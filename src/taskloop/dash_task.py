@@ -16,6 +16,7 @@ from taskloop.attempt_reads import AttemptRow, StoreUnavailable
 from taskloop.attempt_result import collect, succeeded
 from taskloop.attempt_status import StatusPorts, agent_attempt, current_view, with_hold
 from taskloop.attempt_types import AttemptResult
+from taskloop.check_feed import CheckLog, CheckState
 from taskloop.check_store import ChecksRow, CheckStore, ResultRow
 from taskloop.command_conclusion import CommandConclusion
 from taskloop.dash_board import admission_of, card_of, duration_of, queued_card, tries
@@ -84,9 +85,12 @@ def _page(page: ActivityPage, ended: bool = False, duration: Duration | None = N
 
 
 def build_feed(ports: TaskPorts, backlog: str, task_id: str, step: str, number: int, cursor: str | None) -> FeedPage | Failed | None:
-    """The agent's lines of one attempt of the task: its latest, or what came after `cursor`. None: no such agent attempt."""
+    """One numbered agent or checks attempt: its latest lines, or those after `cursor`. None: no such attempt."""
     try:
         rows = ports.reads.store.attempts(backlog, task_id)
+        if step == STEP_CHECKS:
+            checked = next((link.checks for link in _chain(ports, rows) if link.checks is not None and link.number == number), None)
+            return None if checked is None else _checks_feed(ports, checked, cursor)
         numbers = tries(rows)
         row = next((row for row in rows if row.step == step and numbers[row.key.attempt_id] == number), None)
         if row is None:
@@ -98,6 +102,22 @@ def build_feed(ports: TaskPorts, backlog: str, task_id: str, step: str, number: 
     page = (ports.files.activity_tail(row.key, FEED_LINES) if cursor is None
             else ports.files.activity_after(row.key, cursor, FOLLOW_LINES))
     return _page(page, ended=result.status == "collected" or not row.held, duration=duration)
+
+
+def _checks_feed(ports: TaskPorts, row: ChecksRow, cursor: str | None) -> FeedPage:
+    results = CheckStore(ports.reads.store.connect, ports.reads.store.begin).results(row.key)
+    logs = tuple(CheckLog(position=each.position, name=each.name, conclusion=each.conclusion,
+                         state=CheckState.FINISHED if each.conclusion is not None else
+                         CheckState.RUNNING if row.phase == "admitted" else CheckState.UNFINISHED) for each in results)
+    block = results[0].block if results else 0
+    page = ports.files.check_feed(row.key, block, logs, cursor)
+    started = {each.position: iso(each.started_at) or "" for each in results}
+    events = tuple(FeedEvent("check", started[each.position], name=each.name, block=each.block,
+                             id=f"{each.block}:{each.position}:{each.offset if each.offset is not None else 'state'}",
+                             state=each.state.value, text=each.text,
+                             passed=None if each.conclusion is None else each.conclusion == CommandConclusion.PASSED)
+                   for each in page.records)
+    return FeedPage(events, page.cursor, page.replaced, page.available)
 
 
 def _agent(

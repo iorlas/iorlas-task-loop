@@ -19,6 +19,7 @@ from typing import override
 
 from pydantic import BaseModel
 
+from taskloop.check_feed import decode as decode_check_cursor
 from taskloop.dash_model import AttemptBody, Board, Card, FeedPage, LandDetail, TaskDetail, TrackerDetail
 from taskloop.operations import Failed
 from taskloop.round_log import IDENT
@@ -182,7 +183,17 @@ AFTER = re.compile(r"after=([0-9]{1,20}:[0-9]{1,20})")
 
 
 def _feed(ports: DashPorts, found: re.Match[str], query: str) -> Reply:
-    """The agent's lines of one attempt; the only query is `after=<cursor>`, the opaque cursor of the last answer."""
+    """The only query is `after=<cursor>`; checks and agents have separate cursor codecs."""
+    if found["step"] == "checks":
+        cursor = query.removeprefix("after=") if query else None
+        try:
+            if cursor is not None:
+                if not query.startswith("after="):
+                    raise ValueError("Invalid check query")
+                decode_check_cursor(cursor)
+        except ValueError:
+            return Reply(400, b'{"error":"bad_cursor"}', JSON)
+        return _json(ports.feed(found["task"], found["step"], int(found["n"]), cursor))
     after = AFTER.fullmatch(query)
     if query and after is None:
         return Reply(400, b'{"error":"bad_cursor"}', JSON)
