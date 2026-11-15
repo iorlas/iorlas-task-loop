@@ -303,7 +303,7 @@ async function landSelection() {
   assert(![...drawer.querySelectorAll("button")].some((b) => ["Accept", "Reject"].includes(b.textContent)), "no decision controls");
   assert(drawer.querySelector('a[href="https://example.invalid/pull/17"]')?.rel.includes("noopener"), "available PR linked");
   assert(drawer.textContent.includes("Awaiting your delivery decision"), "waiting notes survive Land selection");
-  button(drawer, "Task").click(); button(drawer, "Steps 5").click();
+  button(drawer, "Task").click(); button(drawer, "Steps 3").click();
   assert(landButton(drawer).getAttribute("aria-pressed") === "true", "selection survives task view navigation");
   button(drawer, "ImplementUnknown durationSuccess").click(); await tick();
   assert(drawer.querySelector("section h3").textContent.includes("Implement, attempt 1"), "Land returns to attempt navigation");

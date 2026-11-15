@@ -1,7 +1,8 @@
 // Task loop dashboard page: the board. Plain ES modules, no framework, no build step.
 // It consumes the shapes in docs/design/dashboard-ui.md from the JSON endpoints and the event stream (api.js).
 
-import { initDrawer, onTaskMoved, openDrawer } from "./drawer.js";
+import { closeDrawer, initDrawer, onTaskMoved, openDrawer } from "./drawer.js";
+import { ROUTE, initNavigation } from "./navigation.js";
 import { initLogs, loadLogs, onLog } from "./logs.js";
 import { apiSource } from "./api.js";
 import { receiveDuration } from "./duration.js";
@@ -324,8 +325,10 @@ async function start() {
   source = apiSource();
   $("mode").className = "inline-flex flex-wrap items-center gap-2";
   $("mode").replaceChildren(streamLabel, roundLabel);
-  initDrawer(source, tasks);
+  const navigation = initNavigation((route) => route.kind === ROUTE.closed ? closeDrawer(true) : openDrawer(route.id, route));
+  initDrawer(source, tasks, navigation.changed);
   initLogs(openDrawer);
+  navigation.start();
   setLanes(false);
   showScreen("board");
   await resync();
