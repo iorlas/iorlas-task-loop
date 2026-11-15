@@ -1,22 +1,21 @@
 # Header
 Task: tl-8bh9.14.159.2.2.1
-Base: bc8a5ba5f51943d9fff68c9bf25fef131bc16410
+Base: 99cb5a25d30538dfb515d63a2968c6f42e15f4b1
 Depth: small; one success-family rename.
-No open decisions/unlanded dependencies. Budget: 6 calls.
+Decisions/dependencies: settled. Budget: 6 calls.
 Size: 34 files; 1 behaviour; 30 implement calls.
 
 ## Outcome and non-goals
-Success types only; preserve stored words, schema and other families.
+Rename success types; preserve storage and other families.
 
 ## Settled decisions
-- Naming-map rows 26-27 fix targets.
+- Map rows 26-27: VerifyResult -> CommitResult; Verified -> Committed.
 - Keep factory_commit.Committed(sha) distinct.
 
 ## Open decisions
 - None.
 
 ## Change map
-Rename by rows 26-27:
 - src/taskloop/attempt_types.py: rename Verified, VerifyResult.
 - src/taskloop/commit.py: FactoryCommit: rename types.
 - src/taskloop/repeat.py: Settle/_words: rename types.
@@ -25,18 +24,18 @@ Rename by rows 26-27:
 - src/taskloop/attempt_reads.py: _verdict_values: rename type.
 - src/taskloop/attempt_loads.py: verdict_of: rename constructor.
 - src/taskloop/verdict.py: _artifact: rename constructor.
-- src/taskloop/implement_step.py: rename Verifiedblob reference.
+- src/taskloop/implement_step.py: rename Verified.blob reference.
 - src/taskloop/step_guide.py: rename Verified in STEP_ONLY.
 - tests/cli/test_cli.py: rename Verified in BUILT.
-- tests/steps/killed_rounds_bench.py: rename VerifyResult
-- tests/steps/test_restart.py: rename VerifyResult
-- tests/steps/test_killed_rounds.py: rename Verified
-- tests/steps/test_check_operations.py: rename Verified/VerifyResult
-- tests/steps/test_repeat.py: rename Verified/VerifyResult
-- tests/steps/test_repeat_dispatch.py: rename Verified/VerifyResult
-- tests/steps/test_operations.py: rename Verified/VerifyResult
-- tests/steps/test_round.py: rename Verified/VerifyResult
-- tests/steps/test_verifier.py: rename Verified/VerifyResult
+- tests/steps/killed_rounds_bench.py: rename VerifyResult.
+- tests/steps/test_restart.py: rename VerifyResult.
+- tests/steps/test_killed_rounds.py: rename Verified.
+- tests/steps/test_check_operations.py: rename both types.
+- tests/steps/test_repeat.py: rename both types.
+- tests/steps/test_repeat_dispatch.py: rename both types.
+- tests/steps/test_operations.py: rename both types.
+- tests/steps/test_round.py: rename both types.
+- tests/steps/test_verifier.py: rename both types.
 - tests/steps/test_verifier_leftovers.py: rename Verified
 - tests/steps/test_plan_content.py: rename Verified
 - tests/steps/test_slot_release.py: rename Verified
@@ -51,6 +50,7 @@ Rename by rows 26-27:
 - tests/steps/real/test_prepare_real.py: rename Verified
 
 ## Read list
+- docs/glossary.md:145-157 - factory commit
 - docs/design/tl-8bh9.14.159.1/naming-map.md:26-27 - targets
 - src/taskloop/attempt_types.py:226-287 - family
 - src/taskloop/commit.py:54-176 - types
@@ -73,16 +73,15 @@ Rename by rows 26-27:
 - tests/steps/test_operations.py:151-156 - fake
 - tests/steps/test_operations.py:414-419 - type
 - tests/steps/test_round.py:135-137 - fake
-- tests/steps/test_verifier.py:322-347 - reuse
 
-Omitted files: one-to-one rows 26-27 only; check A2.
+One-to-one omissions: map rows 26-27; A2.
 
 ## Contract
-Intent: CommitResult, Committed(blob, reused). Effect: rename without aliases. Result: unchanged.
+Intent: CommitResult union; Committed(blob, reused) verdict. Effect: no aliases. Result: unchanged storage and Git.
 
 ## Work packages
-1. Rename; focused verdict/reuse/operation/repeat tests close A1.
-2. A2; last, once each: just check 2>&1 | tail -60; just test 2>&1 | tail -40.
+1. Rename listed types/callers/fixtures; focused verdict/reuse/operation/repeat tests close A1-A2.
+2. Last, once each: just check 2>&1 | tail -60; just test 2>&1 | tail -40.
 
 ## Acceptance behaviours
 A1. Normal/reused success preserves blob, reuse, encoding and effects; refusal/wait stay unchanged.
