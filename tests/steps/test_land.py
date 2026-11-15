@@ -7,12 +7,18 @@ from collections.abc import Callable
 from pathlib import Path
 
 import pytest
-from doubles import Command
+from doubles import CHECKS, REQUIRED, Command
 from git_porcelain import Transient
 from land_bench import BAR, ME, RUN, LandBench, bench
 
+from taskloop import check_store, land_store
+from taskloop.admit_store import reserve
+from taskloop.attempt_types import AttemptKey
 from taskloop.land import Landed, LandResult
+from taskloop.land_check import NO_SLOT, RACED
+from taskloop.land_store import LandAdmitted, LandRow
 from taskloop.operations import Failed
+from taskloop.repo import RepoId
 
 
 @pytest.fixture
@@ -92,6 +98,41 @@ def test_the_land_validates_in_the_one_free_slot_rounds_leave_it(b: LandBench) -
     b.advance({"OTHER": "another task\n"})
     found = b.land()
     assert isinstance(found, Landed) and found.row.slot == "s1" and b.reservations() == []
+
+
+@pytest.mark.parametrize("competition", ["none", "missing_checks", "candidate_number", "other_checks_landing"])
+def test_losing_the_last_free_slot_distinguishes_a_competing_land(
+    b: LandBench, competition: str,
+) -> None:
+    main = b.advance({"OTHER": "another task\n"})
+    before: list[tuple[LandRow, ...]] = []
+
+    def take_slot() -> None:
+        checks = CHECKS.attempt_id
+        if competition == "other_checks_landing":
+            checks = "other-checks"
+            check_store.insert(b.con, check_store.ChecksAdmitted(
+                AttemptKey(checks, "other-checks-token", 2), "implement", 2, "s1", b.d, b.x, REQUIRED, 300.0))
+            b.con.execute("""UPDATE checks_attempt SET phase='concluded',conclusion='passed',concluded_at=5,
+                released_at=6,parked=? WHERE attempt_id=?""", (b.d, checks))
+        if competition in {"candidate_number", "other_checks_landing"}:
+            land_store.insert(b.con, LandAdmitted(AttemptKey("competitor", "competitor-token", 0), checks, 1,
+                main, b.x, True, REQUIRED, None, None, None, "same_tree", b.now))
+            if competition == "candidate_number":
+                assert b.lands.supersede(AttemptKey("competitor", "competitor-token", 0), "withdrawn", b.now)
+        elif competition == "missing_checks":
+            b.con.execute("DELETE FROM checks_attempt WHERE attempt_id=?", (checks,))
+        reserve(b.con, RepoId(b.repo.identity().key), "s1", AttemptKey("occupant", "occupant-token", 2))
+        before.append(b.lands.for_task("tasks", "tl-1"))
+
+    b.racing = take_slot
+    found = b.land()
+    competing = competition in {"candidate_number", "other_checks_landing"}
+    assert found == (Failed("refused", "landing", f"{RACED} Nothing was recorded.") if competing else
+                     Failed("unavailable", "no_free_slot", NO_SLOT))
+    assert len(before) == 1 and b.lands.for_task("tasks", "tl-1") == before[0]
+    assert b.reservations() == [("s1", "occupant")]
+    assert b.execs() == [] and b.repo.pushes == 0 and b.tracker == [] and b.origin_main() == main
 
 
 def test_a_failed_validation_pushes_nothing_and_leaves_its_slot_released(b: LandBench) -> None:

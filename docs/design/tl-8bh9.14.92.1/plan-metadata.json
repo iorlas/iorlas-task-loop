@@ -1,0 +1,25 @@
+{
+  "prepared_commit": "ea06b229f3c7761ec7769a1bc12a907c3bd4df36",
+  "cited_paths": [
+    ".git",
+    "pyproject.toml",
+    "uv.lock",
+    ".importlinter",
+    "README.md",
+    "tools/check_tool_versions.py",
+    "tests/rules",
+    "tests/steps/conftest.py",
+    "tests/steps/doubles.py",
+    "tests/steps/real/test_git_read_timeout_real.py",
+    "tests/cli/conftest.py",
+    "src/taskloop/repo.py",
+    "src/taskloop/git_views.py",
+    ".venv/lib/python3.15/site-packages/git_porcelain/__init__.py",
+    ".venv/lib/python3.15/site-packages/git_porcelain/api.py",
+    ".venv/lib/python3.15/site-packages/git_porcelain/api_results.py",
+    ".venv/lib/python3.15/site-packages/git_porcelain/real.py",
+    ".venv/lib/python3.15/site-packages/git_porcelain/testing.py",
+    ".venv/lib/python3.15/site-packages/git_porcelain/fake.py",
+    ".venv/lib/python3.15/site-packages/git_porcelain/fake_diff.py"
+  ]
+}
