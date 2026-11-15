@@ -23,7 +23,7 @@ from taskloop.check_store import CheckStore
 from taskloop.command_conclusion import CommandConclusion
 from taskloop.command_sink import CommandSink
 from taskloop.dash_board import BoardPorts, build_board
-from taskloop.dash_model import AttemptBody, Board, Comment, FeedPage, Fields, Ready, Run, TaskDetail
+from taskloop.dash_model import AttemptBody, Board, Comment, FeedPage, Fields, LandEventKind, Ready, Run, TaskDetail
 from taskloop.dash_task import TaskPorts, build_body, build_feed, build_task, build_tracker
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.hold_store import HoldInsert, HoldStore
@@ -460,6 +460,10 @@ def test_checks_cards_show_only_the_current_checks_slot(
     assert (card.column, card.slot) == (("land", None) if released else ("checks", "s2"))
     assert card.last_activity_at is None
     assert card.waiting_since == ("1970-01-01T00:00:06Z" if released else None)
+    assert [event.kind for event in detail.land_events] == ([LandEventKind.READY] if released else [])
+    if released:
+        ready, = detail.land_events
+        assert ready.checks_n == 1 and ready.waits[0].open and ready.at == card.waiting_since
 
 
 @pytest.mark.parametrize("assigned,released", [(True, False), (True, True), (False, False)])

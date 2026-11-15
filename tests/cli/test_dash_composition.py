@@ -76,7 +76,7 @@ def test_selected_delivery_uses_the_registered_checkout_and_shared_land_reader(t
         assert opened == []
         found = ports.delivery("tl-1")
         assert isinstance(found, LandDetail) and found.diff_files == 1
-        assert str(world.repo.path) in found.command
+        assert any("Integrate" in action for action in found.actions)
         assert opened == [(requested.db, requested.artifacts, views)]
         assert world.repo.pushes == 0 and world.tracker == [] and world.execs() == []
     finally:

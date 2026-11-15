@@ -1,6 +1,5 @@
 """Delivery inspection uses the real land summary over semantic collaborators, without delivering."""
 
-import shlex
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -25,13 +24,13 @@ def read(b: LandBench) -> LandDetail:
     return found
 
 
-def test_inspecting_delivery_explains_actions_diff_and_command_without_delivering(b: LandBench) -> None:
+def test_inspecting_delivery_explains_actions_and_diff_without_delivering(b: LandBench) -> None:
     found = read(b)
     assert any("Integrate" in action for action in found.actions)
     assert any("Mark the task complete" in action for action in found.actions)
     assert (found.diff_files, found.added, found.deleted) == (1, 1, 0)
-    assert shlex.split(found.diff_command) == ["git", "diff", f"{b.base}..{b.x}"]
-    assert shlex.split(found.command) == ["tl", "step", "land", "tl-1", "--backlog", "tasks", "--checkout", str(b.repo.path)]
+    assert not {"command", "diff_command"} & found.model_dump().keys()
+    assert not any("git diff" in line or "tl step" in line for line in found.summary)
     assert found.pr_url is None
     assert any("src/x.py" in line for line in found.summary)
     assert b.rows() == () and b.reservations() == [] and b.repo.pushes == 0 and b.origin_main() == b.base
@@ -41,7 +40,7 @@ def test_inspecting_delivery_explains_actions_diff_and_command_without_deliverin
 def test_a_moved_main_explains_validation_and_a_conflict_has_no_invented_diff_totals(b: LandBench) -> None:
     b.advance({"OTHER": "another task\n"})
     found = read(b)
-    assert any("Validate" in action for action in found.actions) and found.command.endswith("--minutes N")
+    assert any("Validate" in action for action in found.actions)
     b.advance({"src/x.py": "X = 2\n"})
     conflict = read(b)
     assert any("blocked by conflicts" in action for action in conflict.actions)
@@ -52,7 +51,7 @@ def test_a_moved_main_explains_validation_and_a_conflict_has_no_invented_diff_to
 def test_already_integrated_changes_and_failed_checks_explain_their_next_actions(b: LandBench) -> None:
     b.advance({"src/x.py": "X = 1\n"})
     found = read(b)
-    assert found.command.endswith("--no-change") and any("main already contains" in action for action in found.actions)
+    assert any("main already contains" in action for action in found.actions)
     b.con.execute("UPDATE checks_attempt SET conclusion='failed',reason='test:failed'")
     failed = read(b)
     assert any("blocked until" in action for action in failed.actions)
@@ -72,3 +71,15 @@ def test_selecting_delivery_with_retained_conflict_work_only_reads_facts(b: Land
     assert any("blocked by conflicts" in action for action in read(b).actions)
     assert (b.conflict_runs, b.reservations(), b.environment.events) == before
     assert b.rows() == () and b.repo.pushes == 0 and b.tracker == []
+
+
+def test_check_gate_changes_keep_guidance_and_diff_facts_without_commands(tmp_path: Path) -> None:
+    world = bench(tmp_path, {"pyproject.toml": "[tool.example]\nenabled = true\n"})
+    try:
+        found = read(world)
+        assert any("acceptance" in action for action in found.actions)
+        assert any("Configuration changed: pyproject.toml" in line for line in found.summary)
+        assert not any("tl step" in line or "git diff" in line or "--accept" in line for line in found.summary)
+        assert world.rows() == () and world.repo.pushes == 0 and world.tracker == []
+    finally:
+        world.con.close()

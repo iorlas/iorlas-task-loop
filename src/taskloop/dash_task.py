@@ -22,6 +22,7 @@ from taskloop.command_conclusion import CommandConclusion
 from taskloop.dash_board import admission_of, card_of, duration_of, queued_card, tries
 from taskloop.dash_duration import Duration
 from taskloop.dash_duration import read as read_duration
+from taskloop.dash_land import build_events
 from taskloop.dash_model import (
     Answer,
     AttemptBody,
@@ -44,6 +45,7 @@ from taskloop.dash_verify import applies, verification
 from taskloop.evidence_files import EvidenceError, EvidenceFiles
 from taskloop.harness_choice import HARNESS_WORDS, PROVIDER_WORDS
 from taskloop.hold_store import HoldStore
+from taskloop.land_store import LandStore
 from taskloop.merge.status import result as merge_result
 from taskloop.merge.store import MergeStore
 from taskloop.operations import Failed
@@ -306,6 +308,11 @@ def build_task(ports: TaskPorts, backlog: str, task_id: str) -> TaskDetail | Fai
             view = replace(view, stop=StopStore(ports.reads.store.connect).get(
                 view.attempt_id if view.hold is None else view.hold.cause_id))
         attempts = history(ports, rows)
+        cut = max((each.seq for each in rows if each.release is not None and each.release.abandoned), default=0)
+        past = {each.key.attempt_id for each in rows if each.seq <= cut}
+        checks = tuple((link.checks, link.number, link.checks.after in past)
+                       for link in _chain(ports, rows) if link.checks is not None)
+        events = build_events(LandStore(ports.reads.store.connect, ports.reads.store.begin), checks, ports.reads.observe)
     except StoreUnavailable as error:
         return Failed("unavailable", "store", str(error))
     title = task_id if view is None else ports.tracker.titles((task_id,)).get(task_id, task_id)  # cached by the board's own read
@@ -314,7 +321,7 @@ def build_task(ports: TaskPorts, backlog: str, task_id: str) -> TaskDetail | Fai
         view, rows[0], title, ports.files, ports.reads.clock(), tries(rows).get(view.attempt_id),
         admission, duration_of(view, rows[0], ports.reads, ports.files))
     step_usage, usage = totals(attempts)
-    return TaskDetail(card, attempts, step_usage, usage)
+    return TaskDetail(card, attempts, step_usage, usage, events)
 
 
 def build_tracker(tracker: DashTracker, task_id: str) -> TrackerDetail | None:
