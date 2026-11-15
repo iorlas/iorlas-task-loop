@@ -21,6 +21,7 @@ export function pause(e, prev) {
 export const atBottom = (box) => box.scrollHeight - box.scrollTop - box.clientHeight < BOTTOM_PX;
 
 export function lines(a) {
+  const view = el("div", "flex min-h-0 min-w-0 flex-1 flex-col");
   const box = el("div", "min-h-0 min-w-0 flex-1 overflow-y-auto px-6 py-4");
   box.id = "tail";
   box.dataset.key = `${a.step}/${a.n}`;
@@ -33,7 +34,13 @@ export function lines(a) {
   note.id = "feednote";
   box.append(note, list);
   setNote(a, note);
-  return box;
+  const controls = el("div", "px-6 py-2");
+  const jump = el("button", "text-xs text-sky-600 dark:text-sky-400", "Jump to latest");
+  jump.type = "button";
+  jump.addEventListener("click", () => { box.scrollTop = box.scrollHeight; });
+  controls.append(jump);
+  view.append(controls, box);
+  return view;
 }
 
 // The quiet line above the list: how much is kept and whether it is live, or why it stopped following.
@@ -87,8 +94,8 @@ function fill(e, content, right) {
       if (failed) right.className += " font-medium text-rose-600 dark:text-rose-400";
     }
   } else if (e.type === "message") {
-    content.className += " whitespace-pre-wrap break-words text-slate-700 dark:text-slate-200"; // what the agent said, in full
-    content.textContent = e.text;
+    content.className += " text-slate-700 dark:text-slate-200";
+    content.append(message(e.text));
   } else if (e.type === "think") {
     // collapsed; only the words the harness gave (the server sends no think line without text)
     const more = el("details", "text-slate-600 dark:text-slate-300");
@@ -105,6 +112,23 @@ function fill(e, content, right) {
   } else {
     content.append(el("span", "text-slate-500 dark:text-slate-400", `${stepInfo(e.step)?.label ?? e.step} attempt ${e.attempt} started`));
   }
+}
+
+function message(text) {
+  const wrap = el("span", "block");
+  const words = el("span", "message-text", text);
+  words.dataset.folded = "true";
+  const button = el("button", "mt-1 block text-xs text-sky-600 dark:text-sky-400", "Expand message");
+  button.type = "button";
+  button.setAttribute("aria-expanded", "false");
+  button.addEventListener("click", () => {
+    const expanded = button.getAttribute("aria-expanded") !== "true";
+    words.dataset.folded = String(!expanded);
+    button.setAttribute("aria-expanded", String(expanded));
+    button.textContent = expanded ? "Collapse message" : "Expand message";
+  });
+  wrap.append(words, button);
+  return wrap;
 }
 
 // One new line: a command's finished line replaces its running one (same id); only a live feed keeps its last FEED_LIMIT.

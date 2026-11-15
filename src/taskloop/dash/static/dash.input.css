@@ -35,6 +35,17 @@
 @utility animate-pulse-dot { animation: pulse-dot 1.2s ease-in-out infinite; }
 @utility animate-line-in { animation: line-in 0.25s ease-out; }
 
+.message-text {
+  display: block;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.5;
+}
+.message-text[data-folded="true"] {
+  max-height: 12em;
+  overflow: hidden;
+}
+
 /* Keep the wide board inside a viewport shared by Steps and By slot. */
 #board-canvas { min-width: 1100px; }
 .shell-header, .shell-controls { min-width: 0; flex-wrap: wrap; }
