@@ -16,7 +16,17 @@ from git_porcelain.testing import apply_hermetic_env, git
 from plan_fixtures import PLAN_TEXT
 
 from taskloop.agents.settings import AgentSetting
-from taskloop.attempt_types import DEFAULT_GIT_READ_SECONDS, Admission, AnswerState, AttemptKey, ChainLink, FileRef, Rejected, Unsettled
+from taskloop.attempt_types import (
+    DEFAULT_GIT_READ_SECONDS,
+    Admission,
+    AnswerState,
+    AttemptKey,
+    ChainLink,
+    FileRef,
+    Rejected,
+    Unsettled,
+    Verified,
+)
 from taskloop.factory_commit import Committed, clean_at, settle
 from taskloop.git_views import GitViews
 from taskloop.repo import RepoId
@@ -276,11 +286,13 @@ def test_an_implement_commit_deletes_and_adds_anywhere_and_an_ignored_venv_does_
     (slot / "README").unlink()
     (slot / "src").mkdir()
     (slot / "src/a.py").write_text("A = 1\n")
-    answer = AnswerState("valid", "implemented", "commit", ("README", "src/a.py"), "Implement")
+    answer = AnswerState("valid", "implemented", "commit", ("src/a.py",), "Implement")
     made = settle(VIEWS.checkouts, RealSlotFiles(), attempt, base, answer, quiet)
     assert isinstance(made, Committed) and git(slot, "rev-parse", "HEAD^").strip() == base
     assert git(slot, "show", "--format=", "--name-status", "HEAD").split() == ["D", "README", "A", "src/a.py"]
     assert clean_at(VIEWS.checkouts, RealSlotFiles(), attempt, made.sha) == main
+    link = ChainLink(1, base, made.sha, "commit", answer.paths, FileRef("i", "d"))
+    assert isinstance(judge(VIEWS.checkouts(main), main, made.sha, IMPLEMENT, IMPLEMENT.rules("tl-1"), (link,)), Verified)
 
 
 @pytest.mark.parametrize(("paths", "unsafe"), [(("gone.py",), (".gitignore", "src/a.py")), (("src/a.py",), (".gitignore",))]

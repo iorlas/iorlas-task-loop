@@ -91,7 +91,7 @@ def repair_agent(rig: Repairing, *, change: bool = False) -> list[LaunchSpec]:
     specs: list[LaunchSpec] = []
     answer = {"disposition": "implemented" if change else "unchanged", "paths": ["src/fix.py"] if change else [],
               "message": "Fix columns" if change else None, "explanation": "Ran checks"}
-    agent = scripted(rig.slot.repo, answer, {"src/fix.py": "fixed = True\n"} if change else {})
+    agent = scripted(rig.slot.repo, answer, {"src/fix.py": "fixed = True\n", "src/omitted.py": "safe = True\n"} if change else {})
 
     def run(harness: Harness, spec: LaunchSpec, timeout: float, hooks: RunHooks | None) -> RunOutcome:
         specs.append(spec)
@@ -177,6 +177,9 @@ def test_start_dispatches_failed_check_output_at_x_and_fresh_checks_can_pass(rig
     setup = SetupStore(lambda: rig.con).latest(row.key)
     assert setup is not None and setup.commit == x and setup.conclusion == CommandConclusion.PASSED
     assert rig.round() == [("tl-1", "implement", "verify", "verified release=released branch=published")]
+    if change:
+        tree = rig.slot.repo.tree(rig.tip("tl-1"))
+        assert tree is not None and tree.read("src/omitted.py") == b"safe = True\n"
     rig.bodies = ["passed"]
     assert rig.round() == [("tl-1", "check", "advance", "started")]
     assert rig.next_words() == {"tl-1": ("check", "land")}
@@ -392,7 +395,10 @@ def test_a_prior_path_repeat_consumes_the_same_budget(rig: Repairing) -> None:
         "disposition": "unchanged", "paths": [], "message": None, "explanation": "Work left for review",
     }, {"src/x.py": "x = 1\n", "scratch.txt": "leftover"})
     rig.round()  # implement 1
-    rig.round()  # a keep answer with dirty slot files needs a path repeat
+    assert rig.store.attempts("tasks", "tl-1")[0].number == 1
+    # Verify without the round immediately dispatching a repeat with the same dirty keep agent.
+    found = rig.ports().verifier.verify(rig.store.attempts("tasks", "tl-1")[0].key)
+    assert isinstance(found, Unsettled) and found.reason == "uncommitted"
     view = current_view(rig.ports().reads, "tasks", "tl-1")
     assert view is not None and view.next == "repeat"
     specs = repair_agent(rig, change=True)
@@ -404,10 +410,11 @@ def test_a_prior_path_repeat_consumes_the_same_budget(rig: Repairing) -> None:
 
     rig.agents["tl-1", "implement"] = tidy
     rig.round()  # path repeat 2
+    assert rig.store.attempts("tasks", "tl-1")[0].number == 2
     assert rig.round() == [("tl-1", "implement", "verify", "verified release=released branch=published")]
     rig.bodies = ["failed"]
     rig.round()
-    assert rig.next_words() == {"tl-1": ("check", "release")}
+    assert rig.next_words() == {"tl-1": ("check", "repeat")}
     repair_agent(rig)
     assert rig.round() == [("tl-1", "implement", "repeat", "started")]
     assert rig.store.attempts("tasks", "tl-1")[0].number == 3 and len(specs) == 1
