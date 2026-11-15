@@ -104,9 +104,10 @@ def test_an_unanswered_read_writes_nothing(tmp_path: Path) -> None:
 
 
 @pytest.mark.parametrize("lost_response", [False, True])
-def test_delivery_by_text_reads_back_even_after_a_lost_response(tmp_path: Path, lost_response: bool) -> None:
+def test_delivery_by_attempt_reads_back_even_after_a_lost_response(tmp_path: Path, lost_response: bool) -> None:
     text = "taskloop hold: failed:run:timeout\nline two"
-    posted = json.dumps([{"author": "taskloop", "text": text}])
+    body = f"{text}\n\n[comment-key: attempt-1]"
+    posted = json.dumps([{"author": "taskloop", "text": body}])
     script = Script().say("[]")
     if lost_response:
         script.say("", "bd: no answer in 30.0s", 124)
@@ -117,21 +118,29 @@ def test_delivery_by_text_reads_back_even_after_a_lost_response(tmp_path: Path, 
     assert holds.comment(str(tmp_path), "tl-1", "attempt-1", text) == HoldAnswer("done")
     assert holds.clear(str(tmp_path), "tl-1") == HoldAnswer("done")
     read = [*ACTOR, "comments", "tl-1", "--json"]
-    assert calls(script) == [read, [*ACTOR, "comments", "add", "tl-1", text, "--json"], read,
+    assert calls(script) == [read, [*ACTOR, "comments", "add", "tl-1", body, "--json"], read,
                              [*ACTOR, "label", "remove", "tl-1", "held", "--json"]]
     assert 3 * BD_TIMEOUT_S < COMMENT_LEASE
 
 
-def test_an_ambiguous_post_and_failed_readback_retry_through_the_same_text(tmp_path: Path) -> None:
-    posted = json.dumps([{"author": "taskloop", "text": "attempt attempt-1 timed out"}])
+def test_an_ambiguous_post_retries_by_attempt_despite_changed_saved_commits_and_leftovers(tmp_path: Path) -> None:
+    text = "taskloop hold: repeats_exhausted\nSaved commits: abc123\nLeftovers: first.py"
+    retry_text = "taskloop hold: repeats_exhausted\nSaved commits: abc123, def456\nLeftovers: second.py"
+    body = f"{text}\n\n[comment-key: attempt-1]"
+    posted = [{"author": "taskloop", "text": body}]
     script = Script().say("[]").say("", "bd: no answer in 30.0s", 124).say(DOWN, "", 1)
     holds = tracker_holds(script)
-    assert holds.comment(str(tmp_path), "tl-1", "attempt-1", "attempt attempt-1 timed out") == HoldAnswer("unavailable", "timeout")
-    script.say(posted)
-    assert holds.comment(str(tmp_path), "tl-1", "attempt-1", "attempt attempt-1 timed out") == HoldAnswer("done")
+    assert holds.comment(str(tmp_path), "tl-1", "attempt-1", text) == HoldAnswer("unavailable", "timeout")
+    script.say(json.dumps(posted))
+    # Rebuild the adapter as after a restart: only the delivered comment retains the original text.
+    holds = tracker_holds(script)
+    assert holds.comment(str(tmp_path), "tl-1", "attempt-1", retry_text) == HoldAnswer("done")
+    next_body = f"{retry_text}\n\n[comment-key: attempt-2]"
+    script.say(json.dumps(posted)).say().say(json.dumps([*posted, {"author": "taskloop", "text": next_body}]))
+    assert holds.comment(str(tmp_path), "tl-1", "attempt-2", retry_text) == HoldAnswer("done")
     read = [*ACTOR, "comments", "tl-1", "--json"]
-    assert calls(script) == [read, [*ACTOR, "comments", "add", "tl-1", "attempt attempt-1 timed out", "--json"],
-                             read, read]
+    assert calls(script) == [read, [*ACTOR, "comments", "add", "tl-1", body, "--json"], read, read,
+                            read, [*ACTOR, "comments", "add", "tl-1", next_body, "--json"], read]
 
 
 @pytest.mark.parametrize(("reply", "expected"), [
