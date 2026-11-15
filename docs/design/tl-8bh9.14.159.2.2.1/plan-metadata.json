@@ -1,5 +1,5 @@
 {
-  "prepared_commit": "6a0bd3db681dec4fe29ab4b8abbfa4583a67c526",
+  "prepared_commit": "bc8a5ba5f51943d9fff68c9bf25fef131bc16410",
   "cited_paths": [
     "docs/design/tl-8bh9.14.159.1/naming-map.md",
     "src/taskloop/attempt_types.py",
@@ -35,7 +35,9 @@
     "tests/steps/real/test_commit_real.py",
     "tests/steps/real/test_prepare_real.py",
     "src/taskloop/factory_commit.py",
-    "tests/steps/shelf_input_fixtures.py",
-    "tests/steps/shelf_digest_fixtures.py"
+    "docs/design/tl-8bh9.14.159.2.2.1/plan.md",
+    "docs/design/tl-8bh9.14.159.2.2.1/plan-metadata.json",
+    "src/taskloop",
+    "tests"
   ]
 }
