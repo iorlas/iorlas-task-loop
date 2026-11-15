@@ -8,6 +8,7 @@ from collections.abc import Callable, Generator
 from pathlib import Path
 
 import pytest
+from admission_boundaries import guard_git, outside_transaction
 from doubles import MAIN_PROFILE, ChecksBench, Done, FakeSlotFiles, FixedIds, PinnedViews
 from git_porcelain import Sha
 from git_porcelain.testing import FakeRemote, FakeRepo
@@ -25,8 +26,12 @@ from taskloop.ids import NativeIds
 
 
 @pytest.fixture
-def bench(done: Done, repo: FakeRepo, checkouts: PinnedViews, slot_files: FakeSlotFiles) -> Generator[ChecksBench]:
+def bench(
+    done: Done, repo: FakeRepo, checkouts: PinnedViews, slot_files: FakeSlotFiles, monkeypatch: pytest.MonkeyPatch,
+) -> Generator[ChecksBench]:
     found = ChecksBench(done, repo, checkouts, slot_files)
+    guard_git(found.con, monkeypatch)
+    monkeypatch.setattr(found, "inspect", outside_transaction(found.con, found.inspect))
     yield found
     found.con.close()
 
@@ -190,8 +195,9 @@ def test_a_number_other_than_the_store_s_is_task_attempted(bench: ChecksBench) -
 
 def racer(bench: ChecksBench) -> None:
     """Another start's admission of number 1, committed between this admission's reads and its write."""
+    repo_id = bench.repo.identity().key
     with begin_immediate(bench.con):
-        bench.con.execute("INSERT INTO reservation VALUES ('s0',?,7,'winner')", (bench.repo.identity().key,))
+        bench.con.execute("INSERT INTO reservation VALUES ('s0',?,7,'winner')", (repo_id,))
         insert(bench.con, ChecksAdmitted(AttemptKey("winner", "w", 7), "implement", 1, "s0", bench.done.d, bench.done.target,
                                          (("check", "1" * 64),), 100.0))
 

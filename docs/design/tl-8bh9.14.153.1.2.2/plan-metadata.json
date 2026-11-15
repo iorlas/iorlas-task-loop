@@ -1,0 +1,11 @@
+{
+  "prepared_commit": "552de071cd65da4b6be5425104c2458e5fc83091",
+  "cited_paths": [
+    "src/taskloop/dash/static",
+    "src/taskloop/dash_model.py",
+    "src/taskloop/dash_task.py",
+    "tests/dash",
+    "tests/cli/test_dash_server.py",
+    "pyproject.toml"
+  ]
+}
