@@ -62,7 +62,7 @@ function healthyRows() {
 }
 
 function verificationStates() {
-  for (const code of ["verified", "reused", "unsettled:unsafe", "rejected:paths", "rejected:plan_rule"]) {
+  for (const code of ["verified", "reused", "uncommitted:unsafe", "rejected:paths", "rejected:plan_rule"]) {
     const failed = !["verified", "reused"].includes(code);
     const selected = [];
     const node = mount([attempt("plan", 1, { state: failed ? "failed" : "succeeded", summary: failed ? "verification" : "verified" }), verify(42, { summary: code, state: failed ? "failed" : "succeeded" })], task, {}, (...args) => selected.push(args));
@@ -162,7 +162,7 @@ function restartsAndRepeats() {
 
 function reviewed() {
   const past = healthy().map((a) => ({ ...a, past: true }));
-  return [...past, restart(2), verify(39), attempt("implement", 2, { state: "failed", summary: "verification" }), verify(40, { state: "failed", summary: "unsettled:unsafe" }),
+  return [...past, restart(2), verify(39), attempt("implement", 2, { state: "failed", summary: "verification" }), verify(40, { state: "failed", summary: "uncommitted:unsafe" }),
     repeat("implement", 3, { led_by: 40 }), verify(41), attempt("checks", 2, { summary: "passed" })];
 }
 async function pastRuns() {
@@ -185,7 +185,7 @@ async function pastRuns() {
   await tick();
   node = mount(reviewed(), task, selected);
   assert(!node.querySelector("details").open, "person may close selected group until selection changes");
-  const history = [attempt("plan", 1, { past: true }), verify(1, { state: "failed", summary: "unsettled:unsafe", past: true }),
+  const history = [attempt("plan", 1, { past: true }), verify(1, { state: "failed", summary: "uncommitted:unsafe", past: true }),
     repeat("plan", 2, { past: true }), verify(2, { past: true }), restart(3, { past: true }), verify(3, { past: true }), restart(4)];
   node = mount(history);
   const summaries = [...node.querySelectorAll("summary")];
@@ -199,7 +199,7 @@ async function pastRuns() {
     node = mount([attempt("checks", 1, { past: true, state })]);
     assert(node.querySelector("summary").textContent.includes(STATE[state].label), `folded ${state} check has words`);
   }
-  node = mount([attempt("plan", 1, { past: true }), verify(1, { past: true, state: "failed", summary: "unsettled:unsafe" })]);
+  node = mount([attempt("plan", 1, { past: true }), verify(1, { past: true, state: "failed", summary: "uncommitted:unsafe" })]);
   assert(node.querySelector("summary").textContent.includes("✗ Not committed: a listed path is unsafe"),
     "folded verification failure explains its mark");
 }
@@ -208,7 +208,7 @@ async function drawerSelection() {
   fixture.replaceChildren();
   const list = reviewed();
   const requested = [];
-  const verification = { of_step: "implement", of: 2, listed: ["src/link.py"], listing: ["src/link.py"], result: "unsettled:unsafe", checks: [{ name: "Path must be a plain file", state: "failed" }] };
+  const verification = { of_step: "implement", of: 2, listed: ["src/link.py"], listing: ["src/link.py"], result: "uncommitted:unsafe", checks: [{ name: "Path must be a plain file", state: "failed" }] };
   const source = {
     detail: async () => ({ task, attempts: list, operations: [
       { operation: "drawer-commit", step: "implement", n: 3, kind: "commit", state: "completed", elapsed_ms: 1250,
@@ -217,7 +217,7 @@ async function drawerSelection() {
     tracker: async () => tracked,
     body: async (id, step, n) => {
       requested.push(`${step}/${n}`);
-      return { input: "Implement the task", added: [], result: { summary: step === "verification" ? "unsettled:unsafe" : "passed", checks: [], verification: step === "verification" ? verification : null } };
+      return { input: "Implement the task", added: [], result: { summary: step === "verification" ? "uncommitted:unsafe" : "passed", checks: [], verification: step === "verification" ? verification : null } };
     },
   };
   initDrawer(source, new Map([[task.id, task]]));

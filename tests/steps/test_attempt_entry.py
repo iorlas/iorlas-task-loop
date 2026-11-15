@@ -187,8 +187,8 @@ NOTE = "docs/design/tl-1/note.md"
     [
             ({P: PLAN_TEXT}, "collected verified verify=verified claim=held release=released branch=published", 0, 17),
             ({P: " \n"}, "collected rejected:plan_empty verify=rejected:plan_empty claim=held release=released", 1, 17),
-        ({P: PLAN_TEXT, NOTE: "n"}, "pending verification verify=unsettled:uncommitted claim=held", 1, 13),
-        ({}, "pending verification verify=unsettled:unsafe claim=held", 1, 9),
+        ({P: PLAN_TEXT, NOTE: "n"}, "pending verification verify=uncommitted:uncommitted claim=held", 1, 13),
+        ({}, "pending verification verify=uncommitted:unsafe claim=held", 1, 9),
     ],
     ids=["verified", "rejected", "uncommitted", "unsafe"],
 )

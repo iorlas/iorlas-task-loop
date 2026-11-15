@@ -11,7 +11,7 @@ from taskloop.attempt_types import AttemptResult, Rejected
 from taskloop.dash_model import State, Verification, VerifyCheck
 
 STEP: Final = "verification"
-# The checks in the order the factory makes them, each with the unsettled reason that names it as the failing one.
+# The checks in the order the factory makes them, each with the reason that names it as the failing one.
 CHECKS: Final = (
     ("The slot is on the task branch at the agent's start", "branch"),
     ("Every listed path is a plain file the factory may commit", "unsafe"),
@@ -27,7 +27,7 @@ def applies(result: AttemptResult) -> bool:
 
 
 def _failed(result: AttemptResult, successor: AttemptRow | None) -> str | None:
-    """The unsettled reason or `rejected` of the check that failed; None when the verification passed or has no result yet."""
+    """The reason or `rejected` of the check that failed; None when the verification passed or has no result yet."""
     verdict = None if result.execution is None else result.execution.verification
     if isinstance(verdict, Rejected):
         return "rejected"
@@ -50,6 +50,8 @@ def verification(row: AttemptRow, number: int, result: AttemptResult, successor:
         word = "rejected:" + verdict.reason
     elif verdict is not None:
         word = "reused" if verdict.reused else "verified"
+    elif failed in {"unsafe", "ignored", "uncommitted"}:
+        word = f"uncommitted:{failed}"
     else:
         word = "unsettled:" + failed if failed else "pending"
     state: State = "failed" if failed else "succeeded" if verdict is not None else "running" if row.held else "failed"

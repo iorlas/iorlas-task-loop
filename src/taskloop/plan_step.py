@@ -17,8 +17,8 @@ from taskloop.attempt_types import (
     RepeatReason,
     Rule,
     StepRules,
+    Uncommitted,
     Unreadable,
-    Unsettled,
     path_allowed,
 )
 from taskloop.input_context import InputContext
@@ -250,7 +250,7 @@ def repeat_instructions(rules: StepRules, number: int, *, unrecorded: bool) -> s
     )
 
 
-def feedback(found: Unsettled, rules: StepRules, number: int, task: str, nonce: str, *, unrecorded: bool) -> str:
+def feedback(found: Uncommitted, rules: StepRules, number: int, task: str, nonce: str, *, unrecorded: bool) -> str:
     """The next input: warning and assessment before the shared feedback frame, listing, repair instructions and task.
     `unrecorded`: attempt `number` answered `planned` and
     nothing of it was committed, so its files must be listed again. `found.reason` is one of REPEATABLE."""

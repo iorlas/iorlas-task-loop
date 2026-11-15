@@ -15,7 +15,7 @@ from test_attempt import surroundings as attempt_surroundings
 from taskloop.agent_credentials import machine_credentials
 from taskloop.agents.launch import AgentLaunch, CredentialReason, CredentialsUnavailable, LaunchedAgent, LaunchFailure
 from taskloop.agents.settings import AgentSetting, ClaudePolicy, CodexPolicy, OpenCodePolicy, encode_policy
-from taskloop.attempt_types import AttemptKey, Unsettled
+from taskloop.attempt_types import AttemptKey, Uncommitted
 from taskloop.check_repeat.feedback import Availability, FailedCheck, OutputTail
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.harness_choice import HarnessKind
@@ -124,7 +124,7 @@ def test_dispatched_step_inputs_carry_their_answer_contract(
                             argv=("just", "test"), rc=1, output=OutputTail(availability=Availability.EMPTY))
         prompt = failed_check_feedback(found, initial, "nonce")
     elif unrecorded is not None:
-        prompt = operation.feedback(Unsettled("uncommitted", ("?? widget.txt",)), rules, 1, initial, "nonce",
+        prompt = operation.feedback(Uncommitted("uncommitted", ("?? widget.txt",)), rules, 1, initial, "nonce",
                                     unrecorded=unrecorded)
         assert ("Nothing of attempt 1 was committed" in prompt) is unrecorded
     assert prompt.endswith(initial)

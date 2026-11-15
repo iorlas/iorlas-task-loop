@@ -56,7 +56,7 @@ export async function operationRail() {
   assert(node.querySelector("details").open, "disclosure survives operation redraw");
   assert(node.querySelectorAll("details [data-operation]").length === 5, "all operations stay inside history");
   const failedVerification = history.map((a) => a.step === "verification"
-    ? { ...a, state: "failed", summary: "unsettled:unsafe" } : a);
+    ? { ...a, state: "failed", summary: "uncommitted:unsafe" } : a);
   node = mount(failedVerification);
   assert(node.querySelector("summary").textContent.includes("earlier failure"), "operation summaries retain verification failures");
 }

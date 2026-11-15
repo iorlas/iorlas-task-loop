@@ -37,7 +37,7 @@ from taskloop.attempt_types import (
     EntryIdentity,
     NotApplicable,
     Rejected,
-    Unsettled,
+    Uncommitted,
     waiting_reason,
 )
 from taskloop.captured_start import AnswerRepairing, start_captured
@@ -58,13 +58,15 @@ from taskloop.step_text import unsafe_details
 from taskloop.steps import CHECK, following
 
 type Clock = Callable[[], float]
-type FailureKind = Literal["refused", "unavailable", "uncertain", "rejected", "not_applicable", "unsettled", "waiting", "defect"]
+type FailureKind = Literal["refused", "unavailable", "uncertain", "rejected", "not_applicable", "unsettled",
+                          "uncommitted", "waiting", "defect"]
 WAITING: Final[FailureKind] = "waiting"
-UNKNOWN_KINDS: Final = ("unavailable", "uncertain", "unsettled", WAITING)  # re-running is safe: exit 3
+UNCOMMITTED: Final[FailureKind] = "uncommitted"
+UNKNOWN_KINDS: Final = ("unavailable", "uncertain", "unsettled", UNCOMMITTED, WAITING)  # re-running is safe: exit 3
 UNCLAIMING: Final = "Abandoned, but the tracker claim has not been returned. The abandon must finish before fresh admission."
 LATE: Final = "late_relaunch"  # the counted word of a round's relaunch of a checks attempt past its deadline
-COMMIT_KINDS: Final[dict[type[Rejected | NotApplicable | CommitRefused | Unsettled | CommitWaiting], FailureKind]] = {
-    Rejected: "rejected", NotApplicable: "not_applicable", CommitRefused: "refused", Unsettled: "unsettled", CommitWaiting: WAITING,
+COMMIT_KINDS: Final[dict[type[Rejected | NotApplicable | CommitRefused | Uncommitted | CommitWaiting], FailureKind]] = {
+    Rejected: "rejected", NotApplicable: "not_applicable", CommitRefused: "refused", Uncommitted: UNCOMMITTED, CommitWaiting: WAITING,
 }
 
 
@@ -460,11 +462,9 @@ def relaunch_checks(ports: StartPorts, backlog: str, task_id: str, attempt_id: s
 
 def _not_advanced(found: _Found) -> Failed:
     """Why the round's advance of a done attempt does not run: the read's own refusal, its abandon, or another state."""
-    if isinstance(found, Failed):
-        return found
-    if found is None:
-        return Failed("refused", "abandoned", "The task's attempt was abandoned since this round read the store")
-    return Failed("refused", "changed", "The task's current attempt is no longer the done step this round read")
+    return (found if isinstance(found, Failed) else
+            Failed("refused", "abandoned", "The task's attempt was abandoned since this round read the store") if found is None else
+            Failed("refused", "changed", "The task's current attempt is no longer the done step this round read"))
 
 
 def _admit(ports: StartPorts, request: StartRequest, advance: _Advance | None) -> tuple[AttemptKey, bool] | Failed:
@@ -594,10 +594,10 @@ def publish_task(reader: AttemptStore, publisher: Publish, backlog: str, task_id
     return PublishedTask(backlog, task_id, found[0].attempt_id, result)
 
 
-def commit_failure(result: Rejected | NotApplicable | CommitRefused | Unsettled | CommitWaiting) -> Failed:
-    """An unsettled slot carries its listing (`bounded` where it was read) as the detail, as `tl step show` prints it."""
-    if isinstance(result, (Unsettled, CommitRefused)):
-        details = ((unsafe_details(result),) if isinstance(result, Unsettled) else
+def commit_failure(result: Rejected | NotApplicable | CommitRefused | Uncommitted | CommitWaiting) -> Failed:
+    """Uncommitted files carry their listing (`bounded` where it was read) as the detail, as `tl step show` prints it."""
+    if isinstance(result, (Uncommitted, CommitRefused)):
+        details = ((unsafe_details(result),) if isinstance(result, Uncommitted) else
                    ("Contradictory retained facts: inconsistent verdict or end commit.",) if result.reason == "inconsistent" else ())
         return Failed(COMMIT_KINDS[type(result)], result.reason, "\n".join(filter(None, (*details, "\n".join(result.listing)))))
     reason = (result.what if isinstance(result, NotApplicable) else

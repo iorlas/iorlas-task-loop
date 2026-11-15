@@ -3,7 +3,7 @@
 import pytest
 
 from taskloop.admit import task_text
-from taskloop.attempt_types import AttemptKey, StepRules, Unsettled
+from taskloop.attempt_types import AttemptKey, StepRules, Uncommitted
 from taskloop.check_repeat.feedback import Availability, FailedCheck, OutputTail
 from taskloop.factory_commit import attributes
 from taskloop.input_context import InputContext
@@ -26,7 +26,7 @@ TASK = TaskInspection(
 def plan_input(request: pytest.FixtureRequest) -> str:
     text = task_text(TASK, "plan", CONTEXT)
     if request.param:
-        text = PLAN.feedback(Unsettled("uncommitted"), PLAN.rules("tl-1"), 1, text, "nonce", unrecorded=True)
+        text = PLAN.feedback(Uncommitted("uncommitted"), PLAN.rules("tl-1"), 1, text, "nonce", unrecorded=True)
     return text
 
 
@@ -35,7 +35,7 @@ def test_plan_producer_and_feedback_require_committed_preparation_evidence(plan_
                    "`cited_paths`", "nonempty array of unique literal repository-relative", "files or folders consulted",
                    "without valid committed metadata needs revision", "retain its metadata and original prepared_commit"):
         assert phrase in plan_input
-    repaired = PLAN.feedback(Unsettled("uncommitted"), PLAN.rules("tl-1"), 1, "short task", "nonce", unrecorded=True)
+    repaired = PLAN.feedback(Uncommitted("uncommitted"), PLAN.rules("tl-1"), 1, "short task", "nonce", unrecorded=True)
     assert "plan-metadata.json" in repaired and "`prepared_commit`" in repaired
 
 
@@ -146,7 +146,7 @@ def test_the_implement_input_bounds_working_and_final_checks_without_hiding_fail
 
 @pytest.mark.parametrize("unrecorded", [True, False])
 def test_an_implement_repeat_frames_the_listing_and_preserves_the_complete_input(unrecorded: bool) -> None:
-    found = Unsettled("ignored", ("!! .venv/x",))
+    found = Uncommitted("ignored", ("!! .venv/x",))
     original = task_text(TASK, "implement", CONTEXT)
     text = IMPLEMENT.feedback(found, IMPLEMENT.rules("tl-1"), 2, original, "abcd", unrecorded=unrecorded)
     assert text.startswith("These paths are ignored by Git. An ignored attributes file on the way to a changed path")
@@ -163,7 +163,7 @@ def test_an_implement_repeat_frames_the_listing_and_preserves_the_complete_input
 def test_implement_allows_latest_shelf_releases_and_stops_for_missing_capabilities(route: str) -> None:
     text = IMPLEMENT.input_text(TASK, IMPLEMENT.rules("tl-1"), CONTEXT)
     if route == "repeat":
-        text = IMPLEMENT.feedback(Unsettled("uncommitted"), IMPLEMENT.rules("tl-1"), 1, text, "nonce", unrecorded=True)
+        text = IMPLEMENT.feedback(Uncommitted("uncommitted"), IMPLEMENT.rules("tl-1"), 1, text, "nonce", unrecorded=True)
     elif route == "failed_check":
         failed = FailedCheck(source=AttemptKey("check", "dispatch", 1), block=1, commit="a" * 40, name="test",
                              argv=("just", "test"), rc=1, output=OutputTail(availability=Availability.EMPTY))
@@ -355,7 +355,7 @@ def test_fixed_input_and_repeat_keep_unfinished_answer_and_saved_work_guidance(s
         assert GIT_WRITES in text
     assert "ANSWER FORMAT" not in text
     for unrecorded in (False, True):
-        repeated = operation.feedback(Unsettled("uncommitted", ("?? new.txt",)), operation.rules("tl-1"), 1,
+        repeated = operation.feedback(Uncommitted("uncommitted", ("?? new.txt",)), operation.rules("tl-1"), 1,
                                       text, "nonce", unrecorded=unrecorded)
         assert repeated.endswith(text) and guidance in repeated and SAVED_WORK in repeated
         if step == "implement":
@@ -380,7 +380,7 @@ def test_failed_check_feedback_keeps_the_fixed_implement_guidance() -> None:
 def test_plan_orientation_bounds_reads_searches_and_truncated_output(repeat: bool) -> None:
     text = PLAN.input_text(TASK, PLAN.rules("tl-1"), CONTEXT)
     if repeat:
-        text = PLAN.feedback(Unsettled("uncommitted"), PLAN.rules("tl-1"), 1, text, "nonce", unrecorded=True)
+        text = PLAN.feedback(Uncommitted("uncommitted"), PLAN.rules("tl-1"), 1, text, "nonce", unrecorded=True)
     ordered = (
         "1. AGENTS.md rules are already in context; follow them without reopening the file.",
         "2. Use the supplied glossary excerpt; collect missing terms into at most one targeted read of `docs/glossary.md`.",
@@ -415,7 +415,7 @@ def test_plan_change_map_requires_first_line_bullet(plan_input: str) -> None:
 def test_plan_requests_fixed_lean_template_and_immutable_handoff(repeat: bool) -> None:
     text = PLAN.input_text(TASK, PLAN.rules("tl-1"), CONTEXT)
     if repeat:
-        text = PLAN.feedback(Unsettled("uncommitted"), PLAN.rules("tl-1"), 1, text, "nonce", unrecorded=True)
+        text = PLAN.feedback(Uncommitted("uncommitted"), PLAN.rules("tl-1"), 1, text, "nonce", unrecorded=True)
     headings = ("# Header:", "## Outcome and non-goals:", "## Settled decisions:", "## Open decisions:",
                 "## Change map:", "## Read list:", "## Contract:", "## Work packages:", "## Acceptance behaviours:")
     assert [text.index(heading) for heading in headings] == sorted(text.index(heading) for heading in headings)
@@ -435,7 +435,7 @@ def test_plan_requests_fixed_lean_template_and_immutable_handoff(repeat: bool) -
 def test_plan_requires_bounded_read_ranges_and_revises_plans_missing_them(repeat: bool) -> None:
     text = PLAN.input_text(TASK, PLAN.rules("tl-1"), CONTEXT)
     if repeat:
-        text = PLAN.feedback(Unsettled("uncommitted"), PLAN.rules("tl-1"), 1, text, "nonce", unrecorded=True)
+        text = PLAN.feedback(Uncommitted("uncommitted"), PLAN.rules("tl-1"), 1, text, "nonce", unrecorded=True)
     read_list = text[text.index("## Read list:"):text.index("## Contract:")]
     for phrase in ("nonempty Markdown bullet list of at most 25 entries", "Each entry names an existing file as",
                    "`path:first-last`", "a short reason", "a narrow, useful line range",
@@ -465,7 +465,7 @@ def test_plan_read_list_exempts_only_committed_single_target_renames(plan_input:
 def test_implement_reading_directions_survive_both_retry_routes(route: str) -> None:
     text = IMPLEMENT.input_text(TASK, IMPLEMENT.rules("tl-1"), CONTEXT)
     if route == "repeat":
-        text = IMPLEMENT.feedback(Unsettled("uncommitted", ("?? stray",)), IMPLEMENT.rules("tl-1"), 2,
+        text = IMPLEMENT.feedback(Uncommitted("uncommitted", ("?? stray",)), IMPLEMENT.rules("tl-1"), 2,
                                   text, "nonce", unrecorded=False)
     elif route == "failed_check":
         failed = FailedCheck(source=AttemptKey("check", "dispatch", 1), block=1, commit="a" * 40, name="test",

@@ -165,8 +165,9 @@ def test_a_longer_interval_is_its_own_cap() -> None:
     (Failed("unavailable", "store", "locked"), True),  # a whole-round unknown: backs off and goes on
     (Round("tasks", (), "uncertain:launch"), True),
     (Round("tasks", (), "refused:task"), False),  # about one task: written once, tried again next round
+    (Round("tasks", (), "uncommitted:staged"), False),
     (Round("tasks", (Move("tl-1", "publish", "unavailable:remote", "a1"),)), False),  # a per-task word never backs off
-], ids=["store", "launch", "refused_task", "publish"])
+], ids=["store", "launch", "refused_task", "uncommitted", "publish"])
 def test_what_backs_off_and_what_does_not(result: Round | Failed, backoff: bool) -> None:
     bench = Bench([result, result, CLEAN])
     ended = bench.run()

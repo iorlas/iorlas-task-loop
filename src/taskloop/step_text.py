@@ -5,13 +5,13 @@ import json
 from collections.abc import Sequence
 from typing import Final
 
-from taskloop.attempt_types import Unsettled
+from taskloop.attempt_types import Uncommitted
 from taskloop.slot_state import LISTED, shown
 
 GIT_WRITES: Final = "You may read Git; do not run `git add`, `git commit`, `git push` or any other Git write; they will fail."
 
 
-def unsafe_details(found: Unsettled) -> str:
+def unsafe_details(found: Uncommitted) -> str:
     """Render the owning checks' explanations with escaped identities and the shared display bounds."""
     lines = [f"The unsafe path {json.dumps(each.path, ensure_ascii=True)} cannot be committed: {shown(each.explanation)}"
              for each in found.explanations[:LISTED]]

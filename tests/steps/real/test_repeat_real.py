@@ -24,7 +24,7 @@ from taskloop.admit_chain import ChainAdmission
 from taskloop.agents.launch import AgentLaunch
 from taskloop.attempt import Attempts, Execution
 from taskloop.attempt_store import AttemptStore
-from taskloop.attempt_types import DEFAULT_GIT_READ_SECONDS, AttemptKey, Committed, Unsettled
+from taskloop.attempt_types import DEFAULT_GIT_READ_SECONDS, AttemptKey, Committed, Uncommitted
 from taskloop.commit import FactoryCommit
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.git_views import GitViews
@@ -95,7 +95,7 @@ def test_a_repeat_commits_x2_on_x1_from_the_dirty_worktree_and_the_chain_verifie
 
     factory_commit = FactoryCommit(store, VIEWS.checkouts, files, lambda _worker: True, lambda: 20, hold, ids=NativeIds())
     assert attempts(agent(slot, {P: PLAN_TEXT, "scratch.txt": "s"}, (), [P])).execute(KEY, ENTRY).reason == "verification"
-    assert factory_commit.commit(KEY) == Unsettled("uncommitted", ("?? scratch.txt",))
+    assert factory_commit.commit(KEY) == Uncommitted("uncommitted", ("?? scratch.txt",))
     x1 = git(slot, "rev-parse", "HEAD").strip()
     admission = ChainAdmission(lambda: factory, begin_immediate, EvidenceFiles(art), lambda: 10, VIEWS.checkouts, files, ids=NativeIds())
     repeat = StepRepeat(store, factory_commit, EvidenceFiles(art), admission, RegisteringLauncher(store, SECOND),

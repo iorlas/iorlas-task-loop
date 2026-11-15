@@ -14,7 +14,7 @@ from taskloop.agents.stop_store import StopStore
 from taskloop.attempt_reads import AttemptRow, PublishedRow, ReleaseRow, StoreUnavailable
 from taskloop.attempt_result import collect, succeeded
 from taskloop.attempt_store import AttemptStore
-from taskloop.attempt_types import ATTEMPTS, REPEATABLE, AttemptKey, AttemptResult, CommitRefused, EntryIdentity, Observe, Unsettled
+from taskloop.attempt_types import ATTEMPTS, REPEATABLE, AttemptKey, AttemptResult, CommitRefused, EntryIdentity, Observe, Uncommitted
 from taskloop.check_repeat.status import CheckRepeatDecision, decision
 from taskloop.check_status import ChecksView, checks_next, checks_release, checks_result, commands_seen
 from taskloop.check_store import ChecksRow, CheckStore, ResultRow
@@ -45,7 +45,7 @@ type Next = (
     | Stuck
 )
 SHOWN: Final = frozenset({"head_moved", "branch", "unborn"})  # leftovers `tl step show` prints though no repeat hands them back
-type Leftovers = Callable[[AttemptKey], Unsettled | CommitRefused | None]  # read-only Git and file reads of a step still to settle
+type Leftovers = Callable[[AttemptKey], Uncommitted | CommitRefused | None]  # read-only Git and file reads of a step still to settle
 
 
 @dataclass(frozen=True)
@@ -228,7 +228,7 @@ def _agent(reads: StatusPorts, row: AttemptRow, *, probe: bool) -> AttemptView:
              "last_command": _idle(reads, row.key) if entry == "running" else None, "source_checks_id": row.source_checks_id,
              "repo_id": row.repo_id}
     late = expired if row.phase != "captured" or result.execution is None else result.execution.facts.timed_out
-    if not isinstance(left, Unsettled) or left.reason not in REPEATABLE:
+    if not isinstance(left, Uncommitted) or left.reason not in REPEATABLE:
         shown = (left.reason, *left.listing) if left is not None and left.reason in SHOWN else ()  # `head_moved`: the agent's refs
         return AttemptView(*found, entry, result, late, next_word, row.entry, row.worker, shown, *chain, **ended)
     next_word = "repeats_exhausted" if row.number >= ATTEMPTS else "repeat"

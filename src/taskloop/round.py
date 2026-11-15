@@ -84,8 +84,8 @@ STOPS: Final = frozenset({
 ADVANCE_STOPS: Final = frozenset({"no_free_slot", "choices", "deadline", "expired", "database", "schema"})
 # The advance's and the publication's refusals that hold a round-taken task (tl-8bh9.14.9 section 3) instead of a skip.
 HOLDS: Final = frozenset({"claim_lost", "branch_moved"})
-# re-running is safe; a single task's unsettled must not stop admission or back off the loop
-STOPPING_UNKNOWN: Final = frozenset(UNKNOWN_KINDS) - {"unsettled"}
+# re-running is safe; a single task's retained files or processes must not stop admission or back off the loop
+STOPPING_UNKNOWN: Final = frozenset(UNKNOWN_KINDS) - {"unsettled", "uncommitted"}
 
 
 def never() -> bool:

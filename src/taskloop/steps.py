@@ -12,7 +12,7 @@ from typing import Final, Literal, Protocol
 from git_porcelain import Tree
 
 from taskloop import implement_step, plan_step
-from taskloop.attempt_types import CHAIN_RULES, Answer, Rejected, Rule, StepRules, Unsettled
+from taskloop.attempt_types import CHAIN_RULES, Answer, Rejected, Rule, StepRules, Uncommitted
 from taskloop.check_repeat.feedback import FailedCheck
 from taskloop.input_context import InputContext
 from taskloop.step import Step, decode_step
@@ -20,7 +20,7 @@ from taskloop.task import TaskInspection
 
 
 class Feedback(Protocol):
-    def __call__(self, found: Unsettled, rules: StepRules, number: int, task: str, nonce: str, *, unrecorded: bool) -> str:
+    def __call__(self, found: Uncommitted, rules: StepRules, number: int, task: str, nonce: str, *, unrecorded: bool) -> str:
         """A repeat's complete input: the leftovers `found` as data, the kind's fixed instructions, then `task` (attempt
         1's input). `unrecorded`: attempt `number` asked for a commit and nothing of it was committed."""
         ...

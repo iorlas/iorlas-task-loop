@@ -17,7 +17,7 @@ from test_recovery_store import KEY, OWNER
 from taskloop import attempt_entry, slot_lock
 from taskloop.attempt import Attempts
 from taskloop.attempt_entry import EntryArgs, enter
-from taskloop.attempt_types import AttemptKey, CaptureResult, PendingResult, Unsettled
+from taskloop.attempt_types import AttemptKey, CaptureResult, PendingResult, Uncommitted
 from taskloop.claim import ClaimWord
 from taskloop.claim_lease import Beat
 from taskloop.commit import FactoryCommit
@@ -87,12 +87,12 @@ def test_saved_owner_continues_under_custody_and_a_renewed_claim(
         with pytest.raises(slot_lock.SlotBusy), slot_lock.hold(record.admission):
             raise AssertionError("Entry released custody")
 
-    def commit(_self: FactoryCommit, key: AttemptKey) -> Unsettled:
+    def commit(_self: FactoryCommit, key: AttemptKey) -> Uncommitted:
         held()
         stored = attempts.store.collect(key)
         assert stored is not None and stored.answer.kind == "valid" and stored.session_state == "complete"
         verified.append(key)
-        return Unsettled("uncommitted")
+        return Uncommitted("uncommitted")
 
     def beat() -> Beat:
         beats.append("held")

@@ -40,7 +40,7 @@ from taskloop.attempt_types import (
     Rejected,
     SlotFiles,
     StepRules,
-    Unsettled,
+    Uncommitted,
 )
 from taskloop.commit import FactoryCommit
 from taskloop.evidence_files import EvidenceFiles
@@ -157,7 +157,7 @@ def test_the_next_attempt_dispatches_at_e_with_the_leftovers_as_a_fresh_session_
 ) -> None:
     base = head(slot)
     assert step.run(KEY, ENTRY, Agent(slot, {P: PLAN_TEXT, STRAY: "s"}, PLAN)) == "pending verification"
-    assert shown(step.factory_commit.commit(KEY)) == "unsettled:uncommitted"
+    assert shown(step.factory_commit.commit(KEY)) == "uncommitted:uncommitted"
     x1 = head(slot)
     key, entry = step.next_attempt(KEY)
     second = Agent(slot, {}, UNCHANGED, removed=[STRAY])
@@ -175,7 +175,7 @@ def test_the_next_attempt_dispatches_at_e_with_the_leftovers_as_a_fresh_session_
 def test_a_second_commit_on_the_first_is_verified_with_each_held_to_its_own_paths(step: Step, slot: FakeWorktree) -> None:
     base = head(slot)
     step.run(KEY, ENTRY, Agent(slot, {P: PLAN_TEXT, NOTE: "n"}, PLAN))
-    assert shown(step.factory_commit.commit(KEY)) == "unsettled:uncommitted"
+    assert shown(step.factory_commit.commit(KEY)) == "uncommitted:uncommitted"
     key, entry = step.next_attempt(KEY)
     step.run(key, entry, Agent(slot, {P: PLAN_V2}, PLAN | {"paths": [P, NOTE]}))
     found = step.factory_commit.commit(key)
@@ -271,11 +271,11 @@ def test_a_takeover_during_the_verify_is_superseded_before_any_git_write(
 
 
 @pytest.mark.parametrize(("before", "written", "expected"), [
-    (None, {P: PLAN_TEXT, ".gitattributes": "* filter=x\n"}, Unsettled("unsafe", (".gitattributes",))),
-    ({".gitignore": "*.log\n"}, {P: PLAN_TEXT, D + "x.log": "x"}, Unsettled("ignored", (D + "x.log",))),
+    (None, {P: PLAN_TEXT, ".gitattributes": "* filter=x\n"}, Uncommitted("unsafe", (".gitattributes",))),
+    ({".gitignore": "*.log\n"}, {P: PLAN_TEXT, D + "x.log": "x"}, Uncommitted("ignored", (D + "x.log",))),
 ], ids=["git_file", "ignored"])
 def test_show_judges_leftovers_before_the_commit_as_the_verify_does(
-    step: Step, slot: FakeWorktree, before: Files | None, written: Files, expected: Unsettled
+    step: Step, slot: FakeWorktree, before: Files | None, written: Files, expected: Uncommitted
 ) -> None:
     if before is not None:
         commit(slot, before)
@@ -334,7 +334,7 @@ def test_after_an_attempt_that_committed_nothing_the_repeat_lists_every_file_aga
     step.run(KEY, ENTRY, Agent(slot, {P: PLAN_TEXT, **({stray: "x"} if reason == "ignored" else {})}, PLAN))
     if reason == "unsafe":
         slot_files.entries[slot.path / P] = FileStat("file", 7, True)
-    assert shown(step.factory_commit.commit(KEY)) == f"unsettled:{reason}"
+    assert shown(step.factory_commit.commit(KEY)) == f"uncommitted:{reason}"
     key, entry = step.next_attempt(KEY)
     assert "Nothing of attempt 1 was committed" in step.input(key) and "answer `unchanged`" not in step.input(key)
     slot_files.entries.clear()  # the agent made the plan a plain file again
@@ -347,7 +347,7 @@ def test_after_an_attempt_that_committed_nothing_the_repeat_lists_every_file_aga
 def test_the_true_count_of_leftovers_reaches_the_next_attempt(step: Step, slot: FakeWorktree) -> None:
     step.run(KEY, ENTRY, Agent(slot, {P: PLAN_TEXT} | {f"stray-{n:02}": "s" for n in range(53)}, PLAN))
     found = step.factory_commit.commit(KEY)
-    assert isinstance(found, Unsettled) and len(found.listing) == 51 and found.listing[-1] == "+3 more"
+    assert isinstance(found, Uncommitted) and len(found.listing) == 51 and found.listing[-1] == "+3 more"
     key, _entry = step.next_attempt(KEY)
     text = step.input(key)
     assert "\n".join(found.listing) in text and text.count("+3 more") == 1 and "+1 more" not in text
@@ -421,7 +421,7 @@ def test_a_path_staged_beside_the_listed_ones_is_never_committed(
         stage(self, [*paths, STRAY], literal=literal)  # someone stages the scratch file in between
 
     monkeypatch.setattr(FakeWorktree, "stage", staging)
-    assert step.factory_commit.commit(KEY) == Unsettled("staged", (STRAY,)) and made(slot, base) == []
+    assert step.factory_commit.commit(KEY) == Uncommitted("staged", (STRAY,)) and made(slot, base) == []
     assert step.con.execute("SELECT count(*) FROM verification").fetchone() == (0,)
 
 
@@ -472,7 +472,7 @@ def test_a_staged_slot_is_refused_before_the_takeover_and_nothing_is_spent(step:
     step.factory_commit.commit(KEY)
     slot.stage([STRAY], literal=True)  # the owner's staged file must never become the agent's leftover
     dirs = sorted(path.name for path in (step.tmp / "attempts").iterdir())
-    assert step.repeat(KEY) == Failed("unsettled", "staged", STRAY) and step.launcher.calls == []
+    assert step.repeat(KEY) == Failed("uncommitted", "staged", STRAY) and step.launcher.calls == []
     assert step.con.execute("SELECT count(*) FROM attempt").fetchone() == (1,)
     assert step.con.execute("SELECT attempt_id,generation FROM reservation").fetchone() == ("attempt", 1)
     assert sorted(path.name for path in (step.tmp / "attempts").iterdir()) == dirs  # no input written
@@ -483,7 +483,7 @@ def test_a_file_staged_by_a_person_alone_is_staged_never_committed(step: Step, s
     step.run(KEY, ENTRY, Agent(slot, {P: PLAN_TEXT}, PLAN))
     slot.write_file(STRAY, "s")
     slot.stage([STRAY], literal=True)
-    assert step.factory_commit.commit(KEY) == Unsettled("staged", (STRAY,)) and made(slot, base) == []
+    assert step.factory_commit.commit(KEY) == Uncommitted("staged", (STRAY,)) and made(slot, base) == []
 
 
 def test_show_says_why_an_admitted_attempts_entry_gave_up(step: Step, slot: FakeWorktree, tmp_path: Path) -> None:

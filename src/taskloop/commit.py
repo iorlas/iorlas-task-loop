@@ -29,8 +29,8 @@ from taskloop.attempt_types import (
     Rejected,
     SlotFiles,
     StoredExecution,
+    Uncommitted,
     Unreadable,
-    Unsettled,
     Verdict,
     WorkerGone,
 )
@@ -130,7 +130,7 @@ class FactoryCommit:
             return CommitRefused("absent" if record is None else "no_base")
         return record, record.base_commit, stored
 
-    def leftovers(self, key: AttemptKey) -> Unsettled | CommitRefused | None:
+    def leftovers(self, key: AttemptKey) -> Uncommitted | CommitRefused | None:
         """Read-only: the leftovers a factory commit would report for a step still to settle, read now; None when there is
         nothing to report or it cannot be read (the person runs `tl step commit` for the reason)."""
         try:
@@ -177,7 +177,7 @@ class FactoryCommit:
         admission, answer, commit = record.admission, stored.answer, record.end_commit
         if commit is None:
             settled = settle(self.checkouts, self.files, admission, base, answer, lambda: self._quiet(record), self.timing)
-            if isinstance(settled, (Unsettled, CommitRefused, CommitWaiting)):
+            if isinstance(settled, (Uncommitted, CommitRefused, CommitWaiting)):
                 return settled
             if isinstance(settled, Rejected):  # nothing_written: no commit to bind
                 return self._kept(record, base, None, settled)
@@ -185,7 +185,7 @@ class FactoryCommit:
             if commit != settled.sha:
                 return CommitRefused("inconsistent")
         root = clean_at(self.checkouts, self.files, admission, commit)
-        if isinstance(root, (Unsettled, CommitRefused)):
+        if isinstance(root, (Uncommitted, CommitRefused)):
             return root
         if record.end_commit is None and answer.effect == "keep" and self.store.end_commit(admission, commit) != commit:
             return CommitRefused("inconsistent")

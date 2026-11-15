@@ -39,7 +39,7 @@ from taskloop.attempt_types import (
     Rejected,
     Seen,
     SlotFiles,
-    Unsettled,
+    Uncommitted,
 )
 from taskloop.cli_composition import adopt, open_commit, open_land, open_reads, open_start
 from taskloop.commit import FactoryCommit
@@ -324,7 +324,7 @@ def gone(_worker: Worker) -> bool:
     return True
 
 
-def nothing_left(_key: AttemptKey) -> Unsettled | None:
+def nothing_left(_key: AttemptKey) -> Uncommitted | None:
     return None
 
 
@@ -409,7 +409,8 @@ def test_list_keeps_only_stuck_or_unknown_when_asked(reader: AttemptStore, now: 
     (NotApplicable("incomplete"), Failed("not_applicable", "incomplete")),
     (CommitRefused("session"), Failed("refused", "session")),
     (CommitRefused("head_moved", ("refs/tags/task/evil",)), Failed("refused", "head_moved", "refs/tags/task/evil")),
-    (Unsettled("dirty"), Failed("unsettled", "dirty")),
+    *[(Uncommitted(reason, ("file.py",)), Failed("uncommitted", reason, "file.py"))
+      for reason in ("staged", "uncommitted", "unsafe", "ignored", "dirty")],
     (CommitWaiting(CommitWaitingReason.GIT, "NotARepo"), Failed("waiting", "git:NotARepo")),
     *[(CommitWaiting(reason), Failed("waiting", str(reason))) for reason in CommitWaitingReason],
     (CommitRefused("inconsistent"), Failed("refused", "inconsistent", "Contradictory retained facts: inconsistent verdict or end commit.")),
@@ -485,7 +486,7 @@ def test_show_reads_leftovers_fresh_and_names_the_repeat(
     reads = StatusPorts(store, observe("gone", []), lambda: 10, factory_commit.leftovers, lambda: "boot")
     before = show_attempt(reads, tmp_path / "art", "tasks", "tl-1")
     assert isinstance(before, Shown) and (before.view.next, before.view.leftovers) == ("verify", ())  # nothing committed yet
-    left = Failed("unsettled", "uncommitted", f"?? {stray}")  # as show lists it
+    left = Failed("uncommitted", "uncommitted", f"?? {stray}")  # as show lists it
     assert commit_task(store, factory_commit, Releases(), Publishes(), "tasks", "tl-1") == left
     shown = show_attempt(reads, tmp_path / "art", "tasks", "tl-1")
     assert isinstance(shown, Shown) and shown.view.next == "repeat"
@@ -493,7 +494,7 @@ def test_show_reads_leftovers_fresh_and_names_the_repeat(
     assert shown.view.leftovers == ("uncommitted", f"?? {stray}")
     probed: list[AttemptKey] = []
 
-    def counted(key: AttemptKey) -> Unsettled | CommitRefused | None:
+    def counted(key: AttemptKey) -> Uncommitted | CommitRefused | None:
         probed.append(key)
         return factory_commit.leftovers(key)
 

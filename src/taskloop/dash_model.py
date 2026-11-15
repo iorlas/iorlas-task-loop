@@ -106,7 +106,7 @@ class VerifyCheck:
 @dataclass(frozen=True)
 class Verification:
     """What the factory checked after an agent attempt's committing answer: `of_step`/`of` name that attempt, `listed` is what the
-    agent asked to commit, `result` the typed words (`verified`, `reused`, `rejected:<rule>`, `unsettled:<reason>`, `pending`) and
+    agent asked to commit, `result` the typed words (`verified`, `reused`, `rejected:<rule>`, `uncommitted:<reason>`, `pending`) and
     `listing` what the failed check named (the unsafe path and the leftovers beside it, the ignored paths)."""
 
     of_step: str

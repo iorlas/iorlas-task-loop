@@ -18,14 +18,14 @@ from taskloop.agents.settings import Overrides, StepSettings
 from taskloop.attempt_reads import StoreUnavailable
 from taskloop.attempt_status import Listed, Next, Shown, StatusPorts, current_view, list_attempts, show_attempt
 from taskloop.attempt_store import AttemptStore
-from taskloop.attempt_types import AttemptKey, SlotFiles, Unsettled
+from taskloop.attempt_types import AttemptKey, SlotFiles, Uncommitted
 from taskloop.drain.models import Seen
 from taskloop.operations import Round
 from taskloop.recovery.models import Observations, Outcome, Result
 from taskloop.round import NextRequest, run_round
 
 
-def no_leftovers(_key: AttemptKey) -> Unsettled | None:
+def no_leftovers(_key: AttemptKey) -> Uncommitted | None:
     raise AssertionError("Blocked status must not probe leftovers")
 
 
