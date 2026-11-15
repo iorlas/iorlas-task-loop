@@ -1,0 +1,20 @@
+{
+  "prepared_commit": "220beb55af526f716b1d5e0d3f2e6e700e126801",
+  "cited_paths": [
+    "docs/design/tl-8bh9.14.198/plan.md",
+    "docs/design/tl-8bh9.14.198/plan-metadata.json",
+    "src/taskloop/tracker_client.py",
+    "src/taskloop/hold.py",
+    "src/taskloop/hold_facts.py",
+    "src/taskloop/hold_text.py",
+    "src/taskloop/hold_store.py",
+    "src/taskloop/round.py",
+    "src/taskloop/cli_composition.py",
+    "tests/steps/test_tracker_holds.py",
+    "tests/steps/test_hold.py",
+    "tests/steps/test_hold_text.py",
+    "tests/steps/round_bench.py",
+    "tests/steps/doubles.py",
+    "tests/steps/test_round.py"
+  ]
+}
