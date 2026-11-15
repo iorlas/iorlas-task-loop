@@ -31,6 +31,7 @@ from taskloop.ids import NativeIds
 from taskloop.slot_files import RealSlotFiles
 from taskloop.slot_lock import hold, lock_path, probe
 from taskloop.slots import SlotGit, adopt, folder_name
+from taskloop.slots_store import SlotsStore
 from taskloop.task import TaskBinding, TaskInspection, TaskScope
 from taskloop.tracker import inspect_task
 from taskloop.verifier import Verifier
@@ -67,7 +68,7 @@ def test_a_detached_slot_is_prepared_on_its_task_branch_and_the_plan_is_committe
     slot = slots / folder_name(VIEWS.checkouts(main).identity()) / "s1"
     git(main, "worktree", "add", "-q", "--detach", str(slot), "HEAD")
     d = git(slot, "rev-parse", "HEAD").strip()
-    adopt(lambda: factory, begin_immediate, VIEWS.checkouts(main), SlotGit(VIEWS.checkouts, RealSlotFiles()), slots, 1)
+    adopt(SlotsStore(lambda: factory, begin_immediate), VIEWS.checkouts(main), SlotGit(VIEWS.checkouts, RealSlotFiles()), slots, 1)
     origin = root / "origin"
     git(root, "clone", "-q", str(main), str(origin))
     git(main, "remote", "add", "origin", str(origin))

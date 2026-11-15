@@ -37,6 +37,7 @@ from taskloop.setup_store import ProcessSeen
 from taskloop.slot_lock import custody, lock_path, probe
 from taskloop.slot_release import AlreadyReleased, NotReleased, Released, SlotRelease, release_word
 from taskloop.slots import SlotGit, adopt, observe
+from taskloop.slots_store import SlotsStore
 from taskloop.tracker_client import tracker_claims
 from taskloop.verifier import Verifier
 
@@ -415,11 +416,12 @@ def test_after_a_release_every_other_writer_meets_the_fence_and_the_slot_is_free
     assert isinstance(Verifier(store, counted, slot_files, never, lambda: 20, never,
         ids=NativeIds()).verify(KEY), Verified) and opened == []
     git = SlotGit(checkouts, slot_files)
-    adopt(lambda: registered, begin_immediate, slot.repo, git, root, 1)  # the freed slot, detached and clean, is free again
+    store = SlotsStore(lambda: registered, begin_immediate)
+    adopt(store, slot.repo, git, root, 1)  # the freed slot, detached and clean, is free again
     repo_id = RepoId(slot.repo.identity().key)
-    assert [view.state for view in observe(registered, slot.repo, git, repo_id, probe)] == ["free"]
+    assert [view.state for view in observe(store, slot.repo, git, repo_id, probe)] == ["free"]
     with occupy(lock_path(str(slot.path))):  # a release still parking it holds the lock: never free
-        assert [(view.state, view.reason) for view in observe(registered, slot.repo, git, repo_id, probe)] == [("unknown", "locked")]
+        assert [(view.state, view.reason) for view in observe(store, slot.repo, git, repo_id, probe)] == [("unknown", "locked")]
 
 
 def test_a_clean_detached_slot_moved_off_d_is_parked_back_at_d(

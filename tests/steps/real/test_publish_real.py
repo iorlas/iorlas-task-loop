@@ -36,6 +36,7 @@ from taskloop.slot_files import RealSlotFiles
 from taskloop.slot_lock import custody, hold, probe
 from taskloop.slot_release import Released, SlotRelease
 from taskloop.slots import SlotGit, adopt, folder_name
+from taskloop.slots_store import SlotsStore
 from taskloop.task import TaskBinding, TaskInspection, TaskScope
 from taskloop.tracker import inspect_task
 from taskloop.verifier import Verifier
@@ -89,7 +90,8 @@ class Published:
         self.slot = root / "slots" / folder_name(VIEWS.checkouts(self.main).identity()) / "s1"
         git(self.main, "worktree", "add", "-q", "--detach", str(self.slot), "HEAD")
         self.d = self.rev(self.slot, "HEAD")
-        adopt(lambda: factory, begin_immediate, VIEWS.checkouts(self.main), SlotGit(VIEWS.checkouts, RealSlotFiles()), root / "slots", 1)
+        slots = SlotsStore(lambda: factory, begin_immediate)
+        adopt(slots, VIEWS.checkouts(self.main), SlotGit(VIEWS.checkouts, RealSlotFiles()), root / "slots", 1)
         self.store, self.files = AttemptStore(lambda: factory), RealSlotFiles()
         admission = AttemptAdmission(
             lambda: factory, begin_immediate, EvidenceFiles(root / "art"), tasks, VIEWS.checkouts, yes, yes, lambda: 10, probe,

@@ -1,0 +1,23 @@
+{
+  "prepared_commit": "771f57ad2b82b9cb5e6e01e14966c82ad1705b7f",
+  "cited_paths": [
+    "src/taskloop/slots.py",
+    "src/taskloop/slot_state.py",
+    "src/taskloop/factory_store.py",
+    "src/taskloop/setup_store.py",
+    "src/taskloop/factory_schema.py",
+    "src/taskloop/composition.py",
+    "src/taskloop/admit.py",
+    "src/taskloop/land_conflict/store.py",
+    "src/taskloop/check_repeat/store.py",
+    "tests/steps/test_slots.py",
+    "tests/steps/test_admit.py",
+    "tests/steps/test_prepare.py",
+    "tests/steps/test_slot_release.py",
+    "tests/steps/real/test_release_real.py",
+    "tests/steps/real/test_publish_real.py",
+    "tests/steps/real/test_prepare_real.py",
+    "tests/rules/test_policy.py",
+    "tests/rules/test_attempt_sql_ownership.py"
+  ]
+}

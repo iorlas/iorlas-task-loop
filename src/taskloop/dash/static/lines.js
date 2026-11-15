@@ -27,21 +27,21 @@ export function lines(a) {
   const list = el("div", "divide-y divide-slate-100 dark:divide-slate-800/70");
   list.id = "lines";
   if (!a.feed.length) list.append(el("p", "py-3 text-sm text-slate-500", "No lines recorded for this attempt."));
-  a.feed.forEach((e, i) => list.append(line(e, a, a.feed[i - 1])));
+  const start = a.state === "running" ? Math.max(0, a.feed.length - FEED_LIMIT) : 0;
+  a.feed.slice(start).forEach((e, i) => list.append(line(e, a, a.feed[start + i - 1])));
   const note = el("p", "mb-1 text-[11px]");
   note.id = "feednote";
   box.append(note, list);
-  setNote(a);
+  setNote(a, note);
   return box;
 }
 
 // The quiet line above the list: how much is kept and whether it is live, or why it stopped following.
-export function setNote(a) {
-  const note = $("feednote");
+export function setNote(a, note = $("feednote")) {
   if (!note) return;
   note.className = `mb-1 text-[11px] ${a.feedError ? "text-rose-600 dark:text-rose-400" : "text-slate-400 dark:text-slate-500"}`;
   note.textContent = a.feedError ? `Feed stopped: ${a.feedError}. Reconnecting.`
-    : `Latest ${FEED_LIMIT} lines${a.state === "running" ? ", live" : ""}`;
+    : a.state === "running" ? `Latest ${FEED_LIMIT} lines, live` : "Retained lines";
 }
 
 // Feed display timestamps never establish the attempt's quiet age.
@@ -107,12 +107,12 @@ function fill(e, content, right) {
   }
 }
 
-// One new line of an attempt: a command's finished line replaces its running one (same id); the feed keeps its last FEED_LIMIT.
+// One new line: a command's finished line replaces its running one (same id); only a live feed keeps its last FEED_LIMIT.
 export function apply(attempt, e) {
   const at = e.id ? attempt.feed.findIndex((x) => x.id === e.id) : -1;
   if (at >= 0) attempt.feed[at] = e;
   else attempt.feed.push(e);
-  attempt.feed = attempt.feed.slice(-FEED_LIMIT);
+  if (attempt.state === "running") attempt.feed = attempt.feed.slice(-FEED_LIMIT);
 }
 
 // The new line in the open Lines tab: in place of its running line, else at the end. The view follows the end only when it was
@@ -130,7 +130,7 @@ export function show(attempt, e) {
   else list.append(row);
   const height = box.scrollHeight;
   let dropped = false;
-  while (list.children.length > FEED_LIMIT) {
+  while (attempt.state === "running" && list.children.length > FEED_LIMIT) {
     list.firstChild.remove();
     dropped = true;
   }
