@@ -10,7 +10,7 @@ from taskloop import answer_failures
 from taskloop.agents.settings import AgentSetting
 from taskloop.answer_repair_models import RepairContext
 from taskloop.attempt_reads import (
-    AttemptReads,
+    StoreConnection,
     StoreRefused,
     StoreUnavailable,
     as_int,
@@ -101,8 +101,8 @@ def verdict_of(row: tuple[object, ...]) -> Verdict | None:
     return Rejected(rule)
 
 
-class AttemptLoads(AttemptReads):
-    """The fenced reads an attempt's writers need; the status reads are `AttemptReads`'."""
+class AttemptLoads(StoreConnection):
+    """The fenced reads an attempt's writers need."""
 
     def retained(self, key: AttemptKey) -> RetainedInputs | None:
         with self._connection() as con:
@@ -122,19 +122,6 @@ class AttemptLoads(AttemptReads):
             return None
         return PlanEvidence(key=AttemptKey(as_text(row[0]), as_text(row[1]), as_int(row[2])), revision=as_int(row[3]),
                             end_commit=as_text(row[4]), blob=as_text(row[5]))
-
-    def previous_abandoned(self, key: AttemptKey) -> bool:
-        """Distinguish fresh admission after abandonment from ordinary step advancement, across restarts."""
-        with self._connection() as con:
-            row = con.execute(
-                "SELECT q.attempt_id,q.dispatch_token,q.generation FROM attempt p JOIN attempt q "
-                "ON q.repo_id=p.repo_id AND q.adapter=p.adapter "
-                "AND q.backlog=p.backlog AND q.task_id=p.task_id AND q.tracker_root=p.tracker_root AND q.seq<p.seq "
-                "WHERE p.attempt_id=? AND p.dispatch_token=? AND p.generation=? "
-                "ORDER BY q.seq DESC LIMIT 1", astuple(key),
-            ).fetchone()
-        released = None if row is None else self.release_of(AttemptKey(as_text(row[0]), as_text(row[1]), as_int(row[2])))
-        return released is not None and released.abandoned
 
     def earlier(self, repo_id: str, backlog: str, task_id: str, tracker_root: str) -> EarlierAttempt | None:
         """Latest agent attempt for exactly this registered repo and tracker task; checks have their own table."""
@@ -227,6 +214,22 @@ class AttemptLoads(AttemptReads):
     def load(self, key: AttemptKey) -> AttemptRecord | None:
         with self._connection() as con:
             return self._load(con, key)
+
+    def _fence(self, con: sqlite3.Connection, admission: Admission) -> AttemptRecord:
+        record = self._load(con, admission.key)
+        if record is None or record.admission != admission:
+            raise StoreRefused("changed_admission")
+        return record
+
+    def _owned(self, con: sqlite3.Connection, admission: Admission, callback: Callback | None) -> AttemptRecord:
+        fence(con, admission.key, callback)
+        current = self._fence(con, admission)
+        worker = current.worker
+        if callback is not None and (worker is None or
+                (worker.pid, worker.pgid, worker.start, worker.boot) !=
+                (callback.worker.pid, callback.worker.pgid, callback.worker.start, callback.worker.boot)):
+            raise StoreRefused("worker_mismatch")
+        return current
 
     def slot_base(self, key: AttemptKey) -> str:
         """The reservation's original park point D, independent of the branch source and prepared B."""

@@ -34,3 +34,10 @@
 @utility animate-flash { animation: flash 1.4s ease-out; }
 @utility animate-pulse-dot { animation: pulse-dot 1.2s ease-in-out infinite; }
 @utility animate-line-in { animation: line-in 0.25s ease-out; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}
