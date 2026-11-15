@@ -3,8 +3,10 @@
 was given and the outputs of its failed checks. Display only. The lines of an agent attempt are its `events.jsonl`, read
 behind the evidence files; a checks attempt's are its results."""
 
+import re
 from dataclasses import dataclass, replace
 from difflib import SequenceMatcher
+from pathlib import Path
 
 from any_agent.access import CodexSandbox
 from any_agent.activity import Activity
@@ -49,6 +51,7 @@ from taskloop.land_store import LandStore
 from taskloop.merge.status import result as merge_result
 from taskloop.merge.store import MergeStore
 from taskloop.operations import Failed
+from taskloop.slots_store import SlotsStore, SlotsUnavailable
 
 
 @dataclass(frozen=True)
@@ -63,7 +66,23 @@ FEED_LINES = 20  # the agent's latest actions a running attempt's detail carries
 FOLLOW_LINES = 20  # the tail a replaced follow answers with
 
 
-def feed_event(a: Activity) -> FeedEvent | None:
+def _slot_path(ports: TaskPorts, row: AttemptRow, page: ActivityPage) -> Path | None:
+    if not any(each.kind == "tool" for each in page.events):
+        return None
+    path = SlotsStore(ports.reads.store.connect).adopted(row.repo_id).get(row.slot)
+    if path is None:
+        raise SlotsUnavailable("Attempt's slot path unavailable")
+    return path
+
+
+def _tool_argument(text: str, slot_path: Path) -> str:
+    """Shorten exact path roots at argument boundaries, retaining quotes and unrelated paths."""
+    root = re.escape(str(slot_path))
+    pattern = rf"""(^|[\s"'=:(\[{{,]){root}(/|(?=$|[\s"':),;\]}}]))"""
+    return re.sub(pattern, lambda found: found[1] + ("" if found[2] else "."), text)
+
+
+def feed_event(a: Activity, slot_path: Path | None) -> FeedEvent | None:
     """An agent action as the page's live line: a command, a tool, a message, an error or a wait; None when its time is not one
     (the file is display-only data and may hold anything)."""
     try:
@@ -74,14 +93,15 @@ def feed_event(a: Activity) -> FeedEvent | None:
     if a.kind in ("command", "tool"):
         took = a.duration_ms if finished else None
         code = (a.exit_code or 0) if finished and a.kind == "command" else None
-        return FeedEvent(a.kind, at, id=a.id, state=a.state, cmd=a.text, name=a.name or None, waited_ms=a.waited_ms, duration_ms=took,
+        text = _tool_argument(a.text, slot_path) if a.kind == "tool" and slot_path is not None else a.text
+        return FeedEvent(a.kind, at, id=a.id, state=a.state, cmd=text, name=a.name or None, waited_ms=a.waited_ms, duration_ms=took,
                          exit_code=code)
     return FeedEvent(a.kind, at, text=a.text, waited_ms=a.waited_ms)
 
 
-def _page(page: ActivityPage, ended: bool = False, duration: Duration | None = None) -> FeedPage:
+def _page(page: ActivityPage, slot_path: Path | None, ended: bool = False, duration: Duration | None = None) -> FeedPage:
     """`ended`: the attempt is over, so a command or tool still running in its file never finished (its worker went away)."""
-    lines = (feed_event(each) for each in page.events)
+    lines = (feed_event(each, slot_path) for each in page.events)
     shown = tuple(replace(line, state="unfinished") if ended and line.state == "running" else line for line in lines if line is not None)
     return FeedPage(shown, page.cursor, page.replaced, page.available, duration)
 
@@ -99,14 +119,14 @@ def build_feed(ports: TaskPorts, backlog: str, task_id: str, step: str, number: 
             return None
         result = collect(ports.reads.store, row.key)
         duration = read_duration(ports.reads.store, ports.files, row, result)
-    except StoreUnavailable as error:
+        ended = result.status == "collected" or not row.held
+        if cursor is not None:
+            page = ports.files.activity_after(row.key, cursor, FOLLOW_LINES)
+        else:
+            page = ports.files.activity_complete(row.key) if ended else ports.files.activity_tail(row.key, FEED_LINES)
+        return _page(page, _slot_path(ports, row, page), ended=ended, duration=duration)
+    except (StoreUnavailable, SlotsUnavailable) as error:
         return Failed("unavailable", "store", str(error))
-    ended = result.status == "collected" or not row.held
-    if cursor is not None:
-        page = ports.files.activity_after(row.key, cursor, FOLLOW_LINES)
-    else:
-        page = ports.files.activity_complete(row.key) if ended else ports.files.activity_tail(row.key, FEED_LINES)
-    return _page(page, ended=ended, duration=duration)
 
 
 def _checks_feed(ports: TaskPorts, row: ChecksRow, cursor: str | None) -> FeedPage:
@@ -137,7 +157,7 @@ def _agent(
     reason = row.repeat_reason if after == "repeat" else "restarted at plan" if after else None
     begun = () if started is None else (FeedEvent("step", iso(started) or "", step=row.step, attempt=number),)
     activity = ports.files.activity_complete(row.key) if state != "running" else ports.files.activity_tail(row.key, FEED_LINES)
-    page = _page(activity, ended=state != "running")
+    page = _page(activity, _slot_path(ports, row, activity), ended=state != "running")
     summary = result.explanation or result.reason or result.status
     return AttemptDetail(row.step, number, state, iso(started), iso(ended), summary, after, reason,
                          previous if after == "repeat" else None, begun + page.events, page.cursor, led_by if after == "repeat" else None,
@@ -313,7 +333,7 @@ def build_task(ports: TaskPorts, backlog: str, task_id: str) -> TaskDetail | Fai
         checks = tuple((link.checks, link.number, link.checks.after in past)
                        for link in _chain(ports, rows) if link.checks is not None)
         events = build_events(LandStore(ports.reads.store.connect, ports.reads.store.begin), checks, ports.reads.observe)
-    except StoreUnavailable as error:
+    except (StoreUnavailable, SlotsUnavailable) as error:
         return Failed("unavailable", "store", str(error))
     title = task_id if view is None else ports.tracker.titles((task_id,)).get(task_id, task_id)  # cached by the board's own read
     admission = admission_of(ports.reads, frozenset(each.task_id for each in ports.tracker.ready()))
