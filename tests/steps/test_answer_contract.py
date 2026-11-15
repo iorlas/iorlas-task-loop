@@ -23,14 +23,15 @@ from taskloop.attempt_types import (
     Verified,
 )
 from taskloop.evidence_files import EvidenceFiles
+from taskloop.shelf_request import ShelfRequest
 from taskloop.steps import kind
 
 KEY = AttemptKey("attempt", "dispatch", 1)
 EXPECTED = "docs/design/tl-1/plan.md"
 # OpenAI strict structured output: the root is a plain object, and these may not appear at the root
 ROOT_FORBIDDEN = {"oneOf", "anyOf", "allOf", "enum", "not", "if", "then", "else", "const", "$ref", "$defs"}
-# conservative: no composition or conditional keyword anywhere, only the documented strict-mode keywords
-ALLOWED = {"type", "properties", "required", "additionalProperties", "enum", "pattern", "items", "description"}
+# Nested unions are supported by the strict harness contract; the root remains a plain object.
+ALLOWED = {"type", "properties", "required", "additionalProperties", "enum", "pattern", "items", "description", "anyOf"}
 
 
 def schema(tmp_path: Path, step: str = "plan") -> dict[str, object]:
@@ -49,6 +50,10 @@ def nodes(node: object) -> Iterator[dict[str, object]]:
         for child in properties.values():
             yield from nodes(child)
         yield from nodes(node.get("items"))
+        alternatives = node.get("anyOf", [])
+        assert isinstance(alternatives, list)
+        for child in alternatives:
+            yield from nodes(child)
 
 
 @pytest.mark.parametrize("step", ["plan", "implement"])
@@ -61,7 +66,7 @@ def test_the_root_is_a_plain_object_with_every_property_required(tmp_path: Path,
 
 
 @pytest.mark.parametrize("step", ["plan", "implement"])
-def test_no_node_uses_composition_conditionals_or_unlisted_keywords(tmp_path: Path, step: str) -> None:
+def test_no_node_uses_conditionals_or_unlisted_keywords(tmp_path: Path, step: str) -> None:
     for node in nodes(schema(tmp_path, step)):
         assert set(node) <= ALLOWED, set(node) - ALLOWED
         if node.get("type") == "object":
@@ -233,6 +238,52 @@ def test_the_implement_schema_has_four_keys_and_no_plan_path(tmp_path: Path) -> 
     assert isinstance(properties, dict) and sorted(properties) == ["disposition", "explanation", "message", "paths"]
     disposition = properties["disposition"]
     assert isinstance(disposition, dict) and disposition["enum"] == ["implemented", "unchanged", "incomplete", "needs_owner"]
+    explanation = properties["explanation"]
+    assert isinstance(explanation, dict)
+    assert explanation["anyOf"] == [
+        {"type": "string"},
+        {"type": "object", "additionalProperties": False, "required": ["package", "capability"],
+         "properties": {"package": {"type": "string"}, "capability": {"type": "string"}}},
+    ]
+    plan = schema(tmp_path / "plan")["properties"]
+    assert isinstance(plan, dict) and plan["explanation"] == {"type": "string"}
+
+
+@pytest.mark.parametrize(("package", "capability"), [
+    ("git-porcelain", "Read the latest released package"), ("A" + "b" * 199, "c" * 1000), ("a.b_c-1", "A capability"),
+])
+def test_missing_shelf_capabilities_are_typed_requests_without_a_commit(package: str, capability: str) -> None:
+    payload = {"package": package, "capability": capability}
+    found = IMPLEMENT.decode({"disposition": "needs_owner", "paths": [], "message": None, "explanation": payload}, CODE)
+    assert found.shelf_request == ShelfRequest.model_validate(payload)
+    assert (found.disposition, found.effect, found.paths, found.message) == ("needs_owner", "none", (), None)
+    assert package in found.explanation and capability in found.explanation
+    assert "shelf repository before this task can continue" in found.explanation
+    assert len(found.explanation) <= 2000
+
+
+@pytest.mark.parametrize("payload", [
+    {}, {"package": "git-porcelain"}, {"capability": "Missing"},
+    {"package": "git-porcelain", "capability": "Missing", "extra": True},
+    *({"package": value, "capability": "Missing"} for value in (
+        None, 1, [], {}, "", " ", "a" * 201, "not a distribution", "-pkg", "pkg-", "pkg\n", "pkg@1", "pkg/path",
+    )),
+    *({"package": "git-porcelain", "capability": value} for value in (None, 1, [], {}, "", " \n\t", "c" * 1001)),
+])
+def test_invalid_shelf_requests_name_the_rule(payload: object) -> None:
+    with pytest.raises(AnswerFailure) as caught:
+        IMPLEMENT.decode({"disposition": "needs_owner", "paths": [], "message": None, "explanation": payload}, CODE)
+    assert caught.value.rule is AnswerRule.SHELF_REQUEST
+
+
+@pytest.mark.parametrize("disposition", ["implemented", "unchanged", "incomplete"])
+def test_shelf_requests_require_needs_owner(disposition: str) -> None:
+    answer = IMPLEMENTED | {"disposition": disposition, "explanation": {"package": "git-porcelain", "capability": "Missing"}}
+    if disposition != "implemented":
+        answer |= {"paths": [], "message": None}
+    with pytest.raises(AnswerFailure) as caught:
+        IMPLEMENT.decode(answer, CODE)
+    assert caught.value.rule is AnswerRule.SHELF_REQUEST
 
 
 @pytest.mark.parametrize(("answer", "effect"), [
@@ -244,6 +295,7 @@ def test_the_implement_schema_has_four_keys_and_no_plan_path(tmp_path: Path) -> 
 def test_implement_answers_anywhere_in_the_repository_decode_with_their_effect(answer: dict[str, object], effect: str) -> None:
     found, paths = IMPLEMENT.decode(answer, CODE), answer["paths"]
     assert isinstance(paths, list) and (found.disposition, found.effect, found.paths) == (answer["disposition"], effect, tuple(paths))
+    assert found.shelf_request is None
 
 
 @pytest.mark.parametrize("change", [

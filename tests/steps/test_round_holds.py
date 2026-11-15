@@ -73,6 +73,26 @@ def held_plan(factory: Factory) -> str:
     return attempt
 
 
+def test_a_missing_shelf_capability_is_reconstructed_from_evidence_and_held(factory: Factory) -> None:
+    assert factory.round() == [("tl-1", "plan", "start", "started")]
+    assert factory.round() == [("tl-1", "plan", "verify", "verified release=released branch=published")]
+    before = factory.tip("tl-1")
+    factory.agents["tl-1", "implement"] = scripted(
+        factory.slot.repo,
+        {"disposition": "needs_owner", "paths": [], "message": None,
+         "explanation": {"package": "git-porcelain", "capability": "Observe a pending external action"}}, {},
+    )
+    assert factory.round() == [("tl-1", "implement", "advance", "started")]
+    assert factory.ran[-1] == "collected:needs_owner"
+    assert factory.round() == [("tl-1", "implement", "hold", "held failed:needs_owner")]
+    assert factory.tip("tl-1") == before
+    text = factory.tracker.comments[0][1]
+    assert "Shelf package git-porcelain lacks the capability: Observe a pending external action" in text
+    assert "shelf repository before this task can continue" in text
+    assert factory.next_words() == {"tl-1": ("implement", "on_hold")}
+    assert factory.round() == []
+
+
 def test_a_failed_task_is_held_once_then_costs_no_tracker_call_or_line(factory: Factory) -> None:
     attempt = held_plan(factory)
     bead = factory.tracker.beads["tl-1"]

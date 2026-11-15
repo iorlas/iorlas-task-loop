@@ -7,6 +7,7 @@ import json
 from typing import Final
 
 from git_porcelain import Tree
+from pydantic import ValidationError
 
 from taskloop import answer_decode, step_text
 from taskloop.answer_failures import AnswerFailure, AnswerRule
@@ -22,6 +23,7 @@ from taskloop.attempt_types import (
 from taskloop.check_repeat.feedback import FailedCheck, output_text
 from taskloop.command_conclusion import encode
 from taskloop.input_context import InputContext
+from taskloop.shelf_request import ShelfRequest
 from taskloop.task import TaskInspection
 
 DISPOSITIONS: Final = ("implemented", "unchanged", "incomplete", "needs_owner")
@@ -39,12 +41,18 @@ ANSWER_SCHEMA: Final = {
         "disposition": {"type": "string", "enum": list(DISPOSITIONS)},
         "paths": {"type": "array", "items": {"type": "string"}},
         "message": {"type": ["string", "null"]},
-        "explanation": {"type": "string"},
+        "explanation": {"anyOf": [
+            {"type": "string"},
+            {"type": "object", "additionalProperties": False, "required": ["package", "capability"],
+             "properties": {"package": {"type": "string"}, "capability": {"type": "string"}}},
+        ]},
     },
 }
 # The prepared environment, bounded verification policy (design tl-8bh9.14.178) and editing guidance (tl-8bh9.14.182).
 ENVIRONMENT: Final = (
-    "The factory ran this repository's `setup` before you started; uv uses the prepared cache offline. "
+    "The factory ran this repository's `setup` before you started; uv normally uses the prepared cache offline. "
+    "For an authorized shelf package addition or upgrade, acquisition of its latest release is allowed when absent "
+    "from the prepared cache. "
     "While working, run only focused test files for the code you changed. For lint and type validation, run "
     "`just check 2>&1 | tail -60` at most twice while working, in addition to the required final run. "
     "Do not run a full `just test` while working. The only direct pytest invocation permitted is "
@@ -87,6 +95,17 @@ PLAN_HANDOFF: Final = (
     "Do not edit plan.md; the answer's paths list must not contain any plan.md, including another task's plan or a "
     "deletion. The handoff of what was built belongs in the one-line commit message."
 )
+DEPENDENCIES: Final = (
+    "You may add or upgrade only shelf packages, and only to their most recent released version. "
+    "Do not add or upgrade any other dependency. Resolve shelf release versions when implementing; "
+    "task identifiers and task text do not pin versions. Shelf is read-only for agents. "
+    "If shelf lacks a needed capability, stop with disposition `needs_owner`, `paths: []`, `message: null`, and "
+    '`explanation: {"package": "<distribution name>", "capability": "<missing capability>"}`. '
+    "This object has exactly two strict string fields: package must be a nonblank distribution name of at most "
+    "200 characters, and capability must be nonblank text of at most 1000 characters. "
+    "Use this structured explanation only with `needs_owner`; otherwise explanation remains a string. "
+    "The owner or supervisor can address the request in the shelf repository before this task continues."
+)
 
 
 def step_rules(_task_id: str) -> StepRules:
@@ -112,7 +131,24 @@ def decode(value: object, rules: StepRules) -> Answer:
     if disposition == "unchanged" and listed:
         raise AnswerFailure(AnswerRule.PATHS_COUNT, "unchanged paths must be empty")
     text = answer_decode.message(message, committing=disposition == "implemented")
-    return Answer(disposition, EFFECT_OF[disposition], listed, text, answer_decode.explanation(explanation))
+    description, request = _explanation(explanation, disposition)
+    return Answer(disposition, EFFECT_OF[disposition], listed, text, description, request)
+
+
+def _explanation(value: object, disposition: str) -> tuple[str, ShelfRequest | None]:
+    if not isinstance(value, dict):
+        return answer_decode.explanation(value), None
+    if disposition != "needs_owner":
+        raise AnswerFailure(AnswerRule.SHELF_REQUEST, "A shelf request requires disposition needs_owner")
+    try:
+        request = ShelfRequest.model_validate(value)
+    except ValidationError as error:
+        raise AnswerFailure(
+            AnswerRule.SHELF_REQUEST,
+            "A shelf request must contain exactly package (a distribution name, 1 to 200 characters) and capability "
+            "(nonblank text, 1 to 1000 characters), both strict strings",
+        ) from error
+    return request.describe(), request
 
 
 def input_text(task: TaskInspection, rules: StepRules, context: InputContext) -> str:
@@ -149,7 +185,7 @@ def _closing_words(task_id: str, rules: StepRules) -> str:
         f"{rules.file_cap // MiB} MiB each, except: any path with a component starting with `.git`, anything under "
         f"`{'`, `'.join(rules.excluded)}`, executable files and symlinks. Do not edit `plan.md`, including status, progress "
         f"or \"As built\" sections. Other artifacts in the plan's own folder may change under the same rules; add no audit "
-        f"artifact. {PLAN_HANDOFF} {step_text.GIT_WRITES} Do not add or upgrade dependencies. {ENVIRONMENT} With "
+        f"artifact. {PLAN_HANDOFF} {step_text.GIT_WRITES} {DEPENDENCIES} {ENVIRONMENT} With "
         "`implemented`, still list in `paths` every file you changed, "
         "added or deleted and give a one-line commit `message`. "
         f"{COMMIT_SELECTION} In `explanation`, name each "

@@ -80,12 +80,12 @@ def test_plan_selection_produces_the_shared_step_member(decision: ReuseDecision,
 
 def test_the_implement_input_names_the_committed_plan_its_scope_and_its_environment() -> None:
     """The task's own prose first, then the plan by reference and the rules' scope, then the environment the entry
-    prepared: uv offline after setup, `$TMPDIR`, and that only the checks run afterwards count."""
+    prepared: uv normally offline after setup, `$TMPDIR`, and that only the checks run afterwards count."""
     text = task_text(TASK, "implement", CONTEXT)
     assert text.startswith("Add a widget\n\nIt must do X.\nAnd Y.\n\n- X works\n- Y works\n\n")
     assert "`docs/design/tl-1/plan.md`, committed on this branch by the plan step." in text
     assert "at most 96 files of at most 1 MiB each" in text and "anything under `.beads/`" in text and GIT_WRITES in text
-    assert "The factory ran this repository's `setup` before you started; uv uses the prepared cache offline." in text
+    assert "The factory ran this repository's `setup` before you started; uv normally uses the prepared cache offline." in text
     assert "there is no network now" not in text
     assert "Temporary files go to `$TMPDIR`; cleanup is attempted after release and required before the next agent." in text
     assert "Do not write elsewhere outside the repository." in text
@@ -157,6 +157,30 @@ def test_an_implement_repeat_frames_the_listing_and_preserves_the_complete_input
     assert "git show HEAD:<path> >" not in text
     assert "at most twice while working" in text and "Do not rerun either successful final command." in text
     assert "run `just check 2>&1 | tail -60` once and then `just test 2>&1 | tail -40` once" in text
+
+
+@pytest.mark.parametrize("route", ["initial", "repeat", "failed_check"])
+def test_implement_allows_latest_shelf_releases_and_stops_for_missing_capabilities(route: str) -> None:
+    text = IMPLEMENT.input_text(TASK, IMPLEMENT.rules("tl-1"), CONTEXT)
+    if route == "repeat":
+        text = IMPLEMENT.feedback(Unsettled("uncommitted"), IMPLEMENT.rules("tl-1"), 1, text, "nonce", unrecorded=True)
+    elif route == "failed_check":
+        failed = FailedCheck(source=AttemptKey("check", "dispatch", 1), block=1, commit="a" * 40, name="test",
+                             argv=("just", "test"), rc=1, output=OutputTail(availability=Availability.EMPTY))
+        text = failed_check_feedback(failed, text, "nonce")
+    for phrase in (
+        "You may add or upgrade only shelf packages, and only to their most recent released version",
+        "Do not add or upgrade any other dependency",
+        "task identifiers and task text do not pin versions",
+        "acquisition of its latest release is allowed when absent from the prepared cache",
+        "Shelf is read-only for agents",
+        "If shelf lacks a needed capability, stop with disposition `needs_owner`, `paths: []`, `message: null`",
+        '`explanation: {"package": "<distribution name>", "capability": "<missing capability>"}`',
+        "Use this structured explanation only with `needs_owner`",
+        "The owner or supervisor can address the request in the shelf repository",
+    ):
+        assert phrase in text
+    assert "Do not add or upgrade dependencies." not in text
 
 
 def test_the_attributes_files_follow_the_step_root_and_the_listed_paths() -> None:

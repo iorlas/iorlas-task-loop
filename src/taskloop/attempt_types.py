@@ -15,6 +15,7 @@ from taskloop.agents.settings import AgentSetting
 from taskloop.answer_failures import AnswerFailureData
 from taskloop.answer_repair_models import RepairContext
 from taskloop.repo import RepoId
+from taskloop.shelf_request import ShelfRequest
 from taskloop.step import Step
 from taskloop.task import TaskReference
 
@@ -338,6 +339,7 @@ class Answer:
     paths: tuple[str, ...]
     message: str | None
     explanation: str
+    shelf_request: ShelfRequest | None = None
 
 
 def dot_git(name: str) -> bool:
