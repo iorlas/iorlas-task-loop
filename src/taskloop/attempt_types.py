@@ -59,7 +59,6 @@ REPEATABLE: Final[tuple[RepeatReason, ...]] = ("uncommitted", "unsafe", "ignored
 # What a valid answer does to the slot: `commit` ends at a new commit X != B, `keep` ends at B itself, `none` ends nothing.
 type Effect = Literal["commit", "keep", "none"]
 EFFECTS: Final[tuple[Effect, ...]] = ("commit", "keep", "none")
-type Step = Literal["plan", "implement"]  # the built steps (`attempt.step`), in order; each has its kind in `steps`
 
 
 @dataclass(frozen=True)

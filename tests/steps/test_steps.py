@@ -7,6 +7,9 @@ from taskloop.attempt_types import AttemptKey, StepRules, Unsettled
 from taskloop.check_repeat.feedback import Availability, FailedCheck, OutputTail
 from taskloop.factory_commit import attributes
 from taskloop.input_context import InputContext
+from taskloop.plan_reuse import ReuseDecision
+from taskloop.resume_plan import Selection
+from taskloop.step import Step
 from taskloop.step_text import GIT_WRITES, SAVED_WORK
 from taskloop.steps import IMPLEMENT, ORDER, PLAN, failed_check_feedback, following, is_agent, kind, next_step
 from taskloop.task import TaskInspection, TaskReference, TaskScope
@@ -48,12 +51,20 @@ def test_next_step_follows_the_fixed_order_only_after_a_done_step(current: str |
 
 def test_the_check_step_follows_implement_and_is_no_agent_kind() -> None:
     """`ORDER` is every built step; only plan and implement have a kind (an agent): `check` is the checks admission's."""
+    assert PLAN.step is Step.PLAN and IMPLEMENT.step is Step.IMPLEMENT
     assert ORDER == ("plan", "implement", "check") and [following(step) for step in ORDER] == ["implement", "check", None]
     assert [is_agent(step) for step in ORDER] == [True, True, False] and not is_agent("review")
     with pytest.raises(ValueError, match="Unknown step"):
         following("review")
     with pytest.raises(ValueError, match="Unknown step"):
         kind("check")
+
+
+@pytest.mark.parametrize(("decision", "expected"), [
+    (ReuseDecision.REUSE, Step.IMPLEMENT), (ReuseDecision.PLAN, Step.PLAN), (ReuseDecision.UNAVAILABLE, Step.PLAN),
+])
+def test_plan_selection_produces_the_shared_step_member(decision: ReuseDecision, expected: Step) -> None:
+    assert Selection(decision, "Selected from the plan evidence.").step is expected
 
 
 def test_the_implement_input_names_the_committed_plan_its_scope_and_its_environment() -> None:

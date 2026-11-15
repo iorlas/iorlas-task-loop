@@ -2,7 +2,8 @@
 
 from pydantic import BaseModel, ConfigDict
 
-from taskloop.attempt_types import AttemptKey, Step
+from taskloop.attempt_types import AttemptKey
+from taskloop.step import Step
 
 
 class EarlierAttempt(BaseModel):

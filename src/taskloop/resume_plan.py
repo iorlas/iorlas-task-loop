@@ -8,11 +8,12 @@ from git_porcelain import GitUnavailable
 from taskloop.attempt_loads import PlanEvidence
 from taskloop.attempt_reads import StoreUnavailable
 from taskloop.attempt_store import AttemptStore
-from taskloop.attempt_types import AttemptRecord, AttemptResult, Checkouts, Step
+from taskloop.attempt_types import AttemptRecord, AttemptResult, Checkouts
 from taskloop.discussion import RefreshDiscussion
 from taskloop.input_context import InputError
 from taskloop.plan_reuse import ReuseDecision, evaluate
 from taskloop.prepare import Prepared
+from taskloop.step import Step
 from taskloop.task_content import TaskContentDigest
 from taskloop.task_content_store import TaskContentStore
 
@@ -25,7 +26,7 @@ class Selection:
 
     @property
     def step(self) -> Step:
-        return "implement" if self.decision is ReuseDecision.REUSE else "plan"
+        return Step.IMPLEMENT if self.decision is ReuseDecision.REUSE else Step.PLAN
 
 
 class ResumePlans:

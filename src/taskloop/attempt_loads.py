@@ -38,6 +38,7 @@ from taskloop.earlier_attempt import EarlierAttempt
 from taskloop.recovery.execution_models import Callback
 from taskloop.recovery.state_store import fence
 from taskloop.repo import RepoId
+from taskloop.step import decode_step
 from taskloop.steps import RULES
 from taskloop.task import TaskReference, TaskScope
 
@@ -142,7 +143,7 @@ class AttemptLoads(StoreConnection, ABC):
         return EarlierAttempt.model_validate({
             "key": AttemptKey(as_text(row[0]), as_text(row[1]), as_int(row[2])), "revision": as_int(row[3]),
             "repo_id": repo_id, "backlog": backlog, "task_id": task_id, "tracker_root": tracker_root,
-            "slot": as_text(row[4]), "step": as_text(row[5]), "end_commit": as_nullable_text(row[6]),
+            "slot": as_text(row[4]), "step": decode_step(as_text(row[5])), "end_commit": as_nullable_text(row[6]),
         })
 
     def earlier_for(self, key: AttemptKey) -> EarlierAttempt | None:
