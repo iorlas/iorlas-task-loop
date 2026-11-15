@@ -22,6 +22,8 @@ from taskloop.attempt_types import (
     CommitRefused,
     CommitResult,
     Committed,
+    CommitWaiting,
+    CommitWaitingReason,
     EntryIdentity,
     NotApplicable,
     Observe,
@@ -162,7 +164,10 @@ class StepRepeat:
         if record is None:
             return Failed("refused", "absent")
         alive = worker_stopped(self.gone, record.phase, record.worker)
-        return record if alive is None else Failed("unsettled", alive.reason)
+        if alive is None:
+            return record
+        return (commit_failure(CommitWaiting(CommitWaitingReason.WORKER_ALIVE))
+                if alive.reason == CommitWaitingReason.WORKER_ALIVE else Failed("unsettled", alive.reason))
 
     def _takeover(self, request: RepeatRequest, slot_path: str) -> Admitted | AdmitRefused | AdmitUnavailable | Failed:
         """`admit_repeat` under the slot's lock (a release parks only under it); released before the launch, since the

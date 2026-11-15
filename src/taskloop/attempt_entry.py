@@ -49,13 +49,14 @@ from taskloop.attempt_types import (
     CommitRefused,
     CommitResult,
     Committed,
+    CommitWaiting,
     EntryIdentity,
     NotApplicable,
     Rejected,
     Unsettled,
-    VerifyUnavailable,
     WorkerGone,
     entry_identity,
+    waiting_reason,
 )
 from taskloop.claim import ClaimWord, encode_claim
 from taskloop.claim_lease import HeartbeatFor, KeepAlive, Stop, keeping, renewal
@@ -149,8 +150,8 @@ def shown(result: CommitResult) -> str:
             return judged(result)
         case Unsettled(reason=reason):
             return "unsettled:" + reason
-        case VerifyUnavailable(reason=reason):
-            return "unavailable:" + reason
+        case CommitWaiting():
+            return "waiting:" + waiting_reason(result)
         case CommitRefused(reason=reason):
             return "refused:" + reason
         case NotApplicable():

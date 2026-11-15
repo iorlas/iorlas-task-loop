@@ -117,7 +117,7 @@ def automatic_guide(word: str) -> str:
         if not word.startswith(("rejected:", "run:", "answer:", "environment:", "checks:")):
             return GUIDE.get(word, GUIDE["failed"])
     reason = word.split(":", 1)[1] if word.split(":", 1)[0] in {
-        "refused", "unavailable", "uncertain", "unsettled", "rejected", "not_applicable", "defect", "held",
+        "refused", "unavailable", "uncertain", "unsettled", "waiting", "rejected", "not_applicable", "defect", "held",
     } else word
     return _reason_guide(reason)
 

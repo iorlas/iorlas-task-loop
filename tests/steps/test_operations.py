@@ -32,13 +32,14 @@ from taskloop.attempt_types import (
     CommitRefused,
     CommitResult,
     Committed,
+    CommitWaiting,
+    CommitWaitingReason,
     EntryIdentity,
     NotApplicable,
     Rejected,
     Seen,
     SlotFiles,
     Unsettled,
-    VerifyUnavailable,
 )
 from taskloop.cli_composition import adopt, open_commit, open_land, open_reads, open_start
 from taskloop.commit import FactoryCommit
@@ -409,7 +410,8 @@ def test_list_keeps_only_stuck_or_unknown_when_asked(reader: AttemptStore, now: 
     (CommitRefused("session"), Failed("refused", "session")),
     (CommitRefused("head_moved", ("refs/tags/task/evil",)), Failed("refused", "head_moved", "refs/tags/task/evil")),
     (Unsettled("dirty"), Failed("unsettled", "dirty")),
-    (VerifyUnavailable("git:NotARepo"), Failed("unavailable", "git:NotARepo")),
+    (CommitWaiting(CommitWaitingReason.GIT, "NotARepo"), Failed("waiting", "git:NotARepo")),
+    *[(CommitWaiting(reason), Failed("waiting", str(reason))) for reason in CommitWaitingReason],
     (CommitRefused("inconsistent"), Failed("refused", "inconsistent", "Contradictory retained facts: inconsistent verdict or end commit.")),
 ])
 def test_verify_maps_every_verdict(reader: AttemptStore, verdict: CommitResult, expected: VerifiedTask | Failed) -> None:

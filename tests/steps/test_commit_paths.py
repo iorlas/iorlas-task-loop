@@ -14,7 +14,18 @@ from git_porcelain.testing import FakeRepo, FakeWorktree
 
 from taskloop import implement_step, plan_step, step_text
 from taskloop.agents.settings import AgentSetting
-from taskloop.attempt_types import Admission, AnswerState, AttemptKey, FileRef, FileStat, PathExplanation, Rejected, Unsettled
+from taskloop.attempt_types import (
+    Admission,
+    AnswerState,
+    AttemptKey,
+    CommitWaiting,
+    CommitWaitingReason,
+    FileRef,
+    FileStat,
+    PathExplanation,
+    Rejected,
+    Unsettled,
+)
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.factory_commit import Committed, leftovers, settle
 from taskloop.ids import NativeIds
@@ -95,11 +106,12 @@ def test_commit_retry_measures_staging_through_record_and_suppresses_adoption(
         monkeypatch.setattr(files, "write_operation", broken)
     quiet_calls = []
 
-    def quiet() -> Unsettled | None:
+    def quiet() -> CommitWaiting | None:
         quiet_calls.append(True)
-        return Unsettled("worker_alive") if len(quiet_calls) == 2 else None
+        return CommitWaiting(CommitWaitingReason.WORKER_ALIVE) if len(quiet_calls) == 2 else None
 
-    assert settle(checkouts, slot_files, admission, base, answer("edit.txt"), quiet, timing) == Unsettled("worker_alive")
+    result = settle(checkouts, slot_files, admission, base, answer("edit.txt"), quiet, timing)
+    assert result == CommitWaiting(CommitWaitingReason.WORKER_ALIVE)
     assert head(slot) == base and len(quiet_calls) == 2
     made = settle(checkouts, slot_files, admission, base, answer("edit.txt"), lambda: None, timing)
     assert isinstance(made, Committed) and made.sha != base

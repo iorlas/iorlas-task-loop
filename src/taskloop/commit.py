@@ -23,6 +23,8 @@ from taskloop.attempt_types import (
     Checkouts,
     CommitRefused,
     CommitResult,
+    CommitWaiting,
+    CommitWaitingReason,
     NotApplicable,
     Rejected,
     SlotFiles,
@@ -30,7 +32,6 @@ from taskloop.attempt_types import (
     Unreadable,
     Unsettled,
     Verdict,
-    VerifyUnavailable,
     WorkerGone,
 )
 from taskloop.drain.actions import Fenced, Unobservable, operation
@@ -44,10 +45,10 @@ from taskloop.steps import kind
 from taskloop.verdict import judge
 
 type CommitHold = Callable[[Admission], AbstractContextManager[None]]
-LOCK_WORDS: dict[type[Exception], str] = {
-    SlotBusy: "slot_busy",
-    SlotLockUnavailable: "lock",
-}  # busy/unopenable custody is unavailable; read-only wiring refuses writes
+LOCK_WORDS: dict[type[Exception], CommitWaitingReason] = {
+    SlotBusy: CommitWaitingReason.SLOT_BUSY,
+    SlotLockUnavailable: CommitWaitingReason.LOCK,
+}  # busy/unopenable custody waits; read-only wiring refuses writes
 
 
 def applicable(stored: StoredExecution | None) -> StoredExecution | CommitResult:
@@ -55,14 +56,14 @@ def applicable(stored: StoredExecution | None) -> StoredExecution | CommitResult
     if stored is None:
         return CommitRefused("not_captured")
     if stored.answer.kind == "validation_pending":
-        return VerifyUnavailable("validation_pending")
+        return CommitWaiting(CommitWaitingReason.VALIDATION_PENDING)
     if stored.verification is not None:
         return stored.verification
     if not committing(stored):
         return NotApplicable(end_word(stored))
     if stored.session_state != "complete":  # the verdict's writer requires a complete session state too
         return (CommitRefused("session" if stored.session_state == "conflict" else "session_fault")
-                if stored.session_state in ("conflict", "fault") else VerifyUnavailable("session_" + stored.session_state))
+                if stored.session_state in ("conflict", "fault") else CommitWaiting(CommitWaitingReason.SESSION_PENDING))
     return stored
 
 
@@ -77,7 +78,7 @@ class FactoryCommit:
         """`gone` observes the registered worker before the factory writes Git in its slot (`worker_alive` otherwise).
         `hold` is the slot's custody around the commit through the verdict: the entry already holds it (a no-op here),
         `tl step commit` and a repeat take it (`slot_lock.hold`), a read-only factory commit refuses it (`slot_lock.refused`).
-        A held slot is `unavailable:slot_busy`, an unopenable lock file `unavailable:lock`, a write asked of a read-only
+        A held slot is `waiting:slot_busy`, an unopenable lock file `waiting:lock`, a write asked of a read-only
         factory commit `refused:read_only`."""
         self.ids = ids
         self.timing = timing
@@ -91,23 +92,24 @@ class FactoryCommit:
         except Fenced:
             return CommitRefused(Reason.DRAINING)
         except Unobservable:
-            return VerifyUnavailable("observe")
+            return CommitWaiting(CommitWaitingReason.OBSERVE)
         except StoreUnavailable:
-            return VerifyUnavailable("store")
+            return CommitWaiting(CommitWaitingReason.STORE)
 
     def _committed(self, key: AttemptKey) -> CommitResult:
         try:
             return self._commit(key)
         except StoreUnavailable:
-            return VerifyUnavailable("store")
+            return CommitWaiting(CommitWaitingReason.STORE)
         except StoreRefused as error:
             return CommitRefused(str(error))
         except NotSettled as error:
-            return VerifyUnavailable(error.reason)
+            reason, _, diagnostic = error.reason.partition(":")
+            return CommitWaiting(CommitWaitingReason(reason), diagnostic or None)
         except (SlotBusy, SlotLockUnavailable, ReadOnly) as error:
-            return CommitRefused("read_only") if isinstance(error, ReadOnly) else VerifyUnavailable(LOCK_WORDS[type(error)])
+            return CommitRefused("read_only") if isinstance(error, ReadOnly) else CommitWaiting(LOCK_WORDS[type(error)])
         except (GitUnavailable, Unreadable) as error:
-            return VerifyUnavailable("git:" + type(error).__name__)
+            return CommitWaiting(CommitWaitingReason.GIT, type(error).__name__)
 
     def _commit(self, key: AttemptKey) -> CommitResult:
         """A stored verdict or a refusal takes no lock; otherwise everything is read again under the slot's lock, so the
@@ -157,7 +159,7 @@ class FactoryCommit:
         except (StoreUnavailable, StoreRefused, GitUnavailable):
             return None
 
-    def _quiet(self, record: AttemptRecord) -> Unsettled | CommitRefused | None:
+    def _quiet(self, record: AttemptRecord) -> CommitWaiting | CommitRefused | None:
         """Asked right before each factory Git write: this attempt still holds the reservation (a fresh fenced load, else
         `superseded`) and its registered worker is gone (a captured attempt always has one; none counts as alive)."""
         try:
@@ -167,7 +169,7 @@ class FactoryCommit:
         if held is None or held.admission != record.admission:
             return CommitRefused("superseded")
         worker = record.worker
-        return None if worker is not None and self.gone(worker) else Unsettled("worker_alive")
+        return None if worker is not None and self.gone(worker) else CommitWaiting(CommitWaitingReason.WORKER_ALIVE)
 
     def _settle(self, record: AttemptRecord, base: str, stored: StoredExecution) -> CommitResult:
         """Outside any transaction: X (stored, adopted or made), then the clean tree at X, then the verdict over the
@@ -175,7 +177,7 @@ class FactoryCommit:
         admission, answer, commit = record.admission, stored.answer, record.end_commit
         if commit is None:
             settled = settle(self.checkouts, self.files, admission, base, answer, lambda: self._quiet(record), self.timing)
-            if isinstance(settled, (Unsettled, CommitRefused)):
+            if isinstance(settled, (Unsettled, CommitRefused, CommitWaiting)):
                 return settled
             if isinstance(settled, Rejected):  # nothing_written: no commit to bind
                 return self._kept(record, base, None, settled)

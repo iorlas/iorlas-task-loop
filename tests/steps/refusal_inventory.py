@@ -3,6 +3,7 @@
 import ast
 from pathlib import Path
 
+from taskloop.attempt_types import CommitWaitingReason
 from taskloop.recovery.models import Outcome
 from taskloop.release_proof import RecoveryReason
 
@@ -10,7 +11,7 @@ ROOT = Path(__file__).resolve().parents[2] / "src" / "taskloop"
 # Argument carrying a refusal reason, including helpers that construct owning results.
 PRODUCERS = {
     "Failed": 1, "AdmitRefused": 0, "AdmitUnavailable": 0, "LaunchRefused": 0, "LaunchUnavailable": 0,
-    "CommitRefused": 0, "VerifyUnavailable": 0, "NotApplicable": 0, "Unsettled": 0, "NotReleased": 1,
+    "CommitRefused": 0, "CommitWaiting": 0, "NotApplicable": 0, "Unsettled": 0, "NotReleased": 1,
     "NotPublished": 1, "_refused": 0, "_unavailable": 0, "StoreRefused": 0, "Rejected": 0,
 }
 
@@ -56,7 +57,7 @@ def typed_reasons() -> set[str]:
             for field in node.body:
                 if isinstance(field, ast.AnnAssign) and isinstance(field.target, ast.Name) and field.target.id == "reason":
                     reasons.update(n.value for n in ast.walk(field.annotation) if isinstance(n, ast.Constant) and isinstance(n.value, str))
-    return reasons | {reason.value for reason in RecoveryReason}
+    return reasons | {reason.value for reason in RecoveryReason} | {str(reason) for reason in CommitWaitingReason}
 
 
 # Forwarded values originate in admission, launch, store, verification, publication,
@@ -112,7 +113,7 @@ REVIEWED_DYNAMIC = {
     ('operations.py', 'Failed', 'land.reason'),
     ('operations.py', 'Failed', 'refused.reason'),
     ('operations.py', 'Failed', 'result.reason'),
-    ('operations.py', 'Failed', 'result.what if isinstance(result, NotApplicable) else result.reason'),
+    ('operations.py', 'Failed', 'reason'),
     ('plan_step.py', 'Rejected', 'broken'),
     ('prepare.py', '_refused', "'branch_moved' if moved else 'branch_diverged'"),
     ('prepare.py', '_refused', "f'slot_{problem}'"),
@@ -146,10 +147,15 @@ REVIEWED_DYNAMIC = {
     ('factory_commit.py', 'CommitRefused', "'unborn' if head is None else 'branch'"),
     ('factory_commit.py', 'CommitRefused', "'unborn' if state.head is None else 'branch'"),
     ('factory_commit.py', 'CommitRefused', 'problem'),
-    ('commit.py', 'VerifyUnavailable', "'git:' + type(error).__name__"),
-    ('commit.py', 'VerifyUnavailable', "'session_' + stored.session_state"),
-    ('commit.py', 'VerifyUnavailable', 'LOCK_WORDS[type(error)]'),
-    ('commit.py', 'VerifyUnavailable', 'error.reason'),
+    ('commit.py', 'CommitWaiting', 'CommitWaitingReason.VALIDATION_PENDING'),
+    ('commit.py', 'CommitWaiting', 'CommitWaitingReason.SESSION_PENDING'),
+    ('commit.py', 'CommitWaiting', 'CommitWaitingReason.OBSERVE'),
+    ('commit.py', 'CommitWaiting', 'CommitWaitingReason.STORE'),
+    ('commit.py', 'CommitWaiting', 'CommitWaitingReason.GIT'),
+    ('commit.py', 'CommitWaiting', 'CommitWaitingReason.WORKER_ALIVE'),
+    ('commit.py', 'CommitWaiting', 'LOCK_WORDS[type(error)]'),
+    ('commit.py', 'CommitWaiting', 'CommitWaitingReason(reason)'),
+    ('repeat.py', 'CommitWaiting', 'CommitWaitingReason.WORKER_ALIVE'),
 }
 
 DYNAMIC_REASONS = {

@@ -35,6 +35,8 @@ from taskloop.attempt_types import (
     CommitRefused,
     CommitResult,
     Committed,
+    CommitWaiting,
+    CommitWaitingReason,
     FileRef,
     FileStat,
     NotApplicable,
@@ -42,7 +44,6 @@ from taskloop.attempt_types import (
     StepRules,
     StoredExecution,
     Unsettled,
-    VerifyUnavailable,
 )
 from taskloop.commit import CommitHold, FactoryCommit
 from taskloop.composition import open_factory_commit
@@ -197,7 +198,7 @@ def unregistered(slot: FakeWorktree, files: FakeSlotFiles) -> None:
     slot.repo.drop_worktree(slot.path, force=True)
 
 
-LOST = "unavailable:git:MissingRevision"  # B no longer resolves: permanently unknown, never a verdict
+LOST = "waiting:git:MissingRevision"  # B no longer resolves: permanently unknown, never a verdict
 # B made unresolvable: its first hex digit always changes (fake commit ids hang on one counter shared by every repository
 # in the process, so a fixed replacement digit was a no-op whenever an earlier test left B starting with it)
 LOSE_BASE = "UPDATE attempt SET base_commit=(CASE substr(base_commit,1,1) WHEN 'f' THEN 'e' ELSE 'f' END) || substr(base_commit,2)"
@@ -242,11 +243,11 @@ CASES: list[tuple[str, Files | None, Files, Mapping[str, object], After | None, 
     ("unchanged_never_adopts", PLANNED, {}, UNCHANGED, trailer_commit, None, "refused:head_moved", 1),
     ("another_branch", None, PLANNED, PLAN, lambda slot, _files: slot.checkout_new("other"), None, "refused:branch", 0),
     ("detached", None, PLANNED, PLAN, lambda slot, _files: slot.park("HEAD"), None, "refused:branch", 0),
-    ("index_locked", None, PLANNED, PLAN, lambda slot, _files: slot.lock_index(), None, "unavailable:git:IndexLocked", 0),
+    ("index_locked", None, PLANNED, PLAN, lambda slot, _files: slot.lock_index(), None, "waiting:git:IndexLocked", 0),
     ("lost_base", None, PLANNED, PLAN, None, LOSE_BASE, LOST, 0),
-    ("dropped", None, PLANNED, PLAN, lambda slot, _files: slot.repo.drop_checkout(slot.path), None, "unavailable:git:NotARepo", 0),
-    ("not_listed", None, PLANNED, PLAN, unregistered, None, "unavailable:not_listed", 0),
-    ("other_repo", None, PLANNED, PLAN, None, OTHER_REPO, "unavailable:repo", 0),
+    ("dropped", None, PLANNED, PLAN, lambda slot, _files: slot.repo.drop_checkout(slot.path), None, "waiting:git:NotARepo", 0),
+    ("not_listed", None, PLANNED, PLAN, unregistered, None, "waiting:not_listed", 0),
+    ("other_repo", None, PLANNED, PLAN, None, OTHER_REPO, "waiting:repo", 0),
 ]
 
 
@@ -281,7 +282,7 @@ def test_the_stage_commit_and_verdict_table(
     assert shown(result) == expected
     final = expected.startswith(("verified", "reused", "rejected"))
     assert len(stored(registered)) == (1 if final else 0)  # slot state and unknowns are never stored
-    if expected != "unavailable:not_listed":
+    if expected != "waiting:not_listed":
         assert len(made(slot, base)) == commits
         assert all(body == TRAILER for subject, body in made(slot, base) if subject == "Plan tl-1")
     collected = attempts(registered, tmp_path, checkouts, slot_files, agent(slot, {})).collect(KEY)
@@ -492,7 +493,7 @@ def test_an_empty_read_of_a_parent_or_a_listed_blob_is_unknown_never_a_verdict(
         return None if found is None else Tree(found.sha, lambda: found.files, lambda _path: None)
 
     monkeypatch.setattr(repo, "tree", failing)
-    assert factory_commit(registered, checkouts, slot_files).commit(KEY) == VerifyUnavailable("git:Unreadable")
+    assert factory_commit(registered, checkouts, slot_files).commit(KEY) == CommitWaiting(CommitWaitingReason.GIT, "Unreadable")
     assert stored(registered) == []
 
 
@@ -545,14 +546,15 @@ def test_refusals_and_unknowns_before_any_git_read(
     registered.execute(
         "UPDATE execution SET answer_kind='validation_pending',disposition=NULL,effect=NULL,commit_paths=NULL,commit_message=NULL"
     )
-    assert factory_commit(registered, counted, slot_files).commit(KEY) == VerifyUnavailable("validation_pending")
+    assert factory_commit(registered, counted, slot_files).commit(KEY) == CommitWaiting(CommitWaitingReason.VALIDATION_PENDING)
     assert FactoryCommit(AttemptStore(lambda: None), counted, slot_files, gone, lambda: 20, hold,
-        ids=NativeIds()).commit(KEY) == VerifyUnavailable("store")
+        ids=NativeIds()).commit(KEY) == CommitWaiting(CommitWaitingReason.STORE)
     assert counted.opens == 0 and stored(registered) == []
 
 
 @pytest.mark.parametrize(("session_state", "expected"), [
-    ("pending", VerifyUnavailable("session_pending")), ("conflict", CommitRefused("session")), ("fault", CommitRefused("session_fault")),
+    ("pending", CommitWaiting(CommitWaitingReason.SESSION_PENDING)),
+    ("conflict", CommitRefused("session")), ("fault", CommitRefused("session_fault")),
 ])
 def test_an_unfinished_session_state_is_never_verified(
     registered: sqlite3.Connection, slot: FakeWorktree, tmp_path: Path, checkouts: Checkouts, slot_files: FakeSlotFiles,
@@ -781,7 +783,8 @@ def test_no_git_write_while_the_worker_may_still_run(
         return False
 
     found = FactoryCommit(AttemptStore(lambda: registered), checkouts, slot_files, alive, lambda: 20, hold, ids=NativeIds()).commit(KEY)
-    assert found == Unsettled("worker_alive") and seen == [WORKER]
+    assert found == CommitWaiting(CommitWaitingReason.WORKER_ALIVE) and seen == [WORKER]
+    assert shown(found) == "waiting:worker_alive" and stored(registered) == []
     assert slot.state().index == index and made(slot, base) == [] and end_commit(registered) is None
     assert isinstance(factory_commit(registered, checkouts, slot_files).commit(KEY), Committed)  # once it is gone
 

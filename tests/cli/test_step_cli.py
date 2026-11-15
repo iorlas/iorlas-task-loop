@@ -177,7 +177,7 @@ CASES: list[tuple[list[str], Result, int, list[str], set[str]]] = [
      ["refused:repeats_exhausted", step_guide.GUIDE["repeats_exhausted"]], ADMISSION_ERROR),
     (START, Failed("refused", "repeat_cap"), 1, ["tl step start: refused:repeat_cap"], ADMISSION_ERROR),
     (START, Failed("refused", "not_repeatable"), 1, ["tl step start: refused:not_repeatable"], ADMISSION_ERROR),
-    (START, Failed("unsettled", "worker_alive"), 3, ["tl step start: unsettled:worker_alive", step_guide.GUIDE["unsettled"]],
+    (START, Failed("waiting", "worker_alive"), 3, ["tl step start: waiting:worker_alive", step_guide.GUIDE["waiting"]],
      ADMISSION_ERROR),
     (START, Failed("refused", "superseded"), 1, ["tl step start: refused:superseded"], ADMISSION_ERROR),
     (START, Failed("refused", "no_free_slot", slots=(VIEW,)), 1, ["tl step start: refused:no_free_slot", "s2 unknown dirty /slots/s2"],
@@ -340,7 +340,7 @@ def test_every_failure_kind_has_its_exit_code(
     kind: FailureKind, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     monkeypatch.setitem(cli_step.OPERATIONS, ("step", "list"), lambda _arguments, _loaded: Failed(kind, "choices"))
-    assert main(["step", "list"]) == (3 if kind in ("unavailable", "uncertain", "unsettled") else 1)
+    assert main(["step", "list"]) == (3 if kind in ("unavailable", "uncertain", "unsettled", "waiting") else 1)
     assert capsys.readouterr().err.startswith("tl step list: ")
 
 

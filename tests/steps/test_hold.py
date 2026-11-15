@@ -259,12 +259,13 @@ def test_a_crash_after_the_abandon_resumes_at_the_comment(bench: Bench) -> None:
     assert bench.calls.count("labels /tracker tl-1 auto") == 1 and bench.calls.count("comment tl-1") == 1
 
 
+WORKER_ALIVE = NotReleased("unsettled", "worker_alive")  # Release retains its own process-result vocabulary.
 KEPT = [
     (NotReleased("refused", "slot_dirty"), "held:slot_dirty", "slot /slots/s1 has files left by this attempt"),
     (NotReleased("refused", "slot_branch"), "held:slot_branch", "slot /slots/s1 is not where the factory left it (slot_branch)"),
     (NotReleased("refused", "slot_redirected"), "held:slot_redirected", "(slot_redirected)"),
     (NotReleased("refused", "slot_unborn"), "held:slot_unborn", "(slot_unborn)"),
-    (NotReleased("unsettled", "worker_alive"), "unsettled:worker_alive", "still runs (pid 42, group 41)"),
+    (WORKER_ALIVE, WORKER_ALIVE.word, "still runs (pid 42, group 41)"),
     (NotReleased("unsettled", "setup_running"), "unsettled:setup_running", "still runs (pid 77, group 76)"),
     (NotReleased("refused", "landing"), "refused:landing", "may be on origin (landing)"),
     (NotReleased("refused", "landed"), "refused:landed", "may be on origin (landed)"),
