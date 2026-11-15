@@ -236,7 +236,7 @@ function renderContent() {
     return drawer.append(tabPanel(el("p", "px-6 py-5 text-sm text-slate-500", "Not started: no attempt yet."), "drawer-view", view));
   }
   const body = el("div", "flex min-h-0 flex-1");
-  body.append(rail(detail.attempts, t, open, select, detail.step_usage), open.step === "land" ? deliveryPane() : pane());
+  body.append(rail(detail.attempts, t, open, select, detail.step_usage, detail.land_events), open.step === "land" ? deliveryPane() : pane());
   drawer.append(tabPanel(body, "drawer-view", view));
   if ($("rail") && railTop) $("rail").scrollTop = railTop;
   else body.querySelector("[data-selected]")?.scrollIntoView({ block: "nearest" });
@@ -257,7 +257,7 @@ function loadDelivery(mine) {
 
 function deliveryPane() {
   const wrap = el("section", "min-w-0 flex-1 overflow-y-auto px-6 py-4");
-  wrap.append(el("h3", "text-sm font-semibold", "Land · Pending delivery"));
+  wrap.append(el("h3", "text-sm font-semibold", "Land · Delivery details"));
   if (!open.delivery) loadDelivery(open);
   const kept = open.delivery;
   if (kept.error) {
@@ -280,9 +280,6 @@ function deliveryPane() {
   wrap.append(el("p", "py-2 text-sm", detail.diff_files == null ? "Diff totals unavailable for this delivery."
     : `${detail.diff_files} files changed (+${detail.added} −${detail.deleted})`));
   wrap.append(el("pre", "overflow-x-auto whitespace-pre-wrap break-words text-xs", detail.summary.join("\n")));
-  for (const [label, command] of [["Diff command", detail.diff_command], ["Land command reference", detail.command]]) {
-    wrap.append(el("h4", "mt-4 text-sm font-medium", label), el("pre", "overflow-x-auto whitespace-pre-wrap break-words py-2 text-xs", command));
-  }
   if (/^https?:\/\//i.test(detail.pr_url ?? "")) {
     const link = el("a", "mt-3 inline-block text-sm underline", "View pull request");
     link.href = detail.pr_url;

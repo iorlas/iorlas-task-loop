@@ -3,6 +3,7 @@ decides anything, and every fact keeps its one owner (factory.db, the tracker, t
 
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from enum import StrEnum
 from typing import Literal, Protocol
 
 from pydantic import BaseModel, ConfigDict
@@ -217,6 +218,7 @@ class TaskDetail:
     attempts: tuple[AttemptDetail, ...]
     step_usage: dict[str, Usage]
     usage: Usage
+    land_events: tuple[LandEvent, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -225,6 +227,41 @@ class TrackerDetail:
 
     fields: Fields
     comments: tuple[Comment, ...]
+
+
+class LandEventKind(StrEnum):
+    READY = "ready"
+    TRIED = "tried"
+    LANDED = "landed"
+
+
+class LandWait(BaseModel):
+    """A wait following an event; a finished wait can have an unknown end time."""
+
+    model_config = ConfigDict(frozen=True)
+
+    after: str
+    started_at: str | None
+    ended_at: str | None
+    open: bool
+    awaited: str
+
+
+class LandEvent(BaseModel):
+    """Recorded land history, separate from the card's current execution and policy."""
+
+    model_config = ConfigDict(frozen=True)
+
+    id: str
+    kind: LandEventKind
+    checks_id: str
+    checks_n: int
+    candidate_id: str | None = None
+    candidate_n: int | None = None
+    at: str | None
+    past: bool
+    explanation: str
+    waits: tuple[LandWait, ...] = ()
 
 
 class LandDetail(BaseModel):
@@ -237,8 +274,6 @@ class LandDetail(BaseModel):
     diff_files: int | None
     added: int | None
     deleted: int | None
-    diff_command: str
-    command: str
     pr_url: str | None = None
 
 

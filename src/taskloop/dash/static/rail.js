@@ -1,6 +1,6 @@
 // One row per step attempt, with the factory's verification attached to its agent answer.
 // Past history is folded for display only; selection still uses the original (step, n).
-import { JUMP, LAND, STATE, STEPS, VERIFY, dot, el, elapsedSpan, fmtDur, isWaiting, since, stepInfo, waitingNote } from "./ui.js";
+import { JUMP, LAND, STATE, STEPS, VERIFY, dot, el, elapsedSpan, fmtDur, isWaiting, since, stepInfo, tick, waitingNote } from "./ui.js";
 import { elapsedDuration } from "./duration.js";
 import { say, wordNode } from "./words.js";
 import { usageNode, usageText } from "./usage.js";
@@ -176,7 +176,7 @@ function summary(entries, n) {
   return parts.join(" · ");
 }
 
-function groupRows(entries, selected, select, stepUsage) {
+function groupRows(entries, selected, select, stepUsage, events) {
   const ol = el("ol", "ml-1 border-l border-slate-200 dark:border-slate-700");
   for (const entry of entries) {
     if (entry.a.after === "restart_at_plan") ol.append(restart(entry, select));
@@ -186,11 +186,14 @@ function groupRows(entries, selected, select, stepUsage) {
       ol.append(work);
     }
     ol.append(row(entry, selected, select, stepUsage[entry.a.step]));
+    if (entry.a.step === "checks") {
+      for (const event of events.filter((e) => e.checks_n === entry.a.n)) ol.append(landEvent(event, selected, select));
+    }
   }
   return ol;
 }
 
-function pastGroup(entries, n, selected, select, stepUsage) {
+function pastGroup(entries, n, selected, select, stepUsage, events) {
   const key = `${entries[0].a.step}/${entries[0].a.n}`;
   const details = el("details", "mb-2");
   details.dataset.run = key;
@@ -201,12 +204,45 @@ function pastGroup(entries, n, selected, select, stepUsage) {
   details.open = selected.runs.get(key) ?? false;
   const heading = el("summary", `cursor-pointer text-[11px] ${muted}`, summary(entries, n));
   heading.title = "Expand to inspect every attempt and verification result, including earlier failures";
-  details.append(heading, groupRows(entries, selected, select, stepUsage));
+  details.append(heading, groupRows(entries, selected, select, stepUsage, events));
   details.addEventListener("toggle", () => { if (details.isConnected) selected.runs.set(key, details.open); });
   return details;
 }
 
-function landRow(t, selected, select) {
+function landWait(wait) {
+  const note = el("div", `px-2 py-1 text-[11px] ${muted}`, wait.awaited);
+  const time = el("span", "block tabular-nums", "Wait duration unavailable");
+  const start = Date.parse(wait.started_at), end = Date.parse(wait.ended_at);
+  if (Number.isFinite(start) && wait.open && wait.ended_at == null && start <= Date.now()) {
+    time.dataset.since = wait.started_at;
+    time.dataset.prefix = "Waiting · ";
+    tick(time);
+  } else if (!wait.open && Number.isFinite(start) && Number.isFinite(end) && end >= start) {
+    time.textContent = `Waited · ${fmtDur(end - start)}`;
+  }
+  time.title = `${wait.started_at ?? "Start not recorded"} → ${wait.ended_at ?? (wait.open ? "ongoing" : "End not recorded")}`;
+  note.append(time);
+  return note;
+}
+
+function landEvent(event, selected, select) {
+  const li = el("li", "relative py-1.5 pl-4");
+  li.dataset.landEvent = event.id;
+  const label = { ready: "Land ready", tried: "Land tried", landed: "Landed" }[event.kind];
+  const on = selected.step === "land";
+  const button = el("button", `w-full rounded px-2 py-1 text-left text-[13px] ${on ? "bg-slate-100 dark:bg-slate-800" : "hover:bg-slate-50 dark:hover:bg-slate-800/60"}`,
+    `${label}${event.candidate_n == null ? "" : ` · candidate ${event.candidate_n}`}`);
+  button.type = "button";
+  button.setAttribute("aria-pressed", String(on));
+  button.addEventListener("click", () => select("land"));
+  const stamp = el("span", `block px-2 text-[11px] ${muted}`, event.at ?? "Time not recorded");
+  li.append(marker(event.kind === "landed" ? "border-emerald-500 bg-emerald-500" : "border-amber-500"), button, stamp,
+    el("span", `block px-2 text-[11px] ${muted}`, `${event.past ? "Historical · " : ""}${event.explanation}`));
+  for (const wait of event.waits) li.append(landWait(wait));
+  return li;
+}
+
+function landRow(t, selected, select, events) {
   const here = t.column === "land" || t.column === "landed";
   const word = t.column === "landed" ? LAND.done : here ? LAND[t.land ?? "unknown"] : null;
   const li = el("li", `relative py-1.5 pl-4 ${here ? "" : "text-slate-400 dark:text-slate-600"}`);
@@ -217,13 +253,13 @@ function landRow(t, selected, select) {
   if (on) button.dataset.selected = "1";
   button.addEventListener("click", () => select("land"));
   li.append(marker(t.column === "landed" ? "border-emerald-500 bg-emerald-500" : here ? "border-amber-500" : "border-slate-300 dark:border-slate-600"), button);
-  if (here && isWaiting(t)) li.append(waitingNote(t));
+  if (here && isWaiting(t) && !events.length) li.append(waitingNote(t));
   else if (word) li.append(el("span", `block text-[11px] ${word.text}`, t.status_note ?? word.row));
   else li.append(el("span", "ml-2 text-[11px]", "pending"));
   return li;
 }
 
-export function rail(list, t, selected, select, stepUsage = {}) {
+export function rail(list, t, selected, select, stepUsage = {}, events = []) {
   selected.runs ??= new Map();
   const wrap = el("nav", "w-64 shrink-0 overflow-y-auto border-r border-slate-200 px-4 py-4 dark:border-slate-800");
   wrap.id = "rail";
@@ -231,8 +267,8 @@ export function rail(list, t, selected, select, stepUsage = {}) {
   const groups = project(list);
   let current = null;
   groups.forEach((entries, i) => {
-    if (entries.every(({ a }) => a.past)) wrap.append(pastGroup(entries, i + 1, selected, select, stepUsage));
-    else { current = groupRows(entries, selected, select, stepUsage); wrap.append(current); }
+    if (entries.every(({ a }) => a.past)) wrap.append(pastGroup(entries, i + 1, selected, select, stepUsage, events));
+    else { current = groupRows(entries, selected, select, stepUsage, events); wrap.append(current); }
   });
   selected.railSelection = `${selected.step}/${selected.n}`;
   if (t.column === "waiting") return wrap;
@@ -244,6 +280,6 @@ export function rail(list, t, selected, select, stepUsage = {}) {
     li.append(marker("border-slate-300 dark:border-slate-600"), `${s.emoji} ${s.label}`, el("span", "ml-2 text-[11px]", "pending"));
     current.append(li);
   }
-  current.append(landRow(t, selected, select));
+  current.append(landRow(t, selected, select, events));
   return wrap;
 }

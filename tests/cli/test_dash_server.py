@@ -15,7 +15,22 @@ import pytest
 
 from taskloop import dash_server
 from taskloop.dash_duration import Duration
-from taskloop.dash_model import AttemptBody, Board, Card, FeedEvent, FeedPage, Fields, LandDetail, Outcome, TaskDetail, TrackerDetail, Usage
+from taskloop.dash_model import (
+    AttemptBody,
+    Board,
+    Card,
+    FeedEvent,
+    FeedPage,
+    Fields,
+    LandDetail,
+    LandEvent,
+    LandEventKind,
+    LandWait,
+    Outcome,
+    TaskDetail,
+    TrackerDetail,
+    Usage,
+)
 from taskloop.dash_server import PAGES, DashPorts, DashServer, Hub
 from taskloop.operations import Failed
 from taskloop.round_reader import LogRow
@@ -49,7 +64,6 @@ class Ports:
         if task_id != "tl-1":
             return None
         return LandDetail(actions=("Integrate changes.",), summary=("One changed file.",), diff_files=1, added=2, deleted=1,
-                          diff_command="git diff a..b", command="tl step land tl-1 --backlog tl --checkout /repo",
                           pr_url="https://example.invalid/pull/1")
 
     def board(self) -> Board | Failed:
@@ -235,10 +249,20 @@ def test_delivery_details_are_selected_by_task_and_preserve_failure_explanations
     found = json.loads(body)
     assert status == 200 and found["actions"] == ["Integrate changes."]
     assert (found["diff_files"], found["added"], found["deleted"]) == (1, 2, 1)
-    assert found["diff_command"] == "git diff a..b" and found["pr_url"] == "https://example.invalid/pull/1"
+    assert not {"command", "diff_command"} & found.keys()
+    assert found["pr_url"] == "https://example.invalid/pull/1"
     assert get(server, "/api/tasks/missing/delivery")[0] == 404
     status, body = get(server, "/api/tasks/broken/delivery")
     assert status == 503 and json.loads(body) == {"error": "Delivery facts are temporarily unavailable."}
+
+
+def test_task_detail_encodes_nested_land_events_and_waits() -> None:
+    wait = LandWait(after="checks/ready", started_at=AT, ended_at=None, open=True, awaited="Waiting for delivery.")
+    event = LandEvent(id=wait.after, kind=LandEventKind.READY, checks_id="checks", checks_n=1, at=AT,
+                      past=False, explanation="Ready for delivery.", waits=(wait,))
+    reply = dash_server._json(TaskDetail(card(), (), {}, Usage(), (event,)))
+    assert reply.status == 200
+    assert json.loads(reply.body)["land_events"] == [event.model_dump(mode="json")]
 
 
 def test_a_connected_page_is_told_of_a_moved_card_a_vanished_one_and_every_new_log_line(served: tuple[Ports, DashServer]) -> None:

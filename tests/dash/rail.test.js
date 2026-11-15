@@ -28,8 +28,8 @@ const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
 const button = (root, text) => [...root.querySelectorAll("button")].find((b) => b.textContent === text);
 const marks = (root) => [...root.querySelectorAll("button[aria-label]")];
 const primary = (root) => [...root.querySelectorAll(":scope > ol > li")];
-function mount(list, t = task, selected = {}, select = () => {}) {
-  const node = rail(list, t, selected, select);
+function mount(list, t = task, selected = {}, select = () => {}, events = []) {
+  const node = rail(list, t, selected, select, {}, events);
   fixture.replaceChildren(node);
   return node;
 }
@@ -267,13 +267,19 @@ async function checksRestartDetail() {
 const landButton = (root) => [...root.querySelectorAll("#rail button")].find((b) => b.textContent.endsWith("Land"));
 const delivery = (extra = {}) => ({ actions: ["Integrate the task's changes.", "Mark the task complete."],
   summary: ["src/change.py +2 -1"], diff_files: 1, added: 2, deleted: 1,
-  diff_command: "git diff base..task", command: "tl step land tl-test --backlog tasks --checkout /repo", pr_url: null, ...extra });
+  pr_url: null, ...extra });
+const landEvent = (kind, extra = {}) => ({ id: `checks/${kind}`, kind, checks_id: "checks", checks_n: 1,
+  candidate_id: null, candidate_n: null, at: null, past: false, explanation: `Recorded ${kind}`, waits: [], ...extra });
+const landHistory = () => [landEvent("ready", { at: "2026-11-14T10:00:00Z", waits: [{ after: "checks/ready",
+  started_at: "2026-11-14T10:00:00Z", ended_at: null, open: false, awaited: "Waiting for a delivery try." }] }),
+landEvent("tried", { id: "candidate/tried", candidate_id: "candidate", candidate_n: 1,
+  waits: [{ after: "candidate/tried", started_at: null, ended_at: null, open: true, awaited: "Waiting for integration into main." }] })];
 
 async function landSelection() {
   const pending = { ...task, column: "land", land: "manual", status_note: "Awaiting your delivery decision" };
   let resolve, calls = 0;
   const source = {
-    detail: async () => ({ task: pending, attempts: healthy() }), tracker: async () => tracked,
+    detail: async () => ({ task: pending, attempts: healthy(), land_events: landHistory() }), tracker: async () => tracked,
     body: async () => ({ result: { summary: "passed", checks: [] } }),
     delivery: () => { calls++; return new Promise((done) => { resolve = done; }); },
   };
@@ -281,15 +287,19 @@ async function landSelection() {
   await openDrawer(task.id); await tick();
   const drawer = document.getElementById("drawer");
   assert(calls === 0, "summary is not read until Land selection");
+  assert(drawer.querySelectorAll("[data-land-event]").length === 2, "history appears before selecting Land");
   landButton(drawer).focus();
   assert(document.activeElement === landButton(drawer), "Land is independently focusable");
-  landButton(drawer).click();
+  button(drawer, "Land tried · candidate 1").focus();
+  assert(document.activeElement === button(drawer, "Land tried · candidate 1"), "event is keyboard focusable");
+  button(drawer, "Land tried · candidate 1").click();
   assert(drawer.textContent.includes("Loading delivery details"), "delivery loads on selection");
   assert(landButton(drawer).getAttribute("aria-pressed") === "true", "Land selection has accessible state");
   resolve(delivery({ pr_url: "https://example.invalid/pull/17" })); await tick();
   assert(drawer.textContent.includes("Intended actions") && drawer.textContent.includes("Mark the task complete"), "actions shown");
   assert(drawer.textContent.includes("1 files changed (+2 −1)") && drawer.textContent.includes("src/change.py"), "diff totals and files shown");
-  assert(drawer.textContent.includes("git diff base..task") && drawer.textContent.includes("tl step land"), "command references shown");
+  assert(!drawer.textContent.includes("git diff") && !drawer.textContent.includes("tl step land"), "no command references");
+  assert(![...drawer.querySelectorAll("button")].some((b) => ["Accept", "Reject"].includes(b.textContent)), "no decision controls");
   assert(drawer.querySelector('a[href="https://example.invalid/pull/17"]')?.rel.includes("noopener"), "available PR linked");
   assert(drawer.textContent.includes("Awaiting your delivery decision"), "waiting notes survive Land selection");
   button(drawer, "Task").click(); button(drawer, "Steps 5").click();
@@ -301,6 +311,7 @@ async function landSelection() {
   source.delivery = async () => { calls++; throw new Error("Delivery temporarily unavailable"); };
   await onTaskMoved({ ...pending, land: "waiting" }); await tick();
   assert(drawer.textContent.includes("Delivery temporarily unavailable") && calls === 2, "task change refreshes Land and explains failure");
+  assert(drawer.querySelectorAll("[data-land-event]").length === 2, "history survives summary failure and refresh");
   source.delivery = async () => delivery({ summary: ["<img src=x onerror=bad>"], pr_url: "javascript:bad()" });
   button(drawer, "Retry").click(); await tick();
   assert(!drawer.querySelector("section a") && !drawer.querySelector("img"), "unsafe PR omitted and summary rendered as text");
@@ -311,7 +322,7 @@ async function landSelection() {
 async function landStaleReplies() {
   let resolve, calls = 0;
   const source = {
-    detail: async (id) => ({ task: { ...task, id }, attempts: healthy() }), tracker: async () => tracked,
+    detail: async (id) => ({ task: { ...task, id }, attempts: healthy(), land_events: landHistory() }), tracker: async () => tracked,
     body: async () => ({ result: { summary: "passed", checks: [] } }),
     delivery: () => { calls++; return new Promise((done) => { resolve = done; }); },
   };
@@ -324,6 +335,7 @@ async function landStaleReplies() {
   assert(calls === 2, "changed task refreshes an unfinished summary");
   stale(delivery({ actions: ["STALE"] })); await tick();
   assert(drawer.textContent.includes("Loading delivery details") && !drawer.textContent.includes("STALE"), "stale refresh is ignored");
+  assert(drawer.querySelectorAll("[data-land-event]").length === 2, "stale replies cannot erase history");
   resolve(delivery({ actions: ["Current delivery"] })); await tick();
   assert(drawer.textContent.includes("Current delivery"), "fresh delivery fills the selected pane");
   await onTaskMoved({ ...task, id: "first", column: "land", land: "waiting" });
@@ -461,6 +473,38 @@ function vocabulary() {
   } finally {
     Date.now = clock;
   }
+}
+
+function landEvents() {
+  const stamp = "2026-11-14T10:00:00Z", end = "2026-11-14T10:02:00Z";
+  const events = [...landHistory(), landEvent("tried", { id: "second/tried", candidate_n: 2, waits: [
+    { after: "second/tried", started_at: stamp, ended_at: end, open: false, awaited: "Slot release" },
+    { after: "second/tried", started_at: stamp, ended_at: null, open: true, awaited: "Completion" },
+  ] }), landEvent("landed", { id: "second/landed", at: end, candidate_n: 2 })];
+  const node = mount(healthy(), task, {}, () => {}, events);
+  assert(node.querySelectorAll("[data-land-event]").length === 4, "ready, every try and landed are distinct events");
+  assert(node.textContent.includes("Waited · 2m") && node.textContent.includes("Wait duration unavailable"), "completed and unknown waits");
+  const live = node.querySelector("[data-since]");
+  const wall = Date.now;
+  try {
+    Date.now = () => Date.parse(end);
+    updateTime(live);
+    assert(live.textContent.includes("2m"), "open wait ticks from its known start");
+    Date.now = () => Date.parse(end) + 60000;
+    updateTime(live);
+    assert(live.textContent.includes("3m"), "open wait advances");
+  } finally { Date.now = wall; }
+  const history = mount([...healthy().map((a) => ({ ...a, past: true })), restart(2)], task, {}, () => {},
+    events.map((e) => ({ ...e, past: true })));
+  assert(history.querySelector("details [data-land-event]") && history.textContent.includes("Historical"), "abandoned chain keeps events");
+  for (const [start, finish] of [[end, stamp], ["invalid", end], [null, null]]) {
+    const invalid = mount(healthy(), task, {}, () => {}, [landEvent("ready", { waits: [
+      { after: "checks/ready", started_at: start, ended_at: finish, open: false, awaited: "Integration" },
+    ] })]);
+    assert(invalid.textContent.includes("Wait duration unavailable") && !invalid.querySelector("[data-since]"), "bad bounds have no clock");
+  }
+  const active = mount(healthy(), { ...task, column: "land", land: "landing" }, {}, () => {}, [landEvent("tried")]);
+  assert(!active.querySelector("[data-since]") && !active.textContent.includes("Waiting since"), "active validation has no wait clock");
 }
 
 async function waitingRows() {
@@ -715,10 +759,14 @@ async function liveDurations() {
 }
 
 try {
+  for (const dark of [false, true]) {
+    document.documentElement.classList.toggle("dark", dark);
+    document.documentElement.classList.toggle("light", !dark);
   for (const test of [healthyRows, verificationStates, gaps, restartsAndRepeats, pastRuns,
     drawerSelection, checksRestartDetail, landSelection, landStaleReplies, words, eventIndicators, vocabulary,
-    waitingRows, usage, feedDisplay, liveFeedDisplay, liveDurations]) {
+    landEvents, waitingRows, usage, feedDisplay, liveFeedDisplay, liveDurations]) {
     await test();
+  }
   }
   for (const dark of [false, true]) {
     document.documentElement.classList.toggle("dark", dark);
@@ -728,7 +776,7 @@ try {
   }
   document.documentElement.classList.toggle("dark", location.hash === "#dark");
   document.documentElement.classList.toggle("light", location.hash !== "#dark");
-  results.textContent = "PASS: 17 browser contracts, both themes";
+  results.textContent = "PASS: 18 browser contracts, both themes";
   document.documentElement.dataset.result = "passed";
 } catch (error) {
   results.textContent = `FAIL: ${error.stack}`;
