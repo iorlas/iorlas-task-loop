@@ -292,15 +292,19 @@ def attempt(number: int, base: str, end_commit: str | None, paths: tuple[str, ..
     return ChainLink(number, base, end_commit, effect, paths, FileRef("input.txt", "d"))
 
 
-def test_judge_holds_each_commit_of_the_chain_to_its_own_attempts_paths(repo: FakeRepo, slot: FakeWorktree) -> None:
+@pytest.mark.parametrize("step", ["plan", "implement"])
+def test_judge_requires_each_attempts_paths_only_for_plan_commits(repo: FakeRepo, slot: FakeWorktree, step: str) -> None:
     base = head(slot)
     x1 = commit(slot, {P: PLAN_TEXT, NOTE: "n"})
     x2 = commit(slot, {NOTE: "changed"})
     first = attempt(1, base, x1, (P, NOTE))
-    assert isinstance(judge(repo, repo.path, x2, STEP, rules(), (first, attempt(2, x1, None, (P, NOTE)))), Verified)
-    assert judge(repo, repo.path, x2, STEP, rules(), (first, attempt(2, x1, None, (P,)))) == Rejected("paths")
-    assert judge(repo, repo.path, x2, STEP, rules(), (attempt(1, base, x1, (P,)), attempt(2, x1, None, (P, NOTE)))) == Rejected("paths")
-    unchanged = judge(repo, repo.path, x1, STEP, rules(), (first, attempt(2, x1, x1, (), "keep")))
+    operation = kind(step)
+    assert isinstance(judge(repo, repo.path, x2, operation, rules(), (first, attempt(2, x1, None, (P, NOTE)))), Verified)
+    for chain in ((first, attempt(2, x1, None, (P,))),
+                  (attempt(1, base, x1, (P,)), attempt(2, x1, None, (P, NOTE)))):
+        result = judge(repo, repo.path, x2, operation, rules(), chain)
+        assert result == Rejected("paths") if step == "plan" else isinstance(result, Verified)
+    unchanged = judge(repo, repo.path, x1, operation, rules(), (first, attempt(2, x1, x1, (), "keep")))
     assert isinstance(unchanged, Verified) and not unchanged.reused
 
 

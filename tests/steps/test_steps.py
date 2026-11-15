@@ -127,7 +127,7 @@ def test_an_implement_repeat_frames_the_listing_and_preserves_the_complete_input
     found = Unsettled("ignored", ("!! .venv/x",))
     original = task_text(TASK, "implement", CONTEXT)
     text = IMPLEMENT.feedback(found, IMPLEMENT.rules("tl-1"), 2, original, "abcd", unrecorded=unrecorded)
-    assert text.startswith("These paths are ignored by Git. A listed path Git ignores can never be committed")
+    assert text.startswith("These paths are ignored by Git. An ignored attributes file on the way to a changed path")
     assert "BEGIN SLOT STATUS abcd\n!! .venv/x\nEND SLOT STATUS abcd" in text
     assert ("Nothing of attempt 2 was committed" in text) is unrecorded
     assert "answer `implemented`" in text and text.endswith(f"The task, for reference:\n\n{original}")
@@ -293,12 +293,26 @@ def test_fixed_input_and_repeat_keep_unfinished_answer_and_saved_work_guidance(s
         "saves unfinished slot work as a work-in-progress commit on the task branch when holding the task."
     )
     assert guidance in text and SAVED_WORK in text
-    assert f"With `{success}`, remove any other file you created; anything left uncommitted" in text
+    if step == "plan":
+        assert f"With `{success}`, remove any other file you created; anything left uncommitted" in text
+        assert "the factory commits exactly those paths" in text
+    else:
+        assert "The factory derives the commit paths from all tracked and untracked slot changes, including deletions" in text
+        assert "paths list does not select what is committed" in text
+        assert "Remove unwanted untracked files and restore unwanted tracked edits before answering" in text
+        assert "still list in `paths` every file you changed, added or deleted" in text
+        assert GIT_WRITES in text
     assert "ANSWER FORMAT" not in text
     for unrecorded in (False, True):
         repeated = operation.feedback(Unsettled("uncommitted", ("?? new.txt",)), operation.rules("tl-1"), 1,
                                       text, "nonce", unrecorded=unrecorded)
         assert repeated.endswith(text) and guidance in repeated and SAVED_WORK in repeated
+        if step == "implement":
+            instructions = repeated.removesuffix(text)
+            assert "The factory derives the commit paths" in instructions
+            assert "Remove unwanted untracked files and restore unwanted tracked edits before answering" in instructions
+            assert "still list every changed, added or deleted file in `paths`" in instructions
+            assert "apply_patch" in instructions
 
 
 def test_failed_check_feedback_keeps_the_fixed_implement_guidance() -> None:

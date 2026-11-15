@@ -447,13 +447,17 @@ def one(base: str, paths: tuple[str, ...]) -> tuple[ChainLink, ...]:
     ],
     ids=["chain_length", "unlisted_change", "outside_root", "file_size", "at_cap"],
 )
+@pytest.mark.parametrize("step", ["plan", "implement"])
 def test_judge_rules_the_verify_path_cannot_reach(
-    repo: FakeRepo, slot: FakeWorktree, changes: list[Files], paths: tuple[str, ...], cap: int, expected: Rejected | None
+    repo: FakeRepo, slot: FakeWorktree, changes: list[Files], paths: tuple[str, ...], cap: int,
+    expected: Rejected | None, step: str,
 ) -> None:
     base = head(slot)
     for files in changes:
         commit(slot, files)
-    found = judge(repo, repo.path, head(slot), STEP, rules(cap), one(base, paths))
+    if step == "implement" and len(changes) == 1 and NOTE in changes[0] and NOTE not in paths:
+        expected = None  # Only plan commits require answer membership; the other rules apply to both kinds.
+    found = judge(repo, repo.path, head(slot), kind(step), rules(cap), one(base, paths))
     assert found == expected if expected is not None else isinstance(found, Verified)
 
 

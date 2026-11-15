@@ -22,8 +22,9 @@ from taskloop.admit import AdmitRefused, Admitted
 from taskloop.agents.launch import AgentLaunch
 from taskloop.attempt import Attempts
 from taskloop.attempt_store import AttemptStore
-from taskloop.attempt_types import TRAILER, Checkouts, SlotFiles, Unsettled
+from taskloop.attempt_types import TRAILER, AnswerState, Checkouts, SlotFiles, Unsettled
 from taskloop.evidence_files import EvidenceFiles
+from taskloop.factory_commit import Committed, settle
 from taskloop.glossary_extract import BUDGET, HEADING, MAX_BYTES, PRIORITY, extract
 from taskloop.ids import NativeIds
 from taskloop.input_context import BEGIN, END, SHELF_GUIDANCE, InputContext, InputError, read, refresh
@@ -264,6 +265,12 @@ def test_ordinary_repeat_uses_original_spec_and_current_committed_context_once(
                      repeat_agent(slot, changed, answer), lambda: 10, checkouts, slot_files,
                      environment=Environment(registered, checkouts, tmp_path, tmp_bytes=4096).preparation())
     assert prior.execute(KEY, ENTRY, lambda: "held").reason == "verification"
+    captured = AttemptStore(lambda: registered).load(KEY)
+    assert captured is not None
+    settled = settle(checkouts, slot_files, captured.admission, commit,
+                     AnswerState("valid", "implemented", "commit", (DIGEST_PATH,), "Update digest"), lambda: None)
+    assert isinstance(settled, Committed)
+    slot.write_file("stray", "leftovers created after the factory commit")
     result = repeater(registered, tmp_path, checkouts, slot_files).repeat("tasks", "tl-1", KEY, ENTRY, 30)
     assert isinstance(result, Started)
     store = AttemptStore(lambda: registered)

@@ -6,7 +6,7 @@ from dataclasses import replace
 
 import pytest
 from doubles import FakeSlotFiles, PinnedViews
-from git_porcelain import Recorded, Tree
+from git_porcelain import Dirty, GitUnavailable, Recorded, Tree
 from git_porcelain.testing import FakeRepo, FakeWorktree
 
 from taskloop import implement_step, plan_step, step_text
@@ -67,11 +67,11 @@ def test_changed_or_added_credential_fixture_names_the_real_predicate_without_st
         slot.remove_file(path)
     base = record(slot)
     slot.write_file(path, FIXTURE)
-    found = settle(checkouts, slot_files, admission, base, answer(path), lambda: None)
+    found = settle(checkouts, slot_files, admission, base, answer("unrelated.txt"), lambda: None)
     assert isinstance(found, Unsettled) and found.reason == "unsafe"
     assert found.explanations == (PathExplanation(path, "The file content matches a credential signature (private key or login tokens)."),)
     assert stages == [] and head(slot) == base
-    assert leftovers(checkouts, slot_files, admission, base, answer(path), None) == found
+    assert leftovers(checkouts, slot_files, admission, base, answer("unrelated.txt"), None) == found
 
 
 @pytest.mark.parametrize(("stat", "unreadable", "words"), [
@@ -94,13 +94,13 @@ def test_multiple_refusals_keep_each_predicate_and_leftovers_in_both_step_prompt
 ) -> None:
     base = record(slot)
     path, linked = "src/a\x1b.py", "linked/file.py"
-    for each in (path, linked, "scratch.txt", "src/.gitattributes"):
+    for each in (path, linked, "scratch.txt", "src/.gitattributes", "listed.txt"):
         slot.write_file(each, "new data")
     slot_files.entries[slot.path / path] = stat
     if unreadable:
         slot_files.unreadable.add(slot.path / path)
     slot_files.entries[slot.path / "linked"] = ancestor_stat
-    found = settle(checkouts, slot_files, admission, base, answer(path, linked), lambda: None)
+    found = settle(checkouts, slot_files, admission, base, answer("listed.txt"), lambda: None)
     assert isinstance(found, Unsettled) and found.reason == "unsafe"
     reasons = {each.path: each.explanation for each in found.explanations}
     assert set(reasons) == {path, linked, "src/.gitattributes"}
@@ -149,7 +149,7 @@ def test_all_unchanged_is_nothing_written_without_staging(
 @pytest.mark.parametrize("change", ["execute", "link", "unreadable", "ancestor", "delete"])
 def test_unchanged_content_does_not_hide_file_changes_or_unreadability(
     admission: Admission, slot: FakeWorktree, slot_files: FakeSlotFiles, checkouts: PinnedViews,
-    stages: list[tuple[str, ...]], change: str,
+    stages: list[tuple[str, ...]], change: str, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     path = "src/file.py"
     slot.write_file(path, "ordinary")
@@ -162,6 +162,13 @@ def test_unchanged_content_does_not_hide_file_changes_or_unreadability(
         slot_files.entries[slot.path / "src"] = FileStat("link", 8, False)
     else:
         slot_files.entries[slot.path / path] = FileStat("link" if change == "link" else "file", 8, change == "execute")
+    # The file port's mode/type overrides must also be reflected in the typed Git evidence.
+    original = FakeWorktree.dirty
+
+    def dirty(self: FakeWorktree, base: str | None = None, *, ignored_under: Sequence[str] = ()) -> Dirty:
+        return replace(original(self, base, ignored_under=ignored_under), tracked=(path,))
+
+    monkeypatch.setattr(FakeWorktree, "dirty", dirty)
     read = leftovers(checkouts, slot_files, admission, base, answer(path), None)
     found = settle(checkouts, slot_files, admission, base, answer(path), lambda: None)
     if change == "delete":
@@ -194,7 +201,7 @@ def test_baseline_mode_and_type_changes_are_explained(
         slot.remove_file("src")
     slot.write_file(path, "new")
     found = settle(checkouts, slot_files, admission, base, answer(path), lambda: None)
-    assert isinstance(found, Unsettled) and expected in found.explanations[0].explanation
+    assert isinstance(found, Unsettled) and any(expected in each.explanation for each in found.explanations)
 
 
 def test_empty_explanation_is_invalid() -> None:
@@ -234,6 +241,114 @@ def test_unchanged_plan_path_is_filtered_with_the_same_rules(
     slot.write_file(path, FIXTURE)
     base = record(slot)
     slot.write_file("docs/design/tl-1/note.md", "new note")
+    slot.write_file("docs/design/tl-1/unlisted.txt", "unlisted plan change")
+    slot.write_file("outside.txt", "unlisted outside change")
     declared = replace(answer(path, "docs/design/tl-1/note.md"), disposition="planned")
     result = settle(checkouts, slot_files, replace(admission, step="plan"), base, declared, lambda: None)
     assert isinstance(result, Committed) and stages == [("docs/design/tl-1/note.md",)]
+
+
+def test_implement_commits_all_slot_changes_with_the_answer_message_and_attempt_trailer(
+    admission: Admission, slot: FakeWorktree, slot_files: FakeSlotFiles, checkouts: PinnedViews, stages: list[tuple[str, ...]],
+) -> None:
+    for path in ("edit.txt", "delete.txt", "old-name.txt", "unchanged.txt"):
+        slot.write_file(path, "original")
+    base = record(slot)
+    slot.write_file("edit.txt", "changed")
+    slot.remove_file("delete.txt")
+    slot.remove_file("old-name.txt")
+    slot.write_file("new-name.txt", "original")
+    slot.write_file("added.txt", "added")
+    declared = answer("edit.txt", "unchanged.txt")
+    assert leftovers(checkouts, slot_files, admission, base, declared, None) is None
+    result = settle(checkouts, slot_files, admission, base, declared, lambda: None)
+    assert isinstance(result, Committed)
+    assert stages == [("added.txt", "delete.txt", "edit.txt", "new-name.txt", "old-name.txt")]
+    assert slot.dirty().raw is False
+    commits = slot.repo.history([result.sha], not_on=[base])
+    assert len(commits) == 1 and commits[0].subject == "Edit the file" and commits[0].body == "Task-Loop-Attempt: attempt"
+
+
+@pytest.mark.parametrize(("path", "predicate"), [
+    (".Beads/data", "excluded"), ("src/.github/data", "changed Git file"),
+    ("docs/PLAN.MD", "cannot change plan.md"), ("line\nbreak.txt", "newline"), ("x" * 256, "255 bytes"),
+])
+def test_unlisted_forbidden_paths_refuse_before_staging_and_match_preview(
+    admission: Admission, slot: FakeWorktree, slot_files: FakeSlotFiles, checkouts: PinnedViews,
+    stages: list[tuple[str, ...]], path: str, predicate: str,
+) -> None:
+    base = record(slot)
+    slot.write_file("edit.txt", "allowed")
+    slot.write_file(path, "forbidden")
+    found = settle(checkouts, slot_files, admission, base, answer("edit.txt"), lambda: None)
+    assert isinstance(found, Unsettled) and found.reason == "unsafe"
+    assert any(each.path == path and predicate in each.explanation for each in found.explanations)
+    assert leftovers(checkouts, slot_files, admission, base, answer("edit.txt"), None) == found
+    assert stages == [] and head(slot) == base
+
+
+@pytest.mark.parametrize("count", [96, 97])
+def test_actual_changed_path_limit_is_applied_without_truncating_the_selection(
+    admission: Admission, slot: FakeWorktree, slot_files: FakeSlotFiles, checkouts: PinnedViews,
+    stages: list[tuple[str, ...]], count: int,
+) -> None:
+    base = record(slot)
+    paths = tuple(f"src/file-{index:03}.py" for index in range(count))
+    for path in paths:
+        slot.write_file(path, "changed")
+    declared = answer(paths[0])
+    preview = leftovers(checkouts, slot_files, admission, base, declared, None)
+    found = settle(checkouts, slot_files, admission, base, declared, lambda: None)
+    if count == 96:
+        assert preview is None and isinstance(found, Committed) and stages == [paths]
+        assert slot.dirty().raw is False
+    else:
+        assert preview == found and isinstance(found, Unsettled) and found.reason == "unsafe"
+        assert found.explanations == (PathExplanation(paths[0], "The slot has 97 changed paths; the limit is 96 paths."),)
+        assert stages == [] and head(slot) == base
+
+
+def test_ignored_attributes_for_an_unlisted_change_refuse_and_match_preview(
+    admission: Admission, slot: FakeWorktree, slot_files: FakeSlotFiles, checkouts: PinnedViews, stages: list[tuple[str, ...]],
+) -> None:
+    slot.write_file(".gitignore", "nested/.gitattributes\n")
+    base = record(slot)
+    slot.write_file("edit.txt", "listed")
+    slot.write_file("nested/file.py", "unlisted")
+    slot.write_file("nested/.gitattributes", "*.py filter=custom\n")
+    declared = answer("edit.txt")
+    expected = Unsettled("ignored", ("nested/.gitattributes",))
+    assert leftovers(checkouts, slot_files, admission, base, declared, None) == expected
+    assert settle(checkouts, slot_files, admission, base, declared, lambda: None) == expected
+    assert stages == [] and head(slot) == base
+
+
+def test_a_foreign_index_entry_with_no_worktree_changes_still_refuses(
+    admission: Admission, slot: FakeWorktree, slot_files: FakeSlotFiles, checkouts: PinnedViews, stages: list[tuple[str, ...]],
+) -> None:
+    slot.write_file("file.txt", "original")
+    base = record(slot)
+    slot.write_file("file.txt", "foreign staged edit")
+    slot.stage(("file.txt",))
+    slot.write_file("file.txt", "original")
+    stages.clear()
+    assert settle(checkouts, slot_files, admission, base, answer("file.txt"), lambda: None) == Unsettled("staged", ("file.txt",))
+    assert stages == [] and head(slot) == base
+
+
+def test_unknown_dirty_evidence_propagates_without_staging(
+    admission: Admission, slot: FakeWorktree, slot_files: FakeSlotFiles, checkouts: PinnedViews,
+    stages: list[tuple[str, ...]], monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    base = record(slot)
+    original = FakeWorktree.dirty
+
+    def dirty(self: FakeWorktree, base: str | None = None, *, ignored_under: Sequence[str] = ()) -> Dirty:
+        if base is not None:
+            raise GitUnavailable("unreadable typed status")
+        return original(self, base, ignored_under=ignored_under)
+
+    monkeypatch.setattr(FakeWorktree, "dirty", dirty)
+    with pytest.raises(GitUnavailable, match="unreadable typed status"):
+        settle(checkouts, slot_files, admission, base, answer("edit.txt"), lambda: None)
+    assert stages == [] and head(slot) == base
