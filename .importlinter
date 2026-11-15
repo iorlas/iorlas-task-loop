@@ -663,6 +663,7 @@ source_modules =
     taskloop.dash_duration
     taskloop.dash_land
     taskloop.dash_model
+    taskloop.dash_operation
     taskloop.dash_server
     taskloop.dash_task
     taskloop.dash_tracker

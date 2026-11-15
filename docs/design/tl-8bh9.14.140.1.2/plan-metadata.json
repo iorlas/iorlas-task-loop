@@ -1,0 +1,29 @@
+{
+  "prepared_commit": "72b2ea3d82e7200c98773b426fe37318b8ca2790",
+  "cited_paths": [
+    "src/taskloop/dash_task.py",
+    "src/taskloop/dash_model.py",
+    "src/taskloop/dash_composition.py",
+    "src/taskloop/dash_server.py",
+    "src/taskloop/dash/static/rail.js",
+    "src/taskloop/dash/static/drawer.js",
+    "src/taskloop/operation_evidence.py",
+    "src/taskloop/operation_file.py",
+    "src/taskloop/evidence_files.py",
+    "src/taskloop/factory_commit.py",
+    "src/taskloop/publish.py",
+    "src/taskloop/launch.py",
+    "src/taskloop/composition.py",
+    "src/taskloop/check_store.py",
+    "tests/steps/test_dash_read.py",
+    "tests/steps/test_dash_duration.py",
+    "tests/steps/test_dash_usage.py",
+    "tests/steps/test_discussion_dashboard.py",
+    "tests/steps/test_operation_evidence.py",
+    "tests/steps/test_check_operations.py",
+    "tests/dash/rail.test.js",
+    "tests/rules/public_surfaces.json",
+    "tests/steps/public_surface_fixtures.py",
+    ".importlinter"
+  ]
+}
