@@ -31,6 +31,7 @@ from taskloop.attempt_status import Listed, StatusPorts, current_view, list_atte
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import AttemptKey, EntryIdentity, Seen, SlotFiles
 from taskloop.check_admit import ChecksRequest
+from taskloop.claim import ClaimWord
 from taskloop.discussion import Discussion
 from taskloop.drain.models import Identity
 from taskloop.drain.models import Seen as ProcessSeen
@@ -202,7 +203,7 @@ class Factory:
             source_preparation=preparation,
             discussion=Discussion(lambda _task, _root: (), HoldStore(lambda: self.con).latest, self.tracker.inspect).for_task,
         )
-        found = attempts.execute(key, ENTRY, lambda: "held")
+        found = attempts.execute(key, ENTRY, lambda: ClaimWord.HELD)
         self.ran.append(f"{found.status}:{found.reason}")
         return Launched(key, ENTRY)
 

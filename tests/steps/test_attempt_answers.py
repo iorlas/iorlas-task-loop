@@ -15,6 +15,7 @@ from taskloop.answer_failures import AnswerFailureData, AnswerRule
 from taskloop.attempt import Attempts
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import Answer, AnswerState, StepRules
+from taskloop.claim import ClaimWord
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.factory_schema import SCHEMA
 from taskloop.ids import NativeIds
@@ -77,7 +78,7 @@ def test_unfinished_answers_with_paths_are_collected_without_commit_or_repeat(
         surroundings.checkouts, surroundings.files,
         environment=Environment(con, surroundings.checkouts, surroundings.tmp, tmp_bytes=4096).preparation(),
     )
-    result = attempts.execute(KEY, ENTRY, lambda: "held")
+    result = attempts.execute(KEY, ENTRY, lambda: ClaimWord.HELD)
     assert (result.status, result.reason) == ("collected", disposition)
     assert result.execution is not None
     assert result.execution.answer == AnswerState("valid", disposition, "none", (), None)

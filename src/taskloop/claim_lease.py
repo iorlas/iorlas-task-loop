@@ -14,7 +14,7 @@ from contextlib import contextmanager
 from typing import Literal, Protocol
 
 from taskloop.claim import ClaimWord
-from taskloop.environment import Renew, Renewal
+from taskloop.environment import Renew
 
 type Beat = Literal[ClaimWord.HELD, ClaimWord.LOST, ClaimWord.UNRENEWED]  # renewed; claim gone; unknown
 type Heartbeat = Callable[[], Beat]  # bound to one tracker root and task by `tracker_client`
@@ -109,9 +109,9 @@ def renewal(alive: KeepAlive) -> Renew:
     """One renewal now through the keep-alive (an implement step's, after its setup; a validation's, after its setup):
     `lost` and `held` as its word says, anything else `unrenewed`."""
 
-    def renew() -> Renewal:
+    def renew() -> ClaimWord:
         alive.renew()
         word = alive.word()
-        return "lost" if word is ClaimWord.LOST else "held" if word is ClaimWord.HELD else "unrenewed"
+        return ClaimWord.UNRENEWED if word is ClaimWord.FAULT else word
 
     return renew

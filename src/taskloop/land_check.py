@@ -29,6 +29,7 @@ from taskloop.attempt_types import AttemptKey, AttemptResult, Checkouts, EntryId
 from taskloop.check_admit import heads
 from taskloop.check_release import CandidateTarget, ChecksRelease
 from taskloop.check_store import ChecksRow, Required
+from taskloop.claim import ClaimWord
 from taskloop.claim_lease import HeartbeatFor, KeepAlive, Stop, keeping, renewal
 from taskloop.composition import Checking
 from taskloop.ids import Ids
@@ -181,7 +182,7 @@ def _ended(ports: LandPorts, row: LandRow, target: Target) -> Ended:
     """One renewal, then the validation inside the keep-alive (lost: only the reconcile, then `claim_lost`)."""
     alive = KeepAlive(ports.heartbeat_for(row.tracker_root, row.task_id), ports.stop(), ports.work.clock)
     alive.renew()
-    if alive.word() == "lost":
+    if alive.word() is ClaimWord.LOST:
         with contextlib.suppress(StoreRefused, StoreUnavailable):
             reconcile(ports.work, target)
         return Verdict("failed", "claim_lost")

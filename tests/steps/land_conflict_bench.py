@@ -19,6 +19,7 @@ from sqlite_store import Store
 from taskloop.agents.launch import AgentLaunch
 from taskloop.attempt_store import AttemptLoads
 from taskloop.attempt_types import AttemptKey
+from taskloop.claim import ClaimWord
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.factory_schema import SCHEMA
 from taskloop.ids import NativeIds
@@ -133,7 +134,7 @@ def execution_case(on_slot: Path, repo: FakeRepo, slot: FakeWorktree, tmp_path: 
     environment = Environment(b.con, views, tmp_path / "artifacts", tmp_bytes=4096)
     ports = ExecutionPorts(b.ports.store, MergeStore(lambda: b.con), repo, views, views, FakeSlotFiles(repo), b.ports.files,
         AgentLaunch(lambda _h: ("/bin/codex", {}), ids=NativeIds()), lambda *_args: pytest.fail("unwired agent"),
-        lambda _worker: True, lambda: 10, environment.preparation(), lambda: "held", ("/bin/codex", {}), ("probe",))
+        lambda _worker: True, lambda: 10, environment.preparation(), lambda: ClaimWord.HELD, ("/bin/codex", {}), ("probe",))
     case = ExecutionCase(on_slot, b.con, admitted.record, ports, slot, environment)
     case.restart()
     try:

@@ -21,7 +21,8 @@ from taskloop.agents.launch import codex_access
 from taskloop.agents.settings import CodexPolicy
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import DEFAULT_GIT_READ_SECONDS, AttemptKey
-from taskloop.environment import EnvironmentPorts, Preparation, Renewal
+from taskloop.claim import ClaimWord
+from taskloop.environment import EnvironmentPorts, Preparation
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.git_views import GitViews
 from taskloop.owned_processes import setup_seen
@@ -37,8 +38,8 @@ KEY = AttemptKey("attempt", "dispatch", 1)
 SETUP = 'test -z "$(ls -A .venv 2>/dev/null)" && mkdir -p .venv && echo built > .venv/marker && echo "$TMPDIR" && echo "$UV_CACHE_DIR"'
 
 
-def held() -> Renewal:
-    return "held"
+def held() -> ClaimWord:
+    return ClaimWord.HELD
 
 
 def test_setup_resets_the_slot_and_runs_the_committed_setup_in_it(

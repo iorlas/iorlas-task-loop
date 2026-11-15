@@ -481,16 +481,18 @@ def test_main_names_only_a_signal_exit_terminated(capfd: pytest.CaptureFixture[s
 
 
 @pytest.mark.parametrize(
-    ("beats", "expected"), [((ClaimWord.HELD,), "held"), ((ClaimWord.LOST,), "lost"),
-                            ((ClaimWord.UNRENEWED,), "unrenewed"), ((ClaimWord.HELD, ClaimWord.LOST), "lost")]
+    ("beats", "expected"), [((ClaimWord.HELD,), ClaimWord.HELD), ((ClaimWord.LOST,), ClaimWord.LOST),
+                            ((ClaimWord.UNRENEWED,), ClaimWord.UNRENEWED), ((ClaimWord.HELD, ClaimWord.LOST), ClaimWord.LOST)]
 )
-def test_the_renewal_after_setup_renews_once_more_and_answers_the_keep_alives_word(beats: tuple[Beat, ...], expected: str) -> None:
+def test_the_renewal_after_setup_renews_once_more_and_answers_the_keep_alives_word(
+    beats: tuple[Beat, ...], expected: ClaimWord,
+) -> None:
     """An implement step's setup may take minutes: the entry renews the claim once more before dispatch (`lost` refuses)."""
     script = list(beats)
     alive = KeepAlive(lambda: script.pop(0), Stop(0), lambda: 10)
     renew = renewal(alive)
     found = [renew() for _ in beats][-1]
-    assert found == expected and script == []
+    assert found is expected and script == []
 
 
 class Resuming:

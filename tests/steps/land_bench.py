@@ -261,7 +261,7 @@ def executing(b: LandBench, *, interrupt: bool = False,
             dependencies = ExecutionPorts(ports.conflicts.store, MergeStore(lambda: b.con), repo,
                 b.views, b.views, b.files, work.files, AgentLaunch(lambda _h: ("/bin/codex", {}), ids=NativeIds()),
                 lambda *_args: pytest.fail("unwired agent"), lambda _worker: True, lambda: b.now,
-                work.preparation, lambda: "held", ("/bin/codex", {}), ("probe",))
+                work.preparation, lambda: ClaimWord.HELD, ("/bin/codex", {}), ("probe",))
             case = ExecutionCase(b.root / "factory.db", b.con, record, dependencies, b.slot, b.environment,
                                  interrupt=interrupt, edit=edit)
             case.ports = replace(case.ports, run=case.run, gone=lambda _worker: case.gone)

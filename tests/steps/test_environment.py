@@ -22,7 +22,8 @@ from taskloop.agents.settings import AgentSetting, ClaudePolicy, CodexPolicy, Op
 from taskloop.attempt import Attempts
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import AttemptKey, AttemptResult, Checkouts, SlotFiles
-from taskloop.environment import Renewal, SetupFor, setup_digest
+from taskloop.claim import ClaimWord
+from taskloop.environment import SetupFor, setup_digest
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.harness_choice import HarnessKind
 from taskloop.ids import NativeIds
@@ -62,7 +63,7 @@ class Entry:
     environment: Environment
     checkouts: Checkouts
     files: SlotFiles
-    renewals: list[Renewal] = dataclasses.field(default_factory=list)
+    renewals: list[ClaimWord] = dataclasses.field(default_factory=list)
     wired: bool = True
     specs: list[LaunchSpec] = dataclasses.field(default_factory=list)
 
@@ -72,9 +73,9 @@ class Entry:
         outcome = RunOutcome(rc=0, worker=WORKER, summary=Summary(text=json.dumps(UNCHANGED), rc=0, stands=True))
         return FakeRun(outcome)(harness, spec, timeout, hooks)
 
-    def renew(self) -> Renewal:
+    def renew(self) -> ClaimWord:
         self.environment.events.append("renew")
-        return self.renewals.pop(0) if self.renewals else "held"
+        return self.renewals.pop(0) if self.renewals else ClaimWord.HELD
 
     def execute(self) -> AttemptResult:
         env = self.environment
@@ -96,8 +97,8 @@ def entry(environment: Environment, checkouts: Checkouts, slot_files: SlotFiles)
     return Entry(environment, checkouts, slot_files)
 
 
-def held() -> Renewal:
-    return "held"
+def held() -> ClaimWord:
+    return ClaimWord.HELD
 
 
 def rows(con: sqlite3.Connection) -> list[tuple[object, ...]]:
@@ -187,7 +188,7 @@ def test_a_reset_that_leaves_ignored_files_refuses(entry: Entry, slot: FakeWorkt
 def test_a_passed_run_is_reused_by_a_relaunch_of_the_still_admitted_attempt(entry: Entry, slot: FakeWorktree) -> None:
     """The claim is lost after setup: refused before dispatch. The relaunch skips the reset and the commands; files
     written in between stay (no reset), the scratch is still emptied and the claim renewed."""
-    entry.renewals = ["lost"]
+    entry.renewals = [ClaimWord.LOST]
     assert refused(entry, "refused", "claim_lost")[-1] == "renew"
     slot.repo.exclude_locally([".venv/"])
     slot.write_file(".venv/kept", "from setup")
@@ -199,7 +200,7 @@ def test_a_passed_run_is_reused_by_a_relaunch_of_the_still_admitted_attempt(entr
 
 
 def test_an_unrenewed_claim_still_dispatches(entry: Entry) -> None:
-    entry.renewals = ["unrenewed"]
+    entry.renewals = [ClaimWord.UNRENEWED]
     entry.execute()
     assert entry.environment.events[-2:] == ["renew", "agent"]
 
@@ -490,7 +491,7 @@ class ChecksSlot:
         assert found is not None
         return found
 
-    def prepare(self, renewal: Renewal = "held") -> AttemptResult | None:
+    def prepare(self, renewal: ClaimWord = ClaimWord.HELD) -> AttemptResult | None:
         env, gitdir = self.environment, self.slot.repo.identity().common_dir / "worktrees" / self.slot.path.name
         env.events.clear()
         target = SetupFor(CHECKS, self.slot.path, self.x, None, 100.0, True)
@@ -574,7 +575,7 @@ def test_failed_checks_setups_count_across_blocks_and_stop_after_two(checks_slot
 
 
 def test_a_checks_setup_ends_with_the_claim_renewal_and_the_deadline(checks_slot: ChecksSlot) -> None:
-    assert checks_slot.prepare("lost") == AttemptResult("refused", "claim_lost")
+    assert checks_slot.prepare(ClaimWord.LOST) == AttemptResult("refused", "claim_lost")
     checks_slot.environment.clock = lambda: 100
     assert checks_slot.prepare() == AttemptResult("refused", "expired")
 

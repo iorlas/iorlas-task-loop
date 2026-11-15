@@ -30,6 +30,7 @@ from taskloop.attempt import Attempts
 from taskloop.attempt_status import Shown, StatusPorts, show_attempt
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import AttemptKey, Checkouts, EntryIdentity, FileRef, SlotFiles
+from taskloop.claim import ClaimWord
 from taskloop.discussion import empty
 from taskloop.earlier_input import START
 from taskloop.evidence_files import EvidenceFiles
@@ -74,7 +75,7 @@ def execute(con: sqlite3.Connection, tmp_path: Path, key: AttemptKey, run: Agent
         files,
         environment=environment,
     )
-    return attempts.execute(key, ENTRY, lambda: "held").reason
+    return attempts.execute(key, ENTRY, lambda: ClaimWord.HELD).reason
 
 
 def finish(con: sqlite3.Connection, checkouts: Checkouts, files: SlotFiles, *, publish: bool = True) -> VerifiedTask:

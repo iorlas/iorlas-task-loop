@@ -27,21 +27,21 @@ from collections.abc import Callable, Mapping, Sequence
 from contextlib import closing
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal, Protocol
+from typing import Protocol
 
 from git_porcelain import GitUnavailable, Repo
 from stream_proc import OwnedProcess
 
 from taskloop.access import TMP_BYTES, Folders, folders
 from taskloop.attempt_types import AttemptKey, AttemptRecord, AttemptResult, Checkouts
+from taskloop.claim import ClaimWord
 from taskloop.command_conclusion import CommandConclusion
 from taskloop.evidence_files import CappedLog, EvidenceFiles
 from taskloop.prepare import Prepared, task_branch
 from taskloop.profile import ProfileFiles, Refused, Unavailable, read_profile
 from taskloop.setup_store import SETUP_RUNS, SetupSeen, SetupStore
 
-type Renewal = Literal["held", "unrenewed", "lost"]
-type Renew = Callable[[], Renewal]  # one claim renewal, now (the entry's keep-alive)
+type Renew = Callable[[], ClaimWord]  # one claim renewal, now (the entry's keep-alive)
 type GroupAlive = Callable[[int], bool]  # any process left in a process group
 type SlotProfiles = Callable[[Path, Path], ProfileFiles]  # (slot, its verified Git directory): the profile at a commit
 type Launch = tuple[str, Mapping[str, str]]  # the selected agent's executable and scrubbed environment (the credentials)
@@ -240,7 +240,7 @@ class Preparation:
         deadline."""
         if not self.ports.files.empty(found.tmp):
             return _unavailable("environment:files")
-        if renew() == "lost":
+        if renew() is ClaimWord.LOST:
             return _refused("claim_lost")
         return _refused("expired") if self.ports.clock() >= deadline else None
 
