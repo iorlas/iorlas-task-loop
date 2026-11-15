@@ -9,7 +9,7 @@ from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 
 import pytest
-from sqlite_store import Store
+from sqlite_store import Store, begin_immediate
 from stream_proc import (
     IdentityUnavailableError,
     OwnedProcess,
@@ -142,10 +142,23 @@ def test_the_launchers_git_bound_is_in_the_entry_argv(admitted: Path) -> None:
 def test_launch_registers_before_the_permit_and_leaves_the_child_alone(admitted: Path) -> None:
     seen: list[tuple[object, ...]] = []
     start = FakeStart()
-    start.before = lambda: seen.append(stored(admitted))
+
+    def observe_start() -> None:
+        # A second process can acquire the write lock before spawn and after registration,
+        # while the dispatch intent remains durable until launch returns.
+        con = sqlite3.connect(admitted, timeout=0, isolation_level=None)
+        try:
+            with begin_immediate(con):
+                assert con.execute("SELECT count(*) FROM drain_action WHERE state='pending'").fetchone() == (1,)
+            seen.append(stored(admitted))
+        finally:
+            con.close()
+
+    start.before = start.after = observe_start
     result = launcher(admitted, start).launch("tasks", "tl-1", 30)
     assert result == Launched(KEY, (9, "new-start", "boot"))
-    assert seen == [(None, None, None, "admitted")] and stored(admitted) == (9, "new-start", "boot", "admitted")
+    assert seen == [(None, None, None, "admitted"), (9, "new-start", "boot", "admitted")]
+    assert stored(admitted) == seen[-1]
     call = start.calls[0]
     root = str(admitted.parent)
     assert call["argv"] == ["/venv/bin/python", "-I", "-m", "taskloop.attempt_entry", str(admitted), root, "600", "tasks", "tl-1"]

@@ -8,6 +8,7 @@ from dataclasses import replace
 from pathlib import Path
 
 import pytest
+from admission_boundaries import guard_git, outside_transaction
 from any_agent import RunOutcome, Summary
 from any_agent.procs import Worker
 from any_agent.testing import FakeRun
@@ -27,6 +28,7 @@ from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import DEFAULT_GIT_READ_SECONDS, AttemptKey, Checkouts, FileRef, SlotFiles
 from taskloop.claim_lease import BD_TIMEOUT_S
 from taskloop.composition import adopt_slots, open_admission, real_slots
+from taskloop.discussion import empty
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.factory_schema import SCHEMA
 from taskloop.git_views import GitViews
@@ -80,6 +82,7 @@ class Tracker:
 
     def claim(self, tracker_root: str, task_id: str) -> bool:
         assert not self.con.in_transaction, "the claim must be outside any transaction"
+        assert self.con.execute("SELECT count(*) FROM drain_action WHERE state='pending'").fetchone() == (1,)
         assert len(self.files.inputs) == 1 + self.calls.count("claim:" + task_id), "this admission wrote its input first"
         bead = TASKS.show(task_id)
         assert bead is not None
@@ -93,6 +96,7 @@ class Tracker:
         return self.claimed
 
     def unclaim(self, tracker_root: str, task_id: str) -> bool:
+        assert not self.con.in_transaction, "returning the claim must be outside any transaction"
         self.calls.append("unclaim:" + task_id)
         if isinstance(self.released, BdError):
             raise self.released
@@ -134,9 +138,15 @@ def unlocked(_slot_path: str) -> bool:
 
 def admission(con: sqlite3.Connection, tmp_path: Path, tracker: Tracker, repo: FakeRepo) -> AttemptAdmission:
     return AttemptAdmission(
-        lambda: con, begin_immediate, tracker.files, tasks, PinnedViews(repo), tracker.claim, tracker.unclaim, time, unlocked,
+        lambda: con, begin_immediate, tracker.files, outside_transaction(con, tasks), PinnedViews(repo),
+        tracker.claim, tracker.unclaim, time, unlocked,
         FakeSlotFiles(repo),
-    ids=NativeIds())
+        ids=NativeIds(), discussion=outside_transaction(con, empty))
+
+
+@pytest.fixture(autouse=True)
+def external_ports(factory: sqlite3.Connection, monkeypatch: pytest.MonkeyPatch) -> None:
+    guard_git(factory, monkeypatch)
 
 
 def admit(con: sqlite3.Connection, tmp_path: Path, repo: FakeRepo, tracker: Tracker | None = None) -> AdmitResult:

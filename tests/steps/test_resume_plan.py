@@ -5,6 +5,7 @@ from dataclasses import replace
 from pathlib import Path
 
 import pytest
+from admission_boundaries import guard_git, outside_transaction
 from any_agent import Harness, LaunchSpec, RunHooks, RunOutcome
 from doubles import Environment, PinnedViews
 from git_porcelain import GitUnavailable, Recorded
@@ -67,8 +68,14 @@ def steps(factory: Factory) -> list[tuple[str, int, int]]:
     return factory.con.execute("SELECT step,number,seq FROM attempt ORDER BY seq").fetchall()
 
 
-def test_two_cleared_holds_reuse_the_plan_then_changed_content_replans(resumable: Factory, plan_calls: list[str]) -> None:
+def test_two_cleared_holds_reuse_the_plan_then_changed_content_replans(
+    resumable: Factory, plan_calls: list[str], monkeypatch: pytest.MonkeyPatch,
+) -> None:
     factory = resumable
+    guard_git(factory.con, monkeypatch)
+    monkeypatch.setattr(factory.tracker, "inspect", outside_transaction(factory.con, factory.tracker.inspect))
+    monkeypatch.setattr(factory.tracker, "claim", outside_transaction(factory.con, factory.tracker.claim))
+    monkeypatch.setattr(factory.tracker, "unclaim", outside_transaction(factory.con, factory.tracker.unclaim))
     for _ in range(2):
         factory.tracker.answer("tl-1")
         factory.round()
