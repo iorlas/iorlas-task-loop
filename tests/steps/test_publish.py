@@ -234,6 +234,9 @@ def test_each_precondition_refuses_before_any_push(
     git = Observed(checkouts)
     found = publisher(registered, git, slot_files).publish(KEY)
     assert isinstance(found, NotPublished) and (found.kind, found.reason, publish_word(found)) == ("refused", reason, f"refused:{reason}")
+    assert all(recipe not in found.detail for recipe in ("tl step ", "git remote add", "git push"))
+    if reason == "not_verified":
+        assert "Verification must accept it before publication" in found.detail
     assert (pushes, rows(registered), "task/tl-1" in remote.branches(), len(git.opened)) == ([], [], False, opened)
 
 

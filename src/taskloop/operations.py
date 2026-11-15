@@ -59,7 +59,7 @@ from taskloop.steps import CHECK, following
 type Clock = Callable[[], float]
 type FailureKind = Literal["refused", "unavailable", "uncertain", "rejected", "not_applicable", "unsettled", "defect"]
 UNKNOWN_KINDS: Final = ("unavailable", "uncertain", "unsettled")  # re-running is safe: exit 3
-UNCLAIMING: Final = "Abandoned, but the tracker claim is still to be returned: run `tl step release --abandon` again."
+UNCLAIMING: Final = "Abandoned, but the tracker claim has not been returned. The abandon must finish before fresh admission."
 LATE: Final = "late_relaunch"  # the counted word of a round's relaunch of a checks attempt past its deadline
 VERIFY_KINDS: Final[dict[type[Rejected | NotApplicable | VerifyRefused | Unsettled | VerifyUnavailable], FailureKind]] = {
     Rejected: "rejected",
@@ -286,7 +286,7 @@ def require_database(open_ro: Callable[[], sqlite3.Connection | None]) -> sqlite
         con = open_ro()
     except SchemaError as error:
         return Failed("refused", "schema", str(error))
-    return Failed("refused", "database", "No readable factory.db at this path; `tl slot adopt` creates it") if con is None else con
+    return Failed("refused", "database", "No readable factory.db at this path; slot adoption initializes it") if con is None else con
 
 
 def refused_config(refused: ConfigRefused) -> Failed:
@@ -507,7 +507,7 @@ def launched(result: LaunchResult, backlog: str, task_id: str, key: AttemptKey, 
             return Failed("refused" if isinstance(result, LaunchRefused) else "unavailable", result.reason,
                           result.explanation if isinstance(result, LaunchRefused) else "")
         case LaunchUncertain():
-            return Failed("uncertain", "launch", "The registered entry may run; `tl step show` observes it")
+            return Failed("uncertain", "launch", "The registered entry may already run. Confirm its identity before another launch.")
 
 
 def verify_task(

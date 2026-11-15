@@ -24,8 +24,8 @@ def test_help(arguments: list[str], capsys: pytest.CaptureFixture[str]) -> None:
     assert output.err == ""
 
 
-BUILT = ("steps built: plan, implement, check; publishes task/<id>; lands under the profile's `land` "
-         "(`auto`: a round, `manual`: `tl step land`)")
+BUILT = ("Steps built: plan, implement and check. Verified results are published on the task branch. "
+         "The profile selects automatic land during a round or manual land by the owner.")
 
 
 def test_step_help_names_the_steps_built_once_and_each_command_help_does_not_repeat_it(capsys: pytest.CaptureFixture[str]) -> None:

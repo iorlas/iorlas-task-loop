@@ -184,13 +184,13 @@ CASES: list[tuple[list[str], Result, int, list[str], set[str]]] = [
      ADMISSION_ERROR),
     (START, Failed("refused", "registration_refused"), 1, ["refused:registration_refused"], ADMISSION_ERROR),
     (START, Failed("refused", "registration_conflict"), 1, [step_guide.GUIDE["registration_conflict"]], ADMISSION_ERROR),
-    (START, Failed("unavailable", "start", admitted=True), 3, [f"Admitted: {step_guide.HELD} Re-run `tl step start` to retry"],
+    (START, Failed("unavailable", "start", admitted=True), 3, [f"Admitted: {step_guide.HELD} Inspect the registered entry"],
      ADMISSION_ERROR),
     (START, Failed("unavailable", "tracker", claim_leaked=True), 3, ["unavailable:tracker"], ADMISSION_ERROR),
     (START, Failed("uncertain", "launch"), 3, ["tl step start: uncertain:launch"], ADMISSION_ERROR),
     (["step", "show", "tl-1", "--backlog", "tasks"], Shown(STATUS, Path("/a/d"), Path("/a/d/entry.log"), EVENTS), 0,
      ["Step: plan", "Phase: captured", "Result: pending verification", "Setup: none\nDirectory: /a/d", "Entry log: /a/d/entry.log",
-      "Next: verify", "Run `tl step verify`."],
+      "Next: verify", "The result is captured and awaits verification before it can be accepted."],
      STATUS_KEYS | {"directory", "entry_log", "events_path", "setup", "failed_checks"}),
     (["step", "show", "tl-1", "--backlog", "tasks"], Shown(REPEAT, Path("/a/d"), Path("/a/d/entry.log"), EVENTS), 0,
      ["Worker: last known pid 42, process group 41 (not checked)", "Result: pending repeat", "Unsettled: uncommitted",
@@ -239,8 +239,8 @@ CASES: list[tuple[list[str], Result, int, list[str], set[str]]] = [
     (RELEASE, ReleasedTask("tasks", "tl-1", "attempt", Released("s1", D, True, "kept", False)), 0,
      ["released: attempt attempt for tl-1 (backlog tasks)\n", f"Slot s1 parked at {D}\nReservation of s1 removed\nClaim kept"], FREED),
     ([*RELEASE, "--abandon"], ReleasedTask("tasks", "tl-1", "attempt", Released("s1", None, True, "not_held", True)), 0,
-     ["Slot s1: no Git write", "Claim not held by taskloop (reverted, or another actor's): check `bd show tl-1`",
-      "Abandoned: `tl step start tl-1` admits a fresh attempt"], FREED),
+     ["Slot s1: no Git write", "Claim not held by the factory: it was reverted or belongs to another actor.",
+      "Abandoned: the next approved admission starts a fresh attempt."], FREED),
     (RELEASE, ReleasedTask("tasks", "tl-1", "attempt", AlreadyReleased("s1", "unclaimed", True)), 0,
      ["already_released: attempt attempt for tl-1 (backlog tasks); nothing changed", "Claim: unclaimed; abandoned"], FREED),
     (RELEASE, Failed("refused", "slot_dirty", "?? x\nRemove the listed files. Nothing changed."), 1,
@@ -265,9 +265,9 @@ CASES: list[tuple[list[str], Result, int, list[str], set[str]]] = [
     (NEXT, Failed("refused", "label"), 1, ["tl step next: refused:label"], ERROR),
     (["slot", "adopt", "/repo"], Adoption((Adopted("s1", Path("/s/s1")),)), 0, ["s1 adopted /s/s1"], {"slots"}),
     (["slot", "adopt", "/repo"], Adoption((NotAdopted("s1", "not_listed", Path("/s/s1")),)), 1,
-     ["s1 not_listed /s/s1", "git worktree add --detach"], {"slots"}),
+     ["s1 not_listed /s/s1", "Missing slots need registered detached worktrees"], {"slots"}),
     (["slot", "adopt", "/repo"], Adoption((NotAdopted("s1", "attached", Path("/s/s1")),)), 1,
-     ["s1 attached /s/s1", "`git switch --detach` in a slot left on a task branch"], {"slots"}),
+     ["s1 attached /s/s1", "its work preserved and its HEAD detached before adoption"], {"slots"}),
     (["slot", "adopt", "/repo"], Adoption((NotAdopted("s1", "store_unavailable", Path("/s/s1")),)), 3, ["s1 store_unavailable"], {"slots"}),
 ]
 
@@ -478,8 +478,8 @@ def test_the_real_read_paths_write_nothing_and_never_print_the_token(tmp_path: P
     assert [each["step"] for each in json.loads(capsys.readouterr().out)["attempts"]] == ["plan"]
     assert main(["step", "show", "tl-1", "--backlog", "tasks", "--db", str(db), "--artifacts", str(art)]) == 0
     assert "Task: tl-1 (backlog tasks)\nStep: plan\nAttempt: attempt (1 of at most 3)\n" in capsys.readouterr().out
-    assert "stuck:expired_admitted: Nothing ran; rounds only report it. `tl step release --abandon`" in listed
-    assert f"delete {db} and its" in listed
+    assert "stuck:expired_admitted: Nothing ran; rounds only report it." in listed
+    assert f"discard {db} and its" in listed
     assert main(["step", "verify", "tl-1", "--backlog", "tasks", "--db", str(db), "--json"]) == 1
     output = capsys.readouterr()
     assert json.loads(output.err)["error"]["reason"] == "not_captured"
@@ -639,7 +639,7 @@ def test_rounds_flags_reach_the_opener_and_print_a_start_and_an_end(
         "Rounds for backlog tasks every 60 s, taking tasks labelled 'auto', none new while 3 or more tasks of this backlog are in flight "
             "(a step running, or passed and waiting to be landed, by a round under the profile's `land: auto`, else by a person); "
             f"log: {art / 'rounds.log'}; stop with Ctrl-C",
-        "Rounds stopped: interrupted. Launched steps keep running; `tl step rounds` again continues them.",
+        "Rounds stopped: interrupted. Launched steps keep running; restarting scheduling continues them.",
     ] and output.err == ""
     config = tmp_path / "scratch.toml"
     config.write_text("round_seconds = 90\n")
@@ -707,11 +707,10 @@ def test_rounds_require_every_choice_and_the_help_names_the_stop(missing: str, c
     with pytest.raises(SystemExit):
         main(["step", "rounds", "--help"])
     shown = " ".join(capsys.readouterr().out.split())
-    assert "Run scheduling rounds until stopped (Ctrl-C): a round at once, then every --every seconds and as soon as a slot" in shown
-    assert "Ctrl-C once stops after the current move, twice exits at once; launched steps keep running;" in shown
-    assert "only SIGTERM stops it" in shown
-    assert ("each round holds the tasks it took that stopped (`bd list --label held`), advances claimed tasks whose step is "
-            "done to their next step, then starts approved ready tasks") in shown
+    assert "Scheduling starts with a round immediately, then repeats at the configured interval and when a slot becomes free." in shown
+    assert "Ctrl-C once stops scheduling after the current move; twice exits immediately. Launched steps keep running." in shown
+    assert "SIGTERM is needed to stop scheduling" in shown
+    assert ("Each round holds stopped tasks it took, advances completed claimed tasks, then starts approved ready tasks") in shown
 
 
 def test_the_real_opener_refuses_inputs_a_missing_database_and_a_second_rounds_process_before_any_round(

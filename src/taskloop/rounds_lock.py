@@ -20,7 +20,7 @@ class RoundsRunning(Exception):
     """Another rounds process holds this backlog's lock now."""
 
     def __init__(self, pid: int | None) -> None:
-        super().__init__("another `tl step rounds` runs for this backlog" + ("" if pid is None else f" (pid {pid})"))
+        super().__init__("Another scheduling process owns this backlog" + ("" if pid is None else f" (pid {pid})"))
         self.pid = pid
 
 

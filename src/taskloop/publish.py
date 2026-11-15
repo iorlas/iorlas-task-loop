@@ -192,7 +192,7 @@ class BranchPublish:
             return None
         if row.verdict == "rejected":
             return _refused("not_verified", f"The step's result was rejected ({row.reason}).")
-        return _refused("not_verified", "The step's result is not verified yet: `tl step verify`.")
+        return _refused("not_verified", "The step's result is not verified yet. Verification must accept it before publication.")
 
     def _repository(self, row: _Row, x: str) -> tuple[Repo, Path] | NotPublished:
         """The person's checkout through the slot's verified pointer (file reads first), `origin`, then the local branch
@@ -206,7 +206,7 @@ class BranchPublish:
         try:
             repo.remote_url(REMOTE)  # a presence check only: the URL is never kept, logged or printed
         except MissingRemote:
-            return _refused("no_remote", f"The repository has no `{REMOTE}` remote: `git remote add {REMOTE} ...`, then rerun.")
+            return _refused("no_remote", f"The repository has no `{REMOTE}` remote. Configure the intended remote before publication.")
         name = "refs/heads/" + task_branch(row.task_id)
         tip = next((entry.sha for entry in repo.refs(["refs/heads/task/"]) if entry.name == name), None)
         if tip is None or not repo.is_ancestor(x, tip):
@@ -220,7 +220,7 @@ class BranchPublish:
         try:
             pushed = repo.worktree(root).push(branch, remote=REMOTE, head=Sha(x))
         except GitUnavailable as error:
-            return _unavailable("git", f"Git could not push ({type(error).__name__}): check `git push` works from this shell, rerun.")
+            return _unavailable("git", f"Git could not push ({type(error).__name__}). Resolve noninteractive Git access first.")
         if isinstance(pushed, Pushed):
             return self._record(key, x)
         if isinstance(pushed, RefRejected):
