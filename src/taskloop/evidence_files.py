@@ -9,7 +9,7 @@ from typing import Final, Literal
 
 from any_agent import RunOutcome
 
-from taskloop.activity_file import ActivityPage, command_time, follow, tail
+from taskloop.activity_file import ActivityPage, command_time, complete, follow, tail
 from taskloop.attempt_types import AttemptKey, Evidence, FileRef
 from taskloop.check_feed import CheckLog, CheckPage
 from taskloop.check_feed import read as read_checks
@@ -322,6 +322,10 @@ class EvidenceFiles:
         path.parent.mkdir(parents=True, exist_ok=True)
         size = path.stat().st_size if path.exists() else 0
         return CappedLog(path, max(0, EVENTS_CAP - size))  # a resumed run adds to the file's cap, it does not start a new one
+
+    def activity_complete(self, key: AttemptKey) -> ActivityPage:
+        """Read-only: every retained logical action of an ended attempt; creates nothing. Display only."""
+        return complete(self.events_path(key), EVENTS_CAP + len(TRUNCATED))
 
     def activity_tail(self, key: AttemptKey, limit: int) -> ActivityPage:
         """Read-only: the latest `limit` actions of the attempt's agent, with the cursor to follow from; creates nothing.
