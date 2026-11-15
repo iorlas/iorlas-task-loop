@@ -5,6 +5,7 @@ import { initDrawer, onTaskMoved, openDrawer } from "./drawer.js";
 import { initLogs, loadLogs, onLog } from "./logs.js";
 import { apiSource } from "./api.js";
 import { receiveDuration } from "./duration.js";
+import { activateCard, initTabList, tabState } from "./accessibility.js";
 import {
   $, COLUMNS, LAND, STEPS, callout, el, elapsedSpan, holdCallout, isWaiting, position, quietSpan, runningAgent, tag, tick, waitingNote,
 } from "./ui.js";
@@ -143,6 +144,7 @@ const TIME = {
 };
 
 function fillCard(node, t) {
+  node.setAttribute("aria-label", `${t.id}: ${t.title}`);
   node.replaceChildren();
   delete node.dataset.quietLevel;
   const top = el("div", "flex items-center gap-2");
@@ -190,7 +192,7 @@ function fillCard(node, t) {
 function newCard(t) {
   const node = el("article", "relative cursor-pointer rounded-md border border-slate-200 bg-white p-3 transition-colors hover:border-slate-400 data-[quiet-level=slow]:border-amber-400 data-[quiet-level=long]:border-rose-400 dark:border-slate-800 dark:bg-slate-900 dark:hover:border-slate-600");
   node.dataset.id = t.id;
-  node.addEventListener("click", () => openDrawer(t.id));
+  activateCard(node, () => openDrawer(t.id));
   return node;
 }
 
@@ -252,6 +254,8 @@ function showScreen(name) {
   $("layout").hidden = name !== "board";
   $("nav-board").className = navButton(name === "board");
   $("nav-logs").className = navButton(name === "logs");
+  tabState($("nav-board"), name === "board");
+  tabState($("nav-logs"), name === "logs");
   if (name === "logs") loadLogs(source);
 }
 
@@ -315,6 +319,7 @@ async function start() {
   $("theme").addEventListener("click", toggleTheme);
   $("nav-board").addEventListener("click", () => showScreen("board"));
   $("nav-logs").addEventListener("click", () => showScreen("logs"));
+  initTabList($("screens"));
   $("view-columns").addEventListener("click", () => setLanes(false));
   $("view-lanes").addEventListener("click", () => setLanes(true));
   source = apiSource();

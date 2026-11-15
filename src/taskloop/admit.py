@@ -12,7 +12,8 @@ from typing import Literal
 from beads_client import BdError
 from git_porcelain import GitUnavailable, NotARepo, Repo
 
-from taskloop.admit_rows import Free, insert_attempt, issued, next_seq, reserve, task_attempted, unheld
+from taskloop.admit_rows import Free
+from taskloop.admit_store import insert_attempt, issued, next_seq, reserve, task_attempted, unheld
 from taskloop.agents.settings import AgentSetting, Overrides, StepSettings, apply, encode_policy
 from taskloop.attempt_reads import StoreUnavailable
 from taskloop.attempt_store import AttemptStore

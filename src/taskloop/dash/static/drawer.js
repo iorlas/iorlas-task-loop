@@ -12,6 +12,7 @@ import { prompt, result } from "./result.js";
 import { taskView } from "./taskview.js";
 import { usageNode } from "./usage.js";
 import { receiveDuration } from "./duration.js";
+import { closeButton, closeDialog, initDialog, openDialog, preserveDialogFocus, tabBar, tabPanel } from "./accessibility.js";
 
 let source = null;
 let tasks = null;
@@ -21,7 +22,7 @@ export function initDrawer(src, taskMap) {
   source = src;
   tasks = taskMap;
   $("backdrop").addEventListener("click", closeDrawer);
-  addEventListener("keydown", (ev) => { if (ev.key === "Escape") closeDrawer(); });
+  initDialog($("drawer"), closeDrawer);
 }
 
 const attemptOf = () => open.detail?.attempts.find((a) => a.step === open.step && a.n === open.n);
@@ -48,12 +49,14 @@ function select(step, n) {
 function reveal() {
   $("drawer").classList.remove("translate-x-full");
   $("backdrop").classList.remove("pointer-events-none", "opacity-0");
+  openDialog($("drawer"));
 }
 
 // Open at once: the board's card is the head and the body says loading; the detail (factory.db and files, milliseconds) renders when
 // it arrives and the tracker's fields (`bd`, slow under load) when they do. Opening another task cancels the first one's tracker read.
 export async function openDrawer(id) {
   open?.abort.abort();
+  $("drawer").setAttribute("aria-label", `${id}: ${tasks.get(id)?.title ?? "Task details"}`);
   const mine = { id, detail: null, tracker: { state: "loading" }, abort: new AbortController(), sig: null, bodies: new Map(), opened: new Map(), runs: new Map(), tab: null, view: null };
   open = mine;
   render();
@@ -131,21 +134,24 @@ function follow() {
 // The task could not be read: say so in the drawer, with nothing from an earlier read.
 function showError(id, error) {
   const head = el("header", "flex items-start gap-4 px-6 py-5");
-  const close = el("button", "rounded border border-slate-200 px-2 py-1 text-xs text-slate-500 dark:border-slate-700", "Close");
-  close.type = "button";
-  close.addEventListener("click", closeDrawer);
+  const close = closeButton(closeDrawer);
   const who = el("div", "min-w-0 flex-1");
   who.append(el("p", "font-mono text-xs text-slate-500", id));
   head.append(who, close);
-  $("drawer").replaceChildren(head, el("p", "px-6 text-sm text-rose-700 dark:text-rose-300", `This task cannot be read: ${error.message ?? error}`));
+  preserveDialogFocus($("drawer"), () => {
+    $("drawer").replaceChildren(head,
+      el("p", "px-6 text-sm text-rose-700 dark:text-rose-300", `This task cannot be read: ${error.message ?? error}`));
+  });
 }
 
 export function closeDrawer() {
+  if (!open) return;
   clearInterval(follower);
   open?.abort.abort();
   open = null;
   $("drawer").classList.add("translate-x-full");
   $("backdrop").classList.add("pointer-events-none", "opacity-0");
+  closeDialog($("drawer"));
 }
 
 const VIEWS = [["attempts", "Steps"], ["task", "Task"]];
@@ -168,9 +174,7 @@ function head(t) {
   if (position(t)) status.append(el("span", "text-xs text-slate-500 dark:text-slate-400", position(t)));
   status.append(el("span", "truncate text-xs text-slate-500 dark:text-slate-400", place.help));
   title.append(status, el("h2", "mt-1.5 text-lg font-semibold leading-snug", t.title));
-  const close = el("button", "rounded border border-slate-200 px-2 py-1 text-xs text-slate-500 hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800", "Close");
-  close.type = "button";
-  close.addEventListener("click", closeDrawer);
+  const close = closeButton(closeDrawer);
   wrap.append(title, close);
   return wrap;
 }
@@ -178,6 +182,10 @@ function head(t) {
 // Rebuild the drawer. The Lines tab keeps its scroll place across a rebuild of the same attempt: at the bottom it stays at the bottom,
 // anywhere else it stays where it was; a different attempt or tab starts at the bottom.
 function render() {
+  preserveDialogFocus($("drawer"), renderContent);
+}
+
+function renderContent() {
   if (!open) return;
   const { detail } = open;
   const t = tasks.get(open.id) || detail?.task;
@@ -218,21 +226,18 @@ function render() {
   if (!detail) return drawer.append(el("p", "px-6 py-5 text-sm text-slate-500", "Loading the task's steps…"));
 
   const view = open.view ?? (detail.attempts.length ? "attempts" : "task");
-  const bar = el("div", "flex gap-5 border-b border-slate-200 px-6 dark:border-slate-800");
-  for (const [id, label] of VIEWS) {
-    const on = id === view;
-    const b = el("button", `-mb-px border-b-2 pb-2 text-sm ${on ? "border-slate-900 font-semibold dark:border-slate-100" : "border-transparent text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"}`, id === "attempts" && detail.attempts.length ? `${label} ${detail.attempts.length}` : label);
-    b.type = "button";
-    b.addEventListener("click", () => { open.view = id; render(); });
-    bar.append(b);
+  const views = VIEWS.map(([id, label]) => [id,
+    id === "attempts" && detail.attempts.length ? `${label} ${detail.attempts.length}` : label]);
+  drawer.append(tabBar("drawer-view", "Task views", views, view, (id) => { open.view = id; render(); }));
+  if (view === "task") {
+    return drawer.append(tabPanel(taskView(open.tracker, () => { loadTracker(open); render(); }, detail.usage), "drawer-view", view));
   }
-  drawer.append(bar);
-
-  if (view === "task") return drawer.append(taskView(open.tracker, () => { loadTracker(open); render(); }, detail.usage));
-  if (!detail.attempts.length) return drawer.append(el("p", "px-6 py-5 text-sm text-slate-500", "Not started: no attempt yet."));
+  if (!detail.attempts.length) {
+    return drawer.append(tabPanel(el("p", "px-6 py-5 text-sm text-slate-500", "Not started: no attempt yet."), "drawer-view", view));
+  }
   const body = el("div", "flex min-h-0 flex-1");
   body.append(rail(detail.attempts, t, open, select, detail.step_usage), open.step === "land" ? deliveryPane() : pane());
-  drawer.append(body);
+  drawer.append(tabPanel(body, "drawer-view", view));
   if ($("rail") && railTop) $("rail").scrollTop = railTop;
   else body.querySelector("[data-selected]")?.scrollIntoView({ block: "nearest" });
   const tail = $("tail");
@@ -350,15 +355,12 @@ function pane() {
   wrap.append(top);
   if (a.run) wrap.append(el("p", "px-6 pt-1 text-xs text-slate-500 dark:text-slate-400", [a.run.harness, a.run.provider, a.run.model, `${a.run.effort} effort`, a.run.access].join(" · ")));
   if (a.after) top.append(began(a)); // the full reason is readable here after selecting the row or tag
-  const bar = el("div", "mt-3 flex gap-5 border-b border-slate-200 px-6 dark:border-slate-800");
-  for (const [id, label] of TABS) {
-    const on = id === tab;
-    const b = el("button", `-mb-px border-b-2 pb-2 text-[13px] ${on ? "border-slate-900 font-semibold dark:border-slate-100" : "border-transparent text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"}`, label);
-    b.type = "button";
-    b.addEventListener("click", () => { open.tab = id; render(); });
-    bar.append(b);
+  const content = tab === "lines" ? lines(a) : bodyTab(a, tab);
+  if (a.step === VERIFY.id) wrap.append(content);
+  else {
+    wrap.append(tabBar("attempt-body", "Attempt output", TABS, tab, (id) => { open.tab = id; render(); }),
+      tabPanel(content, "attempt-body", tab));
   }
-  wrap.append(...(a.step === VERIFY.id ? [] : [bar]), tab === "lines" ? lines(a) : bodyTab(a, tab));
   return wrap;
 }
 

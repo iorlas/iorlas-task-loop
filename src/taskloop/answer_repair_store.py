@@ -6,8 +6,7 @@ from dataclasses import astuple
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from taskloop.admit_chain import transfer
-from taskloop.admit_rows import insert_attempt
+from taskloop.admit_store import insert_attempt, transfer
 from taskloop.answer_repair_models import RepairContext, RepairOutcome
 from taskloop.attempt_reads import StoreRefused, as_int, as_text
 from taskloop.attempt_store import AttemptStore

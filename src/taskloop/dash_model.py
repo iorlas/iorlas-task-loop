@@ -141,11 +141,12 @@ class FeedEvent:
     text: str | None = None  # a message, the agent's reasoning words (only when the harness gave them), an error or a wait
     waited_ms: int | None = None
     exit_code: int | None = None
+    block: int | None = None  # a check's Result block
 
 
 @dataclass(frozen=True)
 class FeedPage:
-    """`GET /api/tasks/<id>/attempts/<step>/<n>/feed`: the agent's lines of one attempt and the cursor to follow them from."""
+    """`GET /api/tasks/<id>/attempts/<step>/<n>/feed`: agent or check lines and the cursor to follow them from."""
 
     events: tuple[FeedEvent, ...]
     cursor: str | None
