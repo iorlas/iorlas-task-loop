@@ -17,7 +17,7 @@ from taskloop.land_conflict.release_models import ReleasePhase
 from taskloop.land_conflict.reservation_store import owns
 from taskloop.land_store import require_checked
 from taskloop.repo import RepoId
-from taskloop.slot_release import free
+from taskloop.slot_release_store import free
 from taskloop.slots import Probe, SlotGit
 
 

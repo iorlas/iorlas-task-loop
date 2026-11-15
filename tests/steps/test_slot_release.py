@@ -360,6 +360,44 @@ def test_the_claim_is_returned_once_retried_while_bd_fails_and_reported_when_not
     assert other.releaser().release(KEY, True) == Released("s1", None, False, "not_held", True)
 
 
+@pytest.mark.parametrize("change", [
+    "UPDATE attempt SET entry_pid=8,rev=rev+1",
+    "UPDATE reservation SET generation=generation+1",
+], ids=["attempt", "reservation"])
+def test_a_change_before_the_record_transaction_keeps_the_reservation_and_claim(
+    registered: sqlite3.Connection, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles, change: str,
+) -> None:
+    """Custody proof has passed, but the transaction must still compare its snapshot before recording a release."""
+    ports = Ports(registered, checkouts, slot_files)
+
+    @contextmanager
+    def raced(con: sqlite3.Connection) -> Generator[None]:
+        con.execute(change)
+        with begin_immediate(con):
+            yield
+
+    releaser = replace(ports.releaser(), store=AttemptStore(lambda: registered, raced))
+    found = releaser.release(KEY, True)
+    assert isinstance(found, NotReleased) and (found.kind, found.reason) == ("unavailable", "changed")
+    reservations, releases = stored(registered)
+    assert reservations and releases == []
+    assert ports.unclaimed == ports.emptied == []
+
+
+def test_a_failed_reservation_deletion_rolls_back_the_release_record(
+    registered: sqlite3.Connection, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles,
+) -> None:
+    """A database failure after the insert leaves the claim held and the slot reserved; retry can finish normally."""
+    registered.execute("CREATE TRIGGER prevent_release BEFORE DELETE ON reservation "
+                       "BEGIN SELECT RAISE(ABORT, 'deletion failed'); END")
+    before, ports = stored(registered), Ports(registered, checkouts, slot_files)
+    found = ports.releaser().release(KEY, True)
+    assert isinstance(found, NotReleased) and (found.kind, found.reason) == ("unavailable", "store")
+    assert stored(registered) == before and ports.unclaimed == ports.emptied == []
+    registered.execute("DROP TRIGGER prevent_release")
+    assert ports.releaser().release(KEY, True) == Released("s1", None, True, "unclaimed", True)
+
+
 def test_abandoning_a_settled_release_flips_it_and_returns_the_claim_with_no_git(
     registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles
 ) -> None:
