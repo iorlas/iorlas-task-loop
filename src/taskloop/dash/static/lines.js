@@ -53,7 +53,7 @@ export function touchQuiet(a) {
   node.replaceWith(quiet);
 }
 
-// One row: offset, kind emoji, content, duration. A faint "paused 33s" row sits above a line that came after a pause.
+// One row: offset, kind emoji and words, content, duration. A faint "paused 33s" row sits above a line that came after a pause.
 function line(e, a, prev, fresh = false) {
   const idle = pause(e, prev);
   const row = el("div", `${fresh ? "animate-line-in" : ""} grid grid-cols-[3.25rem_3.25rem_minmax(0,1fr)_auto] items-baseline gap-x-3 py-1.5 text-xs`);
@@ -62,7 +62,7 @@ function line(e, a, prev, fresh = false) {
   const r = hint ? "row-start-2" : "row-start-1"; // literal class names: the Tailwind scanner reads strings, not parts
   if (hint) row.append(el("span", "col-start-3 row-start-1 mb-0.5 text-[11px] text-slate-400 dark:text-slate-500", `⏸ paused ${fmtDur(idle)}`));
   const at = el("span", `col-start-1 ${r} font-mono tabular-nums text-slate-400 dark:text-slate-500`, offset(e, a));
-  const kind = el("span", `col-start-2 ${r} text-[13px]`, KIND[e.type]);
+  const kind = el("span", `col-start-2 ${r} break-words text-[11px] leading-snug`, `${KIND[e.type]} ${WORD[e.type]}`);
   kind.title = WORD[e.type];
   const content = el("span", `col-start-3 ${r} min-w-0`);
   const right = el("span", `col-start-4 ${r} text-right tabular-nums text-slate-500 dark:text-slate-400`);

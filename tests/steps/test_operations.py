@@ -246,7 +246,8 @@ def test_a_launch_failure_after_a_fresh_admission_says_the_attempt_is_admitted(e
     (LaunchRefused("dispatched"), Started("already_dispatched", "tasks", "tl-1", "attempt", True, step="plan")),
     (LaunchRefused("registration_refused"), Failed("refused", "registration_refused")),
     (LaunchUnavailable("store"), Failed("unavailable", "store")),
-    (LaunchUncertain(KEY, ENTRY), Failed("uncertain", "launch", "The registered entry may run; `tl step show` observes it")),
+    (LaunchUncertain(KEY, ENTRY),
+     Failed("uncertain", "launch", "The registered entry may already run. Confirm its identity before another launch.")),
 ])
 def test_an_existing_attempt_is_launched_as_admitted_without_the_tracker(
     reader: AttemptStore, launched: LaunchResult, expected: Started | Failed
@@ -536,7 +537,7 @@ def test_show_and_verify_agree_on_a_slot_moved_off_its_task_branch(
 
 def test_every_opener_but_adopt_refuses_a_missing_database_and_creates_none(tmp_path: Path) -> None:
     missing = tmp_path / "factory.db"  # in an existing directory: a writable open would create it
-    refused = Failed("refused", "database", "No readable factory.db at this path; `tl slot adopt` creates it")
+    refused = Failed("refused", "database", "No readable factory.db at this path; slot adoption initializes it")
     with open_reads(missing, missing.parent, GitViews(DEFAULT_GIT_READ_SECONDS)) as reads:
         assert reads == refused
     with open_start(missing, tmp_path / "art", GitViews(DEFAULT_GIT_READ_SECONDS)) as ports:

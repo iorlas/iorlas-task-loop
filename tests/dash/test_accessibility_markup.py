@@ -153,3 +153,47 @@ def test_shared_accessibility_module_is_served_and_imported_by_both_consumers() 
     assert pages["accessibility.js"] == "accessibility.js"
     for consumer in ("app.js", "drawer.js"):
         assert 'from "./accessibility.js"' in source(consumer)
+
+
+def test_rail_indicators_include_visible_state_and_verdict_words() -> None:
+    rail = source("rail.js")
+    row = function(rail, "row")
+    assert "dot(st.dot)" in row
+    assert 'btn.append(el("span", `block text-[11px] ${st.text}`, st.label))' in row
+    assert "verificationButton(verification, selected, select, a)" in row
+    verification = function(rail, "verificationButton")
+    assert '`${v.mark} ${v.label}`' in verification
+    assert "truncate" not in verification and "sr-only" not in verification
+    history = function(rail, "summary")
+    assert "verdict(verification)" in history and "STATE[a.state].label" in history
+    assert "${lastStatus.mark} ${lastStatus.label}" in history
+    assert '"; Not checked yet"' in history
+
+
+def test_all_event_kind_glyphs_have_visible_words_after_insert_or_replace() -> None:
+    script = source("lines.js")
+    row = function(script, "line")
+    assert '`${KIND[e.type]} ${WORD[e.type]}`' in row
+    assert "row.append(at, kind, content, right)" in row
+    assert "sr-only" not in row
+    assert "list.append(line(e, a, a.feed[i - 1]))" in function(script, "lines")
+    update = function(script, "show")
+    assert "const row = line(e, attempt, attempt.feed[index - 1], true)" in update
+    assert "old.replaceWith(row)" in update and "list.append(row)" in update
+
+
+def test_existing_board_badges_quiet_age_and_check_indicators_keep_visible_words() -> None:
+    app, ui = source("app.js"), source("ui.js")
+    heading = function(app, "buildBoard")
+    assert "col.emoji" in heading and "col.label" in heading
+    card = function(app, "fillCard")
+    assert '"↩ Restarted at plan" : "↻ Repeat"' in card
+    assert 't.status === "abandoned" ? "Abandoned" : "Queued"' in card
+    assert 'ask ? "Needs you" : `Factory problem: ${say(cause)}`' in function(ui, "holdCallout")
+    quiet = function(ui, "tickQuiet")
+    assert 'dot(level === "long" ? "bg-rose-500" : "bg-amber-500")' in quiet
+    assert "Last activity ${fmtDur(s * 1000)} ago" in quiet
+    assert "node.append(text)" in function(ui, "tag")
+    assert "tag(st.label, { dotCls: st.dot, cls: st.text })" in function(source("drawer.js"), "pane")
+    assert "c.passed ? STATE.succeeded.label : STATE.failed.label" in function(source("result.js"), "check")
+    assert "e.passed ? STATE.succeeded.label : STATE.failed.label" in function(source("lines.js"), "fill")

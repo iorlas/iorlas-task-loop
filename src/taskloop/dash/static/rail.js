@@ -70,9 +70,12 @@ function verdict(a) {
   return { mark: "✗", label, failed: true, text: STATE.failed.text };
 }
 
-function verificationButtons(a, selected, select, agent) {
+function verificationButton(a, selected, select, agent) {
   const v = verdict(a);
-  const mark = el("button", `shrink-0 rounded px-2 py-1.5 text-sm ${v.text} ${chosen(a, selected) ? "bg-slate-100 dark:bg-slate-800" : "hover:bg-slate-50 dark:hover:bg-slate-800/60"}`, v.mark);
+  const selectedClass = chosen(a, selected) ? "bg-slate-100 dark:bg-slate-800"
+    : "hover:bg-slate-50 dark:hover:bg-slate-800/60";
+  const mark = el("button", `rounded px-2 py-1.5 text-left text-[11px] leading-snug ${v.text} ${selectedClass}`,
+    `${v.mark} ${v.label}`);
   mark.type = "button";
   const of = `${stepInfo(agent.step).label}${agent.n > 1 ? ` attempt ${agent.n}` : ""}`;
   mark.title = `${of}: ${v.label}${a.summary ? ` (${a.summary})` : ""}`;
@@ -80,12 +83,7 @@ function verificationButtons(a, selected, select, agent) {
   mark.setAttribute("aria-pressed", String(!!chosen(a, selected)));
   if (chosen(a, selected)) mark.dataset.selected = "1";
   mark.addEventListener("click", () => select(a.step, a.n));
-  if (!v.failed) return [mark, null];
-  const reason = el("button", `block w-full truncate px-2 text-left text-[11px] ${v.text} hover:underline`, v.label);
-  reason.type = "button";
-  reason.title = mark.title;
-  reason.addEventListener("click", () => select(a.step, a.n));
-  return [mark, reason];
+  return mark;
 }
 
 function restartTime(iso) {
@@ -122,11 +120,11 @@ function row({ a, verification, gap }, selected, select, stepUsage) {
   if (!a.after) li.title = gapWords(gap);
   const dotEl = dot(st.dot);
   dotEl.classList.add("absolute", "-left-[3px]", "top-[0.95rem]");
-  const line = el("div", "flex items-center");
+  const line = el("div", "flex min-w-0 flex-col items-stretch");
   const btn = el("button", `block min-w-0 flex-1 rounded px-2 py-1.5 text-left ${chosen(a, selected) ? "bg-slate-100 dark:bg-slate-800" : "hover:bg-slate-50 dark:hover:bg-slate-800/60"}`);
   btn.type = "button";
   if (chosen(a, selected)) btn.dataset.selected = "1";
-  const top = el("span", "flex items-baseline gap-1");
+  const top = el("span", "flex flex-wrap items-baseline gap-1");
   top.append(el("span", "text-[13px] font-medium", stepInfo(a.step).label));
   if (a.n > 1) top.append(el("span", `text-[11px] ${muted}`, `attempt ${a.n}`));
   if (a.after === "repeat") {
@@ -140,6 +138,7 @@ function row({ a, verification, gap }, selected, select, stepUsage) {
     ? elapsedSpan(a.duration, `ml-auto text-[11px] tabular-nums ${muted}`)
     : el("span", `ml-auto text-[11px] tabular-nums ${muted}`, lasted(a)));
   btn.append(top);
+  btn.append(el("span", `block text-[11px] ${st.text}`, st.label));
   const covered = verification && (a.summary === "verification" || a.summary === verification.summary);
   if (a.state === "failed" && !covered) btn.append(wordNode(el, a.summary, `mt-0.5 block truncate text-[11px] ${muted}`));
   btn.addEventListener("click", () => select(a.step, a.n));
@@ -152,9 +151,7 @@ function row({ a, verification, gap }, selected, select, stepUsage) {
     li.append(total);
   }
   if (verification) {
-    const [mark, reason] = verificationButtons(verification, selected, select, a);
-    line.append(mark);
-    if (reason) li.append(reason);
+    line.append(verificationButton(verification, selected, select, a));
   }
   return li;
 }
@@ -165,9 +162,16 @@ function summary(entries, n) {
     const tries = entries.filter(({ a }) => a.step === step.id);
     if (!tries.length) continue;
     const last = tries.at(-1);
-    const status = ({ a, verification }) => verification ? verdict(verification).mark : a.state === "failed" ? "✗" : step.id === "checks" && a.state === "succeeded" ? "✓" : "…";
-    const earlierFailure = tries.slice(0, -1).some((entry) => status(entry) === "✗");
-    parts.push(`${step.label} ${status(last)}${earlierFailure ? " (earlier failure)" : ""}`);
+    const status = ({ a, verification }) => {
+      if (verification) return verdict(verification);
+      const failed = a.state === "failed", checked = step.id === "checks";
+      const mark = failed ? "✗" : checked && a.state === "succeeded" ? "✓" : "…";
+      const label = `${STATE[a.state].label}${!failed && !checked ? "; Not checked yet" : ""}`;
+      return { mark, label, failed };
+    };
+    const earlierFailure = tries.slice(0, -1).some((entry) => status(entry).failed);
+    const lastStatus = status(last);
+    parts.push(`${step.label} ${lastStatus.mark} ${lastStatus.label}${earlierFailure ? " (earlier failure)" : ""}`);
   }
   return parts.join(" · ");
 }

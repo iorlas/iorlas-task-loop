@@ -1,0 +1,8 @@
+{
+  "prepared_commit": "80d7fd0f7d9e519854a36088f6e2529149c5ddfe",
+  "cited_paths": [
+    "src/taskloop/dash/static",
+    "tests/dash",
+    "tests/cli/test_dash_words.py"
+  ]
+}

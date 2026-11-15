@@ -58,7 +58,8 @@ def _step_lines(command: str, result: StepResult, db: Path | None) -> list[str]:
             lines += [f"  {view.name} {view.state} {view.reason or view.attempt_id or ''} {view.path}" for view in result.slots]
             lines += list(dict.fromkeys(SLOT[view.reason] for view in result.slots if view.reason is not None))
             lines += _guides(result)
-            return lines + ([f"Admitted: {HELD} Re-run `tl step start` to retry the launch."] if result.admitted else [])
+            admitted = [f"Admitted: {HELD} Inspect the registered entry before deciding to retry the launch."] if result.admitted else []
+            return lines + admitted
         case Started():
             entry = "" if result.entry is None else f"; entry pid {result.entry[0]}"
             lines = [f"{result.status}: attempt {result.attempt_id} for {result.task_id} (backlog {result.backlog}){entry}"]
@@ -67,7 +68,7 @@ def _step_lines(command: str, result: StepResult, db: Path | None) -> list[str]:
                 stand = f"attempt {result.number - 1}'s choices stand; deadline from --minutes"
                 lines += [f"attempt {result.number} of at most {ATTEMPTS}; {stand}"]
             lines += ["existing attempt; its admitted choices stand"] if result.existing else [HELD]
-            return [*lines, f"Step commands ({STEP_ONLY}). Follow it with `tl step show {result.task_id} --backlog {result.backlog}`."]
+            return [*lines, STEP_ONLY, "The attempt's status and retained evidence show its progress."]
         case Shown(view=each):
             paths = [f"Directory: {result.directory}", f"Entry log: {result.entry_log}", f"Events: {result.events_path}"]
             ended = each.release
@@ -115,7 +116,7 @@ def _rows_lines(command: str, result: Listed | Round | Ended | SetupTimingReport
     if isinstance(result, Ended):
         ended = {Reason.DRAINING: "Rounds stopped: new work is blocked by the durable drain request.",
                  Reason.DRAINED: "Idle was verified; new work remains blocked. The owner can decide whether to restart or upgrade.",
-                 "interrupted": "Rounds stopped: interrupted. Launched steps keep running; `tl step rounds` again continues them.",
+                 "interrupted": "Rounds stopped: interrupted. Launched steps keep running; restarting scheduling continues them.",
                  "abrupt": "Stopped at once."}
         if result.reason in ended:
             return [ended[result.reason]]
@@ -167,13 +168,13 @@ def _released_lines(result: VerifiedTask | ReleasedTask | PublishedTask) -> list
     lines += [f"Slot {found.slot} parked at {found.parked}" if found.parked else f"Slot {found.slot}: no Git write"]
     lines += [f"Reservation of {found.slot} removed"] if found.reservation_removed else []
     claims = {"kept": "Claim kept", "unclaimed": "Claim returned to the tracker",
-              "not_held": f"Claim not held by taskloop (reverted, or another actor's): check `bd show {task}`"}
+              "not_held": "Claim not held by the factory: it was reverted or belongs to another actor. Inspect tracker ownership."}
     lines += [claims[found.claim]]
     fresh = found.abandoned and found.claim != "kept"  # a checks attempt's abandon keeps the claim: its implement attempt's follows
-    return lines + ([f"Abandoned: `tl step start {task}` admits a fresh attempt"] if fresh else [])
+    return lines + (["Abandoned: the next approved admission starts a fresh attempt."] if fresh else [])
 
 
-SLOT_COUNT_NOTE = "slot_count only adds slots (`tl slot adopt`); lowering it retires none: rounds use every slot adopted in factory.db."
+SLOT_COUNT_NOTE = "Slot adoption only adds slots; lowering slot_count retires none. Rounds use every slot adopted in factory.db."
 
 
 def _setup_lines(result: Adoption | Loaded) -> list[str]:
@@ -182,8 +183,8 @@ def _setup_lines(result: Adoption | Loaded) -> list[str]:
         lines = [f"{each.name} {'adopted' if isinstance(each, Adopted) else each.reason} {each.path or ''}".rstrip() for each in slots]
         missing = any(not isinstance(each, Adopted) and each.reason == "not_listed" for each in slots)
         attached = any(not isinstance(each, Adopted) and each.reason == "attached" for each in slots)
-        hints = ["Make each not_listed slot with `git worktree add --detach <path>`, then adopt again."] if missing else []
-        hints += ["Run `git switch --detach` in a slot left on a task branch, then adopt again."] if attached else []
+        hints = ["Missing slots need registered detached worktrees before adoption can finish."] if missing else []
+        hints += ["A slot attached to a task branch needs its work preserved and its HEAD detached before adoption."] if attached else []
         return lines + hints + list(
             dict.fromkeys(SLOT[each.reason] for each in slots if not isinstance(each, Adopted)))
     lines = [f"Config file: {result.path} ({'exists' if result.exists else 'missing: built-in defaults'})"]
