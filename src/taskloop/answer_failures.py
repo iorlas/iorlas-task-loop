@@ -19,6 +19,7 @@ class AnswerRule(StrEnum):
     PLAN_FORBIDDEN = "plan_forbidden"
     MESSAGE = "message"
     EXPLANATION = "explanation"
+    SHELF_REQUEST = "shelf_request"
 
 
 class AnswerFailureData(BaseModel):
