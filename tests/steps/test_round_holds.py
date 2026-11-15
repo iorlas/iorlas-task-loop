@@ -181,8 +181,9 @@ def test_show_of_a_hand_started_needs_owner_prints_the_agent_s_question_and_a_ne
     shown = show_attempt(reads, tmp_path, "tasks", "tl-1")
     assert isinstance(shown, Shown) and shown.view.result.reason == "needs_owner" and shown.view.step == step
     text = "\n".join(human("show", shown, tmp_path / "factory.db"))
-    assert f"The agent explained:\n> {ASKED}" in text and "answered `needs_owner`" in text
-    assert "`tl step release --abandon` and `tl step start`" in text and "check step" not in text
+    assert f"The agent explained:\n> {ASKED}" in text and "needs the owner's decision" in text
+    assert "Record the decision in the task's description before abandoning and admitting a fresh attempt" in text
+    assert "tl step " not in text and "check step" not in text
     assert factory.tracker.holds == []
 
 

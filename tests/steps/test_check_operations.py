@@ -139,7 +139,7 @@ def test_the_half_done_abandon_refuses_release_and_launches_nothing(rig: Rig) ->
     rig.start()
     rig.bench.concluded("failed", abandoned=True)
     found = rig.start()
-    assert isinstance(found, Failed) and found.word == "refused:release" and "--abandon" in found.detail
+    assert isinstance(found, Failed) and found.word == "refused:release" and "finish returning the claim" in found.detail
     assert rig.numbers() == [(1, "concluded")] and len(rig.launcher.calls) == 1
 
 

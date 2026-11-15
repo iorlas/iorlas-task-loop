@@ -149,7 +149,7 @@ def test_the_task_s_abandon_shows_the_checks_attempt_first_then_the_claim(
     assert run(RELEASE, ABANDON, capsys, monkeypatch).splitlines() == [
         "released: attempt checks for tl-1 (backlog tasks)", f"Slot s1 parked at {D}", "Reservation of s1 removed", "Claim kept",
         "released: attempt implement for tl-1 (backlog tasks)", "Slot s0: no Git write", "Claim returned to the tracker",
-        "Abandoned: `tl step start tl-1` admits a fresh attempt",
+        "Abandoned: the next approved admission starts a fresh attempt.",
     ]
     data = json.loads(run([*RELEASE, "--json"], ABANDON, capsys, monkeypatch))
     assert (data["attempt_id"], data["claim"], data["checks"]["attempt_id"], data["checks"]["claim"]) == ("implement", "unclaimed",
@@ -166,9 +166,9 @@ def test_a_checks_view_gets_its_own_guide_never_the_agent_s(
     out = run(SHOW, Shown(view, LOGS, LOGS / "entry.log", EVENTS), capsys, monkeypatch)
     assert CHECKS_GUIDE[word] in out and GUIDE[word] not in out and "attempt_entry" not in out and "Worker" not in out
     assert "Check: check unfinished, process group 601" in out.splitlines()  # the group the hung guide verifies
-    assert "round relaunches the checks entry" in CHECKS_GUIDE["start"] and "late_relaunch" in CHECKS_GUIDE["start"]
-    assert "until the deadline" in CHECKS_GUIDE["start"] and "cannot finish counts" not in CHECKS_GUIDE["start"]
-    assert "taskloop.check_entry" in CHECKS_GUIDE["stuck:hung"]
+    assert "Rounds relaunch the checks entry" in CHECKS_GUIDE["start"] and "Two consecutive counted refusals" in CHECKS_GUIDE["start"]
+    assert "until the deadline; past it every round's relaunch counts" in CHECKS_GUIDE["start"]
+    assert "verify the entry identity" in CHECKS_GUIDE["stuck:hung"]
     listed = run(["step", "list", "--stuck"], Listed((replace(view, next="stuck:hung"),)), capsys, monkeypatch)
     assert f"stuck:hung: {CHECKS_GUIDE['stuck:hung']}" in listed.splitlines()
 
