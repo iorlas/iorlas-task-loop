@@ -24,8 +24,8 @@ from taskloop.agents.launch import AgentLaunch, Credentials
 from taskloop.answer_repair import AnswerRepair
 from taskloop.answer_repair_store import AnswerRepairStore
 from taskloop.attempt import Attempts
-from taskloop.attempt_reads import AttemptReads, StoreConnection
-from taskloop.attempt_store import REGISTRATION_BUSY_MS, AttemptStore
+from taskloop.attempt_reads import StoreConnection
+from taskloop.attempt_store import AttemptReads, AttemptStore, configure_registration
 from taskloop.attempt_types import Admission, Checkouts, Observe, SlotFiles
 from taskloop.check_admit import ChecksAdmission
 from taskloop.check_release import ChecksRelease
@@ -68,7 +68,7 @@ def _registration(database: Path, store: Store | None = None) -> tuple[Store, Ca
     def bounded() -> sqlite3.Connection | None:
         con = registration.shared_rw(database)
         if con is not None:
-            con.execute(f"PRAGMA busy_timeout={REGISTRATION_BUSY_MS}")
+            configure_registration(con)
         return con
 
     return registration, bounded
