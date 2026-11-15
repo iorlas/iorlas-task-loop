@@ -35,6 +35,17 @@
 @utility animate-pulse-dot { animation: pulse-dot 1.2s ease-in-out infinite; }
 @utility animate-line-in { animation: line-in 0.25s ease-out; }
 
+.message-text {
+  display: block;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.5;
+}
+.message-text[data-folded="true"] {
+  max-height: 12em;
+  overflow: hidden;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, ::before, ::after {
     animation: none !important;
