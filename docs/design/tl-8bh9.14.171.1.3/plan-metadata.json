@@ -1,0 +1,14 @@
+{
+  "prepared_commit": "c0d83f93d95f67487e6e3a8f70ee28da226ee324",
+  "cited_paths": [
+    "src/taskloop",
+    "tests/cli/test_config.py",
+    "tests/cli/test_step_cli.py",
+    "tests/cli/test_dash_server.py",
+    "tests/steps/test_agent_settings.py",
+    "tests/steps/test_task_status.py",
+    "tests/steps/test_dash_read.py",
+    "tests/steps/test_profile.py",
+    "tests/steps/test_steps.py"
+  ]
+}
