@@ -26,7 +26,8 @@ from taskloop.attempt import Attempts
 from taskloop.attempt_reads import StoreRefused
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import DEFAULT_GIT_READ_SECONDS, AttemptKey, Checkouts, FileRef, SlotFiles
-from taskloop.claim_lease import BD_TIMEOUT_S
+from taskloop.claim import ClaimWord
+from taskloop.claim_lease import BD_TIMEOUT_S, Beat
 from taskloop.composition import adopt_slots, open_admission, real_slots
 from taskloop.discussion import empty
 from taskloop.evidence_files import EvidenceFiles
@@ -512,21 +513,21 @@ DELETED = '{"error": "resolving tl-1: no issue found matching \\"tl-1\\"", "sche
 @pytest.mark.parametrize(
     ("out", "err", "code", "beat"),
     [
-        ('{"id": "tl-1", "owner": "taskloop", "schema_version": 1, "status": "heartbeat"}', "", 0, "held"),
-        (TAKEN, "", 1, "lost"),
-        (REVERTED, "", 1, "lost"),
-        (CLOSED, "", 1, "lost"),
-        ("", "", 13, "lost"),
-        ("", "bd: no answer in 30.0s", 124, "unrenewed"),
-        ("", "bd: [Errno 2] No such file or directory", 127, "unrenewed"),
-        (DELETED, "", 1, "lost"),
-        ('{"error": "database is down", "schema_version": 1}', "", 1, "unrenewed"),
+        ('{"id": "tl-1", "owner": "taskloop", "schema_version": 1, "status": "heartbeat"}', "", 0, ClaimWord.HELD),
+        (TAKEN, "", 1, ClaimWord.LOST),
+        (REVERTED, "", 1, ClaimWord.LOST),
+        (CLOSED, "", 1, ClaimWord.LOST),
+        ("", "", 13, ClaimWord.LOST),
+        ("", "bd: no answer in 30.0s", 124, ClaimWord.UNRENEWED),
+        ("", "bd: [Errno 2] No such file or directory", 127, ClaimWord.UNRENEWED),
+        (DELETED, "", 1, ClaimWord.LOST),
+        ('{"error": "database is down", "schema_version": 1}', "", 1, ClaimWord.UNRENEWED),
     ],
     ids=["renewed", "taken", "reverted", "closed", "precondition", "timeout", "missing_binary", "deleted", "other"],
 )
-def test_composition_heartbeats_through_bd_and_maps_its_words(tmp_path: Path, out: str, err: str, code: int, beat: str) -> None:
+def test_composition_heartbeats_through_bd_and_maps_its_words(tmp_path: Path, out: str, err: str, code: int, beat: Beat) -> None:
     script = Script().say(out, err, code)
-    assert tracker_claims(script).heartbeat_for(str(tmp_path), "tl-1")() == beat
+    assert tracker_claims(script).heartbeat_for(str(tmp_path), "tl-1")() is beat
     assert [argv[1:] for argv in script.calls] == [["--actor", "taskloop", "heartbeat", "tl-1", "--json"]]
 
 

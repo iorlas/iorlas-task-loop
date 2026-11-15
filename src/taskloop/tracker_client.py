@@ -13,6 +13,7 @@ from beads_client import Bd, BdError, Runner
 
 from taskloop.admit import Claim, Unclaim
 from taskloop.attempt_types import Admission
+from taskloop.claim import ClaimWord
 from taskloop.claim_lease import BD_TIMEOUT_S, Beat, Heartbeat, HeartbeatFor
 from taskloop.discussion import DiscussionSource
 from taskloop.recovery.models import Claim as RecoveryClaim
@@ -151,7 +152,7 @@ def tracker_located(environ: MutableMapping[str, str] = os.environ) -> None:
 
 def beat_of(error: BdError) -> Beat:
     """A failed heartbeat: `lost` when bd says the claim is gone (taken, reverted, closed, or the bead deleted)."""
-    return "lost" if error.kind in LOST or (error.kind == "other" and gone(error.text)) else "unrenewed"
+    return ClaimWord.LOST if error.kind in LOST or (error.kind == "other" and gone(error.text)) else ClaimWord.UNRENEWED
 
 
 def _closed(bd: Bd, task_id: str, reason: str) -> CloseAnswer:
@@ -215,7 +216,7 @@ def tracker_claims(run: Runner | None = None, client: type[Bd] = Bd) -> TrackerC
                 renewing.heartbeat(task_id)
             except BdError as error:
                 return beat_of(error)
-            return "held"
+            return ClaimWord.HELD
 
         return beat
 

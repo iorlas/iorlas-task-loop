@@ -24,6 +24,7 @@ from taskloop.attempt import AttemptResult, Attempts
 from taskloop.attempt_entry import RESUMES, EntryArgs, arguments, enter, main, renewal, resumed
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import AttemptKey, Checkouts, EntryIdentity, Evidence, SlotFiles
+from taskloop.claim import ClaimWord
 from taskloop.claim_lease import Beat, Heartbeat, KeepAlive
 from taskloop.evidence_files import EvidenceError, EvidenceFiles
 from taskloop.factory_schema import SCHEMA
@@ -91,7 +92,7 @@ class Entry:
         rc: int = 0,
         text: str = "",
         written: tuple[FakeWorktree, dict[str, str], list[str]] | None = None,
-        beats: tuple[Beat | Exception, ...] = ("held",),
+        beats: tuple[Beat | Exception, ...] = (ClaimWord.HELD,),
         rounds: int = 0,
     ) -> None:
         self.db, self.now, self.wait_to, self.git, self.written = db, 10.0, wait_to, checkouts, written
@@ -290,7 +291,8 @@ def test_capture_is_retried_only_while_unavailable_and_the_agent_never_again(
 def test_a_claim_found_lost_before_the_agent_refuses_and_runs_nothing(
     admitted: Path, checkouts: Checkouts, slot_files: SlotFiles, slot: FakeWorktree
 ) -> None:
-    entry = Entry(admitted, checkouts, slot_files, me(), written=(slot, {P: PLAN_TEXT}, [P]), beats=("lost", "held"), rounds=3)
+    entry = Entry(admitted, checkouts, slot_files, me(), written=(slot, {P: PLAN_TEXT}, [P]),
+                  beats=(ClaimWord.LOST, ClaimWord.HELD), rounds=3)
     assert entry() == 1
     assert entry.lines == ["refused claim_lost"] and entry.renewed == [("/tracker", "tl-1")]
     assert entry.run.calls == [] and entry.credential_calls == 0 and entry.git_opens == 0 and entry.stop.waits == 0
@@ -385,11 +387,11 @@ def test_an_unreachable_origin_is_only_the_branch_word_and_the_verified_plan_sti
 @pytest.mark.parametrize(
     ("beats", "rounds", "word", "renewals"),
     [
-        (("held", "lost"), 3, "lost", 2),
-        (("held", TypeError("bug")), 3, "fault", 2),
+        ((ClaimWord.HELD, ClaimWord.LOST), 3, "lost", 2),
+        ((ClaimWord.HELD, TypeError("bug")), 3, "fault", 2),
         ((TypeError("bug"),), 3, "fault", 1),
-        (("unrenewed",), 2, "unrenewed", 3),
-        (("unrenewed", "held"), 2, "held", 3),
+        ((ClaimWord.UNRENEWED,), 2, "unrenewed", 3),
+        ((ClaimWord.UNRENEWED, ClaimWord.HELD), 2, "held", 3),
     ],
     ids=["lost_mid_run", "fault_mid_run", "fault_before_the_agent", "never_renewed", "renewed_after_a_failure"],
 )
@@ -479,7 +481,8 @@ def test_main_names_only_a_signal_exit_terminated(capfd: pytest.CaptureFixture[s
 
 
 @pytest.mark.parametrize(
-    ("beats", "expected"), [(("held",), "held"), (("lost",), "lost"), (("unrenewed",), "unrenewed"), (("held", "lost"), "lost")]
+    ("beats", "expected"), [((ClaimWord.HELD,), "held"), ((ClaimWord.LOST,), "lost"),
+                            ((ClaimWord.UNRENEWED,), "unrenewed"), ((ClaimWord.HELD, ClaimWord.LOST), "lost")]
 )
 def test_the_renewal_after_setup_renews_once_more_and_answers_the_keep_alives_word(beats: tuple[Beat, ...], expected: str) -> None:
     """An implement step's setup may take minutes: the entry renews the claim once more before dispatch (`lost` refuses)."""

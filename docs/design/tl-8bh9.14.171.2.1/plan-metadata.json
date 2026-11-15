@@ -1,0 +1,28 @@
+{
+  "prepared_commit": "74641862ca9f7cc6a2754ada170dc29b0d15459f",
+  "cited_paths": [
+    "src/taskloop/claim_lease.py",
+    "src/taskloop/tracker_client.py",
+    "src/taskloop/attempt_entry.py",
+    "src/taskloop/check_entry.py",
+    "src/taskloop/land_check.py",
+    "src/taskloop/land_conflict/composition.py",
+    "src/taskloop/composition.py",
+    "src/taskloop/drain/composition.py",
+    "src/taskloop/environment.py",
+    "tests/steps/test_claim_lease.py",
+    "tests/steps/test_admit.py",
+    "tests/steps/test_attempt_entry.py",
+    "tests/steps/test_check_entry.py",
+    "tests/steps/test_recovery_entry.py",
+    "tests/steps/land_bench.py",
+    "tests/steps/real/test_land_real.py",
+    "tests/steps/test_land_resume.py",
+    "tests/rules/test_policy.py",
+    "tests/rules/test_isolation.py",
+    "pyproject.toml",
+    ".importlinter",
+    "src/taskloop/claim.py",
+    "tests/steps/test_claim.py"
+  ]
+}
