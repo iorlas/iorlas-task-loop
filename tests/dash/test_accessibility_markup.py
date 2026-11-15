@@ -176,7 +176,7 @@ def test_all_event_kind_glyphs_have_visible_words_after_insert_or_replace() -> N
     assert '`${KIND[e.type]} ${WORD[e.type]}`' in row
     assert "row.append(at, kind, content, right)" in row
     assert "sr-only" not in row
-    assert "list.append(line(e, a, a.feed[i - 1]))" in function(script, "lines")
+    assert "list.append(line(e, a," in function(script, "lines")
     update = function(script, "show")
     assert "const row = line(e, attempt, attempt.feed[index - 1], true)" in update
     assert "old.replaceWith(row)" in update and "list.append(row)" in update

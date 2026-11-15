@@ -110,7 +110,7 @@ WRITERS = {
     ("UPDATE", "check_result"): "check_store.py",
     ("INSERT", "setup_run"): "setup_store.py",
     ("UPDATE", "setup_run"): "setup_store.py",
-    ("INSERT", "slot"): "slots.py",
+    ("INSERT", "slot"): "slots_store.py",
     ("INSERT", "reservation"): "admit_store.py",
     ("INSERT", "attempt"): "admit_store.py",
     ("UPDATE", "reservation"): "admit_store.py",  # a repeat's takeover

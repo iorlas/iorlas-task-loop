@@ -32,6 +32,7 @@ from taskloop.factory_schema import SCHEMA
 from taskloop.ids import NativeIds
 from taskloop.prepare import UNPUBLISHED, Branch, BranchRefusal, branch_refusal, named
 from taskloop.slots import SlotGit, adopt, folder_name
+from taskloop.slots_store import SlotsStore
 from taskloop.task import TaskBinding, TaskInspection, TaskScope
 from taskloop.tracker import inspect_task
 
@@ -371,7 +372,7 @@ def admitted(factory: sqlite3.Connection, repo: FakeRepo, root: Path, tmp_path: 
 
 def slots(factory: sqlite3.Connection, repo: FakeRepo, root: Path, count: int) -> list[FakeWorktree]:
     made = [repo.add_worktree(root.resolve() / folder_name(repo.identity()) / f"s{n}", "HEAD") for n in range(1, count + 1)]
-    adopt(lambda: factory, begin_immediate, repo, SlotGit(PinnedViews(repo), FakeSlotFiles(repo)), root, count)
+    adopt(SlotsStore(lambda: factory, begin_immediate), repo, SlotGit(PinnedViews(repo), FakeSlotFiles(repo)), root, count)
     return made
 
 

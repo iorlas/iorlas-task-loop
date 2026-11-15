@@ -34,6 +34,7 @@ from taskloop.slot_files import RealSlotFiles
 from taskloop.slot_lock import custody, hold, probe
 from taskloop.slot_release import Released, SlotRelease
 from taskloop.slots import Adopted, NotAdopted, SlotGit, adopt, folder_name, observe
+from taskloop.slots_store import SlotsStore
 from taskloop.task import TaskBinding, TaskInspection, TaskScope
 from taskloop.tracker import inspect_task
 from taskloop.verifier import Verifier
@@ -88,7 +89,7 @@ class Repository:
         self.slot = slots / folder_name(VIEWS.checkouts(self.main).identity()) / "s1"
         git(self.main, "worktree", "add", "-q", "--detach", str(self.slot), "HEAD")
         self.d = self.rev("HEAD")
-        adopt(lambda: factory, begin_immediate, VIEWS.checkouts(self.main), SlotGit(VIEWS.checkouts, RealSlotFiles()), slots, 1)
+        adopt(SlotsStore(lambda: factory, begin_immediate), VIEWS.checkouts(self.main), SlotGit(VIEWS.checkouts, RealSlotFiles()), slots, 1)
         self.store, self.files = AttemptStore(lambda: factory), RealSlotFiles()
         self.releaser = SlotRelease(self.store, VIEWS.checkouts, self.files, lambda _entry: "gone", gone, custody, yes, lambda: 30,
                                     lambda _setup: "gone", lambda _scratch: True, ids=NativeIds())
@@ -149,7 +150,8 @@ def test_a_verified_slot_is_parked_at_d_detached_and_clean_and_is_free_again(rea
     assert git(real.slot, "rev-parse", "--abbrev-ref", "HEAD").strip() == "HEAD"  # detached
     assert (real.rev("HEAD"), real.rev("refs/heads/task/tl-1")) == (real.d, x)
     assert git(real.slot, "status", "--porcelain").strip() == ""
-    views = observe(real.factory, VIEWS.checkouts(real.main), SlotGit(VIEWS.checkouts, RealSlotFiles()), real.repo_id, probe)
+    slots = SlotGit(VIEWS.checkouts, RealSlotFiles())
+    views = observe(SlotsStore(lambda: real.factory), VIEWS.checkouts(real.main), slots, real.repo_id, probe)
     assert [(view.name, view.state) for view in views] == [("s1", "free")]
 
 
@@ -172,10 +174,10 @@ def test_a_slot_whose_pointer_names_another_git_directory_is_never_free_nor_adop
     fake, slots = real.root / "fake", SlotGit(VIEWS.checkouts, RealSlotFiles())
     git(real.root, "init", "-q", "--bare", str(fake))
     (real.slot / ".git").write_text(f"gitdir: {fake}\n")
-    views = observe(real.factory, VIEWS.checkouts(real.main), slots, real.repo_id, probe)
+    views = observe(SlotsStore(lambda: real.factory), VIEWS.checkouts(real.main), slots, real.repo_id, probe)
     assert [(view.name, view.state, view.reason) for view in views] == [("s1", "unknown", "redirected")]
     s2 = real.slot.parent / "s2"
     git(real.main, "worktree", "add", "-q", "--detach", str(s2), "HEAD")
     (s2 / ".git").write_text(f"gitdir: {fake}\n")
-    found = adopt(lambda: real.factory, begin_immediate, VIEWS.checkouts(real.main), slots, real.slot.parent.parent, 2)
+    found = adopt(SlotsStore(lambda: real.factory, begin_immediate), VIEWS.checkouts(real.main), slots, real.slot.parent.parent, 2)
     assert found == (Adopted("s1", real.slot), NotAdopted("s2", "redirected", s2))

@@ -56,6 +56,7 @@ from taskloop.slot_env import RealEnvFiles, sandbox_probe, setup_process
 from taskloop.slot_files import RealSlotFiles
 from taskloop.slot_release import Scratch, SlotRelease
 from taskloop.slots import Adopted, NotAdopted, SlotGit, adopt
+from taskloop.slots_store import SlotsStore
 from taskloop.tracker_client import inspect_tracker_task, tracker_claims, tracker_discussion, tracker_recovery_claim
 from taskloop.verifier import Verifier
 
@@ -242,7 +243,7 @@ def adopt_slots(
     store = Store(SCHEMA)
     try:
         repo = git.checkouts(checkout.expanduser().resolve())
-        return adopt(lambda: store.shared_rw(database), store.begin_immediate, repo, git, root, count)
+        return adopt(SlotsStore(lambda: store.shared_rw(database), store.begin_immediate), repo, git, root, count)
     finally:
         store.close_shared()
 

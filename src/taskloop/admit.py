@@ -36,6 +36,7 @@ from taskloop.prepare import held_refusal, refreshed_sources, refusal_detail
 from taskloop.repo import RepoId, UnsupportedCheckout, inspect_repo
 from taskloop.resume_plan import ResumePlans, Selection
 from taskloop.slots import Probe, SlotGit, SlotsUnavailable, SlotView, observe, unusable_text
+from taskloop.slots_store import SlotsStore
 from taskloop.steps import kind
 from taskloop.task import TaskInspection, TaskInspectionError
 from taskloop.task_content import TaskContentDigest
@@ -373,7 +374,7 @@ def free_slots(
 ) -> tuple[SlotView, ...] | AdmitRefused | AdmitUnavailable:
     """The observed-free slots, read-only; a store failure never counts as free."""
     try:
-        views = observe(con, repo, git, repo_id, probe)
+        views = observe(SlotsStore(lambda: con), repo, git, repo_id, probe)
     except (sqlite3.Error, SlotsUnavailable) as error:
         return AdmitUnavailable("store", detail=why(error))
     if any(view.reason == "store_unavailable" for view in views):
