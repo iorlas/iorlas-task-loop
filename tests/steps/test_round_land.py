@@ -16,7 +16,7 @@ from round_bench import Tracker, scripts, task
 from sqlite_store import Store
 from test_checks_round import LAND_LINE, Checking, implemented
 
-from taskloop.attempt_loads import AttemptLoads
+from taskloop.attempt_store import AttemptLoads
 from taskloop.attempt_types import SlotFiles
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.factory_schema import SCHEMA

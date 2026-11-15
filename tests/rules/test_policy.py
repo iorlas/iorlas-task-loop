@@ -119,10 +119,10 @@ WRITERS = {
     ("UPDATE", "slot_release"): "slot_release.py",
     ("DELETE FROM", "reservation"): "slot_release.py",
     ("INSERT", "published_branch"): "publish.py",
-    ("INSERT", "execution"): "attempt_store.py",
-    ("INSERT", "verification"): "attempt_store.py",
-    ("UPDATE", "attempt"): "attempt_store.py",  # also the deadline renewal after a reboot, in the entry registration's write
-    ("UPDATE", "execution"): "attempt_store.py",
+    ("INSERT", "execution"): "attempt_write_store.py",
+    ("INSERT", "verification"): "attempt_write_store.py",
+    ("UPDATE", "attempt"): "attempt_write_store.py",  # also deadline renewal after a reboot in the entry registration's write
+    ("UPDATE", "execution"): "attempt_write_store.py",
 }
 # A statement verb and its table; an index (`CREATE [UNIQUE] INDEX <name> ON <table>`) is written as `CREATE INDEX` of
 # the table after `ON`.

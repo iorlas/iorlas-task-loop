@@ -17,7 +17,7 @@ from merge_bench import MergeRepo, head
 from sqlite_store import Store
 
 from taskloop.agents.launch import AgentLaunch
-from taskloop.attempt_loads import AttemptLoads
+from taskloop.attempt_store import AttemptLoads
 from taskloop.attempt_types import AttemptKey
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.factory_schema import SCHEMA

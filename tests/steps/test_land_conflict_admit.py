@@ -96,6 +96,28 @@ def test_observation_races_never_overwrite_slot_identity(on_slot: Path, repo: Fa
     b.con.close()
 
 
+def test_retained_inputs_changed_after_observation_refuse_without_reserving(on_slot: Path, repo: FakeRepo, tmp_path: Path) -> None:
+    b = bench(on_slot, repo, tmp_path)
+    other = Store(SCHEMA).open_rw(on_slot)
+    assert other is not None
+    before = b.con.execute("SELECT * FROM slot").fetchall()
+
+    def probe(_: str) -> bool:
+        assert not b.con.in_transaction
+        other.execute("UPDATE attempt SET model='changed-after-observation'")
+        return True
+
+    try:
+        result = admit(replace(b.ports, probe=probe), b.request)
+        assert result.outcome is Outcome.SOURCE and result.explanation
+        assert b.con.execute("SELECT * FROM reservation").fetchall() == []
+        assert b.con.execute("SELECT * FROM land_conflict").fetchall() == []
+        assert b.con.execute("SELECT * FROM slot").fetchall() == before
+    finally:
+        other.close()
+        b.con.close()
+
+
 def test_record_failure_rolls_back_reservation_and_generation(on_slot: Path, repo: FakeRepo, tmp_path: Path) -> None:
     b = bench(on_slot, repo, tmp_path)
     before = b.con.execute("SELECT * FROM slot").fetchall()

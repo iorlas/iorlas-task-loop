@@ -9,7 +9,7 @@ from git_porcelain import Repo
 
 from taskloop.agent_credentials import machine_credentials
 from taskloop.agents.launch import AgentLaunch, CredentialsUnavailable, probe_for
-from taskloop.attempt_loads import AttemptLoads
+from taskloop.attempt_store import AttemptLoads
 from taskloop.claim_lease import HeartbeatFor, KeepAlive, keeping, renewal
 from taskloop.composition import Checking, _run
 from taskloop.git_views import GitProfileFiles, GitViews
