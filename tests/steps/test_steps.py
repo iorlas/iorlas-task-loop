@@ -441,6 +441,20 @@ def test_plan_requires_bounded_read_ranges_and_revises_plans_missing_them(repeat
     assert "An existing plan missing `## Read list` needs revision before answering `planned` or `unchanged`" in text
 
 
+def test_plan_read_list_exempts_only_committed_single_target_renames(plan_input: str) -> None:
+    read_list = plan_input[plan_input.index("## Read list:"):plan_input.index("## Contract:")]
+    assert (
+        "Cover every file implementation must edit or consult, including producers and callers. "
+        "Exception: a file whose only change is a one-to-one rename listed in a committed naming map is not listed. "
+        "Instead, name the map rows and one rg -nw command that must return no matches after implementation. "
+        "List the files where the rename touches signatures, logic or behaviour."
+    ) in read_list
+    assert (
+        "Only map rows with one target name qualify; rows whose target depends on a cause stay in normal plan scope."
+    ) in read_list
+    assert "The rg search returning nothing must be an acceptance line." in read_list
+
+
 @pytest.mark.parametrize("route", ["initial", "repeat", "failed_check"])
 def test_implement_reading_directions_survive_both_retry_routes(route: str) -> None:
     text = IMPLEMENT.input_text(TASK, IMPLEMENT.rules("tl-1"), CONTEXT)
