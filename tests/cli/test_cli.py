@@ -30,7 +30,7 @@ BUILT = ("Steps built: plan, implement and check. Verified results are published
 
 def test_step_help_names_the_steps_built_once_and_each_command_help_does_not_repeat_it(capsys: pytest.CaptureFixture[str]) -> None:
     for arguments in (["step", "-h"], ["step", "start", "-h"], ["step", "show", "-h"], ["step", "list", "-h"],
-                      ["step", "verify", "-h"], ["step", "release", "-h"]):
+                      ["step", "commit", "-h"], ["step", "release", "-h"]):
         with pytest.raises(SystemExit) as result:
             main(arguments)
         assert result.value.code == 0

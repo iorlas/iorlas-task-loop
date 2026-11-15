@@ -1,5 +1,5 @@
 """The plan commands' operations over a real factory.db file (read-only where the command is) with recording admission,
-launcher and verifier fakes and a fake entry observation: no process is started or inspected."""
+launcher and factory commit fakes and a fake entry observation: no process is started or inspected."""
 
 import json
 import sqlite3
@@ -40,7 +40,8 @@ from taskloop.attempt_types import (
     VerifyResult,
     VerifyUnavailable,
 )
-from taskloop.cli_composition import adopt, open_land, open_reads, open_start, open_verify
+from taskloop.cli_composition import adopt, open_commit, open_land, open_reads, open_start
+from taskloop.commit import FactoryCommit
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.exit_codes import exit_code
 from taskloop.factory_schema import SCHEMA
@@ -61,16 +62,15 @@ from taskloop.operations import (
     StartPorts,
     StartRequest,
     VerifiedTask,
+    commit_task,
     publish_task,
     start,
-    verify_task,
 )
 from taskloop.publish import BranchPublish, BranchPublished, NotPublished, PublishResult
 from taskloop.slot_files import RealSlotFiles
 from taskloop.slot_lock import custody, hold
 from taskloop.slot_release import NotReleased, Released, ReleaseResult, SlotRelease
 from taskloop.slots import Adopted, SlotGit, SlotView
-from taskloop.verifier import Verifier
 
 KEY = AttemptKey("attempt", "dispatch", 1)
 ENTRY = (7, "entry-start", "boot")
@@ -147,12 +147,12 @@ def releaser(store: AttemptStore, checkouts: Checkouts, slot_files: SlotFiles) -
                        lambda _setup: "gone", lambda _scratch: True, ids=NativeIds())
 
 
-class FakeVerifier:
+class FakeFactoryCommit:
     def __init__(self, result: VerifyResult) -> None:
         self.result = result
         self.keys: list[AttemptKey] = []
 
-    def verify(self, key: AttemptKey) -> VerifyResult:
+    def commit(self, key: AttemptKey) -> VerifyResult:
         self.keys.append(key)
         return self.result
 
@@ -412,14 +412,14 @@ def test_list_keeps_only_stuck_or_unknown_when_asked(reader: AttemptStore, now: 
     (VerifyUnavailable("inconsistent"), Failed("defect", "inconsistent")),
 ])
 def test_verify_maps_every_verdict(reader: AttemptStore, verdict: VerifyResult, expected: VerifiedTask | Failed) -> None:
-    verifier, releases, publishes = FakeVerifier(verdict), Releases(), Publishes()
-    assert verify_task(reader, verifier, releases, publishes, "tasks", "tl-1") == expected
-    assert verifier.keys == [KEY]
+    factory_commit, releases, publishes = FakeFactoryCommit(verdict), Releases(), Publishes()
+    assert commit_task(reader, factory_commit, releases, publishes, "tasks", "tl-1") == expected
+    assert factory_commit.keys == [KEY]
     assert releases.calls == ([(KEY, False)] if isinstance(verdict, (Verified, Rejected)) else [])  # only after a verdict, settled
     assert publishes.keys == ([KEY] if isinstance(verdict, Verified) else [])  # only a verified plan, after its release
-    absent = FakeVerifier(verdict)
+    absent = FakeFactoryCommit(verdict)
     missing = Failed("refused", "absent", "No attempt for tl-9 in backlog tasks")
-    assert verify_task(reader, absent, releases, publishes, "tasks", "tl-9") == missing
+    assert commit_task(reader, absent, releases, publishes, "tasks", "tl-9") == missing
     assert absent.keys == []
 
 
@@ -441,7 +441,7 @@ def test_verify_returns_a_stored_verdict_with_no_git_read(
     )
     assert attempts.execute(KEY, ENTRY).reason == "verification"
     releasing, publishing = releaser(store, checkouts, slot_files), BranchPublish(store, checkouts, slot_files, lambda: 40, ids=NativeIds())
-    first = verify_task(store, Verifier(store, checkouts, slot_files, gone, lambda: 20, hold,
+    first = commit_task(store, FactoryCommit(store, checkouts, slot_files, gone, lambda: 20, hold,
         ids=NativeIds()), releasing, publishing, "tasks", "tl-1")
     assert first == VerifiedTask("verified", "tasks", "tl-1", "attempt", "released", "published") and slot.branch() is None
     slot.repo.drop_checkout(slot.path)
@@ -452,8 +452,9 @@ def test_verify_returns_a_stored_verdict_with_no_git_read(
         return checkouts(where, git_dir=git_dir)
 
     again = releaser(store, counted, slot_files)  # already released and published: nothing pending, no Git
-    verifier = Verifier(store, counted, slot_files, gone, lambda: 20, hold, ids=NativeIds())
-    second = verify_task(store, verifier, again, BranchPublish(store, counted, slot_files, lambda: 50, ids=NativeIds()), "tasks", "tl-1")
+    factory_commit = FactoryCommit(store, counted, slot_files, gone, lambda: 20, hold, ids=NativeIds())
+    second = commit_task(store, factory_commit, again, BranchPublish(store, counted, slot_files, lambda: 50, ids=NativeIds()),
+                         "tasks", "tl-1")
     # the fresh call said released/published; the same verdict again says the already-done words
     assert second == VerifiedTask("verified", "tasks", "tl-1", "attempt", "already_released", "already_published")
     assert opened == []
@@ -477,12 +478,12 @@ def test_show_reads_leftovers_fresh_and_names_the_repeat(
             agent, lambda: 10, checkouts, slot_files
     )
     assert attempts.execute(KEY, ENTRY).reason == "verification"
-    verifier = Verifier(store, checkouts, slot_files, gone, lambda: 20, hold, ids=NativeIds())
-    reads = StatusPorts(store, observe("gone", []), lambda: 10, verifier.leftovers, lambda: "boot")
+    factory_commit = FactoryCommit(store, checkouts, slot_files, gone, lambda: 20, hold, ids=NativeIds())
+    reads = StatusPorts(store, observe("gone", []), lambda: 10, factory_commit.leftovers, lambda: "boot")
     before = show_attempt(reads, tmp_path / "art", "tasks", "tl-1")
     assert isinstance(before, Shown) and (before.view.next, before.view.leftovers) == ("verify", ())  # nothing committed yet
     left = Failed("unsettled", "uncommitted", f"?? {stray}")  # as show lists it
-    assert verify_task(store, verifier, Releases(), Publishes(), "tasks", "tl-1") == left
+    assert commit_task(store, factory_commit, Releases(), Publishes(), "tasks", "tl-1") == left
     shown = show_attempt(reads, tmp_path / "art", "tasks", "tl-1")
     assert isinstance(shown, Shown) and shown.view.next == "repeat"
     assert (shown.view.result.status, shown.view.result.reason) == ("pending", "repeat")
@@ -491,7 +492,7 @@ def test_show_reads_leftovers_fresh_and_names_the_repeat(
 
     def counted(key: AttemptKey) -> Unsettled | None:
         probed.append(key)
-        return verifier.leftovers(key)
+        return factory_commit.leftovers(key)
 
     counting = StatusPorts(store, observe("gone", []), lambda: 10, counted, lambda: "boot")
     assert list_attempts(counting, stuck=True) == Listed(()) and probed == []  # no Git read for a filtered-out attempt
@@ -522,17 +523,17 @@ def test_show_and_verify_agree_on_a_slot_moved_off_its_task_branch(
             agent, lambda: 10, checkouts, slot_files
     )
     assert attempts.execute(KEY, ENTRY).reason == "verification"
-    verifier = Verifier(store, checkouts, slot_files, gone, lambda: 20, hold, ids=NativeIds())
-    reads = StatusPorts(store, observe("gone", []), lambda: 10, verifier.leftovers, lambda: "boot")
+    factory_commit = FactoryCommit(store, checkouts, slot_files, gone, lambda: 20, hold, ids=NativeIds())
+    reads = StatusPorts(store, observe("gone", []), lambda: 10, factory_commit.leftovers, lambda: "boot")
     on = show_attempt(reads, tmp_path / "art", "tasks", "tl-1")
     assert isinstance(on, Shown) and on.view.next == "repeat"
     assert on.view.leftovers[0] == "unsafe" and on.view.leftovers[-1] == near
     assert "A changed Git file" in on.view.leftovers[1] and near in on.view.leftovers[1]
     slot.checkout_new("other")
-    assert verifier.leftovers(KEY) == Unsettled("branch")
+    assert factory_commit.leftovers(KEY) == Unsettled("branch")
     off = show_attempt(reads, tmp_path / "art", "tasks", "tl-1")
     assert isinstance(off, Shown) and (off.view.next, off.view.leftovers) == ("verify", ("branch",))
-    assert verify_task(store, verifier, Releases(), Publishes(), "tasks", "tl-1") == Failed("unsettled", "branch")
+    assert commit_task(store, factory_commit, Releases(), Publishes(), "tasks", "tl-1") == Failed("unsettled", "branch")
 
 
 def test_every_opener_but_adopt_refuses_a_missing_database_and_creates_none(tmp_path: Path) -> None:
@@ -542,7 +543,7 @@ def test_every_opener_but_adopt_refuses_a_missing_database_and_creates_none(tmp_
         assert reads == refused
     with open_start(missing, tmp_path / "art", GitViews(DEFAULT_GIT_READ_SECONDS)) as ports:
         assert ports == refused
-    with open_verify(missing, GitViews(DEFAULT_GIT_READ_SECONDS), tmp_path) as opened:
+    with open_commit(missing, GitViews(DEFAULT_GIT_READ_SECONDS), tmp_path) as opened:
         assert opened == refused
     with open_land(missing, tmp_path / "art", GitViews(DEFAULT_GIT_READ_SECONDS)) as land_ports:
         assert land_ports == refused
@@ -700,7 +701,7 @@ def test_an_abandon_whose_claim_is_still_unclaiming_says_release_and_start_refus
 
 def test_verify_reports_a_failed_publication_without_changing_its_result(reader: AttemptStore) -> None:
     publishes = Publishes(NotPublished("unavailable", "remote"))
-    checked = verify_task(reader, FakeVerifier(Verified("blob")), Releases(), publishes, "tasks", "tl-1")
+    checked = commit_task(reader, FakeFactoryCommit(Verified("blob")), Releases(), publishes, "tasks", "tl-1")
     assert checked == VerifiedTask("verified", "tasks", "tl-1", "attempt", "released", "unavailable:remote") and exit_code(checked) == 0
 
 
@@ -735,7 +736,7 @@ def test_a_verified_plan_is_release_first_then_publish_then_advance(
             agent, lambda: 10, checkouts, slot_files
     )
     assert attempts.execute(KEY, ENTRY).reason == "verification"
-    verifier = Verifier(store, checkouts, slot_files, gone, lambda: 20, hold, ids=NativeIds())
+    factory_commit = FactoryCommit(store, checkouts, slot_files, gone, lambda: 20, hold, ids=NativeIds())
     reads = StatusPorts(store, observe("gone", []), lambda: 10, nothing_left, lambda: "boot")
 
     def shown() -> AttemptView:
@@ -744,7 +745,7 @@ def test_a_verified_plan_is_release_first_then_publish_then_advance(
         return found.view
 
     held = NotReleased("unavailable", "slot_busy")
-    assert verify_task(store, verifier, Releases(held), Publishes(), "tasks", "tl-1") == VerifiedTask(
+    assert commit_task(store, factory_commit, Releases(held), Publishes(), "tasks", "tl-1") == VerifiedTask(
         "verified", "tasks", "tl-1", "attempt", "unavailable:slot_busy", "published")  # the stub publishes nothing
     assert shown().next == "release"  # freeing the slot comes first
     assert isinstance(releaser(store, checkouts, slot_files).release(KEY, False), Released)

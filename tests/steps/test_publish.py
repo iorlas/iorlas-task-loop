@@ -28,12 +28,12 @@ from taskloop.attempt import Attempts
 from taskloop.attempt_reads import PublishedRow
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import AttemptKey, Checkouts, FileStat, SlotFiles
+from taskloop.commit import FactoryCommit
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.ids import NativeIds
 from taskloop.operation_evidence import OperationKind, OperationState, OperationTiming
 from taskloop.publish import BranchPublish, BranchPublished, NotPublished, PublishResult, publish_word
 from taskloop.slot_release import Released, SlotRelease
-from taskloop.verifier import Verifier
 
 KEY = AttemptKey("attempt", "dispatch", 1)
 ENTRY = (7, "entry-start", "boot")
@@ -164,7 +164,7 @@ def run(con: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: 
     )
     assert attempts.execute(KEY, ENTRY).reason == "verification"
     if verify:
-        Verifier(store, checkouts, files, lambda _w: True, lambda: 20, nowhere, ids=NativeIds()).verify(KEY)
+        FactoryCommit(store, checkouts, files, lambda _w: True, lambda: 20, nowhere, ids=NativeIds()).commit(KEY)
     if release:
         releaser = SlotRelease(store, checkouts, files, lambda _e: "gone", lambda _w: True, nowhere, lambda _r, _t: True, lambda: 30,
                                lambda _setup: "gone", lambda _scratch: True, ids=NativeIds())
@@ -191,10 +191,10 @@ def test_verifier_binds_commit_evidence_and_suppresses_stored_verdict(
     run(registered, tmp_path, slot, checkouts, slot_files, {P: PLAN_TEXT}, verify=False, release=False)
     files = EvidenceFiles(tmp_path)
     timing = partial(files.observe_operation, clock=lambda: 10.0, wall=lambda: 100.0, ids=NativeIds())
-    verifier = Verifier(AttemptStore(lambda: registered), checkouts, slot_files, lambda _w: True,
+    factory_commit = FactoryCommit(AttemptStore(lambda: registered), checkouts, slot_files, lambda _w: True,
                         lambda: 20, nowhere, ids=NativeIds(), timing=timing)
-    first = verifier.verify(KEY)
-    assert verifier.verify(KEY) == first
+    first = factory_commit.commit(KEY)
+    assert factory_commit.commit(KEY) == first
     sample, = files.operations(KEY)
     assert sample.kind is OperationKind.COMMIT and sample.state is OperationState.COMPLETED
 

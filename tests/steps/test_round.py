@@ -27,6 +27,7 @@ from taskloop.attempt import Attempts
 from taskloop.attempt_status import StatusPorts
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import AttemptKey, Checkouts, EntryIdentity, Seen, SlotFiles, Unsettled, Verified, VerifyResult
+from taskloop.commit import FactoryCommit
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.exit_codes import exit_code
 from taskloop.hold import HoldPorts
@@ -36,6 +37,7 @@ from taskloop.launch import Launched, LaunchRefused, LaunchResult, LaunchUnavail
 from taskloop.operations import (
     Advance,
     AgentRelease,
+    Commit,
     Failed,
     Move,
     Publish,
@@ -43,8 +45,7 @@ from taskloop.operations import (
     Started,
     StartPorts,
     VerifiedTask,
-    Verify,
-    verify_task,
+    commit_task,
 )
 from taskloop.publish import BranchPublish, BranchPublished, NotPublished, PublishResult
 from taskloop.round import NextRequest, RoundPorts, never, run_round
@@ -54,7 +55,6 @@ from taskloop.slots import SlotView
 from taskloop.step_render import human
 from taskloop.task_event_cause import StuckCause, StuckReason
 from taskloop.tracker import leaked_claim
-from taskloop.verifier import Verifier
 
 KEY = AttemptKey("attempt", "dispatch", 1)
 ENTRY = (7, "entry-start", "boot")
@@ -132,7 +132,7 @@ class Recorded:
         self.calls: list[str] = []
         self.released = release
 
-    def verify(self, key: AttemptKey) -> VerifyResult:
+    def commit(self, key: AttemptKey) -> VerifyResult:
         self.calls.append("verify")
         return Verified("blob")
 
@@ -166,7 +166,7 @@ class Bench:
         self.left: Unsettled | None = None
         self.lines: list[str] = []
         self.log: Callable[[str], None] = self.lines.append
-        self.verifier: Verify = self.recorded
+        self.factory_commit: Commit = self.recorded
         self.releaser: AgentRelease = self.recorded
         self.publisher: Publish = self.recorded
         self.stopping: Callable[[], bool] = never
@@ -185,7 +185,7 @@ class Bench:
         starting = StartPorts(self.store, self.admission, self.launcher, lambda: self.now, self.repeats, self.advance, NO_CHECKS)
         holding = HoldPorts(HoldStore(self.store.connect), self.store, no_holds(), self.releaser, NoChecks(), lambda: self.now,
                             EvidenceFiles(Path("/artifacts")), lambda _backlog, _task: None)  # no label here: nothing is held
-        return RoundPorts(reads, starting, self.verifier, self.releaser, self.publisher, holding, self.ready,
+        return RoundPorts(reads, starting, self.factory_commit, self.releaser, self.publisher, holding, self.ready,
             self.log, self.stopping, ids=NativeIds())
 
     def round(self, request: NextRequest = REQUEST) -> Round:
@@ -324,9 +324,9 @@ def verified_released(
     """The registered attempt verified (its own publication stubbed), then released: `Next: publish`."""
     captured(registered, tmp_path, slot, checkouts, slot_files)
     store = AttemptStore(lambda: registered)
-    verifier = Verifier(store, checkouts, slot_files, lambda _worker: True, lambda: 20, hold, ids=NativeIds())
+    factory_commit = FactoryCommit(store, checkouts, slot_files, lambda _worker: True, lambda: 20, hold, ids=NativeIds())
     held = Recorded(NotReleased("unavailable", "slot_busy"))
-    checked = verify_task(store, verifier, held, held, "tasks", "tl-1")  # its own publication is the recording stub's
+    checked = commit_task(store, factory_commit, held, held, "tasks", "tl-1")  # its own publication is the recording stub's
     assert isinstance(checked, VerifiedTask) and checked.release == "unavailable:slot_busy"
     real = SlotRelease(store, checkouts, slot_files, lambda _entry: "gone", lambda _worker: True, custody, lambda _r, _t: True, lambda: 30,
                        lambda _setup: "gone", lambda _scratch: True, ids=NativeIds())

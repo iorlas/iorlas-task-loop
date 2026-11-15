@@ -27,10 +27,10 @@ from taskloop.operations import (
     StartPorts,
     StartRequest,
     VerifiedTask,
+    commit_task,
     relaunch_checks,
     release_task,
     start,
-    verify_task,
 )
 from taskloop.publish import PublishResult
 from taskloop.slot_release import AlreadyReleased, NotReleased, Released, ReleaseResult
@@ -239,22 +239,22 @@ def test_without_a_checks_attempt_the_release_is_the_implement_attempt_s(rig: Ri
 class Recorded:
     """Verify and publish ports that record the attempt they were asked about: a stored verdict, an earlier publication."""
 
-    commit: str
+    sha: str
     keys: list[str] = dataclasses.field(default_factory=list)
 
-    def verify(self, key: AttemptKey) -> VerifyResult:
+    def commit(self, key: AttemptKey) -> VerifyResult:
         self.keys.append(key.attempt_id)
         return Verified("blob", reused=True)
 
     def publish(self, key: AttemptKey) -> PublishResult:
         self.keys.append(key.attempt_id)
-        return PublishedRow(self.commit, self.commit, 6)
+        return PublishedRow(self.sha, self.sha, 6)
 
 
 def test_verify_on_a_task_in_check_acts_on_its_implement_attempt_only(rig: Rig) -> None:
     rig.start()
     seen, implement = Recorded(rig.bench.done.x), Releases(results=[AlreadyReleased("s0", "kept", False)])
-    found = verify_task(AttemptStore(lambda: rig.bench.con), seen, implement, seen, "tasks", "tl-1")
+    found = commit_task(AttemptStore(lambda: rig.bench.con), seen, implement, seen, "tasks", "tl-1")
     assert isinstance(found, VerifiedTask) and (found.status, found.attempt_id) == ("reused", "implement")
     assert seen.keys == ["implement", "implement"] and implement.calls == [("implement", False)]
 

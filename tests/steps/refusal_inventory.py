@@ -141,14 +141,14 @@ REVIEWED_DYNAMIC = {
     ('wip.py', 'Refused', 'SaveReason.MERGE_PENDING'),
     ('wip.py', 'Refused', 'SaveReason.REF_MOVED'),
     ('verdict.py', 'Rejected', 'broken'),
-    ('verifier.py', 'NotApplicable', 'end_word(stored)'),
-    ('verifier.py', 'VerifyRefused', "'absent' if record is None else 'no_base'"),
-    ('verifier.py', 'VerifyRefused', 'Reason.DRAINING'),
-    ('verifier.py', 'VerifyRefused', 'str(error)'),
-    ('verifier.py', 'VerifyUnavailable', "'git:' + type(error).__name__"),
-    ('verifier.py', 'VerifyUnavailable', "'session_' + stored.session_state"),
-    ('verifier.py', 'VerifyUnavailable', 'LOCK_WORDS[type(error)]'),
-    ('verifier.py', 'VerifyUnavailable', 'error.reason'),
+    ('commit.py', 'NotApplicable', 'end_word(stored)'),
+    ('commit.py', 'VerifyRefused', "'absent' if record is None else 'no_base'"),
+    ('commit.py', 'VerifyRefused', 'Reason.DRAINING'),
+    ('commit.py', 'VerifyRefused', 'str(error)'),
+    ('commit.py', 'VerifyUnavailable', "'git:' + type(error).__name__"),
+    ('commit.py', 'VerifyUnavailable', "'session_' + stored.session_state"),
+    ('commit.py', 'VerifyUnavailable', 'LOCK_WORDS[type(error)]'),
+    ('commit.py', 'VerifyUnavailable', 'error.reason'),
 }
 
 DYNAMIC_REASONS = {

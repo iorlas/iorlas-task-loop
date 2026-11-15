@@ -138,8 +138,8 @@ APPROVED_EXCEPTIONS.update({
         ("taskloop.slot_release", "taskloop.drain.actions"),
         ("taskloop.slot_release", "taskloop.drain.models"),
         ("taskloop.step_render", "taskloop.drain.models"),
-        ("taskloop.verifier", "taskloop.drain.actions"),
-        ("taskloop.verifier", "taskloop.drain.models"),
+        ("taskloop.commit", "taskloop.drain.actions"),
+        ("taskloop.commit", "taskloop.drain.models"),
     },
     "importlinter:contract:slice-taskloop.land_conflict": {
         ("taskloop.cli_composition", "taskloop.land_conflict.composition"),

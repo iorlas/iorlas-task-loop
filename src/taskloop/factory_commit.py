@@ -1,6 +1,6 @@
 """The factory's commit of a step's selected changes, outside the sandbox, and the clean-tree check at its result.
 
-Git and the slot file port only: no factory.db (the verifier stores what this module finds). The only factory module
+Git and the slot file port only: no factory.db (the factory commit stores what this module finds). The only factory module
 that calls `stage` or `record`. The slot pointer is checked before any Git call on the slot and again right before each
 of the two Git writes, and every Git view of the slot is pinned to the Git directory that first check verified; the
 agent's own commit cannot happen under the sandbox, so a moved HEAD is adopted only when it is this attempt's own trailer
@@ -237,7 +237,7 @@ def _unchanged(files: SlotFiles, slot: Path, tree: Tree, path: str) -> bool:
 
 
 def _unwritten(checkouts: Checkouts, files: SlotFiles, admission: Admission, base: str) -> Settled:
-    """Nothing to commit is `nothing_written` only while HEAD is still B: a verifier racing this one may have committed
+    """Nothing to commit is `nothing_written` only while HEAD is still B: a factory commit racing this one may have committed
     the same index first, so a moved HEAD goes back to the adopt rule (its trailer commit) or `head_moved`."""
     state = _observed(checkouts, files, admission)
     if isinstance(state, Unsettled):

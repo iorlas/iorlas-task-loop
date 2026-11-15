@@ -25,6 +25,7 @@ from taskloop.agents.settings import AgentSetting, CodexPolicy, StepSettings
 from taskloop.attempt import Attempts
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import DEFAULT_GIT_READ_SECONDS, Verified
+from taskloop.commit import FactoryCommit
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.git_views import GitViews
 from taskloop.ids import NativeIds
@@ -34,7 +35,6 @@ from taskloop.slots import SlotGit, adopt, folder_name
 from taskloop.slots_store import SlotsStore
 from taskloop.task import TaskBinding, TaskInspection, TaskScope
 from taskloop.tracker import inspect_task
-from taskloop.verifier import Verifier
 
 VIEWS = GitViews(DEFAULT_GIT_READ_SECONDS)
 
@@ -106,7 +106,7 @@ def test_a_detached_slot_is_prepared_on_its_task_branch_and_the_plan_is_committe
             lambda: 10, VIEWS.checkouts, files
     )
     assert attempts.execute(admitted.key, ENTRY).reason == "verification"
-    verdict = Verifier(store, VIEWS.checkouts, files, lambda _worker: True, lambda: 20, hold, ids=NativeIds()).verify(admitted.key)
+    verdict = FactoryCommit(store, VIEWS.checkouts, files, lambda _worker: True, lambda: 20, hold, ids=NativeIds()).commit(admitted.key)
     assert isinstance(verdict, Verified) and not verdict.reused
     x = git(slot, "rev-parse", "HEAD").strip()
     assert git(main, "rev-parse", "refs/heads/task/tl-1").strip() == x and git(slot, "rev-parse", "HEAD^").strip() == m != d

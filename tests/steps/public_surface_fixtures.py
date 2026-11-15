@@ -97,7 +97,7 @@ def step_cases() -> dict[str, tuple[list[str], Result]]:
         "round.empty": (["step", "next", "--backlog", "tasks", *ROUND_FLAGS], Round("tasks", ())),
         "round.full": (["step", "next", "--backlog", "tasks", *ROUND_FLAGS],
                        Round("tasks", (Move("tl-1", "start", "started", "attempt", "detail"),), "capacity", False)),
-        "verified": (["step", "verify", "tl-1", "--backlog", "tasks"],
+        "verified": (["step", "commit", "tl-1", "--backlog", "tasks"],
                      VerifiedTask("verified", "tasks", "tl-1", "attempt", "released", "published")),
         "published": (["step", "publish", "tl-1", "--backlog", "tasks"],
                       PublishedTask("tasks", "tl-1", "attempt", BranchPublished("commit", "remote"))),

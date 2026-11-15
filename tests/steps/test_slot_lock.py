@@ -18,7 +18,7 @@ from git_porcelain.testing import FakeWorktree
 from plan_fixtures import PLAN_TEXT
 from test_repeat import refresh_discussion
 
-from taskloop import verifier as verifier_module
+from taskloop import commit as commit_module
 from taskloop.admit import AdmitRefused, Admitted, AdmitUnavailable
 from taskloop.admit_chain import RepeatRequest
 from taskloop.agents.launch import AgentLaunch
@@ -35,6 +35,7 @@ from taskloop.attempt_types import (
     VerifyUnavailable,
     WorkerGone,
 )
+from taskloop.commit import FactoryCommit
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.factory_commit import GitQuiet, Settled
 from taskloop.ids import NativeIds
@@ -42,7 +43,6 @@ from taskloop.operation_evidence import OperationTiming
 from taskloop.operations import Failed
 from taskloop.repeat import StepRepeat
 from taskloop.slot_lock import LABEL, acquire, hold, lock_path, refused, repeating
-from taskloop.verifier import Verifier
 
 KEY = AttemptKey("attempt", "dispatch", 1)
 ENTRY = (7, "entry-start", "boot")
@@ -79,8 +79,10 @@ def captured(
     assert attempts.execute(KEY, ENTRY).reason == "verification"
 
 
-def verifier(con: sqlite3.Connection, checkouts: Checkouts, files: SlotFiles, gone: WorkerGone = lambda _worker: True) -> Verifier:
-    return Verifier(AttemptStore(lambda: con), checkouts, files, gone, lambda: 20, hold, ids=NativeIds())
+def factory_commit(
+    con: sqlite3.Connection, checkouts: Checkouts, files: SlotFiles, gone: WorkerGone = lambda _worker: True,
+) -> FactoryCommit:
+    return FactoryCommit(AttemptStore(lambda: con), checkouts, files, gone, lambda: 20, hold, ids=NativeIds())
 
 
 @pytest.fixture
@@ -108,12 +110,12 @@ def test_a_held_slot_refuses_verify_before_any_git_write_and_then_it_settles(
 ) -> None:
     captured(registered, tmp_path, slot, checkouts, slot_files, {P: PLAN_TEXT})
     with occupy(lock_path(str(slot.path))):
-        assert verifier(registered, checkouts, slot_files).verify(KEY) == VerifyUnavailable("slot_busy")
+        assert factory_commit(registered, checkouts, slot_files).commit(KEY) == VerifyUnavailable("slot_busy")
     assert writes == [] and registered.execute("SELECT count(*) FROM verification").fetchone() == (0,)
-    found = verifier(registered, checkouts, slot_files).verify(KEY)
+    found = factory_commit(registered, checkouts, slot_files).commit(KEY)
     assert isinstance(found, Verified) and writes == ["stage", "record"]
     with occupy(lock_path(str(slot.path))):  # a stored verdict reads no Git and takes no lock
-        assert verifier(registered, checkouts, slot_files).verify(KEY) == found
+        assert factory_commit(registered, checkouts, slot_files).commit(KEY) == found
 
 
 def test_the_lock_is_released_after_a_verify_and_a_live_worker_is_still_alive(
@@ -121,7 +123,7 @@ def test_the_lock_is_released_after_a_verify_and_a_live_worker_is_still_alive(
 ) -> None:
     """A free lock is never a stop proof: the worker gate still refuses the Git write."""
     captured(registered, tmp_path, slot, checkouts, slot_files, {P: PLAN_TEXT})
-    assert verifier(registered, checkouts, slot_files, lambda _worker: False).verify(KEY) == Unsettled("worker_alive")
+    assert factory_commit(registered, checkouts, slot_files, lambda _worker: False).commit(KEY) == Unsettled("worker_alive")
     assert writes == []
     acquire(str(slot.path), "probe", "verify").release()  # free again
 
@@ -143,7 +145,7 @@ def test_an_uncreatable_lock_file_is_unavailable_lock(
     captured(registered, tmp_path, slot, checkouts, slot_files, {P: PLAN_TEXT})
     lock_path(str(slot.path)).parent.parent.mkdir(parents=True, exist_ok=True)
     lock_path(str(slot.path)).parent.write_text("not a folder")
-    assert verifier(registered, checkouts, slot_files).verify(KEY) == VerifyUnavailable("lock") and writes == []
+    assert factory_commit(registered, checkouts, slot_files).commit(KEY) == VerifyUnavailable("lock") and writes == []
 
 
 class Admits:
@@ -167,7 +169,7 @@ def test_a_repeat_whose_verify_finds_the_slot_held_admits_nothing(
     captured(registered, tmp_path, slot, checkouts, slot_files, {P: PLAN_TEXT, "stray.txt": "s"})
     store, admits = AttemptStore(lambda: registered), Admits()
     repeat = StepRepeat(
-        store, verifier(registered, checkouts, slot_files), EvidenceFiles(tmp_path), admits, NoLaunch(), lambda _worker: True,
+        store, factory_commit(registered, checkouts, slot_files), EvidenceFiles(tmp_path), admits, NoLaunch(), lambda _worker: True,
         lambda _entry: "gone", lambda: 10, repeating,
     ids=NativeIds(), discussion=refresh_discussion)
     with occupy(lock_path(str(slot.path))):
@@ -179,8 +181,8 @@ def test_a_read_only_verifier_asked_to_write_is_its_own_unknown(
     registered: sqlite3.Connection, slot: FakeWorktree, tmp_path: Path, checkouts: Checkouts, slot_files: SlotFiles, writes: list[str]
 ) -> None:
     captured(registered, tmp_path, slot, checkouts, slot_files, {P: PLAN_TEXT})
-    found = Verifier(AttemptStore(lambda: registered), checkouts, slot_files, lambda _worker: True,
-        lambda: 20, refused, ids=NativeIds()).verify(KEY)
+    found = FactoryCommit(AttemptStore(lambda: registered), checkouts, slot_files, lambda _worker: True,
+        lambda: 20, refused, ids=NativeIds()).commit(KEY)
     assert found == VerifyUnavailable("read_only") and writes == []
 
 
@@ -188,26 +190,26 @@ def test_a_verify_reads_the_attempt_again_under_the_lock(
     registered: sqlite3.Connection, slot: FakeWorktree, tmp_path: Path, checkouts: Checkouts, slot_files: SlotFiles, writes: list[str],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Another verifier settles between this one's first read and its lock: this one returns that stored verdict with
+    """Another factory commit settles between this one's first read and its lock: this one returns that stored verdict with
     no Git step of its own (one `settle` in all), never acting on what it read before the lock."""
     captured(registered, tmp_path, slot, checkouts, slot_files, {P: PLAN_TEXT})
     other: list[object] = []
     settled: list[str] = []
-    real = verifier_module.settle
+    real = commit_module.settle
 
     def settle(checkouts: Checkouts, files: SlotFiles, admission: Admission, base: str, answer: AnswerState, quiet: GitQuiet,
                timing: OperationTiming | None = None) -> Settled:
         settled.append(admission.key.attempt_id)
         return real(checkouts, files, admission, base, answer, quiet, timing)
 
-    monkeypatch.setattr(verifier_module, "settle", settle)
+    monkeypatch.setattr(commit_module, "settle", settle)
 
     @contextmanager
     def late(admission: Admission) -> Generator[None]:
-        other.append(verifier(registered, checkouts, slot_files).verify(admission.key))
+        other.append(factory_commit(registered, checkouts, slot_files).commit(admission.key))
         with hold(admission):
             yield
 
-    found = Verifier(AttemptStore(lambda: registered), checkouts, slot_files, lambda _worker: True,
-        lambda: 20, late, ids=NativeIds()).verify(KEY)
+    found = FactoryCommit(AttemptStore(lambda: registered), checkouts, slot_files, lambda _worker: True,
+        lambda: 20, late, ids=NativeIds()).commit(KEY)
     assert isinstance(found, Verified) and other == [found] and writes == ["stage", "record"] and settled == ["attempt"]

@@ -28,6 +28,7 @@ from taskloop.attempt import Attempts
 from taskloop.attempt_reads import PublishedRow
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import DEFAULT_GIT_READ_SECONDS, AttemptKey, Verified
+from taskloop.commit import FactoryCommit
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.git_views import GitViews
 from taskloop.ids import NativeIds
@@ -39,7 +40,6 @@ from taskloop.slots import SlotGit, adopt, folder_name
 from taskloop.slots_store import SlotsStore
 from taskloop.task import TaskBinding, TaskInspection, TaskScope
 from taskloop.tracker import inspect_task
-from taskloop.verifier import Verifier
 
 VIEWS = GitViews(DEFAULT_GIT_READ_SECONDS)
 
@@ -120,8 +120,8 @@ class Published:
             self.files,
         )
         attempts.execute(self.key, ENTRY)
-        assert isinstance(Verifier(self.store, VIEWS.checkouts, self.files, gone, lambda: 20, hold,
-            ids=NativeIds()).verify(self.key), Verified)
+        assert isinstance(FactoryCommit(self.store, VIEWS.checkouts, self.files, gone, lambda: 20, hold,
+            ids=NativeIds()).commit(self.key), Verified)
         self.x = self.rev(self.main, BRANCH)
         releaser = SlotRelease(self.store, VIEWS.checkouts, self.files, lambda _entry: "gone", gone, custody, yes, lambda: 30,
                                lambda _setup: "gone", lambda _scratch: True, ids=NativeIds())

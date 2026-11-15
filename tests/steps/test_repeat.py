@@ -48,6 +48,7 @@ from taskloop.attempt_types import (
     VerifyResult,
     VerifyUnavailable,
 )
+from taskloop.commit import FactoryCommit
 from taskloop.discussion import DiscussionSnapshot, empty
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.factory_schema import SCHEMA
@@ -66,7 +67,6 @@ from taskloop.result_data import as_data
 from taskloop.slot_lock import hold, lock_path, repeating
 from taskloop.steps import kind
 from taskloop.task import TaskReference
-from taskloop.verifier import Verifier
 
 KEY = AttemptKey("attempt", "dispatch", 1)
 ENTRY = (7, "entry-start", "boot")
@@ -128,13 +128,13 @@ def gone(_worker: Worker) -> bool:
     return True
 
 
-class Verifies:
-    """A verifier fake: records each key and returns the configured result."""
+class Commits:
+    """A factory commit fake: records each key and returns the configured result."""
 
     def __init__(self, result: VerifyResult) -> None:
         self.result, self.keys = result, list[AttemptKey]()
 
-    def verify(self, key: AttemptKey) -> VerifyResult:
+    def commit(self, key: AttemptKey) -> VerifyResult:
         self.keys.append(key)
         return self.result
 
@@ -148,10 +148,10 @@ def seen(word: Seen) -> Callable[[EntryIdentity], Seen]:
 
 def repeater(
     con: sqlite3.Connection, tmp_path: Path, checkouts: Checkouts, files: SlotFiles, *,
-    verifier: Settle | None = None, observe: Seen = "gone", alive: bool = False, launcher: RegisteringLauncher | None = None,
+    factory_commit: Settle | None = None, observe: Seen = "gone", alive: bool = False, launcher: RegisteringLauncher | None = None,
 ) -> StepRepeat:
     store = AttemptStore(lambda: con)
-    check = verifier or Verifier(store, checkouts, files, gone, lambda: 20, hold, ids=NativeIds())
+    check = factory_commit or FactoryCommit(store, checkouts, files, gone, lambda: 20, hold, ids=NativeIds())
     launcher = launcher or RegisteringLauncher(store, SECOND)
     return StepRepeat(store, check, EvidenceFiles(tmp_path), admission(con, tmp_path, checkouts, files), launcher,
                       lambda _worker: not alive, seen(observe), lambda: 10, repeating, ids=NativeIds(), discussion=refresh_discussion)
@@ -456,10 +456,10 @@ def test_no_verify_before_the_stop_proof(
     observe: Seen, alive: bool, expected: Started | Failed,
 ) -> None:
     unsafe(registered, tmp_path, slot, checkouts, slot_files)
-    verifier = Verifies(Unsettled("unsafe", (P,)))
-    found = repeater(registered, tmp_path, checkouts, slot_files, verifier=verifier, observe=observe, alive=alive)
+    factory_commit = Commits(Unsettled("unsafe", (P,)))
+    found = repeater(registered, tmp_path, checkouts, slot_files, factory_commit=factory_commit, observe=observe, alive=alive)
     assert found.repeat("tasks", "tl-1", KEY, ENTRY, 30) == expected
-    assert verifier.keys == [] and len(rows(registered)) == 1
+    assert factory_commit.keys == [] and len(rows(registered)) == 1
 
 
 @pytest.mark.parametrize(("verified", "expected"), [
@@ -478,10 +478,10 @@ def test_only_git_leftovers_repeat(
     verified: VerifyResult, expected: Started | Failed,
 ) -> None:
     unsafe(registered, tmp_path, slot, checkouts, slot_files)
-    verifier, launcher = Verifies(verified), RegisteringLauncher(AttemptStore(lambda: registered), SECOND)
-    found = repeater(registered, tmp_path, checkouts, slot_files, verifier=verifier, launcher=launcher)
+    factory_commit, launcher = Commits(verified), RegisteringLauncher(AttemptStore(lambda: registered), SECOND)
+    found = repeater(registered, tmp_path, checkouts, slot_files, factory_commit=factory_commit, launcher=launcher)
     assert found.repeat("tasks", "tl-1", KEY, ENTRY, 30) == expected
-    assert verifier.keys == [KEY] and launcher.calls == [] and len(rows(registered)) == 1
+    assert factory_commit.keys == [KEY] and launcher.calls == [] and len(rows(registered)) == 1
 
 
 def test_the_third_attempt_is_not_repeated(
@@ -498,13 +498,13 @@ def test_a_verdict_stored_between_the_verify_and_the_takeover_refuses_the_repeat
     registered: sqlite3.Connection, slot: FakeWorktree, tmp_path: Path, checkouts: Checkouts, slot_files: FakeSlotFiles
 ) -> None:
     unsafe(registered, tmp_path, slot, checkouts, slot_files)
-    real = Verifier(AttemptStore(lambda: registered), checkouts, slot_files, gone, lambda: 20, hold, ids=NativeIds())
+    real = FactoryCommit(AttemptStore(lambda: registered), checkouts, slot_files, gone, lambda: 20, hold, ids=NativeIds())
 
     class Late:
-        """Another verifier stores its verdict right after this verify returned."""
+        """Another factory commit stores its verdict right after this commit returned."""
 
-        def verify(self, key: AttemptKey) -> VerifyResult:
-            found = real.verify(key)
+        def commit(self, key: AttemptKey) -> VerifyResult:
+            found = real.commit(key)
             registered.execute(GATES[0][1])
             return found
 
@@ -512,7 +512,7 @@ def test_a_verdict_stored_between_the_verify_and_the_takeover_refuses_the_repeat
             return real.staged(key)
 
     launcher = RegisteringLauncher(AttemptStore(lambda: registered), SECOND)
-    late = repeater(registered, tmp_path, checkouts, slot_files, verifier=Late(), launcher=launcher)
+    late = repeater(registered, tmp_path, checkouts, slot_files, factory_commit=Late(), launcher=launcher)
     found = late.repeat("tasks", "tl-1", KEY, ENTRY, 30)
     assert found == Failed("refused", "not_repeatable") and len(rows(registered)) == 1 and launcher.calls == []
     assert held(registered) == ("attempt", 1)
@@ -622,7 +622,7 @@ def test_a_held_slot_lock_refuses_the_takeover_and_admits_nothing(
     """`admit_repeat` runs under the slot's lock, so an abandon parking the slot (or anyone else holding it) refuses it."""
     unsafe(registered, tmp_path, slot, checkouts, slot_files)
     launcher = RegisteringLauncher(AttemptStore(lambda: registered), SECOND)
-    found = repeater(registered, tmp_path, checkouts, slot_files, verifier=Verifies(Unsettled("unsafe", (P,))), launcher=launcher)
+    found = repeater(registered, tmp_path, checkouts, slot_files, factory_commit=Commits(Unsettled("unsafe", (P,))), launcher=launcher)
     with occupy(lock_path(str(slot.path))):
         assert found.repeat("tasks", "tl-1", KEY, ENTRY, 30) == Failed("unavailable", "slot_busy")
     assert len(rows(registered)) == 1 and held(registered) == ("attempt", 1) and launcher.calls == []

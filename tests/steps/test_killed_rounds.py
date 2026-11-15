@@ -54,7 +54,7 @@ def assert_completed(factory: RestartFactory, remote: FakeRemote, attempt: Attem
     assert "resume" not in factory.effects.calls[0].argv and "resume" in factory.effects.calls[1].argv
     captured = factory.store.collect(attempt)
     assert captured is not None and captured.answer.kind == "valid" and captured.session_state == "complete"
-    verified = factory.ports().verifier.verify(attempt)
+    verified = factory.ports().factory_commit.commit(attempt)
     assert isinstance(verified, Verified)
     tip = factory.tip("tl-1")
     tree = factory.slot.repo.tree(tip)
@@ -143,7 +143,7 @@ def test_restart_completes_and_delivers_once(
             factory = factory.reopen()
             factory.round()
             ports = factory.ports()
-            assert ports.verifier.verify(attempt) == verified
+            assert ports.factory_commit.commit(attempt) == verified
             assert isinstance(ports.releaser.release(attempt, False), AlreadyReleased)
             assert isinstance(ports.publisher.publish(attempt), PublishedRow)
             assert artifacts(factory) == retained and identity(factory) == original

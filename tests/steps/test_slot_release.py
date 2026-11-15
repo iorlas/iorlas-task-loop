@@ -30,6 +30,7 @@ from taskloop.attempt import Attempts
 from taskloop.attempt_reads import StoreRefused
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import AttemptKey, Checkouts, EntryIdentity, FileStat, Seen, SlotFiles, Verified
+from taskloop.commit import FactoryCommit
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.ids import NativeIds
 from taskloop.repo import RepoId
@@ -39,7 +40,6 @@ from taskloop.slot_release import AlreadyReleased, NotReleased, Released, SlotRe
 from taskloop.slots import SlotGit, adopt, observe
 from taskloop.slots_store import SlotsStore
 from taskloop.tracker_client import tracker_claims
-from taskloop.verifier import Verifier
 
 KEY = AttemptKey("attempt", "dispatch", 1)
 ENTRY = (7, "entry-start", "boot")
@@ -145,7 +145,7 @@ def verified(con: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checko
     """The registered attempt run and verified: X, on `task/tl-1`."""
     assert executed(con, tmp_path, slot, checkouts, files, {P: PLAN_TEXT}) == "verification"
     store = AttemptStore(lambda: con)
-    assert isinstance(Verifier(store, checkouts, files, lambda _w: True, lambda: 20, nowhere, ids=NativeIds()).verify(KEY), Verified)
+    assert isinstance(FactoryCommit(store, checkouts, files, lambda _w: True, lambda: 20, nowhere, ids=NativeIds()).commit(KEY), Verified)
     return head(slot)
 
 
@@ -451,8 +451,8 @@ def test_after_a_release_every_other_writer_meets_the_fence_and_the_slot_is_free
         opened.append(path)
         return checkouts(path, git_dir=git_dir)
 
-    assert isinstance(Verifier(store, counted, slot_files, never, lambda: 20, never,
-        ids=NativeIds()).verify(KEY), Verified) and opened == []
+    assert isinstance(FactoryCommit(store, counted, slot_files, never, lambda: 20, never,
+        ids=NativeIds()).commit(KEY), Verified) and opened == []
     git = SlotGit(checkouts, slot_files)
     store = SlotsStore(lambda: registered, begin_immediate)
     adopt(store, slot.repo, git, root, 1)  # the freed slot, detached and clean, is free again

@@ -25,6 +25,7 @@ from taskloop.agents.launch import AgentLaunch
 from taskloop.attempt import Attempts, Execution
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import DEFAULT_GIT_READ_SECONDS, AttemptKey, Unsettled, Verified
+from taskloop.commit import FactoryCommit
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.git_views import GitViews
 from taskloop.ids import NativeIds
@@ -32,7 +33,6 @@ from taskloop.operations import Started
 from taskloop.repeat import StepRepeat
 from taskloop.slot_files import RealSlotFiles
 from taskloop.slot_lock import hold, repeating
-from taskloop.verifier import Verifier
 
 VIEWS = GitViews(DEFAULT_GIT_READ_SECONDS)
 
@@ -93,12 +93,12 @@ def test_a_repeat_commits_x2_on_x1_from_the_dirty_worktree_and_the_chain_verifie
                 lambda: 10, VIEWS.checkouts, files
         )
 
-    verifier = Verifier(store, VIEWS.checkouts, files, lambda _worker: True, lambda: 20, hold, ids=NativeIds())
+    factory_commit = FactoryCommit(store, VIEWS.checkouts, files, lambda _worker: True, lambda: 20, hold, ids=NativeIds())
     assert attempts(agent(slot, {P: PLAN_TEXT, "scratch.txt": "s"}, (), [P])).execute(KEY, ENTRY).reason == "verification"
-    assert verifier.verify(KEY) == Unsettled("uncommitted", ("?? scratch.txt",))
+    assert factory_commit.commit(KEY) == Unsettled("uncommitted", ("?? scratch.txt",))
     x1 = git(slot, "rev-parse", "HEAD").strip()
     admission = ChainAdmission(lambda: factory, begin_immediate, EvidenceFiles(art), lambda: 10, VIEWS.checkouts, files, ids=NativeIds())
-    repeat = StepRepeat(store, verifier, EvidenceFiles(art), admission, RegisteringLauncher(store, SECOND),
+    repeat = StepRepeat(store, factory_commit, EvidenceFiles(art), admission, RegisteringLauncher(store, SECOND),
                         lambda _w: True, lambda _e: "gone", lambda: 10,
                         repeating, ids=NativeIds(), discussion=refresh_discussion)
     started = repeat.repeat("tasks", "tl-1", KEY, ENTRY, 30)
@@ -107,7 +107,7 @@ def test_a_repeat_commits_x2_on_x1_from_the_dirty_worktree_and_the_chain_verifie
     assert found is not None
     second = agent(slot, {P: PLAN_V2}, ("scratch.txt",), [P])
     assert attempts(second).execute(found[0], SECOND).reason == "verification"
-    verdict = verifier.verify(found[0])
+    verdict = factory_commit.commit(found[0])
     assert isinstance(verdict, Verified) and not verdict.reused
     assert git(slot, "rev-parse", "HEAD^").strip() == x1 and git(slot, "rev-parse", "HEAD^^").strip() == base
     assert git(slot, "status", "--porcelain").strip() == ""

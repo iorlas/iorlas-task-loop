@@ -2436,7 +2436,7 @@
     "verified": {
       "argv": [
         "step",
-        "verify",
+        "commit",
         "tl-1",
         "--backlog",
         "tasks"

@@ -20,6 +20,7 @@ from taskloop.attempt_entry import EntryArgs, enter
 from taskloop.attempt_types import AttemptKey, CaptureResult, PendingResult, Unsettled
 from taskloop.claim import ClaimWord
 from taskloop.claim_lease import Beat
+from taskloop.commit import FactoryCommit
 from taskloop.recovery.continuation_models import State
 from taskloop.recovery.continue_attempt import Continuation
 from taskloop.recovery.entry import RecoveryEntry
@@ -27,7 +28,6 @@ from taskloop.recovery.execution_models import Callback
 from taskloop.recovery.models import Intent
 from taskloop.recovery.native import NativeContinuation
 from taskloop.recovery.store import RecoveryStore
-from taskloop.verifier import Verifier
 
 surroundings = attempt_surroundings
 con = recovery_connection
@@ -87,7 +87,7 @@ def test_saved_owner_continues_under_custody_and_a_renewed_claim(
         with pytest.raises(slot_lock.SlotBusy), slot_lock.hold(record.admission):
             raise AssertionError("Entry released custody")
 
-    def verify(_self: Verifier, key: AttemptKey) -> Unsettled:
+    def commit(_self: FactoryCommit, key: AttemptKey) -> Unsettled:
         held()
         stored = attempts.store.collect(key)
         assert stored is not None and stored.answer.kind == "valid" and stored.session_state == "complete"
@@ -99,7 +99,7 @@ def test_saved_owner_continues_under_custody_and_a_renewed_claim(
         return ClaimWord.HELD
 
     execution.after_start = held
-    monkeypatch.setattr(attempt_entry.Verifier, "verify", verify)
+    monkeypatch.setattr(attempt_entry.FactoryCommit, "commit", commit)
     lines: list[str] = []
     assert run_entry(tmp_path, attempts, continuation, lines, beat) == 1
     assert execution.permits == 1 and verified == [KEY] and "claim=held" in lines[0], lines

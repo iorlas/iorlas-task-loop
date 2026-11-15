@@ -19,6 +19,7 @@ from test_recovery import Processes
 from taskloop.agents.launch import AgentLaunch
 from taskloop.attempt import Attempts
 from taskloop.attempt_types import Admission, AttemptKey, Evidence, ExecutionFacts, SlotFiles, VerifyResult
+from taskloop.commit import FactoryCommit
 from taskloop.drain.models import Identity, Seen
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.factory_schema import SCHEMA
@@ -38,7 +39,6 @@ from taskloop.recovery.store import RecoveryStore
 from taskloop.round import RoundPorts
 from taskloop.slot_lock import hold
 from taskloop.slot_release import ReleaseResult, SlotRelease
-from taskloop.verifier import Verifier
 
 PLAN = "docs/design/tl-1/plan.md"
 OWNER = Identity(pid=80, pgid=80, start="restarted-entry", boot="boot")
@@ -144,10 +144,10 @@ class RestartFactory(Factory):
                        setup_seen=lambda identity: self.effects.processes.states.get(identity.pid, Seen.GONE).value)
 
     def install_hooks(self) -> None:
-        verify, release, publish = Verifier.verify, SlotRelease.release, BranchPublish.publish
+        commit, release, publish = FactoryCommit.commit, SlotRelease.release, BranchPublish.publish
 
-        def verified(app: Verifier, key: AttemptKey) -> VerifyResult:
-            result = verify(app, key)
+        def verified(app: FactoryCommit, key: AttemptKey) -> VerifyResult:
+            result = commit(app, key)
             self.effects.after("verify")
             return result
 
@@ -161,7 +161,7 @@ class RestartFactory(Factory):
             self.effects.after("publish")
             return result
 
-        self.patch.setattr(Verifier, "verify", verified)
+        self.patch.setattr(FactoryCommit, "commit", verified)
         self.patch.setattr(SlotRelease, "release", released)
         self.patch.setattr(BranchPublish, "publish", published)
 

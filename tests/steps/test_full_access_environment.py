@@ -19,13 +19,13 @@ from taskloop.agents.settings import CodexPolicy, encode_policy
 from taskloop.attempt import Attempts
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import Verified
+from taskloop.commit import FactoryCommit
 from taskloop.environment import Preparation
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.ids import NativeIds
 from taskloop.slot_env import RealEnvFiles
 from taskloop.slot_lock import custody, hold
 from taskloop.slot_release import NotReleased, Released, SlotRelease
-from taskloop.verifier import Verifier
 
 
 def test_full_access_scratch_exists_at_dispatch_and_is_emptied_after_stopped_release(
@@ -60,8 +60,8 @@ def test_full_access_scratch_exists_at_dispatch_and_is_emptied_after_stopped_rel
     assert result.execution is not None and result.execution.answer.kind == "valid"
     assert env.probes == [] and "UV_OFFLINE" not in env.process.calls[0].env
     assert (found.tmp / "agent-scratch").read_text() == "agent"
-    assert isinstance(Verifier(store, entry.checkouts, entry.files, lambda _worker: True, env.clock, hold,
-                               ids=NativeIds()).verify(KEY), Verified)
+    assert isinstance(FactoryCommit(store, entry.checkouts, entry.files, lambda _worker: True, env.clock, hold,
+                               ids=NativeIds()).commit(KEY), Verified)
     releaser = SlotRelease(store, entry.checkouts, entry.files, lambda _entry: "gone", lambda _worker: True,
                            custody, lambda _root, _task: True, env.clock, env.observe, files.empty_scratch, ids=NativeIds())
     refused = replace(releaser, gone=lambda _worker: False).release(KEY, False)
