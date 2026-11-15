@@ -60,9 +60,9 @@ TARGET = "main"  # the only land target M2 checks against (another one is B6's)
 LATEST = f"""SELECT number,phase,conclusion,released_at IS NOT NULL,abandoned,{LANDED},{LANDING} FROM checks_attempt c
 WHERE after_attempt_id=? ORDER BY number DESC LIMIT 1"""
 LAND_GUIDE = {
-    "landed": "A land of the task delivered its code to origin's main: rerun `tl step land` to finish the close; checks do not re-run.",
-    "landing": "A land candidate of the task holds its slot or may already be on origin's main: run `tl step land` to land it, "
-    "or `tl step land --withdraw`; checks do not re-run meanwhile.",
+    "landed": "A land of the task delivered its code to origin's main. Task closure still needs to finish; checks cannot re-run.",
+    "landing": "A land candidate of the task holds its slot or may already be on origin's main. "
+    "Delivery must finish or the candidate must be withdrawn; checks cannot re-run meanwhile.",
 }
 
 
