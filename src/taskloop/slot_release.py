@@ -100,7 +100,7 @@ def _reconcilable(row: ReleaseRow) -> NotReleased | None:
 
 @dataclass(frozen=True)
 class SlotRelease:
-    """`hold` is the slot's custody around the park and the transaction: `slot_lock.custody` for `tl step verify` and
+    """`hold` is the slot's custody around the park and the transaction: `slot_lock.custody` for `tl step commit` and
     `tl step release`, a no-op for the entry, which holds the lock already."""
 
     store: AttemptStore

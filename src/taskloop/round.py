@@ -45,6 +45,7 @@ from taskloop.ids import Ids
 from taskloop.operations import (
     UNKNOWN_KINDS,
     AgentRelease,
+    Commit,
     Failed,
     Move,
     Publish,
@@ -55,13 +56,12 @@ from taskloop.operations import (
     StartPorts,
     StartRequest,
     VerifiedTask,
-    Verify,
+    commit_task,
     launched,
     minutes_refused,
     publish_task,
     relaunch_checks,
     start,
-    verify_task,
 )
 from taskloop.publish import publish_word
 from taskloop.round_land import Landing, land_passed
@@ -117,7 +117,7 @@ class RoundPorts:
 
     reads: StatusPorts
     starting: StartPorts
-    verifier: Verify
+    factory_commit: Commit
     releaser: AgentRelease
     publisher: Publish
     holding: HoldPorts
@@ -251,7 +251,7 @@ def _settle_attempt(ports: RoundPorts, request: NextRequest, each: AttemptView, 
                 found = result.attempt_id if isinstance(result, Started) else attempt
                 trail.add(Move(task, action, _word(result), found, _detail(result), step))  # a repeat stays in its step
         case "verify":
-            trail.add(_verified(ports, request.backlog, each))
+            trail.add(_committed(ports, request.backlog, each))
         case "hold":
             trail.add(_held(ports.holding, each))
         case "release" if each.checks is None or each.checks.row.released_at is None:
@@ -344,15 +344,15 @@ def _detail(result: Started | Failed) -> str:
     return result.detail if isinstance(result, Failed) else ""
 
 
-def _verified(ports: RoundPorts, backlog: str, each: AttemptView) -> Move:
-    """`tl step verify` as built: the verdict, then the settled release and the publication of a verified result."""
+def _committed(ports: RoundPorts, backlog: str, each: AttemptView) -> Move:
+    """`tl step commit` as built: the verdict, then the settled release and the publication of a verified result."""
     if each.checks is None and each.result.status == "pending" and each.result.reason != "verification":
         completed = (AttemptResult("unavailable", "store") if ports.completion is None
                      else ports.completion(backlog, each.task_id, each.attempt_id))
         if completed.status != "pending" or completed.reason != "verification":
             return Move(each.task_id, "verify", f"{completed.status}:{completed.reason}", each.attempt_id,
                         completed.explanation, each.step)
-    verified = verify_task(ports.reads.store, ports.verifier, ports.releaser, ports.publisher, backlog, each.task_id)
+    verified = commit_task(ports.reads.store, ports.factory_commit, ports.releaser, ports.publisher, backlog, each.task_id)
     if isinstance(verified, VerifiedTask):
         word = f"{verified.status} release={verified.release} branch={verified.published}"
         return Move(each.task_id, "verify", word, each.attempt_id, step=each.step)

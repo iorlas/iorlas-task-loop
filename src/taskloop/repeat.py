@@ -2,7 +2,7 @@
 the current attempt holds, with the leftovers as feedback in a complete input of its own, launched as a fresh session
 exactly as attempt 1 (no resume). Only Git leftovers repeat (`REPEATABLE`), at most ATTEMPTS attempts per step.
 
-No Git or SQL of its own: the verifier, the store reads, the files, the admission, the launcher, the worker observation
+No Git or SQL of its own: the factory commit, the store reads, the files, the admission, the launcher, the worker observation
 and the entry observation are injected. `tl step start` on a captured attempt calls `repeat`; a scheduler would too.
 """
 
@@ -35,7 +35,7 @@ from taskloop.earlier_input import without
 from taskloop.evidence_files import EvidenceError, EvidenceFiles
 from taskloop.ids import Ids
 from taskloop.input_context import InputError
-from taskloop.operations import Clock, Failed, Launch, Started, deadline_after, launched, verify_failure
+from taskloop.operations import Clock, Failed, Launch, Started, commit_failure, deadline_after, launched
 from taskloop.slot_lock import SlotBusy, SlotLockUnavailable
 from taskloop.slot_release import ParkHold, entry_stopped, worker_stopped
 from taskloop.step import Step
@@ -44,9 +44,9 @@ from taskloop.task_content import TaskContentDigest
 
 
 class Settle(Protocol):
-    """The verifier as a repeat uses it: the step's own verify, then the slot's staged paths (None: unknown)."""
+    """The factory commit as a repeat uses it: the step's own commit, then the slot's staged paths (None: unknown)."""
 
-    def verify(self, key: AttemptKey) -> VerifyResult: ...
+    def commit(self, key: AttemptKey) -> VerifyResult: ...
 
     def staged(self, key: AttemptKey) -> tuple[str, ...] | None: ...
 
@@ -62,7 +62,7 @@ def _words(found: Verified | Rejected | NotApplicable) -> str:
 @dataclass(frozen=True)
 class StepRepeat:
     store: AttemptStore
-    verifier: Settle
+    factory_commit: Settle
     files: EvidenceFiles
     admission: AdmitRepeat
     launcher: Launch
@@ -100,20 +100,20 @@ class StepRepeat:
     ) -> tuple[Unsettled, RepeatReason] | Started | Failed:
         """C's own verify: a stored or new verdict, or no step to verify, is `already_dispatched` with that result; any
         other unsettled reason or unknown is that failure, never a repeat."""
-        found = self.verifier.verify(current)
+        found = self.factory_commit.commit(current)
         if isinstance(found, (Verified, Rejected, NotApplicable)):
             return Started("already_dispatched", backlog, task_id, current.attempt_id, True, result=_words(found))
         if isinstance(found, VerifyRefused) and found.reason == "stale_reservation":
             return self._existing(backlog, task_id, current, minutes)  # another start took the step over after this one's read
         if not isinstance(found, Unsettled):
-            return verify_failure(found)
+            return commit_failure(found)
         reason = next((each for each in REPEATABLE if each == found.reason), None)
-        return verify_failure(found) if reason is None else (found, reason)
+        return commit_failure(found) if reason is None else (found, reason)
 
     def _index(self, current: AttemptKey) -> Failed | None:
         """A staged index is never repeated: `record` would commit it as the next attempt's, and its dispatch refuses it
         (`slot_staged`). Refused here, before anything is admitted or written; the owner unstages it."""
-        held = self.verifier.staged(current)
+        held = self.factory_commit.staged(current)
         if held is None:
             return Failed("unavailable", "staged")
         return Failed("unsettled", "staged", "\n".join(held)) if held else None

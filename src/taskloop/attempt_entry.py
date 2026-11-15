@@ -4,7 +4,7 @@ It runs only as the identity the launcher registered: its own boot-aware identit
 entry before the attempt key is used or any credential is read. It then holds its slot's custody lock (`slot_lock`)
 until it exits; a held lock refuses (`refused slot_busy`) with nothing read or written. It never creates factory.db,
 runs the agent at most once (through `Attempts.execute`), retries only an unavailable capture, then verifies
-once (`Verifier.verify`: commit the listed paths, check the tree is clean, judge; never retried), and writes one log
+once (`FactoryCommit.commit`: commit the listed paths, check the tree is clean, judge; never retried), and writes one log
 line of fixed words: status and reason, read back after a stored verdict (an accepted capture retry instead keeps the run's
 own words and adds `publish=` and the collected `then=`), always `verify=`, then `claim=` (the tracker claim's lease,
 renewed by `claim_lease` while the step runs), then, once the result read back is collected, `release=` (the settled
@@ -59,6 +59,7 @@ from taskloop.attempt_types import (
 )
 from taskloop.claim import ClaimWord, encode_claim
 from taskloop.claim_lease import HeartbeatFor, KeepAlive, Stop, keeping, renewal
+from taskloop.commit import FactoryCommit
 from taskloop.composition import open_attempts, open_continuation
 from taskloop.drain.models import Identity
 from taskloop.environment import Renew
@@ -73,7 +74,6 @@ from taskloop.recovery.models import Intent, Outcome, Result
 from taskloop.slot_env import RealEnvFiles
 from taskloop.slot_release import SlotRelease, release_word
 from taskloop.tracker_client import tracker_claims, tracker_located
-from taskloop.verifier import Verifier
 
 RETRY_WAIT = 2.0
 UNFINISHED: Final = frozenset({"validation_pending", "session_pending", "session_fault"})  # a captured result still to finish
@@ -235,8 +235,8 @@ def _step(
     if accepted:  # captured but maybe not finished (the store was busy again): finish it before verify commits anything
         resumed(lambda: app.collect(key), lambda: app.execute(key, found.me), clock, wait, found.deadline)
     timing = partial(app.files.observe_operation, clock=app.monotonic, wall=app.clock, ids=app.agent.ids)
-    verified = Verifier(app.store, app.checkouts, app.slot_files, gone, app.clock, _held,
-                        ids=app.agent.ids, timing=timing).verify(key)
+    verified = FactoryCommit(app.store, app.checkouts, app.slot_files, gone, app.clock, _held,
+                        ids=app.agent.ids, timing=timing).commit(key)
     # newly stored facts or a stored verdict: read the terminal result back
     latest = app.collect(key) if accepted or isinstance(verified, (Verified, Rejected)) else result
     line = f"{latest.status} {latest.reason}"

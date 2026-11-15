@@ -32,6 +32,7 @@ from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import AttemptKey, EntryIdentity, Seen, SlotFiles
 from taskloop.check_admit import ChecksRequest
 from taskloop.claim import ClaimWord
+from taskloop.commit import FactoryCommit
 from taskloop.discussion import Discussion
 from taskloop.drain.models import Identity
 from taskloop.drain.models import Seen as ProcessSeen
@@ -41,7 +42,7 @@ from taskloop.hold_store import HoldStore
 from taskloop.ids import NativeIds
 from taskloop.launch import Launched, LaunchResult
 from taskloop.merge.prepare import SourcePreparation
-from taskloop.operations import ChecksPorts, ChecksReleasing, Round, Started, StartPorts, StartRequest, start, verify_task
+from taskloop.operations import ChecksPorts, ChecksReleasing, Round, Started, StartPorts, StartRequest, commit_task, start
 from taskloop.publish import BranchPublish
 from taskloop.recovery.models import ProcessObservation
 from taskloop.round import NextRequest, RoundPorts, repository_of, run_round
@@ -50,7 +51,6 @@ from taskloop.slot_release import SlotRelease
 from taskloop.task import TaskBinding, TaskInspection, TaskScope
 from taskloop.tracker import inspect_task
 from taskloop.tracker_client import HoldAnswer, HoldWrite, LabelStep, TrackerHolds
-from taskloop.verifier import Verifier
 
 ENTRY = (7, "entry-start", "boot")
 WORKER = Worker(pid=42, pgid=42, start="native-start", boot="boot")
@@ -239,11 +239,12 @@ class Factory:
 
     def ports(self) -> RoundPorts:
         """Fresh ports over the same factory.db each round, as each `tl step rounds` round opens them (a restart too)."""
-        verifier = Verifier(self.store, self.checkouts, self.files, lambda _worker: True, lambda: self.now, hold, ids=NativeIds())
-        reads = StatusPorts(self.store, self.observe, lambda: self.now, verifier.leftovers, lambda: "boot")
+        factory_commit = FactoryCommit(self.store, self.checkouts, self.files, lambda _worker: True, lambda: self.now, hold,
+                                       ids=NativeIds())
+        reads = StatusPorts(self.store, self.observe, lambda: self.now, factory_commit.leftovers, lambda: "boot")
         publisher = BranchPublish(self.store, self.checkouts, self.files, lambda: self.now, ids=NativeIds())
         holding = self.holding(reads)
-        return RoundPorts(reads, self.starting(), verifier, self.releaser(), publisher, holding, self.tracker,
+        return RoundPorts(reads, self.starting(), factory_commit, self.releaser(), publisher, holding, self.tracker,
             self.lines.append, repository=partial(repository_of, self.checkouts), ids=NativeIds())
 
     def round(
@@ -267,7 +268,7 @@ class Factory:
         return [(each.task_id, each.step, each.action, each.word) for each in found.moves]
 
     def by_hand(self, task_id: str) -> None:
-        """`tl step start` then `tl step verify` (its release and publication), as the person runs them."""
+        """`tl step start` then `tl step commit` (its release and publication), as the person runs them."""
         self.now += 1
         assert isinstance(
             start(
@@ -277,7 +278,7 @@ class Factory:
             Started,
         )
         self.now += 1
-        verify_task(self.store, Verifier(self.store, self.checkouts, self.files, lambda _w: True,
+        commit_task(self.store, FactoryCommit(self.store, self.checkouts, self.files, lambda _w: True,
             lambda: self.now, hold, ids=NativeIds()), self.releaser(),
                     BranchPublish(self.store, self.checkouts, self.files, lambda: self.now, ids=NativeIds()), "tasks", task_id)
 

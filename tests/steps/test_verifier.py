@@ -44,7 +44,8 @@ from taskloop.attempt_types import (
     VerifyResult,
     VerifyUnavailable,
 )
-from taskloop.composition import open_verifier
+from taskloop.commit import CommitHold, FactoryCommit
+from taskloop.composition import open_factory_commit
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.factory_schema import SCHEMA
 from taskloop.git_views import GitViews
@@ -54,7 +55,6 @@ from taskloop.slot_state import pointer
 from taskloop.step_guide import GUIDE
 from taskloop.steps import kind
 from taskloop.verdict import judge
-from taskloop.verifier import Verifier, VerifyHold
 from taskloop.wip import WIP
 
 KEY = AttemptKey("attempt", "dispatch", 1)
@@ -137,8 +137,8 @@ def unheld(_admission: Admission) -> AbstractContextManager[None]:
     return nullcontext()
 
 
-def verifier(con: sqlite3.Connection, checkouts: Checkouts, files: FakeSlotFiles, custody: VerifyHold = hold) -> Verifier:
-    return Verifier(AttemptStore(lambda: con), checkouts, files, gone, lambda: 20, custody, ids=NativeIds())
+def factory_commit(con: sqlite3.Connection, checkouts: Checkouts, files: FakeSlotFiles, custody: CommitHold = hold) -> FactoryCommit:
+    return FactoryCommit(AttemptStore(lambda: con), checkouts, files, gone, lambda: 20, custody, ids=NativeIds())
 
 
 def stored(con: sqlite3.Connection) -> list[tuple[object, ...]]:
@@ -277,7 +277,7 @@ def test_the_stage_commit_and_verdict_table(
     for statement in (sql or "").split(";"):
         if statement.strip():
             registered.execute(statement)
-    result = verifier(registered, checkouts, slot_files).verify(KEY)
+    result = factory_commit(registered, checkouts, slot_files).commit(KEY)
     assert shown(result) == expected
     final = expected.startswith(("verified", "reused", "rejected"))
     assert len(stored(registered)) == (1 if final else 0)  # slot state and unknowns are never stored
@@ -293,7 +293,7 @@ def test_one_factory_commit_with_the_agents_message_and_the_trailer_is_recorded_
 ) -> None:
     base = head(slot)
     captured(registered, tmp_path, slot, checkouts, slot_files, PLANNED | {NOTE: "n"}, PLAN | {"paths": [P, NOTE]})
-    assert isinstance(verifier(registered, checkouts, slot_files).verify(KEY), Verified)
+    assert isinstance(factory_commit(registered, checkouts, slot_files).commit(KEY), Verified)
     assert made(slot, base) == [("Plan tl-1", TRAILER)] and end_commit(registered) == head(slot)
     assert slot.dirty().raw is False
 
@@ -302,20 +302,20 @@ def test_leftovers_are_listed_fresh_and_a_tidied_slot_then_verifies(
     registered: sqlite3.Connection, slot: FakeWorktree, tmp_path: Path, checkouts: Checkouts, slot_files: FakeSlotFiles
 ) -> None:
     captured(registered, tmp_path, slot, checkouts, slot_files, PLANNED | {NOTE: "n", "scratch.txt": "s"})
-    check = verifier(registered, checkouts, slot_files)
-    assert check.verify(KEY) == Unsettled("uncommitted", ("?? docs/design/tl-1/note.md", "?? scratch.txt"))
+    check = factory_commit(registered, checkouts, slot_files)
+    assert check.commit(KEY) == Unsettled("uncommitted", ("?? docs/design/tl-1/note.md", "?? scratch.txt"))
     x = end_commit(registered)
-    assert x == head(slot) and check.leftovers(KEY) == check.verify(KEY)  # X stays recorded; the listing is read again
+    assert x == head(slot) and check.leftovers(KEY) == check.commit(KEY)  # X stays recorded; the listing is read again
     slot.remove_file(NOTE)
     slot.remove_file("scratch.txt")
-    assert check.leftovers(KEY) is None and isinstance(check.verify(KEY), Verified) and end_commit(registered) == x
+    assert check.leftovers(KEY) is None and isinstance(check.commit(KEY), Verified) and end_commit(registered) == x
 
 
 def test_the_listing_is_bounded(
     registered: sqlite3.Connection, slot: FakeWorktree, tmp_path: Path, checkouts: Checkouts, slot_files: FakeSlotFiles
 ) -> None:
     captured(registered, tmp_path, slot, checkouts, slot_files, PLANNED | {f"stray-{n:02}": "s" for n in range(53)})
-    result = verifier(registered, checkouts, slot_files).verify(KEY)
+    result = factory_commit(registered, checkouts, slot_files).commit(KEY)
     assert isinstance(result, Unsettled) and len(result.listing) == 51 and result.listing[-1] == "+3 more"
 
 
@@ -325,11 +325,11 @@ def test_unchanged_records_b_only_after_the_tree_is_clean(
     base = commit(slot, PLANNED)
     origin_main_at(slot)
     captured(registered, tmp_path, slot, checkouts, slot_files, {NOTE: "n"}, UNCHANGED)
-    check = verifier(registered, checkouts, slot_files)
-    assert shown(check.verify(KEY)) == "unsettled:uncommitted" and end_commit(registered) is None
+    check = factory_commit(registered, checkouts, slot_files)
+    assert shown(check.commit(KEY)) == "unsettled:uncommitted" and end_commit(registered) is None
     slot.remove_file(NOTE)
     tree = slot.repo.tree(base)
-    assert tree is not None and check.verify(KEY) == Verified(tree.files[P][1], reused=True)
+    assert tree is not None and check.commit(KEY) == Verified(tree.files[P][1], reused=True)
     assert end_commit(registered) == base
 
 
@@ -341,7 +341,7 @@ def test_unchanged_over_saved_work_ends_at_its_own_commit_of_the_same_tree(
     base = commit(slot, PLANNED, f"Save unfinished work\n\nTask-Loop-Attempt: old\n{WIP}: old")
     origin_main_at(slot)
     captured(registered, tmp_path, slot, checkouts, slot_files, {}, UNCHANGED)
-    result = verifier(registered, checkouts, slot_files).verify(KEY)
+    result = factory_commit(registered, checkouts, slot_files).commit(KEY)
     assert isinstance(result, Verified) and not result.reused
     x = end_commit(registered)
     assert x == head(slot) and x != base
@@ -367,7 +367,7 @@ def test_a_rewritten_slot_pointer_is_redirected_before_any_git_call(
     captured(registered, tmp_path, slot, checkouts, slot_files, PLANNED)
     rewrite(slot, slot_files)
     counted = Counted(checkouts)
-    assert verifier(registered, counted, slot_files).verify(KEY) == Unsettled("redirected") and counted.opens == 0
+    assert factory_commit(registered, counted, slot_files).commit(KEY) == Unsettled("redirected") and counted.opens == 0
     assert stored(registered) == [] and end_commit(registered) is None
 
 
@@ -389,7 +389,7 @@ def test_a_pointer_is_judged_as_git_resolves_it(
     }
     slot_files.resolved.update(redirects[target])
     counted = Counted(checkouts)
-    assert verifier(registered, counted, slot_files).verify(KEY) == Unsettled("redirected") and counted.opens == 0
+    assert factory_commit(registered, counted, slot_files).commit(KEY) == Unsettled("redirected") and counted.opens == 0
     assert made(slot, head(slot)) == [] and end_commit(registered) is None
 
 
@@ -399,7 +399,7 @@ def test_a_wrong_back_pointer_is_redirected(
     captured(registered, tmp_path, slot, checkouts, slot_files, PLANNED)
     slot_files.contents[repo.identity().common_dir / "worktrees" / "s1" / "gitdir"] = b"/elsewhere/.git\n"
     counted = Counted(checkouts)
-    assert verifier(registered, counted, slot_files).verify(KEY) == Unsettled("redirected") and counted.opens == 0
+    assert factory_commit(registered, counted, slot_files).commit(KEY) == Unsettled("redirected") and counted.opens == 0
 
 
 def test_a_rewritten_pointer_refuses_dispatch(
@@ -419,12 +419,12 @@ def test_the_staged_read_is_pinned_and_unknown_when_the_pointer_names_another_re
     views = PinnedViews(repo, other)
     slot.write_file(P, PLAN_TEXT)
     slot.stage([P], literal=True)
-    assert verifier(registered, views, slot_files).staged(KEY) == (P,)
+    assert factory_commit(registered, views, slot_files).staged(KEY) == (P,)
     assert views.slot_opens(slot.path) == [slot_files.common / "worktrees/s1"] * 2  # the status read and the staged read
     views.opened.clear()
     linked_into(slot_files, slot.path, other)
     assert pointer(slot_files, slot.path) is not None  # the layout check alone passes
-    assert verifier(registered, views, slot_files).staged(KEY) is None and views.slot_opens(slot.path) == []
+    assert factory_commit(registered, views, slot_files).staged(KEY) is None and views.slot_opens(slot.path) == []
 
 
 def rules(cap: int = 1 << 20) -> StepRules:
@@ -493,7 +493,7 @@ def test_an_empty_read_of_a_parent_or_a_listed_blob_is_unknown_never_a_verdict(
         return None if found is None else Tree(found.sha, lambda: found.files, lambda _path: None)
 
     monkeypatch.setattr(repo, "tree", failing)
-    assert verifier(registered, checkouts, slot_files).verify(KEY) == VerifyUnavailable("git:Unreadable")
+    assert factory_commit(registered, checkouts, slot_files).commit(KEY) == VerifyUnavailable("git:Unreadable")
     assert stored(registered) == []
 
 
@@ -501,11 +501,11 @@ def test_a_stored_verdict_is_returned_again_without_any_git_read(
     registered: sqlite3.Connection, slot: FakeWorktree, tmp_path: Path, checkouts: Checkouts, slot_files: FakeSlotFiles
 ) -> None:
     captured(registered, tmp_path, slot, checkouts, slot_files, PLANNED)
-    first = verifier(registered, checkouts, slot_files).verify(KEY)
+    first = factory_commit(registered, checkouts, slot_files).commit(KEY)
     assert isinstance(first, Verified) and not first.reused
     slot.repo.drop_checkout(slot.path)
     counted = Counted(checkouts)
-    assert verifier(registered, counted, slot_files).verify(KEY) == first and counted.opens == 0
+    assert factory_commit(registered, counted, slot_files).commit(KEY) == first and counted.opens == 0
     assert stored(registered) == [("verified", None, 0, 20.0)]
 
 
@@ -534,21 +534,21 @@ def test_no_valid_staged_answer_of_a_clean_run_is_not_applicable_with_no_git_rea
     run = agent(slot, PLANNED, PLAN | answer | quiet, rc)
     assert attempts(registered, tmp_path, checkouts, slot_files, run).execute(KEY, ENTRY).status == "collected"
     counted = Counted(checkouts)
-    assert verifier(registered, counted, slot_files).verify(KEY) == expected and counted.opens == 0 and stored(registered) == []
+    assert factory_commit(registered, counted, slot_files).commit(KEY) == expected and counted.opens == 0 and stored(registered) == []
 
 
 def test_refusals_and_unknowns_before_any_git_read(
     registered: sqlite3.Connection, slot: FakeWorktree, tmp_path: Path, checkouts: Checkouts, slot_files: FakeSlotFiles
 ) -> None:
     counted = Counted(checkouts)
-    assert verifier(registered, counted, slot_files).verify(KEY) == VerifyRefused("not_captured")
+    assert factory_commit(registered, counted, slot_files).commit(KEY) == VerifyRefused("not_captured")
     captured(registered, tmp_path, slot, checkouts, slot_files, PLANNED)
     registered.execute(
         "UPDATE execution SET answer_kind='validation_pending',disposition=NULL,effect=NULL,commit_paths=NULL,commit_message=NULL"
     )
-    assert verifier(registered, counted, slot_files).verify(KEY) == VerifyUnavailable("validation_pending")
-    assert Verifier(AttemptStore(lambda: None), counted, slot_files, gone, lambda: 20, hold,
-        ids=NativeIds()).verify(KEY) == VerifyUnavailable("store")
+    assert factory_commit(registered, counted, slot_files).commit(KEY) == VerifyUnavailable("validation_pending")
+    assert FactoryCommit(AttemptStore(lambda: None), counted, slot_files, gone, lambda: 20, hold,
+        ids=NativeIds()).commit(KEY) == VerifyUnavailable("store")
     assert counted.opens == 0 and stored(registered) == []
 
 
@@ -566,7 +566,7 @@ def test_an_unfinished_session_state_is_never_verified(
 ) -> None:
     captured(registered, tmp_path, slot, checkouts, slot_files, PLANNED)
     registered.execute("UPDATE execution SET session_state=?", (session_state,))
-    assert verifier(registered, checkouts, slot_files).verify(KEY) == expected and stored(registered) == []
+    assert factory_commit(registered, checkouts, slot_files).commit(KEY) == expected and stored(registered) == []
 
 
 def test_a_dispatched_attempt_always_has_a_base(registered: sqlite3.Connection) -> None:
@@ -582,7 +582,7 @@ def test_a_stale_reservation_refuses_and_stores_nothing(
 ) -> None:
     captured(registered, tmp_path, slot, checkouts, slot_files, PLANNED)
     registered.execute("UPDATE reservation SET generation=2")
-    assert verifier(registered, checkouts, slot_files).verify(KEY) == VerifyRefused("stale_reservation")
+    assert factory_commit(registered, checkouts, slot_files).commit(KEY) == VerifyRefused("stale_reservation")
     assert stored(registered) == [] and made(slot, head(slot)) == []
 
 
@@ -593,27 +593,27 @@ def test_another_verifier_storing_first_is_inconsistent(
     store = AttemptStore(lambda: registered)
     record = store.load(KEY)
     assert record is not None and record.base_commit is not None
-    found = verifier(registered, checkouts, slot_files).verify(KEY)
+    found = factory_commit(registered, checkouts, slot_files).commit(KEY)
     tree = slot.repo.tree(head(slot))
     assert tree is not None and found == Verified(tree.files[P][1])
     registered.execute("DELETE FROM verification")
     assert store.verdict(record.admission, record.base_commit, head(slot), Rejected("paths"), 1) == Rejected("paths")
 
     class Racing(AttemptStore):
-        """Another verifier stored its row between this one's collect and insert."""
+        """Another factory commit stored its row between this one's collect and insert."""
 
         def collect(self, key: AttemptKey) -> StoredExecution | None:
             found = super().collect(key)
             return None if found is None else dataclasses.replace(found, verification=None)
 
-    racing = Verifier(Racing(lambda: registered), checkouts, slot_files, gone, lambda: 3, hold, ids=NativeIds())
-    assert racing.verify(KEY) == VerifyUnavailable("inconsistent")
+    racing = FactoryCommit(Racing(lambda: registered), checkouts, slot_files, gone, lambda: 3, hold, ids=NativeIds())
+    assert racing.commit(KEY) == VerifyUnavailable("inconsistent")
 
 
 def test_the_real_composition_opens_the_factory_database(tmp_path: Path) -> None:
     store = Store(SCHEMA)
-    verifier = open_verifier(tmp_path / "factory.db", store, GitViews(DEFAULT_GIT_READ_SECONDS), tmp_path)
-    assert verifier.verify(KEY) == VerifyRefused("not_captured")
+    factory_commit = open_factory_commit(tmp_path / "factory.db", store, GitViews(DEFAULT_GIT_READ_SECONDS), tmp_path)
+    assert factory_commit.commit(KEY) == VerifyRefused("not_captured")
     store.close_shared()
 
 
@@ -706,7 +706,7 @@ def test_a_pointer_rewritten_after_the_slot_read_stops_before_stage(
         return read(self, base, ignored_under=ignored_under)
 
     monkeypatch.setattr(FakeWorktree, "dirty", dirty)
-    assert verifier(registered, checkouts, slot_files).verify(KEY) == Unsettled("redirected")
+    assert factory_commit(registered, checkouts, slot_files).commit(KEY) == Unsettled("redirected")
     assert slot.state().index == index and made(slot, base) == [] and end_commit(registered) is None
 
 
@@ -723,7 +723,7 @@ def test_a_pointer_rewritten_during_stage_stops_before_record(
         flip(slot, slot_files)
 
     monkeypatch.setattr(FakeWorktree, "stage", stage)
-    assert verifier(registered, checkouts, slot_files).verify(KEY) == Unsettled("redirected")
+    assert factory_commit(registered, checkouts, slot_files).commit(KEY) == Unsettled("redirected")
     assert made(slot, base) == [] and end_commit(registered) is None and stored(registered) == []
 
 
@@ -731,9 +731,9 @@ def test_a_verifier_racing_another_adopts_its_commit_never_nothing_written(
     registered: sqlite3.Connection, slot: FakeWorktree, tmp_path: Path, checkouts: Checkouts, slot_files: FakeSlotFiles,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """The other verifier commits, records X and stores its verdict between this one's `stage` and `record`, so this
+    """The other factory commit commits, records X and stores its verdict between this one's `stage` and `record`, so this
     `record` finds nothing to commit: HEAD is no longer B, and the trailer commit is adopted, not `nothing_written`.
-    The slot lock refuses that second verifier (`slot_busy`); this keeps the adopt rule for a race the lock does not see
+    The slot lock refuses that second factory_commit (`slot_busy`); this keeps the adopt rule for a race the lock does not see
     (a deleted lock file), so both verifiers here hold nothing."""
     base = head(slot)
     captured(registered, tmp_path, slot, checkouts, slot_files, PLANNED)
@@ -742,11 +742,11 @@ def test_a_verifier_racing_another_adopts_its_commit_never_nothing_written(
     def record(self: FakeWorktree, message: str, **options: Literal["staged"] | bool) -> RecordResult:
         if not raced:
             raced.append(Unsettled("racing"))
-            raced[0] = verifier(registered, checkouts, slot_files, unheld).verify(KEY)
+            raced[0] = factory_commit(registered, checkouts, slot_files, unheld).commit(KEY)
         return recorded(self, message, paths="staged", hooks=False)
 
     monkeypatch.setattr(FakeWorktree, "record", record)
-    found = verifier(registered, checkouts, slot_files, unheld).verify(KEY)
+    found = factory_commit(registered, checkouts, slot_files, unheld).commit(KEY)
     assert isinstance(found, Verified) and raced == [found]
     assert made(slot, base) == [("Plan tl-1", TRAILER)] and end_commit(registered) == head(slot)
     assert stored(registered) == [("verified", None, 0, 20.0)]
@@ -770,7 +770,7 @@ def test_the_listing_is_safe_to_print(
     registered: sqlite3.Connection, slot: FakeWorktree, tmp_path: Path, checkouts: Checkouts, slot_files: FakeSlotFiles
 ) -> None:
     captured(registered, tmp_path, slot, checkouts, slot_files, PLANNED | {"evil\x1b[31m\nname\x9b": "x", "x" * 400: "y"})
-    result = verifier(registered, checkouts, slot_files).verify(KEY)
+    result = factory_commit(registered, checkouts, slot_files).commit(KEY)
     assert isinstance(result, Unsettled) and result.listing[0] == "?? evil?[31m?name?"
     assert len(result.listing[1]) == 300 and result.listing[1].endswith("...")
 
@@ -786,10 +786,10 @@ def test_no_git_write_while_the_worker_may_still_run(
         seen.append(worker)
         return False
 
-    found = Verifier(AttemptStore(lambda: registered), checkouts, slot_files, alive, lambda: 20, hold, ids=NativeIds()).verify(KEY)
+    found = FactoryCommit(AttemptStore(lambda: registered), checkouts, slot_files, alive, lambda: 20, hold, ids=NativeIds()).commit(KEY)
     assert found == Unsettled("worker_alive") and seen == [WORKER]
     assert slot.state().index == index and made(slot, base) == [] and end_commit(registered) is None
-    assert isinstance(verifier(registered, checkouts, slot_files).verify(KEY), Verified)  # once it is gone
+    assert isinstance(factory_commit(registered, checkouts, slot_files).commit(KEY), Verified)  # once it is gone
 
 
 def test_a_moved_head_lists_the_tags_the_agent_made_and_the_guide_names_the_working_recovery(
@@ -798,9 +798,9 @@ def test_a_moved_head_lists_the_tags_the_agent_made_and_the_guide_names_the_work
     captured(registered, tmp_path, slot, checkouts, slot_files, PLANNED)
     commit(slot, {}, "agent commit")
     slot.repo.tag("task/evil", head(slot))
-    result = verifier(registered, checkouts, slot_files).verify(KEY)
+    result = factory_commit(registered, checkouts, slot_files).commit(KEY)
     assert result == Unsettled("head_moved", ("refs/tags/task/evil",))
-    assert verifier(registered, checkouts, slot_files).leftovers(KEY) == result  # what `tl step show` reads, with no write
+    assert factory_commit(registered, checkouts, slot_files).leftovers(KEY) == result  # what `tl step show` reads, with no write
     guide = GUIDE["unsettled"]
     assert "abandon before admitting a fresh attempt" in guide and "`head_moved`" in guide
     assert "unexpected branch" in guide and "restoration to the attempt's expected branch" in guide

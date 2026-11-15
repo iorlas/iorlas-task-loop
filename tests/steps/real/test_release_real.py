@@ -26,6 +26,7 @@ from taskloop.agents.settings import AgentSetting, CodexPolicy, StepSettings
 from taskloop.attempt import Attempts
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import DEFAULT_GIT_READ_SECONDS, AttemptKey, Verified
+from taskloop.commit import FactoryCommit
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.git_views import GitViews
 from taskloop.ids import NativeIds
@@ -37,7 +38,6 @@ from taskloop.slots import Adopted, NotAdopted, SlotGit, adopt, folder_name, obs
 from taskloop.slots_store import SlotsStore
 from taskloop.task import TaskBinding, TaskInspection, TaskScope
 from taskloop.tracker import inspect_task
-from taskloop.verifier import Verifier
 
 VIEWS = GitViews(DEFAULT_GIT_READ_SECONDS)
 
@@ -134,7 +134,8 @@ class Repository:
             (self.slot / P).write_text(PLAN_TEXT)
 
         key = self.run(answered(PLAN, write))
-        assert isinstance(Verifier(self.store, VIEWS.checkouts, self.files, gone, lambda: 20, hold, ids=NativeIds()).verify(key), Verified)
+        assert isinstance(FactoryCommit(self.store, VIEWS.checkouts, self.files, gone, lambda: 20, hold,
+                                        ids=NativeIds()).commit(key), Verified)
         return key, self.rev("HEAD")
 
 

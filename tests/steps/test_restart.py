@@ -127,7 +127,7 @@ def complete_round(
 ) -> None:
     attempts = surroundings.attempts(AttemptStore(lambda: reopened), execution)
     bench = Bench(reopened, free=False)
-    verify = bench.recorded.verify
+    commit = bench.recorded.commit
     events: list[str] = []
 
     def checked(key: AttemptKey) -> VerifyResult:
@@ -136,7 +136,7 @@ def complete_round(
         if index == 1:
             assert events == ["complete"]
         events.append("verify")
-        return verify(key)
+        return commit(key)
 
     completion = CapturedCompletion(attempts, HoldStore(lambda: reopened), hold, lambda _entry: "gone")
 
@@ -144,7 +144,7 @@ def complete_round(
         events.append("complete")
         return completion(backlog, task_id, attempt_id)
 
-    monkeypatch.setattr(bench.recorded, "verify", checked)
+    monkeypatch.setattr(bench.recorded, "commit", checked)
     ports = replace(bench.ports(), completion=completed)
     with monkeypatch.context() as patch:
         if index == 0:

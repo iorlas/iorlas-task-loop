@@ -42,6 +42,7 @@ from taskloop.attempt_types import (
     VerifyRefused,
     VerifyResult,
 )
+from taskloop.commit import FactoryCommit
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.ids import NativeIds
 from taskloop.operations import (
@@ -52,7 +53,6 @@ from taskloop.repeat import StepRepeat
 from taskloop.slot_lock import hold, repeating
 from taskloop.steps import kind
 from taskloop.verdict import judge
-from taskloop.verifier import Verifier
 
 KEY = AttemptKey("attempt", "dispatch", 1)
 REPEAT = RepeatRequest(KEY, "feedback", 1000, "uncommitted", content_digest=CONTENT_DIGEST)
@@ -106,7 +106,7 @@ class Step:
         self.con, self.tmp, self.slot, self.checkouts, self.files = con, tmp, slot, checkouts, files
         self.store = AttemptStore(lambda: con)
         self.launcher = RegisteringLauncher(self.store)
-        self.verifier = Verifier(self.store, checkouts, files, lambda _worker: True, lambda: 20, hold, ids=NativeIds())
+        self.factory_commit = FactoryCommit(self.store, checkouts, files, lambda _worker: True, lambda: 20, hold, ids=NativeIds())
 
     def run(self, key: AttemptKey, entry: EntryIdentity, agent: Agent) -> str:
         attempts = Attempts(
@@ -128,7 +128,7 @@ class Step:
     def repeat(self, current: AttemptKey) -> Started | Failed:
         found = self.store.attempt_of("tasks", "tl-1")
         assert found is not None and found[0] == current
-        repeat = StepRepeat(self.store, self.verifier, EvidenceFiles(self.tmp), self.admission(), self.launcher, lambda _worker: True,
+        repeat = StepRepeat(self.store, self.factory_commit, EvidenceFiles(self.tmp), self.admission(), self.launcher, lambda _worker: True,
                             lambda _entry: "gone", lambda: 10, repeating, ids=NativeIds(), discussion=refresh_discussion)
         return repeat.repeat("tasks", "tl-1", current, found[2], 30)
 
@@ -157,7 +157,7 @@ def test_the_next_attempt_dispatches_at_e_with_the_leftovers_as_a_fresh_session_
 ) -> None:
     base = head(slot)
     assert step.run(KEY, ENTRY, Agent(slot, {P: PLAN_TEXT, STRAY: "s"}, PLAN)) == "pending verification"
-    assert shown(step.verifier.verify(KEY)) == "unsettled:uncommitted"
+    assert shown(step.factory_commit.commit(KEY)) == "unsettled:uncommitted"
     x1 = head(slot)
     key, entry = step.next_attempt(KEY)
     second = Agent(slot, {}, UNCHANGED, removed=[STRAY])
@@ -167,7 +167,7 @@ def test_the_next_attempt_dispatches_at_e_with_the_leftovers_as_a_fresh_session_
     (spec,) = second.specs
     assert "resume" not in spec.argv and spec.argv[1] == "exec"  # a fresh session, never a resumed one
     assert f"?? {STRAY}" in spec.stdin + " ".join(spec.argv) and TASK in spec.stdin + " ".join(spec.argv)
-    found = step.verifier.verify(key)
+    found = step.factory_commit.commit(key)
     assert isinstance(found, Verified) and not found.reused  # X1, then `unchanged`: verified, not reused
     assert made(slot, base) == ["Plan tl-1"] and slot.dirty().raw is False
 
@@ -175,10 +175,10 @@ def test_the_next_attempt_dispatches_at_e_with_the_leftovers_as_a_fresh_session_
 def test_a_second_commit_on_the_first_is_verified_with_each_held_to_its_own_paths(step: Step, slot: FakeWorktree) -> None:
     base = head(slot)
     step.run(KEY, ENTRY, Agent(slot, {P: PLAN_TEXT, NOTE: "n"}, PLAN))
-    assert shown(step.verifier.verify(KEY)) == "unsettled:uncommitted"
+    assert shown(step.factory_commit.commit(KEY)) == "unsettled:uncommitted"
     key, entry = step.next_attempt(KEY)
     step.run(key, entry, Agent(slot, {P: PLAN_V2}, PLAN | {"paths": [P, NOTE]}))
-    found = step.verifier.verify(key)
+    found = step.factory_commit.commit(key)
     assert isinstance(found, Verified) and not found.reused
     assert made(slot, base) == ["Plan tl-1", "Plan tl-1"]
     rows = step.con.execute("SELECT number,base_commit,end_commit FROM attempt ORDER BY number").fetchall()
@@ -188,17 +188,17 @@ def test_a_second_commit_on_the_first_is_verified_with_each_held_to_its_own_path
 
 def test_planned_with_nothing_new_in_a_later_attempt_is_rejected_for_good(step: Step, slot: FakeWorktree) -> None:
     step.run(KEY, ENTRY, Agent(slot, {P: PLAN_TEXT, STRAY: "s"}, PLAN))
-    step.verifier.verify(KEY)
+    step.factory_commit.commit(KEY)
     key, entry = step.next_attempt(KEY)
     step.run(key, entry, Agent(slot, {}, PLAN, removed=[STRAY]))
-    assert step.verifier.verify(key) == Rejected("nothing_written")
+    assert step.factory_commit.commit(key) == Rejected("nothing_written")
 
 
 @pytest.mark.parametrize(("move", "word"), [("commit", "head_moved"), ("branch", "branch"), ("detached", "detached")])
 def test_a_slot_not_at_e_refuses_dispatch_and_the_attempt_stays_admitted(step: Step, slot: FakeWorktree, move: str, word: str) -> None:
     """A repeat dispatches only on its task branch at E: never a commit elsewhere, another branch or a detached HEAD."""
     step.run(KEY, ENTRY, Agent(slot, {P: PLAN_TEXT, STRAY: "s"}, PLAN))
-    step.verifier.verify(KEY)
+    step.factory_commit.commit(KEY)
     key, entry = step.next_attempt(KEY)
     if move == "commit":
         commit(slot, {"README": "two"}, "someone else")
@@ -215,10 +215,10 @@ def test_three_attempts_then_the_owner(step: Step, slot: FakeWorktree, tmp_path:
     """Each repeat's input is its own feedback over attempt 1's task, never an earlier feedback nested; the third
     unsettled attempt is `repeats_exhausted`, shown and refused, nothing admitted."""
     step.run(KEY, ENTRY, Agent(slot, {P: PLAN_TEXT, STRAY: "s"}, PLAN))
-    step.verifier.verify(KEY)
+    step.factory_commit.commit(KEY)
     second, entry = step.next_attempt(KEY)
     step.run(second, entry, Agent(slot, {}, UNCHANGED))
-    reads = StatusPorts(step.store, lambda _entry: "gone", lambda: 10, step.verifier.leftovers, lambda: "boot")
+    reads = StatusPorts(step.store, lambda _entry: "gone", lambda: 10, step.factory_commit.leftovers, lambda: "boot")
     shown_two = show_attempt(reads, tmp_path / "art", "tasks", "tl-1")
     assert not isinstance(shown_two, Failed) and (shown_two.view.number, shown_two.view.next) == (2, "repeat")
     third, entry = step.next_attempt(second)
@@ -239,7 +239,7 @@ def test_three_attempts_then_the_owner(step: Step, slot: FakeWorktree, tmp_path:
     assert step.repeat(third) == Failed("refused", "repeats_exhausted")
     assert step.con.execute("SELECT count(*) FROM attempt").fetchone() == (3,)
     slot.remove_file(STRAY)
-    assert isinstance(step.verifier.verify(third), Verified)  # the owner tidies the slot; attempt 3 can still verify
+    assert isinstance(step.factory_commit.commit(third), Verified)  # the owner tidies the slot; attempt 3 can still verify
 
 
 def test_a_late_verify_of_a_superseded_attempt_writes_no_git(step: Step, slot: FakeWorktree) -> None:
@@ -247,7 +247,7 @@ def test_a_late_verify_of_a_superseded_attempt_writes_no_git(step: Step, slot: F
     step.run(KEY, ENTRY, Agent(slot, {P: PLAN_TEXT}, PLAN))
     taken = step.admission().admit_repeat(REPEAT)
     assert isinstance(taken, Admitted)
-    assert step.verifier.verify(KEY) == VerifyRefused("stale_reservation") and made(slot, base) == []
+    assert step.factory_commit.commit(KEY) == VerifyRefused("stale_reservation") and made(slot, base) == []
 
 
 def test_a_takeover_during_the_verify_is_superseded_before_any_git_write(
@@ -264,7 +264,7 @@ def test_a_takeover_during_the_verify_is_superseded_before_any_git_write(
         return read(self, base, ignored_under=ignored_under)
 
     monkeypatch.setattr(FakeWorktree, "dirty", dirty)
-    assert step.verifier.verify(KEY) == Unsettled("superseded")
+    assert step.factory_commit.commit(KEY) == Unsettled("superseded")
     assert slot.state().index == index and made(slot, base) == []
     assert step.con.execute("SELECT end_commit FROM attempt WHERE attempt_id='attempt'").fetchone() == (None,)
     assert step.con.execute("SELECT count(*) FROM verification").fetchone() == (0,)
@@ -281,7 +281,7 @@ def test_show_judges_leftovers_before_the_commit_as_the_verify_does(
         commit(slot, before)
         origin_main_at(slot)
     step.run(KEY, ENTRY, Agent(slot, written, PLAN))
-    assert step.verifier.leftovers(KEY) == expected == step.verifier.verify(KEY)
+    assert step.factory_commit.leftovers(KEY) == expected == step.factory_commit.commit(KEY)
 
 
 def rules() -> StepRules:
@@ -334,19 +334,19 @@ def test_after_an_attempt_that_committed_nothing_the_repeat_lists_every_file_aga
     step.run(KEY, ENTRY, Agent(slot, {P: PLAN_TEXT, **({stray: "x"} if reason == "ignored" else {})}, PLAN))
     if reason == "unsafe":
         slot_files.entries[slot.path / P] = FileStat("file", 7, True)
-    assert shown(step.verifier.verify(KEY)) == f"unsettled:{reason}"
+    assert shown(step.factory_commit.commit(KEY)) == f"unsettled:{reason}"
     key, entry = step.next_attempt(KEY)
     assert "Nothing of attempt 1 was committed" in step.input(key) and "answer `unchanged`" not in step.input(key)
     slot_files.entries.clear()  # the agent made the plan a plain file again
     step.run(key, entry, Agent(slot, {}, PLAN, removed=[stray] if reason == "ignored" else []))
     record = step.store.load(key)
     assert record is not None and record.base_commit == base == record.start
-    assert isinstance(step.verifier.verify(key), Verified) and made(slot, base) == ["Plan tl-1"]
+    assert isinstance(step.factory_commit.commit(key), Verified) and made(slot, base) == ["Plan tl-1"]
 
 
 def test_the_true_count_of_leftovers_reaches_the_next_attempt(step: Step, slot: FakeWorktree) -> None:
     step.run(KEY, ENTRY, Agent(slot, {P: PLAN_TEXT} | {f"stray-{n:02}": "s" for n in range(53)}, PLAN))
-    found = step.verifier.verify(KEY)
+    found = step.factory_commit.commit(KEY)
     assert isinstance(found, Unsettled) and len(found.listing) == 51 and found.listing[-1] == "+3 more"
     key, _entry = step.next_attempt(KEY)
     text = step.input(key)
@@ -368,7 +368,7 @@ def test_show_prints_no_control_character_and_a_bounded_listing(
     else:
         step.run(KEY, ENTRY, Agent(slot, {P: PLAN_TEXT, EVIL: "x"}, PLAN | {"paths": [P, EVIL]}))
         slot_files.entries[slot.path / EVIL] = FileStat("file", 1, True)
-    reads = StatusPorts(step.store, lambda _entry: "gone", lambda: 10, step.verifier.leftovers, lambda: "boot")
+    reads = StatusPorts(step.store, lambda _entry: "gone", lambda: 10, step.factory_commit.leftovers, lambda: "boot")
     shown_now = show_attempt(reads, tmp_path / "art", "tasks", "tl-1")
     assert not isinstance(shown_now, Failed)
     left = shown_now.view.leftovers
@@ -382,7 +382,7 @@ def test_show_prints_no_control_character_and_a_bounded_listing(
 
 def test_a_staged_index_at_e_never_dispatches(step: Step, slot: FakeWorktree) -> None:
     step.run(KEY, ENTRY, Agent(slot, {P: PLAN_TEXT, STRAY: "s"}, PLAN))
-    step.verifier.verify(KEY)
+    step.factory_commit.commit(KEY)
     key, entry = step.next_attempt(KEY)
     slot.stage([STRAY], literal=True)  # a person staged the scratch file: the factory's record would sweep it in
     agent = Agent(slot, {}, UNCHANGED, removed=[STRAY])
@@ -403,7 +403,7 @@ def test_a_superseded_verify_that_staged_leaves_the_next_attempt_undispatched(
         assert isinstance(step.admission().admit_repeat(REPEAT), Admitted)
 
     monkeypatch.setattr(FakeWorktree, "stage", staging)
-    assert step.verifier.verify(KEY) == Unsettled("superseded") and made(slot, base) == []
+    assert step.factory_commit.commit(KEY) == Unsettled("superseded") and made(slot, base) == []
     monkeypatch.setattr(FakeWorktree, "stage", stage)
     found = step.store.attempt_of("tasks", "tl-1")
     assert found is not None and step.store.register_entry(found[0], (9, "s", "boot"), 10) == "accepted"
@@ -421,7 +421,7 @@ def test_a_path_staged_beside_the_listed_ones_is_never_committed(
         stage(self, [*paths, STRAY], literal=literal)  # someone stages the scratch file in between
 
     monkeypatch.setattr(FakeWorktree, "stage", staging)
-    assert step.verifier.verify(KEY) == Unsettled("staged", (STRAY,)) and made(slot, base) == []
+    assert step.factory_commit.commit(KEY) == Unsettled("staged", (STRAY,)) and made(slot, base) == []
     assert step.con.execute("SELECT count(*) FROM verification").fetchone() == (0,)
 
 
@@ -429,7 +429,7 @@ def test_a_start_that_lost_the_takeover_launches_the_winner(step: Step, slot: Fa
     step.run(KEY, ENTRY, Agent(slot, {P: PLAN_TEXT, STRAY: "s"}, PLAN))
     taken = step.admission().admit_repeat(REPEAT)
     assert isinstance(taken, Admitted)
-    repeat = StepRepeat(step.store, step.verifier, EvidenceFiles(step.tmp), step.admission(), step.launcher, lambda _worker: True,
+    repeat = StepRepeat(step.store, step.factory_commit, EvidenceFiles(step.tmp), step.admission(), step.launcher, lambda _worker: True,
                         lambda _entry: "gone", lambda: 10, repeating, ids=NativeIds(), discussion=refresh_discussion)
     found = repeat.repeat("tasks", "tl-1", KEY, ENTRY, 30)  # its read of the current attempt predates the takeover
     assert found == Started("relaunched", "tasks", "tl-1", taken.key.attempt_id, True, (8, "start", "boot"))
@@ -441,14 +441,14 @@ def test_a_takeover_during_the_repeats_verify_launches_the_winner(step: Step, sl
     taken: list[AttemptKey] = []
 
     class Racing:
-        def verify(self, key: AttemptKey) -> VerifyResult:
+        def commit(self, key: AttemptKey) -> VerifyResult:
             won = step.admission().admit_repeat(REPEAT)
             assert isinstance(won, Admitted)
             taken.append(won.key)
-            return step.verifier.verify(key)
+            return step.factory_commit.commit(key)
 
         def staged(self, key: AttemptKey) -> tuple[str, ...] | None:
-            return step.verifier.staged(key)
+            return step.factory_commit.staged(key)
 
     repeat = StepRepeat(step.store, Racing(), EvidenceFiles(step.tmp), step.admission(), step.launcher, lambda _worker: True,
                         lambda _entry: "gone", lambda: 10, repeating, ids=NativeIds(), discussion=refresh_discussion)
@@ -469,7 +469,7 @@ def test_judge_refuses_a_chain_whose_commit_does_not_sit_on_the_stored_one(repo:
 
 def test_a_staged_slot_is_refused_before_the_takeover_and_nothing_is_spent(step: Step, slot: FakeWorktree) -> None:
     step.run(KEY, ENTRY, Agent(slot, {P: PLAN_TEXT, STRAY: "s"}, PLAN))
-    step.verifier.verify(KEY)
+    step.factory_commit.commit(KEY)
     slot.stage([STRAY], literal=True)  # the owner's staged file must never become the agent's leftover
     dirs = sorted(path.name for path in (step.tmp / "attempts").iterdir())
     assert step.repeat(KEY) == Failed("unsettled", "staged", STRAY) and step.launcher.calls == []
@@ -483,16 +483,16 @@ def test_a_file_staged_by_a_person_alone_is_staged_never_committed(step: Step, s
     step.run(KEY, ENTRY, Agent(slot, {P: PLAN_TEXT}, PLAN))
     slot.write_file(STRAY, "s")
     slot.stage([STRAY], literal=True)
-    assert step.verifier.verify(KEY) == Unsettled("staged", (STRAY,)) and made(slot, base) == []
+    assert step.factory_commit.commit(KEY) == Unsettled("staged", (STRAY,)) and made(slot, base) == []
 
 
 def test_show_says_why_an_admitted_attempts_entry_gave_up(step: Step, slot: FakeWorktree, tmp_path: Path) -> None:
     step.run(KEY, ENTRY, Agent(slot, {P: PLAN_TEXT, STRAY: "s"}, PLAN))
-    step.verifier.verify(KEY)
+    step.factory_commit.commit(KEY)
     key, _entry = step.next_attempt(KEY)
     log = EvidenceFiles(tmp_path).entry_log(key)
     log.write_text("refused slot_staged verify=refused:not_captured\nTraceback \x1b]0;owned\x07 (most recent call last)\n")
-    reads = StatusPorts(step.store, lambda _entry: "gone", lambda: 10, step.verifier.leftovers, lambda: "boot")
+    reads = StatusPorts(step.store, lambda _entry: "gone", lambda: 10, step.factory_commit.leftovers, lambda: "boot")
     found = show_attempt(reads, tmp_path, "tasks", "tl-1")
     assert not isinstance(found, Failed)
     assert (found.view.phase, found.view.next, found.view.last_entry) == (

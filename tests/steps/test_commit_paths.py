@@ -19,7 +19,7 @@ from taskloop.evidence_files import EvidenceFiles
 from taskloop.factory_commit import Committed, leftovers, settle
 from taskloop.ids import NativeIds
 from taskloop.operation_evidence import OperationKind, OperationState
-from taskloop.operations import verify_failure
+from taskloop.operations import commit_failure
 from taskloop.prepare import task_branch
 from taskloop.repo import RepoId
 from taskloop.step import Step
@@ -192,7 +192,7 @@ def test_multiple_refusals_keep_each_predicate_and_leftovers_in_both_step_prompt
                 assert "`paths`" not in text
                 assert "Remove unwanted untracked files and restore unwanted tracked edits before answering" in text
             assert "symlink or under one, not a plain file" not in text
-    assert words in verify_failure(found).detail
+    assert words in commit_failure(found).detail
 
 
 def test_unchanged_credential_ordinary_and_over_cap_files_are_omitted_from_the_commit(

@@ -8,7 +8,7 @@ from doubles import FakeSlotFiles, origin_main_at
 from git_porcelain import Sha, Tree
 from git_porcelain.testing import FakeWorktree
 from plan_fixtures import CHANGE_MAP, HEADER, PLAN_TEXT
-from test_verifier import KEY, PLAN, UNCHANGED, P, captured, commit, stored, verifier
+from test_verifier import KEY, PLAN, UNCHANGED, P, captured, commit, factory_commit, stored
 
 from taskloop.attempt_loads import verdict_of
 from taskloop.attempt_types import Checkouts, PlanContentRule, Rejected, Rule, StepRules, Verified
@@ -88,14 +88,14 @@ def test_exact_depth_byte_caps_apply_to_new_and_reused_plans(
         commit(slot, {P: data})
         origin_main_at(slot)
     captured(registered, tmp_path, slot, checkouts, slot_files, {} if reuse else {P: data}, UNCHANGED if reuse else PLAN)
-    check = verifier(registered, checkouts, slot_files)
-    result = check.verify(KEY)
+    check = factory_commit(registered, checkouts, slot_files)
+    result = check.commit(KEY)
     if excess:
         assert result == Rejected("plan_size")
         assert stored(registered)[0][1] == "plan_size"
     else:
         assert isinstance(result, Verified) and result.reused is reuse
-    assert check.verify(KEY) == result
+    assert check.commit(KEY) == result
 
 
 @pytest.mark.parametrize(("text", "rule"), [
@@ -112,10 +112,10 @@ def test_format_refusals_survive_storage_for_both_commit_and_reuse(
         commit(slot, {P: text})
         origin_main_at(slot)
     captured(registered, tmp_path, slot, checkouts, slot_files, {} if reuse else {P: text}, UNCHANGED if reuse else PLAN)
-    check = verifier(registered, checkouts, slot_files)
-    assert check.verify(KEY) == Rejected(rule)
+    check = factory_commit(registered, checkouts, slot_files)
+    assert check.commit(KEY) == Rejected(rule)
     assert stored(registered)[0][1] == rule.value
-    again = check.verify(KEY)
+    again = check.commit(KEY)
     assert isinstance(again, Rejected) and again.reason is rule
 
 
@@ -133,7 +133,7 @@ def test_a_revised_old_plan_can_complete_with_the_new_template(
     commit(slot, {P: "# Old plan\n"})
     origin_main_at(slot)
     captured(registered, tmp_path, slot, checkouts, slot_files, {P: PLAN_TEXT}, PLAN)
-    assert isinstance(verifier(registered, checkouts, slot_files).verify(KEY), Verified)
+    assert isinstance(factory_commit(registered, checkouts, slot_files).commit(KEY), Verified)
 
 
 def test_inline_depth_is_refused_with_the_one_line_form_and_own_line_passes() -> None:

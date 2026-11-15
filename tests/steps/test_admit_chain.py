@@ -31,19 +31,19 @@ from taskloop.attempt_status import Shown, StatusPorts, show_attempt
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import AttemptKey, Checkouts, EntryIdentity, FileRef, SlotFiles
 from taskloop.claim import ClaimWord
+from taskloop.commit import FactoryCommit
 from taskloop.discussion import empty
 from taskloop.earlier_input import START
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.ids import NativeIds
 from taskloop.launch import Launched, LaunchResult
-from taskloop.operations import Started, StartPorts, StartRequest, VerifiedTask, start, verify_task
+from taskloop.operations import Started, StartPorts, StartRequest, VerifiedTask, commit_task, start
 from taskloop.publish import BranchPublish, NotPublished, PublishResult
 from taskloop.slot_lock import custody, hold
 from taskloop.slot_release import NotReleased, Released, SlotRelease
 from taskloop.step import Step
 from taskloop.task import TaskBinding, TaskInspection, TaskScope
 from taskloop.tracker import inspect_task
-from taskloop.verifier import Verifier
 
 KEY = AttemptKey("attempt", "dispatch", 1)
 ENTRY = (7, "entry-start", "boot")
@@ -79,12 +79,12 @@ def execute(con: sqlite3.Connection, tmp_path: Path, key: AttemptKey, run: Agent
 
 
 def finish(con: sqlite3.Connection, checkouts: Checkouts, files: SlotFiles, *, publish: bool = True) -> VerifiedTask:
-    """`tl step verify` as built: the verdict, the settled release (the real one) and the publication to origin."""
+    """`tl step commit` as built: the verdict, the settled release (the real one) and the publication to origin."""
     store = AttemptStore(lambda: con)
-    verifier = Verifier(store, checkouts, files, lambda _worker: True, lambda: 20, hold, ids=NativeIds())
+    factory_commit = FactoryCommit(store, checkouts, files, lambda _worker: True, lambda: 20, hold, ids=NativeIds())
     releaser = SlotRelease(store, checkouts, files, lambda _entry: "gone", lambda _worker: True, custody, lambda _r, _t: True, lambda: 30,
                            lambda _setup: "gone", lambda _scratch: True, ids=NativeIds())
-    found = verify_task(store, verifier, releaser, BranchPublish(store, checkouts, files, lambda: 40,
+    found = commit_task(store, factory_commit, releaser, BranchPublish(store, checkouts, files, lambda: 40,
         ids=NativeIds()) if publish else Unpublished(),
                         "tasks", "tl-1")
     assert isinstance(found, VerifiedTask)

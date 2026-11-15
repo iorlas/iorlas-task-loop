@@ -208,12 +208,12 @@ CASES: list[tuple[list[str], Result, int, list[str], set[str]]] = [
      ["task\tbacklog\tstep\tattempt\tslot", "pending verification\tsettling\tverify"], {"attempts"}),
     (["step", "show", "tl-1", "--backlog", "tasks"], Shown(STATUS, Path("/a/d"), Path("/a/d/entry.log"), EVENTS), 0,
      ["Attempt: attempt (1 of at most 3)\nSlot: s1"], STATUS_KEYS | {"directory", "entry_log", "events_path", "setup", "failed_checks"}),
-    (["step", "verify", "tl-1", "--backlog", "tasks"], VerifiedTask("reused", "tasks", "tl-1", "attempt", "released", "published"), 0,
+    (["step", "commit", "tl-1", "--backlog", "tasks"], VerifiedTask("reused", "tasks", "tl-1", "attempt", "released", "published"), 0,
      ["reused: attempt attempt", "Release: released\nPublish: published"], CHECKED),
-    (["step", "verify", "tl-1", "--backlog", "tasks"],
+    (["step", "commit", "tl-1", "--backlog", "tasks"],
      VerifiedTask("verified", "tasks", "tl-1", "attempt", "held:slot_dirty", "unavailable:remote"), 0,
      ["Release: held:slot_dirty", step_guide.GUIDE["slot_dirty"], f"Publish: unavailable:remote\n{step_guide.GUIDE['remote']}"], CHECKED),
-    (["step", "verify", "tl-1", "--backlog", "tasks"],
+    (["step", "commit", "tl-1", "--backlog", "tasks"],
      VerifiedTask("verified", "tasks", "tl-1", "attempt", "already_released", "already_published"), 0,
      ["Release: already_released\nPublish: already_published\n"], CHECKED),
     (PUBLISH, PublishedTask("tasks", "tl-1", "attempt", BranchPublished(X, X)), 0,
@@ -249,11 +249,11 @@ CASES: list[tuple[list[str], Result, int, list[str], set[str]]] = [
     (RELEASE, Failed("unsettled", "worker_unknown"), 3, [step_guide.GUIDE["worker_unknown"]], ERROR),
     (RELEASE, Failed("unavailable", "tracker", "Released; the tracker claim is still to be returned (other): rerun"), 3,
      ["unavailable:tracker\nReleased; the tracker claim is still to be returned"], ERROR),
-    (["step", "verify", "tl-1", "--backlog", "tasks"], Failed("rejected", "paths"), 1, ["tl step verify: rejected:paths"], ERROR),
-    (["step", "verify", "tl-1", "--backlog", "tasks"], Failed("not_applicable", "incomplete"), 1, ["not_applicable:incomplete"], ERROR),
-    (["step", "verify", "tl-1", "--backlog", "tasks"], Failed("unsettled", "dirty"), 3, ["unsettled:dirty", step_guide.GUIDE["unsettled"]],
+    (["step", "commit", "tl-1", "--backlog", "tasks"], Failed("rejected", "paths"), 1, ["tl step commit: rejected:paths"], ERROR),
+    (["step", "commit", "tl-1", "--backlog", "tasks"], Failed("not_applicable", "incomplete"), 1, ["not_applicable:incomplete"], ERROR),
+    (["step", "commit", "tl-1", "--backlog", "tasks"], Failed("unsettled", "dirty"), 3, ["unsettled:dirty", step_guide.GUIDE["unsettled"]],
      ERROR),
-    (["step", "verify", "tl-1", "--backlog", "tasks"], Failed("unavailable", "slot_busy"), 3,
+    (["step", "commit", "tl-1", "--backlog", "tasks"], Failed("unavailable", "slot_busy"), 3,
      ["unavailable:slot_busy", step_guide.GUIDE["slot_busy"]], ERROR),
     (NEXT, Round("tasks", MOVES, "no_free_slot"), 0,
      ["tl-3   start    started a3\ntl-2   report   stuck:hung a2\ntl-10  skip     abandoned\n", "Stopped: no_free_slot",
@@ -300,8 +300,8 @@ def test_verify_prints_the_release_and_publish_guides_only_when_not_done(
     release: str, published: str, guided: bool, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str],
 ) -> None:
     result = VerifiedTask("verified", "tasks", "tl-1", "attempt", release, published)
-    monkeypatch.setitem(cli_step.OPERATIONS, ("step", "verify"), lambda _arguments, _loaded: result)
-    assert main(["step", "verify", "tl-1", "--backlog", "tasks"]) == 0
+    monkeypatch.setitem(cli_step.OPERATIONS, ("step", "commit"), lambda _arguments, _loaded: result)
+    assert main(["step", "commit", "tl-1", "--backlog", "tasks"]) == 0
     out = capsys.readouterr().out
     assert (step_guide.GUIDE["slot_dirty"] in out) is guided and (step_guide.GUIDE["remote"] in out) is guided
 
@@ -342,6 +342,18 @@ def test_every_failure_kind_has_its_exit_code(
     monkeypatch.setitem(cli_step.OPERATIONS, ("step", "list"), lambda _arguments, _loaded: Failed(kind, "choices"))
     assert main(["step", "list"]) == (3 if kind in ("unavailable", "uncertain", "unsettled") else 1)
     assert capsys.readouterr().err.startswith("tl step list: ")
+
+
+def test_removed_commit_spelling_fails_parsing_before_opening(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setattr(cli_composition, "open_commit", lambda *_args: pytest.fail("Opened the factory commit ports"))
+    obsolete = "ver" + "ify"
+    with pytest.raises(SystemExit) as result:
+        main(["step", obsolete, "tl-1", "--backlog", "tasks"])
+    assert result.value.code == 2
+    error = capsys.readouterr().err
+    assert "invalid choice" in error and obsolete in error and "commit" in error
 
 
 def test_release_needs_its_backlog(capsys: pytest.CaptureFixture[str]) -> None:
@@ -480,7 +492,7 @@ def test_the_real_read_paths_write_nothing_and_never_print_the_token(tmp_path: P
     assert "Task: tl-1 (backlog tasks)\nStep: plan\nAttempt: attempt (1 of at most 3)\n" in capsys.readouterr().out
     assert "stuck:expired_admitted: Nothing ran; rounds only report it." in listed
     assert f"discard {db} and its" in listed
-    assert main(["step", "verify", "tl-1", "--backlog", "tasks", "--db", str(db), "--json"]) == 1
+    assert main(["step", "commit", "tl-1", "--backlog", "tasks", "--db", str(db), "--json"]) == 1
     output = capsys.readouterr()
     assert json.loads(output.err)["error"]["reason"] == "not_captured"
     assert KEY.dispatch_token not in output.out + output.err + json.dumps(shown)
@@ -491,7 +503,7 @@ def test_the_real_read_paths_write_nothing_and_never_print_the_token(tmp_path: P
 
 
 @pytest.mark.parametrize(
-    "argv", [["step", "show", "tl-1", "--backlog", "tasks"], ["step", "list"], ["step", "verify", "tl-1", "--backlog", "b"], START, PUBLISH]
+    "argv", [["step", "show", "tl-1", "--backlog", "tasks"], ["step", "list"], ["step", "commit", "tl-1", "--backlog", "b"], START, PUBLISH]
 )
 def test_without_a_factory_database_every_step_command_refuses_and_creates_none(
     argv: list[str], tmp_path: Path, home: Path, capsys: pytest.CaptureFixture[str]
@@ -752,7 +764,7 @@ LANDING = ["step", "land", "tl-1", "--backlog", "tasks", "--checkout", "/checkou
 @pytest.mark.parametrize(
     ("argv", "opener"),
     [(START, "open_start"), (NEXT, "open_next"), (ROUNDS, "open_rounds"), (["step", "list"], "open_reads"),
-     (["step", "verify", "tl-1", "--backlog", "tasks"], "open_verify"), (RELEASE, "open_release"), (PUBLISH, "open_publish"),
+     (["step", "commit", "tl-1", "--backlog", "tasks"], "open_commit"), (RELEASE, "open_release"), (PUBLISH, "open_publish"),
      (LANDING, "open_land"), (["slot", "adopt", "/checkout"], "adopt")],
 )
 def test_every_operation_gets_the_configured_git_read_seconds(

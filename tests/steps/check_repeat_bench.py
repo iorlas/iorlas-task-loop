@@ -12,6 +12,7 @@ from taskloop.check_repeat.repair import CheckRepeat
 from taskloop.check_repeat.store import CheckRepeatStore
 from taskloop.checks import argv_digest
 from taskloop.command_conclusion import CommandConclusion
+from taskloop.commit import FactoryCommit
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.git_views import GitProfileFiles
 from taskloop.ids import NativeIds
@@ -19,7 +20,6 @@ from taskloop.operations import StartPorts, StartRequest
 from taskloop.profile import PROFILE_PATH, Profile, read_profile
 from taskloop.repeat import StepRepeat
 from taskloop.slot_lock import hold, repeating
-from taskloop.verifier import Verifier
 
 ASSERTION = "tests/cli/test_check_cli.py: list columns\nE AssertionError: expected Check, got Step\n"
 
@@ -30,8 +30,9 @@ class Repairing(Checking):
                              self.checkouts, self.files, lambda _path: True,
                              lambda path: GitProfileFiles(path, self.checkouts), self, self.observe,
                                  self.command, lambda: self.now, ids=NativeIds())
-        verifier = Verifier(self.store, self.checkouts, self.files, lambda _worker: True, lambda: self.now, hold, ids=NativeIds())
-        repeat = StepRepeat(self.store, verifier, EvidenceFiles(self.tmp),
+        factory_commit = FactoryCommit(self.store, self.checkouts, self.files, lambda _worker: True, lambda: self.now, hold,
+                                       ids=NativeIds())
+        repeat = StepRepeat(self.store, factory_commit, EvidenceFiles(self.tmp),
                             ChainAdmission(lambda: self.con, self.store.begin, EvidenceFiles(self.tmp),
                                 lambda: self.now, self.checkouts, self.files, ids=NativeIds()), self,
                             lambda _worker: True, self.observe, lambda: self.now, repeating, ids=NativeIds())

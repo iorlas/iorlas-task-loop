@@ -81,11 +81,11 @@ def register(commands: Parsers) -> None:
     timing = _add(step, "setup-times", "Recent persisted implement setup times (read-only; no decision)")
     timing.add_argument("--backlog", metavar="KEY", required=True)
     _common(timing, "--db")
-    verify = _add(step, "verify", "Commit the step's listed files and verify them, then release a clean slot and publish a verified "
+    commit = _add(step, "commit", "Commit the step's listed files and verify them, then release a clean slot and publish a verified "
                   "result; an agent step's only, never the checks")
-    verify.add_argument("task_id", metavar="TASK")
-    verify.add_argument("--backlog", required=True)
-    _common(verify, "--db")
+    commit.add_argument("task_id", metavar="TASK")
+    commit.add_argument("--backlog", required=True)
+    _common(commit, "--db")
     release = _add(step, "release", "Release the slot of a step that ended (parked where it was admitted, the claim kept); with --abandon, "
                    "of any step whose entry and agent or checks are stopped, and return the tracker claim (a land candidate's slot "
                    "first, then the check step's, then its implement step's claim)")
@@ -265,9 +265,9 @@ def _setup_times(arguments: argparse.Namespace, loaded: Loaded) -> Result:
         return setup_timing.report(SetupStore(reads.store.connect, reads.store.begin), arguments.backlog)
 
 
-def _verify(arguments: argparse.Namespace, loaded: Loaded) -> Result:
-    with cli_composition.open_verify(loaded.settings.db.value, views_for(loaded), loaded.settings.artifacts.value) as opened:
-        return opened if isinstance(opened, Failed) else operations.verify_task(*opened, arguments.backlog, arguments.task_id)
+def _commit(arguments: argparse.Namespace, loaded: Loaded) -> Result:
+    with cli_composition.open_commit(loaded.settings.db.value, views_for(loaded), loaded.settings.artifacts.value) as opened:
+        return opened if isinstance(opened, Failed) else operations.commit_task(*opened, arguments.backlog, arguments.task_id)
 
 
 def _release(arguments: argparse.Namespace, loaded: Loaded) -> Result:
@@ -324,7 +324,7 @@ OPERATIONS: dict[tuple[str, str], Callable[[argparse.Namespace, Loaded], Result]
     ("step", "show"): _show,
     ("step", "list"): _list,
     ("step", "setup-times"): _setup_times,
-    ("step", "verify"): _verify,
+    ("step", "commit"): _commit,
     ("step", "release"): _release,
     ("step", "publish"): _publish,
     ("step", "land"): _land,

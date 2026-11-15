@@ -21,6 +21,7 @@ from taskloop.attempt_store import AttemptStore
 from taskloop.check_release import ChecksRelease
 from taskloop.check_repeat.repair import CheckRepeat
 from taskloop.check_repeat.store import CheckRepeatStore
+from taskloop.commit import FactoryCommit
 from taskloop.composition import (
     adopt_slots,
     open_admission,
@@ -33,10 +34,10 @@ from taskloop.composition import (
     open_checks_releaser,
     open_completion,
     open_discussion,
+    open_factory_commit,
     open_launcher,
     open_publisher,
     open_releaser,
-    open_verifier,
 )
 from taskloop.drain.composition import open_drain
 from taskloop.drain.drain import reconcile_claims
@@ -71,7 +72,6 @@ from taskloop.slot_release import SlotRelease
 from taskloop.slots import SlotGit
 from taskloop.task import TaskInspectionError
 from taskloop.tracker_client import inspect_tracker_task, tracker_holds, tracker_reads
-from taskloop.verifier import Verifier
 
 
 def load_config(config: str | None, flags: Flags, home: Callable[[], Path] = Path.home) -> Loaded | ConfigRefused:
@@ -118,17 +118,17 @@ def open_reads(database: Path, artifacts: Path, views: GitViews) -> Generator[St
             yield con
         else:
             reader = _reader(con)
-            verifier = Verifier(reader, views.checkouts, RealSlotFiles(), worker_gone, time.time, refused,
+            factory_commit = FactoryCommit(reader, views.checkouts, RealSlotFiles(), worker_gone, time.time, refused,
                 ids=NativeIds())  # never verifies
             seen = EvidenceFiles(artifacts).last_command
-            yield StatusPorts(reader, entry_seen, time.time, verifier.leftovers, current_boot, setup_seen, seen,
+            yield StatusPorts(reader, entry_seen, time.time, factory_commit.leftovers, current_boot, setup_seen, seen,
                               recovery=recovery_reader(reader, time.time),
                               policy=known_slot_mode(views.checkouts, RealSlotFiles()))
 
 
 @contextmanager
 def open_start(database: Path, artifacts: Path, views: GitViews) -> Generator[StartPorts | Failed]:
-    """The database guard first, then the admission, the launcher and the repeat (with the verifier's shared writer, which
+    """The database guard first, then the admission, the launcher and the repeat (with the factory commit's shared writer, which
     this closes) on the same paths."""
     store = Store(SCHEMA)
     with _read_only(database) as con:
@@ -144,7 +144,7 @@ def open_start(database: Path, artifacts: Path, views: GitViews) -> Generator[St
 def _starting(reader: AttemptStore, database: Path, artifacts: Path, store: Store, views: GitViews) -> StartPorts:
     admission, chain = open_admission(database, artifacts, views, store), open_chain(database, artifacts, views, store)
     launcher = open_launcher(database, artifacts, views)
-    repeat = StepRepeat(reader, open_verifier(database, store, views, artifacts), EvidenceFiles(artifacts), chain, launcher,
+    repeat = StepRepeat(reader, open_factory_commit(database, store, views, artifacts), EvidenceFiles(artifacts), chain, launcher,
                         worker_gone, entry_seen,
                         time.time, repeating, ids=NativeIds(), discussion=open_discussion(database, store).for_task)
     releaser = open_checks_releaser(database, store, views)
@@ -178,7 +178,7 @@ def open_next(database: Path, artifacts: Path, views: GitViews, tracker_root: st
                 yield Failed("refused", "tracker_root", str(error))
                 return
             reader = _reader(con)
-            leftovers = Verifier(reader, views.checkouts, RealSlotFiles(), worker_gone, time.time, refused, ids=NativeIds()).leftovers
+            leftovers = FactoryCommit(reader, views.checkouts, RealSlotFiles(), worker_gone, time.time, refused, ids=NativeIds()).leftovers
             reads = StatusPorts(reader, entry_seen, time.time, leftovers, current_boot, setup_seen,
                                 recovery=recovery_reader(reader, time.time),
                                 policy=known_slot_mode(views.checkouts, RealSlotFiles()))
@@ -189,7 +189,7 @@ def open_next(database: Path, artifacts: Path, views: GitViews, tracker_root: st
             with open_land(database, artifacts, views, store, registration) as lands:  # the land's ports, the ones `tl step land` opens
                 landing = None if isinstance(lands, Failed) else Landing(land_mode(views.remotes), partial(_landed, lands))
                 yield RoundPorts(reads, _starting(reader, database, artifacts, store, views),
-                                 open_verifier(database, store, views, artifacts), releaser,
+                                 open_factory_commit(database, store, views, artifacts), releaser,
                                  open_publisher(database, store, views, artifacts), holding, ready, EvidenceFiles(artifacts).log_round,
                                  repository=partial(repository_of, views.checkouts), landing=landing,
                                  completion=open_completion(database, artifacts, views),
@@ -318,8 +318,8 @@ def open_rounds(database: Path, artifacts: Path, views: GitViews, request: NextR
 
 
 @contextmanager
-def open_verify(database: Path, views: GitViews, artifacts: Path
-                ) -> Generator[tuple[AttemptStore, Verifier, SlotRelease, BranchPublish] | Failed]:
+def open_commit(database: Path, views: GitViews, artifacts: Path
+                ) -> Generator[tuple[AttemptStore, FactoryCommit, SlotRelease, BranchPublish] | Failed]:
     """Open guarded verification, release and publication over one shared writer."""
     store = Store(SCHEMA)
     with _read_only(database) as con:
@@ -327,7 +327,7 @@ def open_verify(database: Path, views: GitViews, artifacts: Path
             if isinstance(con, Failed):
                 yield con
             else:
-                yield (_reader(con), open_verifier(database, store, views, artifacts), open_releaser(database, store, views),
+                yield (_reader(con), open_factory_commit(database, store, views, artifacts), open_releaser(database, store, views),
                        open_publisher(database, store, views, artifacts))
         finally:
             store.close_shared()

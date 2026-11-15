@@ -19,7 +19,7 @@ from test_checks import Bench as ChecksBlock
 from test_land_push import lost
 from test_launch import FakeStart, launcher
 from test_round import REQUEST, Bench
-from test_verifier import KEY, P, agent, attempts, verifier
+from test_verifier import KEY, P, agent, attempts, factory_commit
 
 from taskloop.admit import AdmitRefused, Admitted
 from taskloop.admit_chain import ChainAdmission, NextAdmission, NextStepRequest, RepeatRequest
@@ -258,7 +258,7 @@ def test_an_authorized_agent_body_can_capture_and_finalize_after_drain(
     result = attempts(registered, tmp_path, checkouts, slot_files, running).execute(KEY, entry)
     assert result.status == "pending" and result.reason == "verification"
     assert registered.execute("SELECT phase FROM attempt").fetchone() == ("captured",)
-    assert isinstance(verifier(registered, checkouts, slot_files).verify(KEY), Verified)
+    assert isinstance(factory_commit(registered, checkouts, slot_files).commit(KEY), Verified)
     assert registered.execute("SELECT count(*) FROM attempt").fetchone() == (1,)
     assert DrainStore(lambda: registered, ids=NativeIds()).boundary().state is State.DRAINING
 

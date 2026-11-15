@@ -24,7 +24,7 @@ from taskloop.earlier_input import BEGIN, END, START
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.hold_store import HoldStore
 from taskloop.launch import LaunchUnavailable
-from taskloop.operations import Failed, Round, Started, StartRequest, VerifiedTask, start, verify_task
+from taskloop.operations import Failed, Round, Started, StartRequest, VerifiedTask, commit_task, start
 from taskloop.round import NextRequest, run_round
 from taskloop.step_render import human
 from taskloop.step_text import SAVED_WORK
@@ -568,7 +568,7 @@ def test_a_hand_started_publication_refused_branch_moved_is_reported_never_held(
     factory.slot.repo.set_remote_url("origin", "/nowhere")
     factory.now += 1
     ports = factory.ports()
-    verified = verify_task(factory.store, ports.verifier, ports.releaser, ports.publisher, "tasks", "tl-1")
+    verified = commit_task(factory.store, ports.factory_commit, ports.releaser, ports.publisher, "tasks", "tl-1")
     assert isinstance(verified, VerifiedTask) and factory.next_words() == {"tl-1": ("plan", "publish")}
     moved(factory)
     assert factory.round(frozenset()) == [("tl-1", "plan", "publish", "refused:branch_moved")]

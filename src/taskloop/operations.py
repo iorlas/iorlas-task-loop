@@ -61,7 +61,7 @@ type FailureKind = Literal["refused", "unavailable", "uncertain", "rejected", "n
 UNKNOWN_KINDS: Final = ("unavailable", "uncertain", "unsettled")  # re-running is safe: exit 3
 UNCLAIMING: Final = "Abandoned, but the tracker claim has not been returned. The abandon must finish before fresh admission."
 LATE: Final = "late_relaunch"  # the counted word of a round's relaunch of a checks attempt past its deadline
-VERIFY_KINDS: Final[dict[type[Rejected | NotApplicable | VerifyRefused | Unsettled | VerifyUnavailable], FailureKind]] = {
+COMMIT_KINDS: Final[dict[type[Rejected | NotApplicable | VerifyRefused | Unsettled | VerifyUnavailable], FailureKind]] = {
     Rejected: "rejected",
     NotApplicable: "not_applicable",
     VerifyRefused: "refused",
@@ -86,8 +86,8 @@ class Launch(Protocol):
     def launch(self, backlog: str, task_id: str, minutes: int) -> LaunchResult: ...
 
 
-class Verify(Protocol):
-    def verify(self, key: AttemptKey) -> VerifyResult: ...
+class Commit(Protocol):
+    def commit(self, key: AttemptKey) -> VerifyResult: ...
 
 
 class Release(Protocol):
@@ -510,8 +510,8 @@ def launched(result: LaunchResult, backlog: str, task_id: str, key: AttemptKey, 
             return Failed("uncertain", "launch", "The registered entry may already run. Confirm its identity before another launch.")
 
 
-def verify_task(
-    reader: AttemptStore, verifier: Verify, releaser: Release, publisher: Publish, backlog: str, task_id: str
+def commit_task(
+    reader: AttemptStore, factory_commit: Commit, releaser: Release, publisher: Publish, backlog: str, task_id: str
 ) -> VerifiedTask | Failed:
     """A stored verdict returns with no Git read; otherwise one verification, stored once when it settles. After a
     verdict (new or stored) the slot is released, settled, and a verified result published: a held release or a failed
@@ -522,12 +522,12 @@ def verify_task(
         return Failed("unavailable", "store", str(error))
     if found is None:
         return Failed("refused", "absent", f"No attempt for {task_id} in backlog {backlog}")
-    result = verifier.verify(found[0])
+    result = factory_commit.commit(found[0])
     if not isinstance(result, (Verified, Rejected)):
-        return verify_failure(result)
+        return commit_failure(result)
     released = release_word(releaser.release(found[0], False))
     if isinstance(result, Rejected):
-        return replace(verify_failure(result), detail=f"Release: {released}")
+        return replace(commit_failure(result), detail=f"Release: {released}")
     published = publish_word(publisher.publish(found[0]))
     return VerifiedTask("reused" if result.reused else "verified", backlog, task_id, found[0].attempt_id, released, published)
 
@@ -596,10 +596,10 @@ def publish_task(reader: AttemptStore, publisher: Publish, backlog: str, task_id
     return PublishedTask(backlog, task_id, found[0].attempt_id, result)
 
 
-def verify_failure(result: Rejected | NotApplicable | VerifyRefused | Unsettled | VerifyUnavailable) -> Failed:
+def commit_failure(result: Rejected | NotApplicable | VerifyRefused | Unsettled | VerifyUnavailable) -> Failed:
     """An unsettled slot carries its listing (`bounded` where it was read) as the detail, as `tl step show` prints it."""
     if isinstance(result, VerifyUnavailable) and result.reason == "inconsistent":  # same inputs, another verdict: a defect
         return Failed("defect", result.reason)
     if isinstance(result, Unsettled):
         return Failed("unsettled", result.reason, "\n".join(filter(None, (unsafe_details(result), "\n".join(result.listing)))))
-    return Failed(VERIFY_KINDS[type(result)], result.what if isinstance(result, NotApplicable) else result.reason)
+    return Failed(COMMIT_KINDS[type(result)], result.what if isinstance(result, NotApplicable) else result.reason)

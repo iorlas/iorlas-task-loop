@@ -373,8 +373,8 @@ ignore_imports =
     taskloop.slot_release -> taskloop.drain.actions
     taskloop.slot_release -> taskloop.drain.models
     taskloop.step_render -> taskloop.drain.models
-    taskloop.verifier -> taskloop.drain.actions
-    taskloop.verifier -> taskloop.drain.models
+    taskloop.commit -> taskloop.drain.actions
+    taskloop.commit -> taskloop.drain.models
 
 [importlinter:contract:slice-taskloop.land_conflict]
 name = Private modules belong to taskloop.land_conflict; api.py is its public door
@@ -657,6 +657,7 @@ source_modules =
     taskloop.clock_jumps
     taskloop.command_conclusion
     taskloop.command_sink
+    taskloop.commit
     taskloop.composition
     taskloop.dash_board
     taskloop.dash_composition
@@ -830,7 +831,6 @@ source_modules =
     taskloop.tracker_discussion
     taskloop.validate
     taskloop.verdict
-    taskloop.verifier
     taskloop.wip
 forbidden_modules = sqlite3
 as_packages = False

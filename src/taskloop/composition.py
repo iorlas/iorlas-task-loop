@@ -32,6 +32,7 @@ from taskloop.check_release import ChecksRelease
 from taskloop.check_store import CheckStore
 from taskloop.checks import Block, BlockPorts
 from taskloop.command_sink import WatchedHooks
+from taskloop.commit import FactoryCommit
 from taskloop.discussion import Discussion
 from taskloop.environment import EnvironmentPorts, Preparation, SlotProfiles
 from taskloop.evidence_files import EvidenceFiles
@@ -59,7 +60,6 @@ from taskloop.slot_release import Scratch, SlotRelease
 from taskloop.slots import Adopted, NotAdopted, SlotGit, adopt
 from taskloop.slots_store import SlotsStore
 from taskloop.tracker_client import inspect_tracker_task, tracker_claims, tracker_discussion, tracker_recovery_claim
-from taskloop.verifier import Verifier
 
 
 def _registration(database: Path, store: Store | None = None) -> tuple[Store, Callable[[], sqlite3.Connection | None]]:
@@ -201,16 +201,16 @@ def _operation_observer(artifacts: Path, key: AttemptKey, kind: OperationKind) -
     return EvidenceFiles(artifacts).observe_operation(key, kind, clock=time.monotonic, wall=time.time, ids=NativeIds())
 
 
-def open_verifier(database: Path, store: Store, views: GitViews, artifacts: Path) -> Verifier:
-    """Real wiring for on-demand verification (`tl step verify`, a repeat's verify): a shared writer of `store` (the caller
+def open_factory_commit(database: Path, store: Store, views: GitViews, artifacts: Path) -> FactoryCommit:
+    """Real wiring for on-demand verification (`tl step commit`, a repeat's verify): a shared writer of `store` (the caller
     closes it) on factory.db, real Git, wall clock, its Git writes under the slot's custody lock."""
     writer = AttemptStore(lambda: store.shared_rw(database), store.begin_immediate)
     timing = partial(_operation_observer, artifacts)
-    return Verifier(writer, views.checkouts, RealSlotFiles(), worker_gone, time.time, slot_lock.hold, ids=NativeIds(), timing=timing)
+    return FactoryCommit(writer, views.checkouts, RealSlotFiles(), worker_gone, time.time, slot_lock.hold, ids=NativeIds(), timing=timing)
 
 
 def open_releaser(database: Path, store: Store, views: GitViews) -> SlotRelease:
-    """Real wiring for `tl step release` and the release after `tl step verify`: a shared writer of `store` (the caller
+    """Real wiring for `tl step release` and the release after `tl step commit`: a shared writer of `store` (the caller
     closes it) on factory.db, real Git, the entry and worker observations, the park under the slot's custody lock, the
     tracker's fenced unclaim, wall clock."""
     writer = AttemptStore(lambda: store.shared_rw(database), store.begin_immediate)
@@ -220,7 +220,7 @@ def open_releaser(database: Path, store: Store, views: GitViews) -> SlotRelease:
 
 
 def open_publisher(database: Path, store: Store, views: GitViews, artifacts: Path) -> BranchPublish:
-    """Real wiring for `tl step publish` and the publication after `tl step verify`: a shared writer of `store` (the caller
+    """Real wiring for `tl step publish` and the publication after `tl step commit`: a shared writer of `store` (the caller
     closes it) on factory.db, the remote-capable Git view, the real slot file port, wall clock."""
     timing = partial(_operation_observer, artifacts)
     return BranchPublish(AttemptStore(lambda: store.shared_rw(database), store.begin_immediate),
