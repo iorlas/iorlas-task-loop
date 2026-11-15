@@ -1,0 +1,26 @@
+{
+  "prepared_commit": "cd64b25ec06d8255e15670a51b0aee06d3889bc9",
+  "cited_paths": [
+    "src/taskloop/check_admit.py",
+    "tests/steps/test_check_admit.py",
+    "src/taskloop/operations.py",
+    "src/taskloop/composition.py",
+    "tests/steps/doubles.py",
+    "tests/steps/test_checks_round.py",
+    "tests/steps/test_check_repeat.py",
+    "tests/steps/round_bench.py",
+    "src/taskloop/admit.py",
+    "tests/steps/refusal_inventory.py",
+    "src/taskloop/check_repeat/repair.py",
+    "src/taskloop/land_check.py",
+    "src/taskloop/land_target.py",
+    "src/taskloop/admit_chain.py",
+    "tests/cli/test_refusal_guidance.py",
+    "tests/cli/test_land_cli.py",
+    "src/taskloop/land_guide.py",
+    "tests/steps/test_land_status.py",
+    "src/taskloop/step_guide.py",
+    "src/taskloop/land_render.py",
+    "src/taskloop/step_render.py"
+  ]
+}
