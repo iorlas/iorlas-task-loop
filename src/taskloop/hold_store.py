@@ -18,8 +18,6 @@ import sqlite3
 from dataclasses import dataclass
 from typing import Final, Literal
 
-from pydantic import ValidationError
-
 from taskloop.attempt_reads import StoreConnection, StoreRefused, StoreUnavailable, as_int, as_nullable_text, as_text
 from taskloop.check_store import stored_nullable_real, stored_real, stored_word
 from taskloop.factory_schema import HOLD, LATER, LATEST_CHECKS, SUCCESSOR, marks, prefixed
@@ -114,7 +112,7 @@ def _row(row: tuple[object, ...]) -> HoldRow:
             commented_at=stored_nullable_real(row[6]), cleared_at=stored_nullable_real(row[7]), rev=as_int(row[8]),
             backlog=as_text(row[9]), task_id=as_text(row[10]), tracker_root=as_text(row[11]), label=as_nullable_text(row[12]),
         )
-    except (ValidationError, ValueError) as error:
+    except ValueError as error:
         raise StoreUnavailable("Malformed stored hold event") from error
 
 
