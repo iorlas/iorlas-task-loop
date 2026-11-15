@@ -168,7 +168,7 @@ function head(t) {
   const place = placeOf(t);
   const wrap = el("header", "flex items-start gap-4 px-6 pb-3 pt-5");
   const title = el("div", "min-w-0 flex-1");
-  const status = el("div", "flex items-center gap-2");
+  const status = el("div", "flex min-w-0 flex-wrap items-center gap-2");
   status.append(el("span", "font-mono text-xs text-slate-500 dark:text-slate-400", t.id), tag(place.label, { cls: "text-slate-700 dark:text-slate-200" }));
   if (t.slot) status.append(tag(`slot ${t.slot}`, { cls: "font-mono" }));
   if (position(t)) status.append(el("span", "text-xs text-slate-500 dark:text-slate-400", position(t)));
@@ -235,7 +235,7 @@ function renderContent() {
   if (!detail.attempts.length) {
     return drawer.append(tabPanel(el("p", "px-6 py-5 text-sm text-slate-500", "Not started: no attempt yet."), "drawer-view", view));
   }
-  const body = el("div", "flex min-h-0 flex-1");
+  const body = el("div", "drawer-body flex min-h-0 min-w-0 flex-1");
   body.append(rail(detail.attempts, t, open, select, detail.step_usage), open.step === "land" ? deliveryPane() : pane());
   drawer.append(tabPanel(body, "drawer-view", view));
   if ($("rail") && railTop) $("rail").scrollTop = railTop;
@@ -332,7 +332,7 @@ function pane() {
   const a = attemptOf();
   const st = STATE[a.state];
   const tab = tabOf(a);
-  const wrap = el("section", "flex min-w-0 flex-1 flex-col");
+  const wrap = el("section", "attempt-pane flex min-h-0 min-w-0 flex-1 flex-col");
   const top = el("div", "flex flex-wrap items-center gap-x-3 gap-y-1 px-6 pt-4");
   const title = a.step === VERIFY.id ? `${VERIFY.emoji} ${verifyTitle(open.detail.attempts, a)}`
     : `${nameOf(a.step).emoji} ${nameOf(a.step).label}, attempt ${a.n}`;
