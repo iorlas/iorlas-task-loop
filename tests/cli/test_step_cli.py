@@ -398,7 +398,7 @@ def test_publish_reaches_the_operation_through_the_opener_and_its_json_is_exact(
     assert con is not None
 
     @contextmanager
-    def opener(database: Path, _views: GitViews) -> Generator[tuple[AttemptStore, Publishes]]:
+    def opener(database: Path, _views: GitViews, _artifacts: Path) -> Generator[tuple[AttemptStore, Publishes]]:
         opened.append(database)
         yield AttemptStore(lambda: con), publishes
 

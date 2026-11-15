@@ -542,7 +542,7 @@ def test_every_opener_but_adopt_refuses_a_missing_database_and_creates_none(tmp_
         assert reads == refused
     with open_start(missing, tmp_path / "art", GitViews(DEFAULT_GIT_READ_SECONDS)) as ports:
         assert ports == refused
-    with open_verify(missing, GitViews(DEFAULT_GIT_READ_SECONDS)) as opened:
+    with open_verify(missing, GitViews(DEFAULT_GIT_READ_SECONDS), tmp_path) as opened:
         assert opened == refused
     with open_land(missing, tmp_path / "art", GitViews(DEFAULT_GIT_READ_SECONDS)) as land_ports:
         assert land_ports == refused

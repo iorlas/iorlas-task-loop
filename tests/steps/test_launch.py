@@ -6,6 +6,7 @@ import sqlite3
 import stat
 import sys
 from collections.abc import Callable, Mapping, Sequence
+from functools import partial
 from pathlib import Path
 
 import pytest
@@ -29,6 +30,7 @@ from taskloop.factory_schema import SCHEMA
 from taskloop.git_views import GitViews
 from taskloop.ids import NativeIds
 from taskloop.launch import CHECK_ENTRY_MODULE, AlreadyRunning, Launched, Launcher, LaunchRefused, LaunchUnavailable, LaunchUncertain
+from taskloop.operation_evidence import OperationKind, OperationState
 
 KEY = AttemptKey("attempt", "dispatch", 1)
 NEW = OwnedProcess(9, 9, "new-start", "boot")
@@ -337,6 +339,76 @@ def test_the_registration_write_waits_briefly_and_a_busy_store_registers_nothing
 
 
 CHECKS = AttemptKey("checks", "checks-token", 1)
+
+
+@pytest.mark.parametrize(("mode", "result_type", "state"), [
+    ("popen", LaunchUnavailable, OperationState.FAILED),
+    ("exec_failed", LaunchUnavailable, OperationState.FAILED),
+    ("uncertain", LaunchUncertain, OperationState.UNCERTAIN),
+    ("exec", Launched, OperationState.COMPLETED),
+])
+def test_checks_start_measures_each_retry_and_suppresses_running_and_dispatched(
+    on_slot: Path, mode: str, result_type: type, state: OperationState,
+) -> None:
+    files, now = EvidenceFiles(on_slot.parent), [0.0]
+
+    def tick() -> None:
+        now[0] += 4
+
+    start = FakeStart(mode, before=tick)
+    app = checks_launcher(on_slot, start)
+    app.timing = partial(files.observe_operation, clock=lambda: now[0], wall=lambda: 100.0, ids=NativeIds())
+    assert isinstance(app.launch("tasks", "tl-1", 30), result_type)
+    first, = files.operations(CHECKS)
+    assert first.kind is OperationKind.CHECKS_START and first.state is state
+    assert first.elapsed == (0.0 if mode == "popen" else 4.0)
+    start.mode = "exec"
+    start.identity = OwnedProcess(11, 11, "retry-start", "boot")
+    assert isinstance(app.launch("tasks", "tl-1", 30), Launched)
+    samples = files.operations(CHECKS)
+    assert len(samples) == 2 and len({sample.operation for sample in samples}) == 2
+    app.observe = Observe("matching")
+    assert isinstance(app.launch("tasks", "tl-1", 30), AlreadyRunning)
+    con = sqlite3.connect(on_slot)
+    try:
+        con.execute("UPDATE checks_attempt SET phase='concluded',conclusion='passed',concluded_at=1")
+        con.commit()
+    finally:
+        con.close()
+    assert app.launch("tasks", "tl-1", 30) == LaunchRefused("dispatched")
+    now[0] += 9000
+    assert files.operations(CHECKS) == samples and len(start.calls) == 2
+
+
+@pytest.mark.parametrize("broken_evidence", [False, True])
+def test_checks_interruption_and_evidence_failure_preserve_registration_and_retry(
+    on_slot: Path, monkeypatch: pytest.MonkeyPatch, broken_evidence: bool,
+) -> None:
+    files = EvidenceFiles(on_slot.parent)
+
+    def interrupt() -> None:
+        raise KeyboardInterrupt
+
+    def broken(*_args: object) -> None:
+        raise OSError("Evidence unavailable")
+
+    start = FakeStart(before=interrupt)
+    app = checks_launcher(on_slot, start)
+    app.timing = partial(files.observe_operation, clock=lambda: 1.0, wall=lambda: 100.0, ids=NativeIds())
+    if broken_evidence:
+        monkeypatch.setattr(files, "write_operation", broken)
+    with pytest.raises(KeyboardInterrupt):
+        app.launch("tasks", "tl-1", 30)
+    assert checks_row(on_slot)[:3] == (None, None, None)
+    start.before = lambda: None
+    assert app.launch("tasks", "tl-1", 30) == Launched(CHECKS, (9, "new-start", "boot"))
+    assert checks_row(on_slot)[:3] == (9, "new-start", "boot") and len(start.calls) == 2
+    samples = files.operations(CHECKS)
+    if broken_evidence:
+        assert samples == ()
+    else:
+        assert len(samples) == 2
+        assert {sample.state for sample in samples} == {OperationState.ACTIVE, OperationState.COMPLETED}
 
 
 def checks_launcher(db: Path, start: FakeStart, observe: Observe | None = None, now: float = 10) -> Launcher:

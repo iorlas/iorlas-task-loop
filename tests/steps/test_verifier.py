@@ -612,7 +612,8 @@ def test_another_verifier_storing_first_is_inconsistent(
 
 def test_the_real_composition_opens_the_factory_database(tmp_path: Path) -> None:
     store = Store(SCHEMA)
-    assert open_verifier(tmp_path / "factory.db", store, GitViews(DEFAULT_GIT_READ_SECONDS)).verify(KEY) == VerifyRefused("not_captured")
+    verifier = open_verifier(tmp_path / "factory.db", store, GitViews(DEFAULT_GIT_READ_SECONDS), tmp_path)
+    assert verifier.verify(KEY) == VerifyRefused("not_captured")
     store.close_shared()
 
 

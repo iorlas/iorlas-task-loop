@@ -38,6 +38,7 @@ from taskloop.attempt_types import (
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.factory_commit import GitQuiet, Settled
 from taskloop.ids import NativeIds
+from taskloop.operation_evidence import OperationTiming
 from taskloop.operations import Failed
 from taskloop.repeat import StepRepeat
 from taskloop.slot_lock import LABEL, acquire, hold, lock_path, refused, repeating
@@ -194,9 +195,10 @@ def test_a_verify_reads_the_attempt_again_under_the_lock(
     settled: list[str] = []
     real = verifier_module.settle
 
-    def settle(checkouts: Checkouts, files: SlotFiles, admission: Admission, base: str, answer: AnswerState, quiet: GitQuiet) -> Settled:
+    def settle(checkouts: Checkouts, files: SlotFiles, admission: Admission, base: str, answer: AnswerState, quiet: GitQuiet,
+               timing: OperationTiming | None = None) -> Settled:
         settled.append(admission.key.attempt_id)
-        return real(checkouts, files, admission, base, answer, quiet)
+        return real(checkouts, files, admission, base, answer, quiet, timing)
 
     monkeypatch.setattr(verifier_module, "settle", settle)
 

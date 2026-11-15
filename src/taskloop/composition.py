@@ -26,7 +26,7 @@ from taskloop.answer_repair_store import AnswerRepairStore
 from taskloop.attempt import Attempts
 from taskloop.attempt_reads import StoreConnection
 from taskloop.attempt_store import AttemptReads, AttemptStore, configure_registration
-from taskloop.attempt_types import Admission, Checkouts, Observe, SlotFiles
+from taskloop.attempt_types import Admission, AttemptKey, Checkouts, Observe, SlotFiles
 from taskloop.check_admit import ChecksAdmission
 from taskloop.check_release import ChecksRelease
 from taskloop.check_store import CheckStore
@@ -41,6 +41,7 @@ from taskloop.hold_store import HoldStore
 from taskloop.ids import Ids, NativeIds
 from taskloop.launch import CHECK_ENTRY_MODULE, Launcher
 from taskloop.merge.prepare import SourcePreparation
+from taskloop.operation_evidence import OperationKind, OperationObserver
 from taskloop.owned_processes import entry_seen, setup_seen, worker_gone
 from taskloop.publish import BranchPublish
 from taskloop.recovery.complete_attempt import CapturedCompletion
@@ -195,11 +196,17 @@ def real_slots(views: GitViews) -> SlotGit:
     return SlotGit(views.checkouts, RealSlotFiles())
 
 
-def open_verifier(database: Path, store: Store, views: GitViews) -> Verifier:
+def _operation_observer(artifacts: Path, key: AttemptKey, kind: OperationKind) -> OperationObserver:
+    # Resolve the artifact root inside the isolated observation, too.
+    return EvidenceFiles(artifacts).observe_operation(key, kind, clock=time.monotonic, wall=time.time, ids=NativeIds())
+
+
+def open_verifier(database: Path, store: Store, views: GitViews, artifacts: Path) -> Verifier:
     """Real wiring for on-demand verification (`tl step verify`, a repeat's verify): a shared writer of `store` (the caller
     closes it) on factory.db, real Git, wall clock, its Git writes under the slot's custody lock."""
     writer = AttemptStore(lambda: store.shared_rw(database), store.begin_immediate)
-    return Verifier(writer, views.checkouts, RealSlotFiles(), worker_gone, time.time, slot_lock.hold, ids=NativeIds())
+    timing = partial(_operation_observer, artifacts)
+    return Verifier(writer, views.checkouts, RealSlotFiles(), worker_gone, time.time, slot_lock.hold, ids=NativeIds(), timing=timing)
 
 
 def open_releaser(database: Path, store: Store, views: GitViews) -> SlotRelease:
@@ -212,11 +219,12 @@ def open_releaser(database: Path, store: Store, views: GitViews) -> SlotRelease:
                        HoldStore(lambda: store.shared_rw(database), store.begin_immediate), ids=NativeIds())
 
 
-def open_publisher(database: Path, store: Store, views: GitViews) -> BranchPublish:
+def open_publisher(database: Path, store: Store, views: GitViews, artifacts: Path) -> BranchPublish:
     """Real wiring for `tl step publish` and the publication after `tl step verify`: a shared writer of `store` (the caller
     closes it) on factory.db, the remote-capable Git view, the real slot file port, wall clock."""
+    timing = partial(_operation_observer, artifacts)
     return BranchPublish(AttemptStore(lambda: store.shared_rw(database), store.begin_immediate),
-        views.remotes, RealSlotFiles(), time.time, ids=NativeIds())
+        views.remotes, RealSlotFiles(), time.time, ids=NativeIds(), timing=timing)
 
 
 def open_launcher(database: Path, artifacts: Path, views: GitViews) -> Launcher:
@@ -231,8 +239,10 @@ def open_launcher(database: Path, artifacts: Path, views: GitViews) -> Launcher:
 
 def open_checks_launcher(database: Path, artifacts: Path, views: GitViews) -> Launcher:
     """`open_launcher` for checks attempts: `CheckStore`'s attempts and registration, the checks entry module."""
-    return Launcher(database.absolute(), EvidenceFiles(artifacts), time.time, popen_registered, observe_owned, sys.executable,
-                    CheckStore, CHECK_ENTRY_MODULE, read_seconds=views.read_seconds, ids=NativeIds())
+    files = EvidenceFiles(artifacts)
+    timing = partial(files.observe_operation, clock=time.monotonic, wall=time.time, ids=NativeIds())
+    return Launcher(database.absolute(), files, time.time, popen_registered, observe_owned, sys.executable,
+                    CheckStore, CHECK_ENTRY_MODULE, read_seconds=views.read_seconds, ids=NativeIds(), timing=timing)
 
 
 def adopt_slots(

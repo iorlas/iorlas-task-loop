@@ -7,6 +7,7 @@ import re
 import sqlite3
 from collections.abc import Callable, Generator
 from contextlib import AbstractContextManager, contextmanager
+from functools import partial
 from pathlib import Path
 from typing import override
 
@@ -29,6 +30,7 @@ from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import AttemptKey, Checkouts, FileStat, SlotFiles
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.ids import NativeIds
+from taskloop.operation_evidence import OperationKind, OperationState, OperationTiming
 from taskloop.publish import BranchPublish, BranchPublished, NotPublished, PublishResult, publish_word
 from taskloop.slot_release import Released, SlotRelease
 from taskloop.verifier import Verifier
@@ -174,12 +176,27 @@ def tip(repo: FakeRepo, prefix: str = "refs/heads/task/") -> str:
     return next(ref.sha for ref in repo.refs([prefix]) if ref.name in (BRANCH, "refs/remotes/origin/task/tl-1"))
 
 
-def publisher(con: sqlite3.Connection, git: Checkouts, files: SlotFiles, store: AttemptStore | None = None) -> BranchPublish:
-    return BranchPublish(store or AttemptStore(lambda: con), git, files, lambda: 40, ids=NativeIds())
+def publisher(con: sqlite3.Connection, git: Checkouts, files: SlotFiles, store: AttemptStore | None = None,
+              timing: OperationTiming | None = None) -> BranchPublish:
+    return BranchPublish(store or AttemptStore(lambda: con), git, files, lambda: 40, ids=NativeIds(), timing=timing)
 
 
 def rows(con: sqlite3.Connection) -> list[tuple[object, ...]]:
     return con.execute("SELECT attempt_id,commit_sha,remote_head,published_at FROM published_branch").fetchall()
+
+
+def test_verifier_binds_commit_evidence_and_suppresses_stored_verdict(
+    registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles,
+) -> None:
+    run(registered, tmp_path, slot, checkouts, slot_files, {P: PLAN_TEXT}, verify=False, release=False)
+    files = EvidenceFiles(tmp_path)
+    timing = partial(files.observe_operation, clock=lambda: 10.0, wall=lambda: 100.0, ids=NativeIds())
+    verifier = Verifier(AttemptStore(lambda: registered), checkouts, slot_files, lambda _w: True,
+                        lambda: 20, nowhere, ids=NativeIds(), timing=timing)
+    first = verifier.verify(KEY)
+    assert verifier.verify(KEY) == first
+    sample, = files.operations(KEY)
+    assert sample.kind is OperationKind.COMMIT and sample.state is OperationState.COMPLETED
 
 
 def test_a_verified_released_plan_is_pushed_from_the_checkout_and_recorded_once(
@@ -421,10 +438,51 @@ def test_a_failed_record_is_unavailable_store_and_a_rerun_records_it(
     def refused(_con: sqlite3.Connection) -> AbstractContextManager[None]:
         raise sqlite3.OperationalError("database is locked")
 
-    failing = publisher(registered, checkouts, slot_files, AttemptStore(lambda: registered, refused))
+    files, now = EvidenceFiles(tmp_path), [0.0]
+    timing = partial(files.observe_operation, clock=lambda: now[0], wall=lambda: 100.0, ids=NativeIds())
+    failing = publisher(registered, checkouts, slot_files, AttemptStore(lambda: registered, refused), timing)
     found = failing.publish(KEY)
     assert isinstance(found, NotPublished) and (found.kind, found.reason) == ("unavailable", "store") and rows(registered) == []
-    assert publisher(registered, checkouts, slot_files).publish(KEY) == BranchPublished(x, x)  # pushed again: up to date
+    assert publisher(registered, checkouts, slot_files, timing=timing).publish(KEY) == BranchPublished(x, x)
+    samples = files.operations(KEY)
+    assert len(samples) == 2 and len({sample.operation for sample in samples}) == 2
+    assert all(sample.kind is OperationKind.PUBLISH and sample.state is OperationState.COMPLETED for sample in samples)
+    assert publisher(registered, checkouts, slot_files, timing=timing).publish(KEY) == PublishedRow(x, x, 40.0)
+    assert files.operations(KEY) == samples
+
+
+@pytest.mark.parametrize("broken_evidence", [False, True])
+def test_push_retry_retains_effect_duration_and_evidence_failure_does_not_repeat_push(
+    registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, repo: ScriptedPushRepo, checkouts: Checkouts,
+    slot_files: SlotFiles, monkeypatch: pytest.MonkeyPatch, broken_evidence: bool,
+) -> None:
+    x = run(registered, tmp_path, slot, checkouts, slot_files, {P: PLAN_TEXT})
+    files, now, calls = EvidenceFiles(tmp_path), [0.0], []
+    timing = partial(files.observe_operation, clock=lambda: now[0], wall=lambda: 100.0, ids=NativeIds())
+
+    def during() -> None:
+        assert not registered.in_transaction
+        now[0] += 5
+        calls.append(True)
+
+    def broken(*_args: object) -> None:
+        raise OSError("Evidence unavailable")
+
+    repo.during = during
+    if broken_evidence:
+        monkeypatch.setattr(files, "write_operation", broken)
+    repo.answer = RemoteRejected("remote refused")
+    app = publisher(registered, checkouts, slot_files, timing=timing)
+    assert isinstance(app.publish(KEY), NotPublished)
+    repo.answer = None
+    assert app.publish(KEY) == BranchPublished(x, x)
+    assert app.publish(KEY) == PublishedRow(x, x, 40.0) and len(calls) == 2
+    samples = files.operations(KEY)
+    if broken_evidence:
+        assert samples == ()
+    else:
+        assert len(samples) == 2 and all(sample.elapsed == 5.0 for sample in samples)
+        assert {sample.state for sample in samples} == {OperationState.FAILED, OperationState.COMPLETED}
 
 
 def test_two_publishers_at_once_record_one_row(

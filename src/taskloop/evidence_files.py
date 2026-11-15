@@ -19,6 +19,10 @@ from taskloop.duration_evidence import DurationObserver, DurationSample
 from taskloop.duration_file import invalidate as invalidate_duration
 from taskloop.duration_file import read as read_duration
 from taskloop.duration_file import write as write_duration
+from taskloop.ids import Ids
+from taskloop.operation_evidence import OperationKind, OperationObserver, OperationSample
+from taskloop.operation_file import read as read_operations
+from taskloop.operation_file import write as write_operation
 from taskloop.recovery.execution_models import Callback
 from taskloop.recovery.models import Intent
 from taskloop.round_log import WORD
@@ -140,6 +144,23 @@ class EvidenceFiles:
             lambda: self.directory(key, execution), clock, lambda sample: self.write_duration(key, sample, execution),
             lambda: invalidate_duration(self._path(self.directory(key, execution))),
         )
+
+    def operations(self, key: AttemptKey) -> tuple[OperationSample, ...]:
+        try:
+            identity = self.directory(key)
+            return read_operations(self._path(identity), identity)
+        except (EvidenceError, OSError):
+            return ()
+
+    def write_operation(self, key: AttemptKey, sample: OperationSample) -> None:
+        identity = self.directory(key)
+        write_operation(self._path(identity), identity, sample)
+
+    def observe_operation(
+        self, key: AttemptKey, kind: OperationKind, *, clock: Callable[[], float], wall: Callable[[], float], ids: Ids,
+    ) -> OperationObserver:
+        return OperationObserver(lambda: (self.directory(key), ids.hex()), kind, clock, wall,
+                                 lambda sample: self.write_operation(key, sample))
 
     def entry_log(self, key: AttemptKey) -> Path:
         """The attempt's entry process log (`entry.log` in its key-derived directory), with that directory made."""
