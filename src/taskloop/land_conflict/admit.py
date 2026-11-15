@@ -5,8 +5,8 @@ from dataclasses import dataclass
 
 from git_porcelain import GitUnavailable, Repo
 
-from taskloop.attempt_loads import AttemptLoads
 from taskloop.attempt_reads import StoreRefused, StoreUnavailable
+from taskloop.attempt_store import AttemptLoads
 from taskloop.attempt_types import AttemptKey
 from taskloop.evidence_files import EvidenceError, EvidenceFiles
 from taskloop.ids import Ids

@@ -1,7 +1,7 @@
 """Fenced reads of an admitted attempt's record and stored execution; the writers inherit them, no write lives here."""
 
 import sqlite3
-from dataclasses import astuple
+from abc import ABC, abstractmethod
 
 from any_agent.procs import Worker
 from pydantic import BaseModel, ConfigDict
@@ -35,7 +35,6 @@ from taskloop.attempt_types import (
     Verified,
 )
 from taskloop.earlier_attempt import EarlierAttempt
-from taskloop.factory_schema import ANSWER, ATTEMPT_LOADED, EVIDENCE, FACTS, VERDICT, prefixed
 from taskloop.recovery.execution_models import Callback
 from taskloop.recovery.state_store import fence
 from taskloop.repo import RepoId
@@ -67,21 +66,6 @@ class PlanEvidence(BaseModel):
     blob: str
 
 
-def retained_on(con: sqlite3.Connection, key: AttemptKey) -> RetainedInputs | None:
-    row = con.execute(
-        "SELECT repo_id,backlog,task_id,tracker_root,end_commit,input_path,input_digest,harness,provider,model,effort,access_policy,"
-        "compaction_token_limit "
-        "FROM attempt WHERE attempt_id=? AND dispatch_token=? AND generation=? AND step='implement'",
-        astuple(key),
-    ).fetchone()
-    if row is None:
-        return None
-    return RetainedInputs(key=key, repo_id=as_text(row[0]), backlog=as_text(row[1]), task_id=as_text(row[2]),
-                          tracker_root=as_text(row[3]), checked=as_text(row[4]),
-                          input_ref=FileRef(as_text(row[5]), as_text(row[6])),
-                          setting=stored_setting(*row[7:13]))
-
-
 def _counts(row: tuple[object, ...]) -> tuple[int | None, int | None, int | None] | None:
     """Stored token counts (in, cached, out): known when any is stored, else None; an unknown count is NULL, never 0."""
     counts = (as_nullable_int(row[0]), as_nullable_int(row[1]), as_nullable_int(row[2]))
@@ -101,23 +85,49 @@ def verdict_of(row: tuple[object, ...]) -> Verdict | None:
     return Rejected(rule)
 
 
-class AttemptLoads(StoreConnection):
+class AttemptLoads(StoreConnection, ABC):
     """The fenced reads an attempt's writers need."""
+
+    @abstractmethod
+    def _retained(self, con: sqlite3.Connection, key: AttemptKey) -> RetainedInputs | None: ...
+
+    @abstractmethod
+    def _plan_row(self, con: sqlite3.Connection, repo_id: str, backlog: str, task_id: str,
+                  tracker_root: str) -> tuple[object, ...] | None: ...
+
+    @abstractmethod
+    def _earlier_row(self, con: sqlite3.Connection, repo_id: str, backlog: str, task_id: str,
+                     tracker_root: str) -> tuple[object, ...] | None: ...
+
+    @abstractmethod
+    def _scope_row(self, con: sqlite3.Connection, key: AttemptKey) -> tuple[object, ...] | None: ...
+
+    @abstractmethod
+    def _attempt_row(self, con: sqlite3.Connection, key: AttemptKey) -> tuple[object, ...] | None: ...
+
+    @abstractmethod
+    def _reservation_row(self, con: sqlite3.Connection, slot: object, repo_id: object) -> tuple[object, ...] | None: ...
+
+    @abstractmethod
+    def _repair_row(self, con: sqlite3.Connection, previous: str) -> tuple[object, ...] | None: ...
+
+    @abstractmethod
+    def _slot_row(self, con: sqlite3.Connection, key: AttemptKey) -> tuple[object, ...] | None: ...
+
+    @abstractmethod
+    def _execution_row(self, con: sqlite3.Connection, key: AttemptKey) -> tuple[object, ...] | None: ...
+
+    @abstractmethod
+    def _callback_row(self, con: sqlite3.Connection, key: AttemptKey) -> tuple[str | bytes | None] | None: ...
 
     def retained(self, key: AttemptKey) -> RetainedInputs | None:
         with self._connection() as con:
-            return retained_on(con, key)
+            return self._retained(con, key)
 
     def latest_plan(self, repo_id: str, backlog: str, task_id: str, tracker_root: str) -> PlanEvidence | None:
         """Never fall back past a newer unsuccessful plan; later implementation attempts do not hide this plan."""
         with self._connection() as con:
-            row = con.execute(
-                "SELECT p.attempt_id,p.dispatch_token,p.generation,p.rev,p.end_commit,v.blob,v.verdict "
-                "FROM attempt p LEFT JOIN verification v ON v.attempt_id=p.attempt_id "
-                "AND v.dispatch_token=p.dispatch_token AND v.generation=p.generation "
-                "WHERE p.repo_id=? AND p.adapter='beads' AND p.backlog=? AND p.task_id=? AND p.tracker_root=? "
-                "AND p.step='plan' ORDER BY p.seq DESC LIMIT 1", (repo_id, backlog, task_id, tracker_root),
-            ).fetchone()
+            row = self._plan_row(con, repo_id, backlog, task_id, tracker_root)
         if row is None or row[6] != "verified" or row[4] is None or row[5] is None:
             return None
         return PlanEvidence(key=AttemptKey(as_text(row[0]), as_text(row[1]), as_int(row[2])), revision=as_int(row[3]),
@@ -126,11 +136,7 @@ class AttemptLoads(StoreConnection):
     def earlier(self, repo_id: str, backlog: str, task_id: str, tracker_root: str) -> EarlierAttempt | None:
         """Latest agent attempt for exactly this registered repo and tracker task; checks have their own table."""
         with self._connection() as con:
-            row: tuple[object, ...] | None = con.execute(
-                """SELECT attempt_id,dispatch_token,generation,rev,slot,step,end_commit FROM attempt
-                WHERE repo_id=? AND adapter='beads' AND backlog=? AND task_id=? AND tracker_root=?
-                ORDER BY seq DESC LIMIT 1""", (repo_id, backlog, task_id, tracker_root),
-            ).fetchone()
+            row = self._earlier_row(con, repo_id, backlog, task_id, tracker_root)
         if row is None:
             return None
         return EarlierAttempt.model_validate({
@@ -140,30 +146,19 @@ class AttemptLoads(StoreConnection):
         })
 
     def earlier_for(self, key: AttemptKey) -> EarlierAttempt | None:
-        """Select by the predecessor's fenced identity, independently of its released reservation."""
+        """Look up the predecessor's fenced identity, independently of its released reservation."""
         with self._connection() as con:
-            row = con.execute(
-                "SELECT repo_id,backlog,task_id,tracker_root FROM attempt WHERE attempt_id=? AND dispatch_token=? AND generation=?",
-                astuple(key),
-            ).fetchone()
+            row = self._scope_row(con, key)
         return None if row is None else self.earlier(*(as_text(value) for value in row))
 
     def _load(self, con: sqlite3.Connection, key: AttemptKey) -> AttemptRecord | None:
         """The fenced read; `start` (E) is the previous attempt's X, else its B, frozen since this attempt took over."""
-        row: tuple[object, ...] | None = con.execute(
-            f"""SELECT {prefixed("p", ATTEMPT_LOADED)},
-            (SELECT path FROM slot WHERE name=p.slot AND repo_id=p.repo_id),
-            (SELECT coalesce(q.end_commit, q.base_commit) FROM attempt q WHERE q.attempt_id=p.previous_attempt_id),p.repair_context
-            FROM attempt p WHERE p.attempt_id=? AND p.dispatch_token=? AND p.generation=?""",
-            astuple(key),
-        ).fetchone()
+        row = self._attempt_row(con, key)
         if row is None:
             return None
         if any(value is None for value in row[10:13]):
             raise StoreRefused("unregistered_entry")
-        held = con.execute(
-            "SELECT repo_id,generation,attempt_id FROM reservation WHERE slot=? AND repo_id=?", (row[3], row[2])
-        ).fetchone()
+        held = self._reservation_row(con, row[3], row[2])
         if held != (row[2], key.reservation_generation, key.attempt_id) or row[31] is None:
             raise StoreRefused("stale_reservation")
         if not isinstance(row[9], (int, float)):
@@ -199,11 +194,7 @@ class AttemptLoads(StoreConnection):
         return AttemptRecord(admission, as_text(row[13]), as_int(row[14]), worker, session, conflict, base, end, start)
 
     def _repair_source(self, con: sqlite3.Connection, previous: str, admission: Admission) -> None:
-        row = con.execute(
-            "SELECT p.session_ref,p.base_commit,p.number,p.deadline,p.harness,p.provider,p.model,p.effort,p.access_policy,"
-            "p.compaction_token_limit,p.repair_context,e.answer_failure FROM attempt p JOIN execution e "
-            "ON e.attempt_id=p.attempt_id WHERE p.attempt_id=?", (previous,),
-        ).fetchone()
+        row = self._repair_row(con, previous)
         context = admission.repair
         if (row is None or context is None or row[10] is not None or row[:4] !=
                 (context.session, context.base_commit, admission.number, admission.deadline)
@@ -234,20 +225,13 @@ class AttemptLoads(StoreConnection):
     def slot_base(self, key: AttemptKey) -> str:
         """The reservation's original park point D, independent of the branch source and prepared B."""
         with self._connection() as con:
-            row = con.execute("SELECT slot_head FROM attempt WHERE attempt_id=? AND dispatch_token=? AND generation=?",
-                              astuple(key)).fetchone()
+            row = self._slot_row(con, key)
         if row is None:
             raise StoreRefused("absent")
         return as_text(row[0])
 
     def _execution(self, con: sqlite3.Connection, key: AttemptKey) -> StoredExecution | None:
-        row: tuple[object, ...] | None = con.execute(
-            f"""SELECT {prefixed("e", FACTS)},{prefixed("e", EVIDENCE)},{prefixed("e", ANSWER)},{prefixed("v", VERDICT)}
-            FROM execution e LEFT JOIN verification v
-            ON v.attempt_id=e.attempt_id AND v.dispatch_token=e.dispatch_token AND v.generation=e.generation
-            WHERE e.attempt_id=? AND e.dispatch_token=? AND e.generation=?""",
-            astuple(key),
-        ).fetchone()
+        row = self._execution_row(con, key)
         if row is None:
             return None
         tokens, cumulative = _counts(row[9:12]), _counts(row[12:15])
@@ -285,8 +269,7 @@ class AttemptLoads(StoreConnection):
             return self._execution(con, key)
 
     def _callback(self, con: sqlite3.Connection, key: AttemptKey) -> Callback | None:
-        row = con.execute("SELECT recovery_callback FROM execution WHERE attempt_id=? AND dispatch_token=? AND generation=?",
-                          astuple(key)).fetchone()
+        row = self._callback_row(con, key)
         identity = None if row is None or row[0] is None else Callback.model_validate_json(row[0])
         if identity is not None and identity.key != key:
             raise StoreUnavailable("Captured recovery identity does not match the execution")

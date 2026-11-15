@@ -25,7 +25,7 @@ from sqlite_store import Store, begin_immediate
 
 from taskloop import check_store
 from taskloop.agents.launch import AgentLaunch
-from taskloop.attempt_loads import AttemptLoads
+from taskloop.attempt_store import AttemptLoads
 from taskloop.attempt_types import AttemptKey, EntryIdentity, Seen
 from taskloop.check_store import CheckStore
 from taskloop.checks import Block, BlockPorts, argv_digest

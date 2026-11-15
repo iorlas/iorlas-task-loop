@@ -7,8 +7,8 @@ from git_porcelain import Repo
 
 from taskloop.admit import AdmitUnavailable, free_slots
 from taskloop.admit_store import reserve
-from taskloop.attempt_loads import retained_on
 from taskloop.attempt_reads import StoreConnection, StoreRefused, StoreUnavailable, as_int, as_text
+from taskloop.attempt_store import retained_on
 from taskloop.attempt_types import AttemptKey
 from taskloop.land_conflict.abort_models import transition
 from taskloop.land_conflict.cleanup_models import transition as cleanup_transition
