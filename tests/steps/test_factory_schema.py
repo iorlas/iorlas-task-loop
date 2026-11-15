@@ -9,7 +9,7 @@ import pytest
 from sqlite_store import Schema, SchemaError, Store
 
 from taskloop.factory_schema import SCHEMA
-from taskloop.factory_store import open_ro
+from taskloop.factory_store import current, open_ro, refusal
 
 # Append a reviewed pin for each new version; never replace a version's existing digest.
 DDL_DIGESTS = {
@@ -106,3 +106,45 @@ def test_read_only_open_requires_every_factory_table(tmp_path: Path, missing: st
             open_ro(path)
         assert len(str(refused.value).splitlines()) == 1
     assert path.read_bytes() == before
+
+
+@pytest.mark.parametrize("version", [0, SCHEMA.version - 1, SCHEMA.version, SCHEMA.version + 1])
+def test_current_reads_the_borrowed_connection_without_changing_it(version: int) -> None:
+    con = sqlite3.connect(":memory:")
+    con.execute(f"PRAGMA user_version={version}")
+    assert current(con) is (version == SCHEMA.version)
+    assert not con.in_transaction
+    assert con.execute("PRAGMA user_version").fetchone() == (version,)
+    con.close()
+
+
+@pytest.mark.parametrize("contents", ["missing", "corrupt", "version"])
+def test_refusal_diagnosis_is_read_only_and_closes_its_connection(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, contents: str,
+) -> None:
+    path = tmp_path / "factory.db"
+    if contents == "corrupt":
+        path.write_bytes(b"not a SQLite database")
+    elif contents == "version":
+        con = sqlite3.connect(path)
+        con.execute(f"PRAGMA user_version={SCHEMA.version - 1}")
+        con.close()
+    before = path.read_bytes() if path.exists() else None
+    opened: list[sqlite3.Connection] = []
+    connect = sqlite3.connect
+
+    def diagnostic(database: str, *, uri: bool) -> sqlite3.Connection:
+        assert database == f"{path.resolve().as_uri()}?mode=ro" and uri
+        con = connect(database, uri=uri)
+        opened.append(con)
+        return con
+
+    monkeypatch.setattr(sqlite3, "connect", diagnostic)
+    detail = refusal(SchemaError("incompatible"), path)
+    expected = f"records schema version {SCHEMA.version - 1}" if contents == "version" else "schema version could not be read"
+    assert expected in detail and "The database has been preserved" in detail
+    assert (path.read_bytes() if path.exists() else None) == before
+    assert len(opened) == (0 if contents == "missing" else 1)
+    for con in opened:
+        with pytest.raises(sqlite3.ProgrammingError, match="closed"):
+            con.execute("SELECT 1")

@@ -18,8 +18,7 @@ from taskloop.drain.models import Action, Conclusion, Owner, Result
 from taskloop.drain.observe import observe
 from taskloop.drain.reconcile import Reconcile
 from taskloop.drain.store import DrainStore
-from taskloop.factory_schema import current, refusal
-from taskloop.factory_store import open_ro, validate_tables
+from taskloop.factory_store import current, open_ro, refusal, validate_tables
 from taskloop.git_views import GitViews
 from taskloop.ids import NativeIds
 from taskloop.land_store import LandStore

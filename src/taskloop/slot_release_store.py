@@ -11,7 +11,8 @@ from stream_proc import OwnedProcess
 
 from taskloop.attempt_reads import StoreUnavailable, as_int, as_nullable_text, as_text
 from taskloop.attempt_types import AttemptKey
-from taskloop.factory_schema import RELEASE, SUCCESSOR, current, marks
+from taskloop.factory_schema import RELEASE, SUCCESSOR, marks
+from taskloop.factory_store import current
 from taskloop.recovery.models import Intent
 from taskloop.recovery.store import RecoveryStore
 from taskloop.release_proof import Stopping

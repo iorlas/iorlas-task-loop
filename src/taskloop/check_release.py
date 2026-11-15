@@ -40,7 +40,7 @@ from taskloop.check_store import ChecksRow, CheckStore, Recorded, ResultRow, hel
 from taskloop.drain.actions import Fenced, Unobservable, operation
 from taskloop.drain.models import BLOCKED, ActionKind, Reason
 from taskloop.environment import reset_to
-from taskloop.factory_schema import current
+from taskloop.factory_store import current
 from taskloop.ids import Ids
 from taskloop.land_store import LandRow, LandStore
 from taskloop.setup_store import SetupSeen, running

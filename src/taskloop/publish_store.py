@@ -11,7 +11,8 @@ from pydantic import BaseModel, ConfigDict
 from taskloop.attempt_reads import PublishedRow, StoreUnavailable, as_nullable_text, as_text
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import AttemptKey
-from taskloop.factory_schema import LATER, PUBLISHED, current, marks
+from taskloop.factory_schema import LATER, PUBLISHED, marks
+from taskloop.factory_store import current
 
 ROW: Final = """SELECT p.task_id,p.repo_id,p.end_commit,s.path,v.verdict,v.reason,x.claim,b.commit_sha,b.remote_head,b.published_at
 FROM attempt p LEFT JOIN verification v ON v.attempt_id=p.attempt_id

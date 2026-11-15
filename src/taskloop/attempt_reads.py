@@ -11,7 +11,7 @@ from sqlite_store import begin_immediate
 from taskloop.agents.settings import AgentSetting, decode_setting
 from taskloop.attempt_types import EFFECTS, AttemptKey, ChainLink, Effect, EntryIdentity, ExecutionFacts, FileRef, Verdict, Verified
 from taskloop.check_repeat.feedback import stored_source
-from taskloop.factory_schema import current
+from taskloop.factory_store import current
 
 
 @dataclass(frozen=True)
