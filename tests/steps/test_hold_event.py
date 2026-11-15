@@ -46,6 +46,7 @@ def execution(root: Path, step: Step = Step.PLAN) -> StoredExecution:
     answer = {"disposition": "needs_owner", "plan_path": None, "paths": [], "message": None, "explanation": "Choose the database."}
     if step is Step.IMPLEMENT:
         answer.pop("plan_path")
+        answer.pop("paths")
     path = root / "answer.json"
     path.write_text(json.dumps(answer))
     ref = FileRef("answer.json", hashlib.sha256(path.read_bytes()).hexdigest())

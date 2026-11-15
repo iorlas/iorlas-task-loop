@@ -294,12 +294,10 @@
   },
   "src/taskloop/implement_step.py": {
     "": 4,
-    "implemented": 4,
-    "incomplete": 3,
-    "needs_owner": 4,
-    "string": 6,
-    "type": 9,
-    "unchanged": 3
+    "implemented": 3,
+    "needs_owner": 3,
+    "string": 5,
+    "type": 7
   },
   "src/taskloop/input_context.py": {
     "": 6,

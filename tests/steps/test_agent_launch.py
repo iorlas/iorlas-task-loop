@@ -74,9 +74,9 @@ def test_released_harnesses_receive_typed_choices_and_writable_steps(tmp_path: P
 
 def assert_disposition_guidance(text: str, step: str, success: str) -> None:
     assert f"answer `{success}`" in text
-    assert f"Only with `{success}` should `paths` list files; otherwise return `paths: []` and `message: null`" in text
     assert SAVED_WORK in text
     if step == "plan":
+        assert f"Only with `{success}` should `paths` list files; otherwise return `paths: []` and `message: null`" in text
         assert f"With `{success}`, list in `paths` every file" in text
         assert "one-line commit `message`; the factory commits exactly those paths." in text
         assert "`docs/design/tl-1/plan.md`" in text
@@ -87,15 +87,16 @@ def assert_disposition_guidance(text: str, step: str, success: str) -> None:
         assert "answer `needs_owner` and say in `explanation` what the owner must decide" in text
         assert "the expected or null `plan_path`" in text
     else:
-        assert "With `implemented`, still list in `paths` every file" in text
+        assert "With `implemented`, give a one-line commit `message`" in text
+        assert "Only with `implemented` should `message` contain a commit message; otherwise return `message: null`" in text
+        assert "`paths`" not in text and "paths list" not in text
         assert "The factory derives the commit paths from all tracked and untracked slot changes" in text
-        assert "paths list does not select what is committed" in text
         assert "Remove unwanted untracked files and restore unwanted tracked edits before answering" in text
         assert "If the code already does what the plan asks, change nothing and answer `unchanged`" in text
         assert "If you could not finish, answer `incomplete`" in text
         assert "if the plan cannot be implemented as written or needs a decision, answer `needs_owner`; say why" in text
         assert "In `explanation`, name each command you ran and how it ended, and every test file you added." in text
-        assert "the answer's paths list must not contain any plan.md" in text
+        assert "Do not change any plan.md, including another task's plan or a deletion" in text
 
 
 @pytest.mark.parametrize("harness", list(HarnessKind))
@@ -141,10 +142,10 @@ def test_dispatched_step_inputs_carry_their_answer_contract(
         assert original == prompt
         contract = json.loads(appendix)
         assert contract == json.loads(Path(schema).read_text()) == operation.answer_schema
-        keys = {"disposition", "paths", "message", "explanation"}
+        keys = {"disposition", "message", "explanation"}
         success = "planned" if step == "plan" else "implemented"
         if step == "plan":
-            keys.add("plan_path")
+            keys.update(("plan_path", "paths"))
         assert set(contract["properties"]) == set(contract["required"]) == keys
         assert contract["properties"]["disposition"]["enum"] == [success, "unchanged", "incomplete", "needs_owner"]
         assert_disposition_guidance(original, step, success)

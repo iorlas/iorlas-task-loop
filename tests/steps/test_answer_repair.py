@@ -320,7 +320,7 @@ def test_implement_repair_preserves_work_without_running_setup(failed: sqlite3.C
     surroundings.slot.write_file("changed.py", "kept")
     key = successor(failed, surroundings)
     assert store.register_entry(key, ENTRY, 10) == "accepted"
-    run = fake(json.dumps({"disposition": "unchanged", "paths": [], "message": None, "explanation": "done"}), refs=("saved",))
+    run = fake(json.dumps({"disposition": "unchanged", "message": None, "explanation": "done"}), refs=("saved",))
     result = app(failed, surroundings, run).execute(key, ENTRY)
     assert result.execution is not None and result.execution.answer.kind == "valid"
     assert surroundings.slot.read_file("changed.py") == "kept" and len(run.calls) == 1

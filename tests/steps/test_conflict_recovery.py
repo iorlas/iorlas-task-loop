@@ -136,7 +136,7 @@ def factory(factory: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, che
         slot.repo, {"disposition": "planned", "plan_path": plan, "paths": [plan], "message": "Plan", "explanation": "planned"},
         {plan: PLAN_TEXT})
     built.agents["tl-1", "implement"] = scripted(
-        slot.repo, {"disposition": "implemented", "paths": [code], "message": "Add it", "explanation": "ran just check"},
+        slot.repo, {"disposition": "implemented", "message": "Add it", "explanation": "ran just check"},
         {code: "X = 1\n"})
     return built
 
@@ -153,7 +153,7 @@ def test_the_restarted_chain_is_planned_and_implemented_on_the_moved_main(factor
     abandoned = release_task(factory.store, factory.releaser(), factory.checks_release(), "tasks", "tl-1", abandon=True)
     assert isinstance(abandoned, ReleasedTask)
     factory.agents["tl-1", "implement"] = scripted(
-        repo, {"disposition": "implemented", "paths": ["src/shared.py"], "message": "Add it", "explanation": "ran just check"},
+        repo, {"disposition": "implemented", "message": "Add it", "explanation": "ran just check"},
         {"src/shared.py": "X = 2\nY = 1\n"})
     factory.by_hand("tl-1")  # tl step start
     for _ in range(4):

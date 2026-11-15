@@ -113,7 +113,11 @@ def test_multiple_refusals_keep_each_predicate_and_leftovers_in_both_step_prompt
             text = step.feedback(found, step.step_rules("tl-1"), 1, "Task", "NONCE", unrecorded=unrecorded)
             assert words in text and "scratch.txt" in text and "Ancestor 'linked'" in text
             assert json.dumps(path) in text and "\x1b" not in text
-            assert "leave files you did not change out of paths" in text
+            if step is plan_step:
+                assert "leave files you did not change out of paths" in text
+            else:
+                assert "`paths`" not in text
+                assert "Remove unwanted untracked files and restore unwanted tracked edits before answering" in text
             assert "symlink or under one, not a plain file" not in text
     assert words in verify_failure(found).detail
 

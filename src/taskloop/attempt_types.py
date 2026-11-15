@@ -331,8 +331,8 @@ class AttemptResult:
 @dataclass(frozen=True)
 class Answer:
     """A step kind decoder's one result: the step's own `disposition` word (for display), its `effect` (what the factory
-    does), and `paths` and `message`: what the agent asks the factory to commit (only with effect `commit`); the agent
-    never commits."""
+    does), and its commit `message`. Planning lists `paths`; implementation leaves them empty because slot settlement
+    selects the changes. The agent never commits."""
 
     disposition: str
     effect: Effect
