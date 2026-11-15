@@ -1,0 +1,22 @@
+{
+  "prepared_commit": "212f6104dbf84e1a0b93992f566cd9ac4a242fd6",
+  "cited_paths": [
+    "src/taskloop/dash/static/dash.input.css",
+    "src/taskloop/dash/static/dash.css",
+    "src/taskloop/dash/static/index.html",
+    "src/taskloop/dash/static/app.js",
+    "src/taskloop/dash/static/ui.js",
+    "src/taskloop/dash/static/logs.js",
+    "src/taskloop/dash/static/lines.js",
+    "src/taskloop/dash/static/taskview.js",
+    "src/taskloop/dash_server.py",
+    "tests/dash/rail.html",
+    "tests/dash/owner-attention.html",
+    "tests/dash/test_accessibility_markup.py",
+    "tests/cli/test_dash_server.py",
+    "tests/rules/test_tool_versions.py",
+    "tools/check_tool_versions.py",
+    "mise.toml",
+    "pyproject.toml"
+  ]
+}
