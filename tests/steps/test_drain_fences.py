@@ -25,7 +25,7 @@ from taskloop.admit import AdmitRefused, Admitted
 from taskloop.admit_chain import ChainAdmission, NextAdmission, NextStepRequest, RepeatRequest
 from taskloop.agents.settings import AgentSetting, CodexPolicy
 from taskloop.attempt_store import AttemptStore
-from taskloop.attempt_types import AttemptKey, FileRef, Verified
+from taskloop.attempt_types import AttemptKey, Committed, FileRef
 from taskloop.check_repeat.feedback import Availability, FailedCheck, OutputTail
 from taskloop.check_repeat.store import CheckRepeatStore
 from taskloop.check_store import CheckStore
@@ -258,7 +258,7 @@ def test_an_authorized_agent_body_can_capture_and_finalize_after_drain(
     result = attempts(registered, tmp_path, checkouts, slot_files, running).execute(KEY, entry)
     assert result.status == "pending" and result.reason == "verification"
     assert registered.execute("SELECT phase FROM attempt").fetchone() == ("captured",)
-    assert isinstance(factory_commit(registered, checkouts, slot_files).commit(KEY), Verified)
+    assert isinstance(factory_commit(registered, checkouts, slot_files).commit(KEY), Committed)
     assert registered.execute("SELECT count(*) FROM attempt").fetchone() == (1,)
     assert DrainStore(lambda: registered, ids=NativeIds()).boundary().state is State.DRAINING
 

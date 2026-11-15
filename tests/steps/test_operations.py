@@ -29,15 +29,15 @@ from taskloop.attempt_types import (
     AttemptKey,
     AttemptResult,
     Checkouts,
+    CommitResult,
+    Committed,
     EntryIdentity,
     NotApplicable,
     Rejected,
     Seen,
     SlotFiles,
     Unsettled,
-    Verified,
     VerifyRefused,
-    VerifyResult,
     VerifyUnavailable,
 )
 from taskloop.cli_composition import adopt, open_commit, open_land, open_reads, open_start
@@ -148,11 +148,11 @@ def releaser(store: AttemptStore, checkouts: Checkouts, slot_files: SlotFiles) -
 
 
 class FakeFactoryCommit:
-    def __init__(self, result: VerifyResult) -> None:
+    def __init__(self, result: CommitResult) -> None:
         self.result = result
         self.keys: list[AttemptKey] = []
 
-    def commit(self, key: AttemptKey) -> VerifyResult:
+    def commit(self, key: AttemptKey) -> CommitResult:
         self.keys.append(key)
         return self.result
 
@@ -402,8 +402,8 @@ def test_list_keeps_only_stuck_or_unknown_when_asked(reader: AttemptStore, now: 
 
 
 @pytest.mark.parametrize("verdict, expected", [
-    (Verified("blob"), VerifiedTask("verified", "tasks", "tl-1", "attempt", "released", "published")),
-    (Verified("blob", reused=True), VerifiedTask("reused", "tasks", "tl-1", "attempt", "released", "published")),
+    (Committed("blob"), VerifiedTask("verified", "tasks", "tl-1", "attempt", "released", "published")),
+    (Committed("blob", reused=True), VerifiedTask("reused", "tasks", "tl-1", "attempt", "released", "published")),
     (Rejected("paths"), Failed("rejected", "paths", "Release: released")),
     (NotApplicable("incomplete"), Failed("not_applicable", "incomplete")),
     (VerifyRefused("session"), Failed("refused", "session")),
@@ -411,12 +411,12 @@ def test_list_keeps_only_stuck_or_unknown_when_asked(reader: AttemptStore, now: 
     (VerifyUnavailable("git:NotARepo"), Failed("unavailable", "git:NotARepo")),
     (VerifyUnavailable("inconsistent"), Failed("defect", "inconsistent")),
 ])
-def test_verify_maps_every_verdict(reader: AttemptStore, verdict: VerifyResult, expected: VerifiedTask | Failed) -> None:
+def test_verify_maps_every_verdict(reader: AttemptStore, verdict: CommitResult, expected: VerifiedTask | Failed) -> None:
     factory_commit, releases, publishes = FakeFactoryCommit(verdict), Releases(), Publishes()
     assert commit_task(reader, factory_commit, releases, publishes, "tasks", "tl-1") == expected
     assert factory_commit.keys == [KEY]
-    assert releases.calls == ([(KEY, False)] if isinstance(verdict, (Verified, Rejected)) else [])  # only after a verdict, settled
-    assert publishes.keys == ([KEY] if isinstance(verdict, Verified) else [])  # only a verified plan, after its release
+    assert releases.calls == ([(KEY, False)] if isinstance(verdict, (Committed, Rejected)) else [])  # only after a verdict, settled
+    assert publishes.keys == ([KEY] if isinstance(verdict, Committed) else [])  # only a verified plan, after its release
     absent = FakeFactoryCommit(verdict)
     missing = Failed("refused", "absent", "No attempt for tl-9 in backlog tasks")
     assert commit_task(reader, absent, releases, publishes, "tasks", "tl-9") == missing
@@ -701,7 +701,7 @@ def test_an_abandon_whose_claim_is_still_unclaiming_says_release_and_start_refus
 
 def test_verify_reports_a_failed_publication_without_changing_its_result(reader: AttemptStore) -> None:
     publishes = Publishes(NotPublished("unavailable", "remote"))
-    checked = commit_task(reader, FakeFactoryCommit(Verified("blob")), Releases(), publishes, "tasks", "tl-1")
+    checked = commit_task(reader, FakeFactoryCommit(Committed("blob")), Releases(), publishes, "tasks", "tl-1")
     assert checked == VerifiedTask("verified", "tasks", "tl-1", "attempt", "released", "unavailable:remote") and exit_code(checked) == 0
 
 

@@ -46,13 +46,13 @@ from taskloop.attempt_types import (
     AttemptResult,
     CaptureResult,
     Checkouts,
+    CommitResult,
+    Committed,
     EntryIdentity,
     NotApplicable,
     Rejected,
     Unsettled,
-    Verified,
     VerifyRefused,
-    VerifyResult,
     VerifyUnavailable,
     WorkerGone,
     entry_identity,
@@ -142,10 +142,10 @@ def _capture(
             return captured
 
 
-def shown(result: VerifyResult) -> str:
+def shown(result: CommitResult) -> str:
     """The `verify=` word of the log line."""
     match result:
-        case Verified() | Rejected():
+        case Committed() | Rejected():
             return judged(result)
         case Unsettled(reason=reason):
             return "unsettled:" + reason
@@ -238,7 +238,7 @@ def _step(
     verified = FactoryCommit(app.store, app.checkouts, app.slot_files, gone, app.clock, _held,
                         ids=app.agent.ids, timing=timing).commit(key)
     # newly stored facts or a stored verdict: read the terminal result back
-    latest = app.collect(key) if accepted or isinstance(verified, (Verified, Rejected)) else result
+    latest = app.collect(key) if accepted or isinstance(verified, (Committed, Rejected)) else result
     line = f"{latest.status} {latest.reason}"
     if latest.explanation:
         line += f": {latest.explanation}"

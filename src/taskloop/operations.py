@@ -30,13 +30,13 @@ from taskloop.attempt_result import collect, succeeded
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import (
     AttemptKey,
+    CommitResult,
+    Committed,
     EntryIdentity,
     NotApplicable,
     Rejected,
     Unsettled,
-    Verified,
     VerifyRefused,
-    VerifyResult,
     VerifyUnavailable,
 )
 from taskloop.captured_start import AnswerRepairing, start_captured
@@ -87,7 +87,7 @@ class Launch(Protocol):
 
 
 class Commit(Protocol):
-    def commit(self, key: AttemptKey) -> VerifyResult: ...
+    def commit(self, key: AttemptKey) -> CommitResult: ...
 
 
 class Release(Protocol):
@@ -523,7 +523,7 @@ def commit_task(
     if found is None:
         return Failed("refused", "absent", f"No attempt for {task_id} in backlog {backlog}")
     result = factory_commit.commit(found[0])
-    if not isinstance(result, (Verified, Rejected)):
+    if not isinstance(result, (Committed, Rejected)):
         return commit_failure(result)
     released = release_word(releaser.release(found[0], False))
     if isinstance(result, Rejected):

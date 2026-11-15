@@ -26,7 +26,7 @@ from taskloop.agents.settings import Overrides, StepSettings
 from taskloop.attempt import Attempts
 from taskloop.attempt_status import StatusPorts
 from taskloop.attempt_store import AttemptStore
-from taskloop.attempt_types import AttemptKey, Checkouts, EntryIdentity, Seen, SlotFiles, Unsettled, Verified, VerifyResult
+from taskloop.attempt_types import AttemptKey, Checkouts, CommitResult, Committed, EntryIdentity, Seen, SlotFiles, Unsettled
 from taskloop.commit import FactoryCommit
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.exit_codes import exit_code
@@ -132,9 +132,9 @@ class Recorded:
         self.calls: list[str] = []
         self.released = release
 
-    def commit(self, key: AttemptKey) -> VerifyResult:
+    def commit(self, key: AttemptKey) -> CommitResult:
         self.calls.append("verify")
-        return Verified("blob")
+        return Committed("blob")
 
     def release(self, key: AttemptKey, abandon: bool, me: EntryIdentity | None = None) -> ReleaseResult:
         self.calls.append("release")

@@ -15,6 +15,7 @@ from git_porcelain.history import Identity
 from git_porcelain.testing import apply_hermetic_env, git
 from plan_fixtures import PLAN_TEXT
 
+from taskloop import factory_commit
 from taskloop.agents.settings import AgentSetting
 from taskloop.attempt_types import (
     DEFAULT_GIT_READ_SECONDS,
@@ -22,12 +23,12 @@ from taskloop.attempt_types import (
     AnswerState,
     AttemptKey,
     ChainLink,
+    Committed,
     FileRef,
     Rejected,
     Unsettled,
-    Verified,
 )
-from taskloop.factory_commit import Committed, clean_at, settle
+from taskloop.factory_commit import clean_at, settle
 from taskloop.git_views import GitViews
 from taskloop.repo import RepoId
 from taskloop.slot_files import RealSlotFiles
@@ -92,7 +93,7 @@ def test_the_factory_commit_runs_no_hook_carries_the_trailer_and_leaves_the_slot
     (slot / P).write_text(PLAN_TEXT)
     attempt = admission(main, slot)
     made = settle(VIEWS.checkouts, RealSlotFiles(), attempt, base, ANSWER, quiet)
-    assert isinstance(made, Committed) and made.sha != base
+    assert isinstance(made, factory_commit.Committed) and made.sha != base
     assert clean_at(VIEWS.checkouts, RealSlotFiles(), attempt, made.sha) == main
     assert list(markers.iterdir()) == []  # neither --no-verify's two nor the four it leaves running
     assert git(slot, "log", "-1", "--format=%B").strip() == "Plan tl-1\n\nTask-Loop-Attempt: attempt"
@@ -200,7 +201,8 @@ def test_a_relative_paths_worktree_is_accepted(tmp_path: Path, monkeypatch: pyte
     base = git(slot, "rev-parse", "HEAD").strip()
     plan(slot)
     made = settle(VIEWS.checkouts, RealSlotFiles(), admission(main, slot), base, ANSWER, quiet)
-    assert isinstance(made, Committed) and git(slot, "rev-parse", "HEAD").strip() == made.sha and list(markers.iterdir()) == []
+    assert isinstance(made, factory_commit.Committed) and git(slot, "rev-parse", "HEAD").strip() == made.sha
+    assert list(markers.iterdir()) == []
 
 
 @pytest.mark.parametrize("extra", [False, True], ids=["one_trailer_commit", "two_commits"])
@@ -217,7 +219,7 @@ def test_a_crash_leftover_is_adopted_through_real_history_only_as_one_trailer_co
     git(slot, *hookless, "commit", "-q", "-m", "Plan tl-1\n\nTask-Loop-Attempt: attempt")
     head = git(slot, "rev-parse", "HEAD").strip()
     found = settle(VIEWS.checkouts, RealSlotFiles(), admission(main, slot), base, ANSWER, quiet)
-    assert found == (Unsettled("head_moved") if extra else Committed(head))
+    assert found == (Unsettled("head_moved") if extra else factory_commit.Committed(head))
 
 
 def test_a_slot_whose_git_file_is_gone_never_reaches_an_enclosing_repository(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -289,11 +291,11 @@ def test_an_implement_commit_deletes_and_adds_anywhere_and_an_ignored_venv_does_
     (slot / "src/a.py").write_text("A = 1\n")
     answer = AnswerState("valid", "implemented", "commit", ("src/a.py",), "Implement")
     made = settle(VIEWS.checkouts, RealSlotFiles(), attempt, base, answer, quiet)
-    assert isinstance(made, Committed) and git(slot, "rev-parse", "HEAD^").strip() == base
+    assert isinstance(made, factory_commit.Committed) and git(slot, "rev-parse", "HEAD^").strip() == base
     assert git(slot, "show", "--format=", "--name-status", "HEAD").split() == ["D", "README", "A", "src/a.py"]
     assert clean_at(VIEWS.checkouts, RealSlotFiles(), attempt, made.sha) == main
     link = ChainLink(1, base, made.sha, "commit", answer.paths, FileRef("i", "d"))
-    assert isinstance(judge(VIEWS.checkouts(main), main, made.sha, IMPLEMENT, IMPLEMENT.rules("tl-1"), (link,)), Verified)
+    assert isinstance(judge(VIEWS.checkouts(main), main, made.sha, IMPLEMENT, IMPLEMENT.rules("tl-1"), (link,)), Committed)
 
 
 @pytest.mark.parametrize(("paths", "unsafe"), [(("gone.py",), (".gitignore", "src/a.py")), (("src/a.py",), (".gitignore",))]

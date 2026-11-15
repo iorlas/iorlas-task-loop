@@ -29,9 +29,9 @@ from taskloop.attempt_types import (
     AnswerState,
     AttemptKey,
     Checkouts,
+    Committed,
     SlotFiles,
     Unsettled,
-    Verified,
     VerifyUnavailable,
     WorkerGone,
 )
@@ -113,7 +113,7 @@ def test_a_held_slot_refuses_verify_before_any_git_write_and_then_it_settles(
         assert factory_commit(registered, checkouts, slot_files).commit(KEY) == VerifyUnavailable("slot_busy")
     assert writes == [] and registered.execute("SELECT count(*) FROM verification").fetchone() == (0,)
     found = factory_commit(registered, checkouts, slot_files).commit(KEY)
-    assert isinstance(found, Verified) and writes == ["stage", "record"]
+    assert isinstance(found, Committed) and writes == ["stage", "record"]
     with occupy(lock_path(str(slot.path))):  # a stored verdict reads no Git and takes no lock
         assert factory_commit(registered, checkouts, slot_files).commit(KEY) == found
 
@@ -212,4 +212,4 @@ def test_a_verify_reads_the_attempt_again_under_the_lock(
 
     found = FactoryCommit(AttemptStore(lambda: registered), checkouts, slot_files, lambda _worker: True,
         lambda: 20, late, ids=NativeIds()).commit(KEY)
-    assert isinstance(found, Verified) and other == [found] and writes == ["stage", "record"] and settled == ["attempt"]
+    assert isinstance(found, Committed) and other == [found] and writes == ["stage", "record"] and settled == ["attempt"]

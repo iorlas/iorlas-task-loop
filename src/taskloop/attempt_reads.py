@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from sqlite_store import begin_immediate
 
 from taskloop.agents.settings import AgentSetting, decode_setting
-from taskloop.attempt_types import EFFECTS, AttemptKey, ChainLink, Effect, EntryIdentity, ExecutionFacts, FileRef, Verdict, Verified
+from taskloop.attempt_types import EFFECTS, AttemptKey, ChainLink, Committed, Effect, EntryIdentity, ExecutionFacts, FileRef, Verdict
 from taskloop.check_repeat.feedback import stored_source
 from taskloop.factory_store import current
 
@@ -240,7 +240,7 @@ def _facts_values(facts: ExecutionFacts) -> tuple[object, ...]:
 
 
 def _verdict_values(result: Verdict) -> tuple[str, str | None, str | None, int]:
-    if isinstance(result, Verified):
+    if isinstance(result, Committed):
         return "verified", None, result.blob, int(result.reused)
     return "rejected", str(result.reason), None, 0
 

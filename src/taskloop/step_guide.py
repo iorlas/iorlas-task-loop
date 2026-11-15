@@ -7,7 +7,7 @@ from taskloop.hold_guide import HOLD, ON_HOLD
 from taskloop.land_guide import LAND_GUIDE, LAND_NEXT
 from taskloop.step_refusal_guide import REFUSALS
 
-STEP_ONLY = ("Steps built: plan, implement and check. Verified results are published on the task branch. "
+STEP_ONLY = ("Steps built: plan, implement and check. Committed results are published on the task branch. "
              "The profile selects automatic land during a round or manual land by the owner.")
 PUBLISH = ("The step's result is verified but has not been published to origin. Publication must finish before the next step. "
            "An unreachable remote may need network or credential repair. If the remote branch moved, diverged or advanced, "

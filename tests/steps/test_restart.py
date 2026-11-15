@@ -22,7 +22,7 @@ from test_round import ENTRY, REQUEST, Bench, seed
 from taskloop import composition
 from taskloop.attempt import Attempts
 from taskloop.attempt_store import AttemptStore
-from taskloop.attempt_types import AttemptKey, AttemptResult, Seen, VerifyResult
+from taskloop.attempt_types import AttemptKey, AttemptResult, CommitResult, Seen
 from taskloop.cli_composition import open_reads
 from taskloop.drain.models import Seen as ProcessSeen
 from taskloop.factory_schema import SCHEMA
@@ -130,7 +130,7 @@ def complete_round(
     commit = bench.recorded.commit
     events: list[str] = []
 
-    def checked(key: AttemptKey) -> VerifyResult:
+    def checked(key: AttemptKey) -> CommitResult:
         result = attempts.collect(key)
         assert result.status == "pending" and result.reason == "verification"
         if index == 1:

@@ -11,7 +11,7 @@ from plan_fixtures import CHANGE_MAP, HEADER, PLAN_TEXT
 from test_verifier import KEY, PLAN, UNCHANGED, P, captured, commit, factory_commit, stored
 
 from taskloop.attempt_loads import verdict_of
-from taskloop.attempt_types import Checkouts, PlanContentRule, Rejected, Rule, StepRules, Verified
+from taskloop.attempt_types import Checkouts, Committed, PlanContentRule, Rejected, Rule, StepRules
 from taskloop.hold_cause import cause
 from taskloop.steps import PLAN as STEP
 
@@ -94,7 +94,7 @@ def test_exact_depth_byte_caps_apply_to_new_and_reused_plans(
         assert result == Rejected("plan_size")
         assert stored(registered)[0][1] == "plan_size"
     else:
-        assert isinstance(result, Verified) and result.reused is reuse
+        assert isinstance(result, Committed) and result.reused is reuse
     assert check.commit(KEY) == result
 
 
@@ -133,7 +133,7 @@ def test_a_revised_old_plan_can_complete_with_the_new_template(
     commit(slot, {P: "# Old plan\n"})
     origin_main_at(slot)
     captured(registered, tmp_path, slot, checkouts, slot_files, {P: PLAN_TEXT}, PLAN)
-    assert isinstance(factory_commit(registered, checkouts, slot_files).commit(KEY), Verified)
+    assert isinstance(factory_commit(registered, checkouts, slot_files).commit(KEY), Committed)
 
 
 def test_inline_depth_is_refused_with_the_one_line_form_and_own_line_passes() -> None:

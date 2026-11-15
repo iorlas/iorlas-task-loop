@@ -225,7 +225,7 @@ CHAIN_RULES: Final[tuple[Rule, ...]] = (
 
 
 @dataclass(frozen=True)
-class Verified:
+class Committed:
     """Every rule held over the step's chain (B1, each attempt's commit, the step's artifact at Xn); `blob`: that
     artifact's blob (the plan's), None for a step kind without one; `reused`: no attempt of the step committed anything,
     what B1 holds stands."""
@@ -283,8 +283,8 @@ class VerifyUnavailable:
     reason: str
 
 
-type Verdict = Verified | Rejected
-type VerifyResult = Verified | Rejected | Unsettled | NotApplicable | VerifyRefused | VerifyUnavailable
+type Verdict = Committed | Rejected
+type CommitResult = Committed | Rejected | Unsettled | NotApplicable | VerifyRefused | VerifyUnavailable
 
 
 @dataclass(frozen=True)

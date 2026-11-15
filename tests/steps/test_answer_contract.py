@@ -16,6 +16,7 @@ from taskloop.attempt_result import end_word, report, succeeded
 from taskloop.attempt_types import (
     AnswerState,
     AttemptKey,
+    Committed,
     Evidence,
     ExecutionFacts,
     FileRef,
@@ -23,7 +24,6 @@ from taskloop.attempt_types import (
     StepRules,
     StoredExecution,
     Verdict,
-    Verified,
 )
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.shelf_request import ShelfRequest
@@ -214,8 +214,8 @@ def test_collected_always_names_its_outcome_and_only_a_verified_plan_succeeds(
     ("verdict", "status", "reason", "success"),
     [
         (None, "pending", "verification", False),
-        (Verified("c" * 40), "collected", "verified", True),
-        (Verified("c" * 40, reused=True), "collected", "reused", True),
+        (Committed("c" * 40), "collected", "verified", True),
+        (Committed("c" * 40, reused=True), "collected", "reused", True),
         (Rejected("paths"), "collected", "rejected:paths", False),
         (Rejected("nothing_written"), "collected", "rejected:nothing_written", False),
     ],

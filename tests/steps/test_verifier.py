@@ -32,6 +32,8 @@ from taskloop.attempt_types import (
     AttemptKey,
     ChainLink,
     Checkouts,
+    CommitResult,
+    Committed,
     FileRef,
     FileStat,
     NotApplicable,
@@ -39,9 +41,7 @@ from taskloop.attempt_types import (
     StepRules,
     StoredExecution,
     Unsettled,
-    Verified,
     VerifyRefused,
-    VerifyResult,
     VerifyUnavailable,
 )
 from taskloop.commit import CommitHold, FactoryCommit
@@ -293,7 +293,7 @@ def test_one_factory_commit_with_the_agents_message_and_the_trailer_is_recorded_
 ) -> None:
     base = head(slot)
     captured(registered, tmp_path, slot, checkouts, slot_files, PLANNED | {NOTE: "n"}, PLAN | {"paths": [P, NOTE]})
-    assert isinstance(factory_commit(registered, checkouts, slot_files).commit(KEY), Verified)
+    assert isinstance(factory_commit(registered, checkouts, slot_files).commit(KEY), Committed)
     assert made(slot, base) == [("Plan tl-1", TRAILER)] and end_commit(registered) == head(slot)
     assert slot.dirty().raw is False
 
@@ -308,7 +308,7 @@ def test_leftovers_are_listed_fresh_and_a_tidied_slot_then_verifies(
     assert x == head(slot) and check.leftovers(KEY) == check.commit(KEY)  # X stays recorded; the listing is read again
     slot.remove_file(NOTE)
     slot.remove_file("scratch.txt")
-    assert check.leftovers(KEY) is None and isinstance(check.commit(KEY), Verified) and end_commit(registered) == x
+    assert check.leftovers(KEY) is None and isinstance(check.commit(KEY), Committed) and end_commit(registered) == x
 
 
 def test_the_listing_is_bounded(
@@ -329,7 +329,7 @@ def test_unchanged_records_b_only_after_the_tree_is_clean(
     assert shown(check.commit(KEY)) == "unsettled:uncommitted" and end_commit(registered) is None
     slot.remove_file(NOTE)
     tree = slot.repo.tree(base)
-    assert tree is not None and check.commit(KEY) == Verified(tree.files[P][1], reused=True)
+    assert tree is not None and check.commit(KEY) == Committed(tree.files[P][1], reused=True)
     assert end_commit(registered) == base
 
 
@@ -342,7 +342,7 @@ def test_unchanged_over_saved_work_ends_at_its_own_commit_of_the_same_tree(
     origin_main_at(slot)
     captured(registered, tmp_path, slot, checkouts, slot_files, {}, UNCHANGED)
     result = factory_commit(registered, checkouts, slot_files).commit(KEY)
-    assert isinstance(result, Verified) and not result.reused
+    assert isinstance(result, Committed) and not result.reused
     x = end_commit(registered)
     assert x == head(slot) and x != base
     assert made(slot, base) == [("Review saved work of tl-1", TRAILER)]
@@ -458,7 +458,7 @@ def test_judge_rules_the_verify_path_cannot_reach(
     if step == "implement" and len(changes) == 1 and NOTE in changes[0] and NOTE not in paths:
         expected = None  # Only plan commits require answer membership; the other rules apply to both kinds.
     found = judge(repo, repo.path, head(slot), kind(step), rules(cap), one(base, paths))
-    assert found == expected if expected is not None else isinstance(found, Verified)
+    assert found == expected if expected is not None else isinstance(found, Committed)
 
 
 def test_a_commit_that_does_not_descend_from_b_or_is_no_commit(repo: FakeRepo, slot: FakeWorktree) -> None:
@@ -502,7 +502,7 @@ def test_a_stored_verdict_is_returned_again_without_any_git_read(
 ) -> None:
     captured(registered, tmp_path, slot, checkouts, slot_files, PLANNED)
     first = factory_commit(registered, checkouts, slot_files).commit(KEY)
-    assert isinstance(first, Verified) and not first.reused
+    assert isinstance(first, Committed) and not first.reused
     slot.repo.drop_checkout(slot.path)
     counted = Counted(checkouts)
     assert factory_commit(registered, counted, slot_files).commit(KEY) == first and counted.opens == 0
@@ -595,7 +595,7 @@ def test_another_verifier_storing_first_is_inconsistent(
     assert record is not None and record.base_commit is not None
     found = factory_commit(registered, checkouts, slot_files).commit(KEY)
     tree = slot.repo.tree(head(slot))
-    assert tree is not None and found == Verified(tree.files[P][1])
+    assert tree is not None and found == Committed(tree.files[P][1])
     registered.execute("DELETE FROM verification")
     assert store.verdict(record.admission, record.base_commit, head(slot), Rejected("paths"), 1) == Rejected("paths")
 
@@ -627,13 +627,13 @@ def test_the_writer_refuses_an_end_commit_or_verdict_without_its_preconditions(
     with pytest.raises(StoreRefused, match="changed_answer"):
         store.end_commit(record.admission, record.base_commit)  # planned: X must differ from B
     with pytest.raises(StoreRefused, match="changed_answer"):
-        store.verdict(record.admission, record.base_commit, "e" * 40, Verified("e" * 40), 1)  # no end_commit stored yet
+        store.verdict(record.admission, record.base_commit, "e" * 40, Committed("e" * 40), 1)  # no end_commit stored yet
     assert store.end_commit(record.admission, "e" * 40) == "e" * 40
     assert store.end_commit(record.admission, "f" * 40) == "e" * 40  # written once: the caller sees the other value
     with pytest.raises(StoreRefused, match="changed_answer"):
         store.verdict(record.admission, record.base_commit, None, Rejected("nothing_written"), 1)  # a commit is recorded
     with pytest.raises(StoreRefused, match="changed_answer"):
-        store.verdict(record.admission, record.base_commit, "e" * 40, Verified("e" * 40, reused=True), 1)  # reused needs keep
+        store.verdict(record.admission, record.base_commit, "e" * 40, Committed("e" * 40, reused=True), 1)  # reused needs keep
     assert stored(registered) == []
 
 
@@ -661,7 +661,7 @@ def test_the_end_commit_and_verdict_fences_read_the_stored_effect(
         assert store.end_commit(record.admission, end) == end
     else:
         registered.execute("UPDATE attempt SET end_commit=?", (end,))
-    verdict = Verified("f" * 40, reused=effect == "keep")
+    verdict = Committed("f" * 40, reused=effect == "keep")
     if accepted:
         assert store.verdict(record.admission, record.base_commit, end, verdict, 1) == verdict
         return
@@ -680,7 +680,7 @@ def test_a_verified_row_without_a_blob_reads_back(
     record = store.load(KEY)
     assert record is not None and record.base_commit is not None
     assert store.end_commit(record.admission, record.base_commit) == record.base_commit
-    verdict = Verified(None, reused=True)
+    verdict = Committed(None, reused=True)
     assert store.verdict(record.admission, record.base_commit, record.base_commit, verdict, 1) == verdict
     assert registered.execute("SELECT verdict,blob FROM verification").fetchall() == [("verified", None)]
     collected = store.collect(KEY)
@@ -737,7 +737,7 @@ def test_a_verifier_racing_another_adopts_its_commit_never_nothing_written(
     (a deleted lock file), so both verifiers here hold nothing."""
     base = head(slot)
     captured(registered, tmp_path, slot, checkouts, slot_files, PLANNED)
-    recorded, raced = FakeWorktree.record, list[VerifyResult]()
+    recorded, raced = FakeWorktree.record, list[CommitResult]()
 
     def record(self: FakeWorktree, message: str, **options: Literal["staged"] | bool) -> RecordResult:
         if not raced:
@@ -747,7 +747,7 @@ def test_a_verifier_racing_another_adopts_its_commit_never_nothing_written(
 
     monkeypatch.setattr(FakeWorktree, "record", record)
     found = factory_commit(registered, checkouts, slot_files, unheld).commit(KEY)
-    assert isinstance(found, Verified) and raced == [found]
+    assert isinstance(found, Committed) and raced == [found]
     assert made(slot, base) == [("Plan tl-1", TRAILER)] and end_commit(registered) == head(slot)
     assert stored(registered) == [("verified", None, 0, 20.0)]
 
@@ -789,7 +789,7 @@ def test_no_git_write_while_the_worker_may_still_run(
     found = FactoryCommit(AttemptStore(lambda: registered), checkouts, slot_files, alive, lambda: 20, hold, ids=NativeIds()).commit(KEY)
     assert found == Unsettled("worker_alive") and seen == [WORKER]
     assert slot.state().index == index and made(slot, base) == [] and end_commit(registered) is None
-    assert isinstance(factory_commit(registered, checkouts, slot_files).commit(KEY), Verified)  # once it is gone
+    assert isinstance(factory_commit(registered, checkouts, slot_files).commit(KEY), Committed)  # once it is gone
 
 
 def test_a_moved_head_lists_the_tags_the_agent_made_and_the_guide_names_the_working_recovery(

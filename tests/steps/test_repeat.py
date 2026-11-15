@@ -35,6 +35,8 @@ from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import (
     AttemptKey,
     Checkouts,
+    CommitResult,
+    Committed,
     EntryIdentity,
     FileRef,
     FileStat,
@@ -43,9 +45,7 @@ from taskloop.attempt_types import (
     Seen,
     SlotFiles,
     Unsettled,
-    Verified,
     VerifyRefused,
-    VerifyResult,
     VerifyUnavailable,
 )
 from taskloop.commit import FactoryCommit
@@ -131,10 +131,10 @@ def gone(_worker: Worker) -> bool:
 class Commits:
     """A factory commit fake: records each key and returns the configured result."""
 
-    def __init__(self, result: VerifyResult) -> None:
+    def __init__(self, result: CommitResult) -> None:
         self.result, self.keys = result, list[AttemptKey]()
 
-    def commit(self, key: AttemptKey) -> VerifyResult:
+    def commit(self, key: AttemptKey) -> CommitResult:
         self.keys.append(key)
         return self.result
 
@@ -463,8 +463,8 @@ def test_no_verify_before_the_stop_proof(
 
 
 @pytest.mark.parametrize(("verified", "expected"), [
-    (Verified("blob"), Started("already_dispatched", "tasks", "tl-1", "attempt", True, result="verified")),
-    (Verified("blob", reused=True), Started("already_dispatched", "tasks", "tl-1", "attempt", True, result="reused")),
+    (Committed("blob"), Started("already_dispatched", "tasks", "tl-1", "attempt", True, result="verified")),
+    (Committed("blob", reused=True), Started("already_dispatched", "tasks", "tl-1", "attempt", True, result="reused")),
     (Rejected("nothing_written"), Started("already_dispatched", "tasks", "tl-1", "attempt", True, result="rejected:nothing_written")),
     (NotApplicable("incomplete"), Started("already_dispatched", "tasks", "tl-1", "attempt", True, result="incomplete")),
     (Unsettled("redirected"), Failed("unsettled", "redirected")),
@@ -475,7 +475,7 @@ def test_no_verify_before_the_stop_proof(
 ])
 def test_only_git_leftovers_repeat(
     registered: sqlite3.Connection, slot: FakeWorktree, tmp_path: Path, checkouts: Checkouts, slot_files: FakeSlotFiles,
-    verified: VerifyResult, expected: Started | Failed,
+    verified: CommitResult, expected: Started | Failed,
 ) -> None:
     unsafe(registered, tmp_path, slot, checkouts, slot_files)
     factory_commit, launcher = Commits(verified), RegisteringLauncher(AttemptStore(lambda: registered), SECOND)
@@ -503,7 +503,7 @@ def test_a_verdict_stored_between_the_verify_and_the_takeover_refuses_the_repeat
     class Late:
         """Another factory commit stores its verdict right after this commit returned."""
 
-        def commit(self, key: AttemptKey) -> VerifyResult:
+        def commit(self, key: AttemptKey) -> CommitResult:
             found = real.commit(key)
             registered.execute(GATES[0][1])
             return found

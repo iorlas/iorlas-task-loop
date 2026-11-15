@@ -27,7 +27,7 @@ from taskloop.agents.settings import AgentSetting, CodexPolicy, StepSettings
 from taskloop.attempt import Attempts
 from taskloop.attempt_reads import PublishedRow
 from taskloop.attempt_store import AttemptStore
-from taskloop.attempt_types import DEFAULT_GIT_READ_SECONDS, AttemptKey, Verified
+from taskloop.attempt_types import DEFAULT_GIT_READ_SECONDS, AttemptKey, Committed
 from taskloop.commit import FactoryCommit
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.git_views import GitViews
@@ -121,7 +121,7 @@ class Published:
         )
         attempts.execute(self.key, ENTRY)
         assert isinstance(FactoryCommit(self.store, VIEWS.checkouts, self.files, gone, lambda: 20, hold,
-            ids=NativeIds()).commit(self.key), Verified)
+            ids=NativeIds()).commit(self.key), Committed)
         self.x = self.rev(self.main, BRANCH)
         releaser = SlotRelease(self.store, VIEWS.checkouts, self.files, lambda _entry: "gone", gone, custody, yes, lambda: 30,
                                lambda _setup: "gone", lambda _scratch: True, ids=NativeIds())

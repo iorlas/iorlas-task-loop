@@ -18,7 +18,7 @@ from test_recovery import Processes
 
 from taskloop.agents.launch import AgentLaunch
 from taskloop.attempt import Attempts
-from taskloop.attempt_types import Admission, AttemptKey, Evidence, ExecutionFacts, SlotFiles, VerifyResult
+from taskloop.attempt_types import Admission, AttemptKey, CommitResult, Evidence, ExecutionFacts, SlotFiles
 from taskloop.commit import FactoryCommit
 from taskloop.drain.models import Identity, Seen
 from taskloop.evidence_files import EvidenceFiles
@@ -146,7 +146,7 @@ class RestartFactory(Factory):
     def install_hooks(self) -> None:
         commit, release, publish = FactoryCommit.commit, SlotRelease.release, BranchPublish.publish
 
-        def verified(app: FactoryCommit, key: AttemptKey) -> VerifyResult:
+        def verified(app: FactoryCommit, key: AttemptKey) -> CommitResult:
             result = commit(app, key)
             self.effects.after("verify")
             return result

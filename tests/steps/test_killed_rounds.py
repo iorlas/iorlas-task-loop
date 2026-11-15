@@ -13,7 +13,7 @@ from plan_fixtures import PLAN_TEXT
 from round_bench import Tracker, task
 
 from taskloop.attempt_reads import PublishedRow
-from taskloop.attempt_types import AttemptKey, SlotFiles, Verified
+from taskloop.attempt_types import AttemptKey, Committed, SlotFiles
 from taskloop.drain.models import Seen
 from taskloop.release_proof import RecoveryReason
 from taskloop.slot_release import AlreadyReleased, NotReleased
@@ -44,7 +44,7 @@ def artifacts(factory: RestartFactory) -> dict[str, bytes]:
     return {str(path.relative_to(root)): path.read_bytes() for path in root.rglob("*") if path.is_file()}
 
 
-def assert_completed(factory: RestartFactory, remote: FakeRemote, attempt: AttemptKey) -> Verified:
+def assert_completed(factory: RestartFactory, remote: FakeRemote, attempt: AttemptKey) -> Committed:
     assert factory.con.execute("SELECT count(*) FROM attempt").fetchone() == (1,)
     assert factory.con.execute("SELECT count(*) FROM slot").fetchone() == (1,)
     assert factory.con.execute("SELECT * FROM reservation").fetchall() == []
@@ -55,7 +55,7 @@ def assert_completed(factory: RestartFactory, remote: FakeRemote, attempt: Attem
     captured = factory.store.collect(attempt)
     assert captured is not None and captured.answer.kind == "valid" and captured.session_state == "complete"
     verified = factory.ports().factory_commit.commit(attempt)
-    assert isinstance(verified, Verified)
+    assert isinstance(verified, Committed)
     tip = factory.tip("tl-1")
     tree = factory.slot.repo.tree(tip)
     assert tree is not None and tree.read(PLAN) == PLAN_TEXT.encode()
