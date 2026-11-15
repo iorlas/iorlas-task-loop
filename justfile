@@ -54,3 +54,7 @@ tool-versions:
 # see docs/design/dashboard-ui.md. The compiled dash.css is committed, so running the page never needs it.
 css: tool-versions
     tailwindcss -i src/taskloop/dash/static/dash.input.css -o src/taskloop/dash/static/dash.css --minify
+
+# Run tests reached by changed modules; optionally include committed changes since a base.
+test-fast *args: install
+    uv run --frozen --no-sync python -I tools/affected.py {{args}}
