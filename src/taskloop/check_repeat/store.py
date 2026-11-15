@@ -4,8 +4,8 @@ from dataclasses import dataclass
 
 from git_porcelain import Repo
 
-from taskloop.admit import AdmitRefused, Admitted, Free, branched, free_slots, issued, unheld
-from taskloop.admit_rows import insert_attempt, reserve
+from taskloop.admit import AdmitRefused, Admitted, Free, branched, free_slots
+from taskloop.admit_store import insert_attempt, issued, reserve, unheld
 from taskloop.agents.settings import encode_policy
 from taskloop.attempt_reads import AttemptRow, StoreConnection, StoreRefused, StoreUnavailable, as_text
 from taskloop.attempt_result import collect, succeeded

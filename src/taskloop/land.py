@@ -23,7 +23,7 @@ from typing import Final, Literal
 from git_porcelain import Conflicted, GitUnavailable, MissingRemote
 
 from taskloop.admit import AdmitRefused, AdmitUnavailable, checkout_repo, open_store, read_task
-from taskloop.admit_chain import CURRENT, task_of
+from taskloop.admit_store import current, task_of
 from taskloop.agent_credentials import PUSH_REFUSED
 from taskloop.attempt_reads import StoreRefused, StoreUnavailable
 from taskloop.attempt_types import AttemptKey
@@ -117,10 +117,10 @@ def _not_checked(checks: ChecksRow | None, no_change: bool) -> Failed | None:
 def _task(ports: LandPorts, request: LandRequest) -> _Task | Failed:
     """Steps 2-4, then the latest candidate (step 5): reads only."""
     con = open_store(ports.lands.connect)  # the current schema, else `unavailable store`
-    row = con.execute(CURRENT, (request.backlog, request.task_id)).fetchone()
-    key = None if row is None else AttemptKey(str(row[0]), str(row[1]), int(row[2]))
+    row = current(con, request.backlog, request.task_id)
+    key = None if row is None else row.key
     found = None if key is None else task_of(con, key)
-    if row is None or key is None or found is None or not row[3] or following(str(row[4])) != CHECK:
+    if row is None or key is None or found is None or not row.done or following(row.step) != CHECK:
         return Failed("refused", "not_done", "The task's current attempt is not a done implement attempt.")
     checks = latest(ports.work.store, key.attempt_id)
     refused = _not_checked(checks, request.no_change or request.mode == "summary")  # the summary reports any conclusion

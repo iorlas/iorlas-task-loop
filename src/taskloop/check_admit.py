@@ -16,7 +16,7 @@ HEAD). A lost race on the number is `task_attempted`: the caller launches the wi
 import sqlite3
 from collections.abc import Callable
 from contextlib import AbstractContextManager
-from dataclasses import astuple, dataclass
+from dataclasses import dataclass
 from pathlib import Path
 
 from git_porcelain import GitUnavailable, Repo
@@ -31,14 +31,12 @@ from taskloop.admit import (
     checkout_repo,
     deadline_refusal,
     free_slots,
-    issued,
     open_store,
     read_task,
-    unheld,
     why,
 )
-from taskloop.admit_chain import CURRENT, Task, task_of
-from taskloop.admit_rows import reserve
+from taskloop.admit_rows import Task
+from taskloop.admit_store import current, issued, reserve, task_of, unheld
 from taskloop.attempt_reads import StoreRefused
 from taskloop.attempt_types import AttemptKey, Checkouts, SlotFiles
 from taskloop.check_status import HALF_DONE
@@ -96,8 +94,8 @@ def next_number(con: sqlite3.Connection, previous: AttemptKey) -> int | AdmitRef
     delivered (`landed`), holding its slot or pushable (`landing`) refuses the re-run (`factory_schema.LANDING`, as the
     abandon); any other is `task_attempted`."""
     found = task_of(con, previous)
-    row = None if found is None else con.execute(CURRENT, (found.backlog, found.task_id)).fetchone()
-    if row is None or row[0:3] != astuple(previous) or not row[3] or following(str(row[4])) != CHECK:
+    row = None if found is None else current(con, found.backlog, found.task_id)
+    if row is None or row.key != previous or not row.done or following(row.step) != CHECK:
         return AdmitRefused("not_advanceable", detail="The implement attempt is not the task's current, done (verified, released "
                             "with its claim kept, published) attempt")
     latest: tuple[object, ...] | None = con.execute(LATEST, (previous.attempt_id,)).fetchone()
