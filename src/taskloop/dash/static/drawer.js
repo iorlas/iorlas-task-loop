@@ -6,7 +6,8 @@ import {
   $, COLUMNS, JUMP, LAND, STATE, VERIFY, ago, callout, el, elapsedSpan, holdCallout, isWaiting, position, quietSpan, stepInfo,
   tag, tick, waitingNote,
 } from "./ui.js";
-import { apply, atBottom, lines, setNote, show, touchQuiet } from "./lines.js";
+import { atBottom, lines } from "./lines.js";
+import { followFeed } from "./feed.js";
 import { causeLink, changeReason, lasted, rail, verifyTitle } from "./rail.js";
 import { prompt, result } from "./result.js";
 import { taskView } from "./taskview.js";
@@ -35,9 +36,11 @@ const signature = (t) => JSON.stringify([
 
 // All rail and cause links share selection and URL reporting.
 function select(step, n) {
+  delete open.target;
   Object.assign(open, resolveSelection(open.detail, { kind: step === "land" ? ROUTE.land : ROUTE.attempt, step, n, tab: open.tab }));
   changed(selectionRoute(open));
   render();
+  follow();
 }
 function reveal() {
   $("drawer").classList.remove("translate-x-full");
@@ -49,12 +52,15 @@ function reveal() {
 // it arrives and the tracker's fields (`bd`, slow under load) when they do. Opening another task cancels the first one's tracker read.
 export async function openDrawer(id, request = null) {
   if (open?.id === id) {
+    delete open.target;
     open.request = request;
     if (open.detail) Object.assign(open, resolveSelection(open.detail, request ?? {}));
     changed(selectionRoute(open), !!request);
     render();
+    follow();
     return;
   }
+  follower?.();
   open?.abort.abort();
   $("drawer").setAttribute("aria-label", `${id}: ${tasks.get(id)?.title ?? "Task details"}`);
   const mine = { id, request, detail: null, tracker: { state: "loading" }, abort: new AbortController(), sig: null,
@@ -100,37 +106,18 @@ async function loadTracker(mine) {
 
 const taskTabOpen = () => (open.view ?? (open.detail?.attempts.length ? "attempts" : "task")) === "task";
 
-const FOLLOW_MS = 2000;
 let follower = null;
-// While the drawer shows a running attempt, ask for the lines after the cursor of the last answer. Closing the drawer or selecting
-// another attempt stops following this one; the page never jumps to the newest attempt by itself.
 function follow() {
-  clearInterval(follower);
-  follower = setInterval(async () => {
-    const mine = open;
-    const a = mine && attemptOf();
-    if (!a || a.state !== "running" || a.step === "checks" || a.step === VERIFY.id) return; // checks and verifications have no agent lines
-    try {
-      const page = await source.feed(mine.id, a.step, a.n, a.feed_cursor ?? "0:0"); // a file not there yet follows from its start
-      if (open !== mine || attemptOf() !== a) return;
-      receiveDuration(page.duration);
-      const changed = page.duration?.execution !== a.duration?.execution || page.duration?.frozen !== a.duration?.frozen;
-      a.duration = page.duration;
-      $("drawer").querySelectorAll("[data-duration]").forEach(tick);
-      a.feedError = null;
-      setNote(a);
-      a.feed_cursor = page.cursor ?? a.feed_cursor;
-      if (page.replaced) a.feed = a.feed.filter((e) => e.type === "step");
-      for (const e of page.events) apply(a, e);
-      if (page.replaced || changed) render();
-      else page.events.forEach((e) => show(a, e));
-      touchQuiet(a);
-    } catch (error) {
-      if (open !== mine || attemptOf() !== a) return;
-      a.feedError = error.message ?? String(error); // shown, and the next poll continues from the same cursor
-      setNote(a);
-    }
-  }, FOLLOW_MS);
+  follower?.();
+  const mine = open;
+  const a = mine && attemptOf();
+  if (!a || a.step === VERIFY.id || (a.step !== "checks" && a.state !== "running")) return;
+  follower = followFeed(source, mine.id, a, {
+    current: () => open === mine && attemptOf() === a,
+    render, activate: (target) => activateCheck(a, target),
+    invalidate: () => mine.bodies.delete(`${a.step}/${a.n}`),
+    resultOpen: () => mine.tab === "result",
+  });
 }
 // The task could not be read: say so in the drawer, with nothing from an earlier read.
 function showError(id, error) {
@@ -148,7 +135,7 @@ function showError(id, error) {
 export function closeDrawer(fromURL = false) {
   if (fromURL !== true) changed({ kind: ROUTE.closed });
   if (!open) return;
-  clearInterval(follower);
+  follower?.();
   open?.abort.abort();
   open = null;
   $("drawer").classList.add("translate-x-full");
@@ -294,16 +281,30 @@ function bodyTab(a, tab) {
   const key = `${a.step}/${a.n}`;
   const mine = open;
   const kept = mine.bodies.get(key);
-  if (kept?.body) return tab === "result" ? result(a, kept.body, { key, opened: mine.opened }) : prompt(a, kept.body);
+  if (kept?.body) return tab === "result" ? result(a, kept.body, {
+    key, opened: mine.opened, target: mine.target,
+    revealed: (target) => { if (open === mine && mine.target === target) delete mine.target; },
+  }) : prompt(a, kept.body);
   if (kept?.error) return el("p", "px-6 py-4 text-sm text-rose-700 dark:text-rose-300", `This attempt cannot be read: ${kept.error}`);
   if (!kept) {
-    mine.bodies.set(key, { state: a.state });
+    const own = { state: a.state };
+    mine.bodies.set(key, own);
+    const current = () => mine.bodies.get(key) === own;
     source.body(mine.id, a.step, a.n).then(
-      (body) => mine.bodies.set(key, { state: a.state, body }),
-      (error) => mine.bodies.set(key, { state: a.state, error: error.message ?? String(error) }),
-    ).then(() => { if (open === mine && attemptOf() === a) render(); });
+      (body) => { if (current()) own.body = body; },
+      (error) => { if (current()) own.error = error.message ?? String(error); },
+    ).then(() => { if (current() && open === mine && attemptOf() === a) render(); });
   }
   return el("p", "px-6 py-4 text-sm text-slate-500", "Loading…");
+}
+
+function activateCheck(a, target) {
+  if (attemptOf() !== a) return;
+  open.target = { ...target, key: `${a.step}/${a.n}` };
+  open.tab = "result";
+  open.bodies.delete(`${a.step}/${a.n}`);
+  changed(selectionRoute(open));
+  render();
 }
 
 const nameOf = stepInfo;
@@ -350,7 +351,7 @@ function pane() {
   wrap.append(top);
   if (a.run) wrap.append(el("p", "px-6 pt-1 text-xs text-slate-500 dark:text-slate-400", [a.run.harness, a.run.provider, a.run.model, `${a.run.effort} effort`, a.run.access].join(" · ")));
   if (a.after) top.append(began(a)); // the full reason is readable here after selecting the row or tag
-  const content = tab === "lines" ? lines(a) : bodyTab(a, tab);
+  const content = tab === "lines" ? lines(a, (target) => activateCheck(a, target)) : bodyTab(a, tab);
   if (a.step === VERIFY.id) wrap.append(content);
   else {
     wrap.append(tabBar("attempt-body", "Attempt output", TABS, tab, (id) => {

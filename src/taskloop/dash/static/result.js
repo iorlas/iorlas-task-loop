@@ -66,6 +66,17 @@ function check(c, blocks, shown) {
   if (blocks > 1) top.append(el("span", "text-slate-500", `block ${c.block}`));
   top.append(el("span", "ml-auto tabular-nums text-slate-500", fmtDur(c.duration_ms)));
   node.append(top, c.output == null ? el("p", "mt-2 text-xs text-slate-500", "Output unavailable: the log file is gone or cannot be read.") : pre(plain(c.output) || "(no output)", `mt-2 ${c.passed ? "" : "border-l-2 border-l-rose-500"}`));
+  const target = shown.target;
+  if (target?.key === shown.key && target.block === c.block && target.name === c.name) {
+    node.open = true;
+    shown.opened.set(key, true);
+    requestAnimationFrame(() => {
+      if (!node.isConnected) return;
+      node.scrollIntoView({ block: "nearest" });
+      top.focus();
+      shown.revealed?.(target);
+    });
+  }
   return node;
 }
 
