@@ -45,7 +45,7 @@ _UNDEFINED = encode(CommandConclusion.UNDEFINED)
 # This is also the runtime's persisted-state compatibility version: increment it for incompatible changes to the
 # interpretation of execution state, even without a DDL change. Compatible code changes keep it and resume normally.
 SCHEMA = Schema(
-    version=31,
+    version=32,
     name="factory",
     steps={},
     ddl=f"""
@@ -256,8 +256,7 @@ CREATE TABLE land_candidate (
 CREATE UNIQUE INDEX land_delivered ON land_candidate(checks_attempt_id) WHERE delivery IS NOT NULL;
 CREATE TABLE task_hold (
  attempt_id TEXT PRIMARY KEY REFERENCES attempt(attempt_id),
- cause_id TEXT NOT NULL,
- reason TEXT NOT NULL CHECK(length(reason) BETWEEN 1 AND 200),
+ event TEXT NOT NULL CHECK(json_valid(event)),
  held_at REAL NOT NULL,
  labels TEXT CHECK(labels IS NULL OR labels IN ('moved','absent','not_ours','closed','missing','superseded')),
  labelled_at REAL,
@@ -309,7 +308,7 @@ LAND_LOADED = (
     "deadline,profile_digest,entry_pid,entry_start,entry_boot,validation,reason,validated_at,released_at,parked,superseded,"
     "superseded_at,delivery,delivered_at,remote_head,close,closed_at,rev"
 )
-HOLD = "attempt_id,cause_id,reason,held_at,labels,labelled_at,commenting_at,commented_at,cleared_at,rev"
+HOLD = "attempt_id,event,held_at,labels,labelled_at,commenting_at,commented_at,cleared_at,rev"
 CHECK_RESULT = "block,position,name,argv_digest,timeout,pid,pgid,proc_start,boot,started_at,ended_at,rc,conclusion"
 
 

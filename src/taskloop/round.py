@@ -70,6 +70,7 @@ from taskloop.round_trail import Trail
 from taskloop.selection import order
 from taskloop.slot_release import NotReleased, release_word
 from taskloop.task import TaskInspectionError
+from taskloop.task_event_cause import RoundCause, RoundReason, TaskEventCause
 from taskloop.task_status import Admission, Status, in_flight, restartable, skipped, task_status, words
 from taskloop.tracker import ACTOR, ReadyRows, TaskRow, ancestry, leaked_claim, ready_rows
 
@@ -306,11 +307,11 @@ def _resume(ports: StartPorts, backlog: str, minutes: int, each: AttemptView) ->
     return launched(ports.launcher.launch(backlog, each.task_id, minutes), backlog, each.task_id, key, existing=True)
 
 
-def _held(ports: HoldPorts, each: AttemptView, reason: str | None = None) -> Move:
+def _held(ports: HoldPorts, each: AttemptView, decided: TaskEventCause | None = None) -> Move:
     """`hold.hold_task` for the view's task as one move of its agent attempt: `held <reason>` when this call finished the
     hold, `pending <missing step> <refusal>` (the refusal in the word, so the quiet key changes with it and an unchanged
     pending hold is written once), `refused <refusal>` (a lost race: the task changed since the round read it)."""
-    found = hold_task(ports, each, reason)
+    found = hold_task(ports, each, decided)
     match found.word:
         case "held":
             word = f"held {found.reason}"
@@ -400,7 +401,7 @@ def _advance(ports: RoundPorts, request: NextRequest, waiting: tuple[AttemptView
             return result.reason
         stop = _stops(result, ADVANCE_STOPS)
         if not stop and not result.admitted and result.kind == "refused" and result.reason in HOLDS and each.label is not None:
-            trail.add(_held(ports.holding, each, result.reason))
+            trail.add(_held(ports.holding, each, RoundCause(reason=RoundReason(result.reason), explanation=result.detail or None)))
         elif stop or result.admitted:  # an unknown, a stop, or the next step admitted but not launched (the next round relaunches)
             trail.add(Move(each.task_id, "advance", result.word, each.attempt_id, result.detail, each.step))
         else:
@@ -478,7 +479,7 @@ def _publish(ports: RoundPorts, backlog: str, verified: Iterable[AttemptView], t
         if isinstance(found, PublishedTask):
             trail.add(Move(each.task_id, "publish", publish_word(found.result), found.attempt_id, step=each.step))
         elif found.kind == "refused" and found.reason == "branch_moved" and each.label is not None:
-            trail.add(_held(ports.holding, each, "branch_moved"))
+            trail.add(_held(ports.holding, each, RoundCause(reason=RoundReason.BRANCH_MOVED, explanation=found.detail or None)))
         else:
             trail.add(Move(each.task_id, "publish", found.word, each.attempt_id, found.detail, each.step))
     return ""

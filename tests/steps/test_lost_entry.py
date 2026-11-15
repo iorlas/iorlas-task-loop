@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 from beads_client import BdError
 from git_porcelain.testing import FakeWorktree
+from hold_fixtures import STUCK, event
 from test_round import Bench
 from test_slot_release import ENTRY, KEY, WORKER, WORKING, Ports, executed, head, stored
 
@@ -107,7 +108,7 @@ def test_capture_and_explicit_hold_prevent_reconciliation_even_after_stop_proof(
                 registered.execute(f"INSERT INTO execution VALUES ({','.join('?' for _ in captured)})", captured)
             registered.execute("UPDATE attempt SET phase='dispatching'")  # capture remains authoritative
         else:
-            HoldStore(lambda: registered).insert(HoldInsert(KEY.attempt_id, KEY.attempt_id, "stuck:entry_lost", 20))
+            HoldStore(lambda: registered).insert(HoldInsert(event=event(STUCK, KEY.attempt_id), now=20))
 
     if race:
         ports.inside = protect

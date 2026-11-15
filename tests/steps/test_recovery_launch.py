@@ -5,6 +5,7 @@ from collections.abc import Generator
 from pathlib import Path
 
 import pytest
+from hold_fixtures import STUCK_SQL
 from stream_proc import OwnedProcess
 from test_launch import FakeStart, Observe
 from test_recovery import Processes
@@ -101,7 +102,7 @@ def test_uncertain_start_retains_authority_until_its_owner_is_gone(con: sqlite3.
 
 
 @pytest.mark.parametrize(("change", "outcome"), [
-    ("INSERT INTO task_hold(attempt_id,cause_id,reason,held_at) VALUES('attempt','cause','held',10)", Outcome.INELIGIBLE),
+    (STUCK_SQL, Outcome.INELIGIBLE),
     ("INSERT INTO drain_state VALUES(1,1,'draining')", Outcome.DRAINING),
     ("UPDATE attempt SET rev=rev+1", Outcome.CHANGED),
 ])

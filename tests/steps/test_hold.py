@@ -11,6 +11,7 @@ from pathlib import Path
 
 import pytest
 from doubles import CHECKS, D, X
+from hold_fixtures import event, event_for
 from sqlite_store import begin_immediate
 from stream_proc import OwnedProcess
 
@@ -22,12 +23,13 @@ from taskloop.check_status import ChecksView
 from taskloop.check_store import CheckStore, ResultRow
 from taskloop.command_conclusion import CommandConclusion
 from taskloop.evidence_files import EvidenceFiles
-from taskloop.hold import ROUND_CAUSES, HoldMove, HoldPorts, clear_holds, hold_task
+from taskloop.hold import HoldMove, HoldPorts, clear_holds, hold_task
 from taskloop.hold_guide import pending_guide
 from taskloop.hold_store import COMMENT_LEASE, HoldInsert, HoldRow, HoldStore, Uncleared
 from taskloop.operations import Failed, Move, Round
 from taskloop.slot_release import AlreadyReleased, NotReleased, Released, ReleaseResult
 from taskloop.step_render import human
+from taskloop.task_event_cause import RoundCause, RoundReason
 from taskloop.tracker_client import HoldAnswer, HoldWrite, LabelStep, TrackerHolds
 
 NEEDS_OWNER = AttemptResult("collected", "needs_owner")
@@ -125,12 +127,17 @@ class Bench:
     def ports(self, view: AttemptView, reason: str | None = None) -> HoldPorts:
         """`fresh`, the task's status read now; None: the held view with its cause still standing (a stuck word, or the
         advance word of a round-passed refusal)."""
-        standing = replace(view, next="advance" if reason in ROUND_CAUSES else "stuck:entry_lost")
+        standing = replace(view, next="advance" if reason in {str(each) for each in RoundReason} else "stuck:entry_lost")
         return HoldPorts(HoldStore(lambda: self.con), AttemptStore(lambda: self.con), self.tracker.holds(), self.abandon, self.checks,
                          lambda: self.now, EvidenceFiles(self.root), lambda _backlog, _task: self.fresh or standing)
 
     def hold(self, view: AttemptView | None = None, reason: str | None = None) -> HoldMove:
-        return hold_task(self.ports(view or VIEW, reason), view or VIEW, reason)
+        found = view or VIEW
+        decided = RoundCause(reason=RoundReason(reason)) if reason is not None else None
+        if (decided is None and found.checks is None and found.hold_due is not None
+                and found.result.execution is None and found.result.status == "collected"):
+            decided = event_for(found.hold_due).cause
+        return hold_task(self.ports(found, reason), found, decided)
 
     def row(self, attempt_id: str = "a") -> HoldRow:
         return HoldStore(lambda: self.con).of_attempts((attempt_id,))[attempt_id]
@@ -192,7 +199,7 @@ def test_a_task_taken_again_meanwhile_is_a_lost_race_with_no_tracker_call(bench:
 
 def test_the_label_step_checks_a_is_still_current_right_before_it(bench: Bench) -> None:
     """Recorded, then the task taken again before the label step: no tracker call; the row stays for `clear_holds`."""
-    HoldStore(lambda: bench.con).insert(HoldInsert("a", "a", "failed:needs_owner", 5.0))
+    HoldStore(lambda: bench.con).insert(HoldInsert(event=event(), now=5.0))
     attempt(bench.con, "b", seq=2)
     found = bench.hold()
     assert (found.word, found.missing, found.refusal, bench.calls) == ("refused", "labels", "refused:changed", [])
@@ -228,7 +235,7 @@ def test_a_label_step_that_wrote_nothing_is_retried_and_nothing_follows_it(bench
 
 
 def test_a_crash_after_the_labels_resumes_at_the_abandon(bench: Bench) -> None:
-    row = HoldStore(lambda: bench.con).insert(HoldInsert("a", "a", "failed:needs_owner", 5.0))
+    row = HoldStore(lambda: bench.con).insert(HoldInsert(event=event(), now=5.0))
     HoldStore(lambda: bench.con).labelled("a", row.rev, "moved", 6.0)
     assert bench.hold().word == "held"
     assert bench.calls == ["release a True", "comment tl-1"]
@@ -237,7 +244,7 @@ def test_a_crash_after_the_labels_resumes_at_the_abandon(bench: Bench) -> None:
 def test_a_stale_snapshot_never_abandons_the_task_s_new_attempt(bench: Bench) -> None:
     """Labelled, then the task taken again (`tl step start` after the hold's abandon) before a round with an older
     snapshot reruns the hold: the abandon would act on the new attempt, so nothing is done."""
-    row = HoldStore(lambda: bench.con).insert(HoldInsert("a", "a", "failed:needs_owner", 5.0))
+    row = HoldStore(lambda: bench.con).insert(HoldInsert(event=event(), now=5.0))
     HoldStore(lambda: bench.con).labelled("a", row.rev, "moved", 6.0)
     attempt(bench.con, "b", seq=2)
     found = bench.hold()
@@ -349,7 +356,7 @@ def test_a_timeout_notice_survives_failed_delivery_recording(bench: Bench, monke
 
 def test_a_lease_older_than_the_lease_time_is_taken_again(bench: Bench) -> None:
     """A caller died after taking the lease (maybe after posting): within `COMMENT_LEASE` nobody posts; after it, one does."""
-    row = HoldStore(lambda: bench.con).insert(HoldInsert("a", "a", "failed:needs_owner", 5.0))
+    row = HoldStore(lambda: bench.con).insert(HoldInsert(event=event(), now=5.0))
     row = HoldStore(lambda: bench.con).labelled("a", row.rev, "moved", 6.0)
     assert HoldStore(lambda: bench.con).commenting("a", row.rev, 9.0) is not None
     assert (bench.hold().missing, bench.tracker.texts) == ("comment", [])
@@ -407,7 +414,7 @@ def test_a_checks_cause_holds_the_implement_attempt_and_names_its_failed_checks(
                ResultRow(1, 2, "lint", None, None, None, 1.0, None, None, CommandConclusion.UNDEFINED))
     failed = AttemptResult("collected", "failed:test:lingering")
     view = AttemptView("tasks", "tl-1", "check", CHECKS.attempt_id, "s2", "concluded", "gone", failed, False, "hold", label="auto",
-                       hold_due="failed:test:lingering", checks=ChecksView(row, results))
+                       hold_due="failed:test:lingering", checks=ChecksView(replace(row, reason="test:lingering"), results))
     bench.checks.checks_result = NotReleased("unsettled", "check_running")
     found = bench.hold(view)
     assert (found.attempt_id, found.missing, found.refusal) == ("implement", "abandon", "unsettled:check_running")
@@ -438,7 +445,7 @@ def test_clear_of_a_task_held_again_leaves_held_to_the_new_hold(bench: Bench) ->
 
 
 def test_clear_of_an_unfinished_label_step_supersedes_it_and_removes_held(bench: Bench) -> None:
-    HoldStore(lambda: bench.con).insert(HoldInsert("a", "a", "failed:needs_owner", 5.0))
+    HoldStore(lambda: bench.con).insert(HoldInsert(event=event(), now=5.0))
     attempt(bench.con, "b", seq=2)
     assert [each.word for each in clear_holds(HoldStore(lambda: bench.con), bench.tracker.holds(), lambda: 20.0, "tasks")] == ["cleared"]
     assert (bench.row().labels, bench.calls) == ("superseded", ["clear tl-1"])
@@ -469,7 +476,7 @@ def test_a_retried_comment_of_a_checks_cause_describes_the_checks_attempt_not_th
     row = CheckStore(lambda: checking).of_attempt("implement")[0]
     failed = AttemptResult("collected", "failed:test:failed")
     view = AttemptView("tasks", "tl-1", "check", CHECKS.attempt_id, "s2", "concluded", "gone", failed, False, "hold", label="auto",
-                       hold_due="failed:test:failed", checks=ChecksView(row, ()))
+                       hold_due="failed:test:failed", checks=ChecksView(replace(row, reason="test:failed"), ()))
     bench.tracker.commented = "unavailable"
     assert bench.hold(view).missing == "comment"
     after = AttemptView("tasks", "tl-1", "implement", "implement", "s1", "captured", "gone", AttemptResult("collected", "verified"),
@@ -513,7 +520,7 @@ def test_clear_waits_while_the_new_hold_s_label_step_is_unfinished_and_clears_on
     bench.hold()
     attempt(bench.con, "b", seq=2)
     store = HoldStore(lambda: bench.con)
-    held = store.insert(HoldInsert("b", "b", "failed:needs_owner", 15.0))
+    held = store.insert(HoldInsert(event=event(attempt_id="b"), now=15.0))
     calls = len(bench.calls)
     found = clear_holds(store, bench.tracker.holds(), lambda: 20.0, "tasks")
     assert [(each.word, each.detail) for each in found] == [("pending:held_again", "b")] and len(bench.calls) == calls
@@ -528,7 +535,7 @@ class Racing(HoldStore):
 
     def uncleared(self, backlog: str) -> tuple[Uncleared, ...]:
         found = super().uncleared(backlog)
-        row = self.insert(HoldInsert("b", "b", "failed:needs_owner", 15.0))
+        row = self.insert(HoldInsert(event=event(attempt_id="b"), now=15.0))
         self.labelled("b", row.rev, "moved", 16.0)
         return found
 
@@ -544,7 +551,7 @@ def test_clear_reads_the_new_hold_again_right_before_the_tracker_call(bench: Ben
 def test_a_hold_whose_cause_is_gone_before_its_label_step_is_retired_with_no_tracker_call(bench: Bench) -> None:
     """The work was relaunched after the hold was recorded (the status read now: an entry runs, no hold cause): the hold
     never writes a label or abandons it; its row is deleted, so a later stop of A can be held afresh."""
-    HoldStore(lambda: bench.con).insert(HoldInsert("a", "a", "stuck:expired_admitted", 5.0))
+    HoldStore(lambda: bench.con).insert(HoldInsert(event=event_for("stuck:expired_admitted"), now=5.0))
     bench.fresh = replace(VIEW, next="wait")
     found = bench.hold()
     assert (found.word, found.refusal, bench.calls) == ("refused", "refused:retired", [])
@@ -557,7 +564,7 @@ def test_a_retired_hold_that_moved_the_labels_removes_held_first_and_waits_on_a_
     """The work went on since and passed (the view read now is at `land`, no hold cause): `held` is removed, then the
     row; the approval label is not added back (a claimed task advances without it)."""
     store = HoldStore(lambda: bench.con)
-    row = store.insert(HoldInsert("a", "a", "failed:needs_owner", 5.0))
+    row = store.insert(HoldInsert(event=event(), now=5.0))
     store.labelled("a", row.rev, "moved", 6.0)
     bench.fresh = replace(VIEW, next="land")
     bench.tracker.cleared = "unavailable"
@@ -578,7 +585,7 @@ def test_the_cause_is_fenced_on_the_status_read_now(bench: Bench, fresh: Attempt
 
 
 def test_a_round_passed_cause_stands_while_the_view_still_waits_for_its_advance_or_publication(bench: Bench) -> None:
-    HoldStore(lambda: bench.con).insert(HoldInsert("a", "a", "branch_moved", 5.0))
+    HoldStore(lambda: bench.con).insert(HoldInsert(event=event(RoundCause(reason=RoundReason.BRANCH_MOVED)), now=5.0))
     bench.fresh = replace(VIEW, next="verify")
     assert bench.hold().refusal == "refused:retired"
     bench.fresh = replace(VIEW, next="publish")

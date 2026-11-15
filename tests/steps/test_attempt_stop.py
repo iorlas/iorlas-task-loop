@@ -8,6 +8,7 @@ from any_agent.procs import StopReport, Worker
 from any_agent.procs import Survivor as ProcessSurvivor
 from any_agent.supervisor import EntrySignal
 from any_agent.testing import FakeRun
+from hold_fixtures import event
 from sqlite_store import Store
 from test_attempt import ENTRY, KEY, WORKER, AttemptSurroundings, app, database
 from test_attempt import surroundings as attempt_surroundings
@@ -28,6 +29,7 @@ from taskloop.operations import Failed
 from taskloop.result_data import as_data
 from taskloop.slot_release import NotReleased, Released
 from taskloop.step_render import human
+from taskloop.task_event_cause import RunCause, RunReason, StuckCause, StuckReason
 
 surroundings = attempt_surroundings
 
@@ -57,10 +59,12 @@ def test_hold_cause_is_identical_in_tracker_cli_and_dashboard(
     result = app(con, surroundings, execute).execute(KEY, ENTRY)
     assert result.reason == ("run:timeout" if timed_out else "run:killed")
     reader = AttemptStore(lambda: con)
-    row = HoldStore(lambda: con).insert(HoldInsert(KEY.attempt_id, KEY.attempt_id, f"failed:{result.reason}", 20))
+    cause = RunCause(reason=RunReason.TIMEOUT if timed_out else RunReason.KILLED, timed_out=timed_out, rc=rc,
+                     stop=StopStore(lambda: con).get(KEY.attempt_id))
+    row = HoldStore(lambda: con).insert(HoldInsert(event=event(cause, KEY.attempt_id), now=20))
     agent = reader.attempts()[0]
     files = EvidenceFiles(surroundings.tmp)
-    held = facts(files, reader, row, "moved", agent, ())
+    held = facts(files, reader, row, "moved", agent)
     sentence = stop_text(held.stop, rc)
     assert sentence is not None and sentence in comment(held, Returned("unclaimed"))
     ports = StatusPorts(reader, lambda _entry: "gone", lambda: 30, lambda _key: None, lambda: "boot")
@@ -103,9 +107,10 @@ def test_entry_interruption_persists_cause_before_normal_capture_and_survives_re
     assert reopened is not None
     try:
         reader = AttemptStore(lambda: reopened)
-        row = HoldStore(lambda: reopened).insert(HoldInsert(KEY.attempt_id, KEY.attempt_id, "stuck:entry_lost", 20))
+        cause = StuckCause(reason=StuckReason.ENTRY_LOST, stop=StopStore(lambda: reopened).get(KEY.attempt_id))
+        row = HoldStore(lambda: reopened).insert(HoldInsert(event=event(cause, KEY.attempt_id), now=20))
         agent = reader.attempts()[0]
-        held = facts(EvidenceFiles(surroundings.tmp), reader, row, "moved", agent, ())
+        held = facts(EvidenceFiles(surroundings.tmp), reader, row, "moved", agent)
         sentence = stop_text(held.stop)
         assert sentence is not None and "sender of the entry signal is unknown" in sentence
         assert sentence in comment(held, Returned("unclaimed"))
@@ -120,7 +125,7 @@ def test_entry_interruption_persists_cause_before_normal_capture_and_survives_re
                    schema_version,model,effort,access_policy,deadline,1,seq+1,slot_head FROM attempt WHERE attempt_id='attempt'""",
         )
         reopened.execute("UPDATE reservation SET generation=2,attempt_id='later'")
-        retained = facts(EvidenceFiles(surroundings.tmp), reader, row, "moved", agent, ())
+        retained = facts(EvidenceFiles(surroundings.tmp), reader, row, "moved", agent)
         assert retained.stop == held.stop and sentence in comment(retained, Returned("unclaimed"))
         assert StopStore(lambda: reopened).get("later") is None
     finally:

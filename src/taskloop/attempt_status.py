@@ -95,6 +95,7 @@ class AttemptView:
     check_repeat_eligible: bool = False
     source_checks_id: str | None = None
     hold_due: str | None = None  # `Next: hold` with no hold recorded yet: the reason the next round holds it for
+    hold_action: Next | None = None  # the action that made this hold due, before the hold projection
     stop: AgentStop | None = None
     repo_id: str = ""
     land_mode: LandMode | None = None
@@ -390,11 +391,10 @@ def _holding(reads: StatusPorts, views: tuple[AttemptView, ...]) -> tuple[Attemp
 
 
 def with_hold(view: AttemptView, row: HoldRow | None) -> AttemptView:
-    """The hold decides the word after every other rule, except `unknown`: `hold` (due, or recorded and not finished)
-    or `on_hold` (finished); a view with no hold and no cause keeps its own word."""
+    """Apply recorded or due holds after other status rules, except `unknown`."""
     if view.next == "unknown":
         return replace(view, hold=row)
     if row is not None:
         return replace(view, hold=row, next=hold_next(row, view.release))
     due = cause(view)
-    return view if due is None else replace(view, next="hold", hold_due=due)
+    return view if due is None else replace(view, next="hold", hold_due=due, hold_action=view.next)

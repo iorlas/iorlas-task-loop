@@ -9,6 +9,8 @@ from pathlib import Path
 
 import pytest
 from doubles import D, X
+from hold_fixtures import event_for
+from hold_fixtures import row as hold_row
 from sqlite_store import begin_immediate
 
 from taskloop.answer_failures import AnswerFailureData, AnswerRule, encode
@@ -29,7 +31,7 @@ from taskloop.step_render import human
 FAILED = AttemptResult("collected", "needs_owner")
 VIEW = AttemptView("tasks", "tl-1", "plan", "a", "s1", "captured", "gone", FAILED, False, "done", label="auto")
 RETURNED = ReleaseRow(D, 5.0, "unclaimed")
-ROW = HoldRow("a", "a", "failed:needs_owner", 10.0, "moved", 11.0, 12.0, 13.0, None, 4, "tasks", "tl-1", "/tracker", "auto")
+ROW = hold_row()
 
 
 @pytest.mark.parametrize(("view", "expected"), [
@@ -56,11 +58,11 @@ def test_the_cause_rule(view: AttemptView, expected: str | None) -> None:
 
 @pytest.mark.parametrize(("row", "release", "done"), [
     (ROW, RETURNED, True), (ROW, ReleaseRow(D, 5.0, "not_held"), True), (ROW, ReleaseRow(D, 5.0, "unclaiming"), False),
-    (ROW, ReleaseRow(D, 5.0, "kept"), False), (ROW, None, False), (replace(ROW, commented_at=None), RETURNED, False),
-    (replace(ROW, labels=None, labelled_at=None), RETURNED, False),
-    (replace(ROW, labels="closed", commenting_at=None, commented_at=None), ReleaseRow(D, 5.0, "not_held"), True),
-    (replace(ROW, labels="missing", commenting_at=None, commented_at=None), ReleaseRow(D, 5.0, "not_held"), True),
-    (replace(ROW, labels="not_ours", commented_at=None), ReleaseRow(D, 5.0, "not_held"), False),
+    (ROW, ReleaseRow(D, 5.0, "kept"), False), (ROW, None, False), (ROW.model_copy(update={"commented_at": None}), RETURNED, False),
+    (ROW.model_copy(update={"labels": None, "labelled_at": None}), RETURNED, False),
+    (ROW.model_copy(update={"labels": "closed", "commenting_at": None, "commented_at": None}), ReleaseRow(D, 5.0, "not_held"), True),
+    (ROW.model_copy(update={"labels": "missing", "commenting_at": None, "commented_at": None}), ReleaseRow(D, 5.0, "not_held"), True),
+    (ROW.model_copy(update={"labels": "not_ours", "commented_at": None}), ReleaseRow(D, 5.0, "not_held"), False),
 ])
 def test_a_hold_is_finished_once_labelled_abandoned_and_commented(row: HoldRow, release: ReleaseRow | None, done: bool) -> None:
     assert finished(row, release) is done
@@ -81,9 +83,9 @@ def test_the_hold_decides_the_word_after_every_rule_but_unknown(view: AttemptVie
 
 
 @pytest.mark.parametrize(("word", "row", "label", "taken"), [
-    ("on_hold", ROW, "auto", True), ("on_hold", replace(ROW, labels="absent"), "auto", True),
+    ("on_hold", ROW, "auto", True), ("on_hold", ROW.model_copy(update={"labels": "absent"}), "auto", True),
     ("on_hold", ROW, "auto2", False),
-    *(("on_hold", replace(ROW, labels=each), "auto", False) for each in ("not_ours", "closed", "missing")),
+    *(("on_hold", ROW.model_copy(update={"labels": each}), "auto", False) for each in ("not_ours", "closed", "missing")),
     ("hold", ROW, "auto", False), ("start", None, "auto", False),
 ])
 def test_only_a_hold_that_removed_the_round_s_own_label_is_taken_again(word: str, row: HoldRow | None, label: str, taken: bool) -> None:
@@ -95,12 +97,12 @@ def test_only_a_hold_that_removed_the_round_s_own_label_is_taken_again(word: str
     ("land:remote_rejected", True), ("land:branch_moved", True), ("land:claim_lost", True),
 ])
 def test_terminal_decisions_resist_restored_approval_labels(reason: str, retry: bool) -> None:
-    assert reingests("on_hold", replace(ROW, reason=reason), "auto") is retry
+    assert reingests("on_hold", ROW.model_copy(update={"event": event_for(reason)}), "auto") is retry
 
 
 @pytest.mark.parametrize("pending", [True, False])
 def test_terminal_land_guidance_preserves_work_without_restart_advice(pending: bool) -> None:
-    row = replace(ROW, reason="land:conflict")
+    row = ROW.model_copy(update={"event": event_for("land:conflict")})
     view = replace(VIEW, next="hold" if pending else "on_hold", hold=None if pending else row,
                    hold_due=row.reason if pending else None)
     text = hold_guide(view)
@@ -128,7 +130,7 @@ def reads(con: sqlite3.Connection, now: float = 500) -> StatusPorts:
 def recorded(con: sqlite3.Connection, attempt_id: str = "a", cause_id: str = "a", reason: str = "stuck:expired_admitted",
              comment: bool = True) -> HoldRow:
     store = HoldStore(lambda: con)
-    row = store.insert(HoldInsert(attempt_id, cause_id, reason, 10.0))
+    row = store.insert(HoldInsert(event=event_for(reason, attempt_id, cause_id), now=10.0))
     row = store.labelled(attempt_id, row.rev, "moved", 11.0)
     leased = store.commenting(attempt_id, row.rev, 12.0)
     assert leased is not None

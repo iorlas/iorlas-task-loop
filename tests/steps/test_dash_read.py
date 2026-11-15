@@ -12,6 +12,7 @@ from any_agent.activity import Activity
 from any_agent.activity import encode as encode_activity
 from conftest import DONE
 from doubles import CHECKS, REQUIRED, TARGET, D
+from hold_fixtures import event, event_for
 from sqlite_store import begin_immediate
 
 from taskloop import activity_file, check_store
@@ -92,7 +93,7 @@ def test_current_agent_questions_agree_on_board_and_detail(
     saved_ask(registered, files, step=step)
     if released:
         store = HoldStore(lambda: registered)
-        hold = store.insert(HoldInsert("attempt", "attempt", "failed:needs_owner", 10))
+        hold = store.insert(HoldInsert(event=event(attempt_id="attempt"), now=10))
         store.labelled("attempt", hold.rev, "moved", 11)
         registered.execute("INSERT INTO slot_release VALUES ('attempt','dispatch',1,?,12,'unclaimed')", (D,))
         registered.execute("UPDATE task_hold SET commenting_at=12,commented_at=13 WHERE attempt_id='attempt'")
@@ -183,14 +184,13 @@ def test_damaged_question_evidence_preserves_the_ask(
     ("branch_moved", "The factory held this task with recorded cause: branch_moved."),
     ("land:branch_moved", "The task branch no longer holds exactly the commit that was checked."),
     ("failed:run:timeout", "The agent did not finish before its deadline ("),
-    ("unrecognized:cause", "The factory held this task with recorded cause: unrecognized:cause."),
 ])
 def test_factory_holds_do_not_reuse_an_agent_question(
     registered: sqlite3.Connection, tmp_path: Path, reason: str, explanation: str,
 ) -> None:
     files = EvidenceFiles(tmp_path)
     saved_ask(registered, files)
-    HoldStore(lambda: registered).insert(HoldInsert("attempt", "attempt", reason, 10))
+    HoldStore(lambda: registered).insert(HoldInsert(event=event_for(reason, "attempt"), now=10))
     card, = board_of(registered, files, Tracker()).tasks
     assert (card.column, card.ask, card.question, card.hold_cause) == ("held", False, None, reason)
     assert card.hold_explanation is not None and explanation in card.hold_explanation
@@ -202,7 +202,7 @@ def test_factory_holds_do_not_reuse_an_agent_question(
 def test_checks_hold_does_not_reuse_its_agents_question(checking: sqlite3.Connection, tmp_path: Path) -> None:
     files = EvidenceFiles(tmp_path)
     saved_ask(checking, files, AttemptKey("implement", "implement-token", 1), "implement")
-    HoldStore(lambda: checking).insert(HoldInsert("implement", "checks", "failed:needs_owner", 10))
+    HoldStore(lambda: checking).insert(HoldInsert(event=event_for("failed:test:failed", "implement", "checks"), now=10))
     card, = board_of(checking, files, Tracker()).tasks
     detail = build_task(TaskPorts(reads_of(checking), files, Tracker()), "tasks", "tl-1")
     assert isinstance(detail, TaskDetail) and detail.task == card

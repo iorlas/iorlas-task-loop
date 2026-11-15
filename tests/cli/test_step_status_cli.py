@@ -6,6 +6,7 @@ from collections.abc import Generator
 from pathlib import Path
 
 import pytest
+from hold_fixtures import event_for
 from sqlite_store import Store, begin_immediate
 
 from taskloop import cli_composition
@@ -203,7 +204,14 @@ def test_show_requires_a_selection_when_backlogs_are_empty_or_ambiguous(
 
 def hold(con: sqlite3.Connection, key: str, reason: str, *, completed: bool = False) -> None:
     store = HoldStore(lambda: con)
-    row = store.insert(HoldInsert(key, key, reason, 10))
+    captured = event_for(reason, key)
+    if captured.cause_id != key:
+        captured = event_for(reason, key, f"{key}-checks")
+        con.execute("UPDATE attempt SET step='implement',after_commit=? WHERE attempt_id=?", (D, key))
+        con.execute("""INSERT INTO checks_attempt(attempt_id,dispatch_token,generation,after_attempt_id,number,slot,
+            slot_head,target_commit,required,deadline) VALUES(?,?,1,?,1,'s1',?,?,'[]',100)""",
+                    (captured.cause_id, captured.cause_id + "-token", key, D, D))
+    row = store.insert(HoldInsert(event=captured, now=10))
     if completed:
         row = store.labelled(key, row.rev, "moved", 11)
         leased = store.commenting(key, row.rev, 12)

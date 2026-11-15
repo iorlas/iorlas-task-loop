@@ -162,7 +162,6 @@ APPROVED_EXCEPTIONS.update({
         ("taskloop.hold_facts", "taskloop.merge.models"),
         ("taskloop.hold_facts", "taskloop.merge.store"),
         ("taskloop.hold_status", "taskloop.merge.models"),
-        ("taskloop.hold_store", "taskloop.merge.models"),
         ("taskloop.land", "taskloop.merge.models"),
         ("taskloop.land_conflict.abort", "taskloop.merge.models"),
         ("taskloop.land_conflict.abort_models", "taskloop.merge.models"),

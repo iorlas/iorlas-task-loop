@@ -147,6 +147,10 @@ class Checking(Factory):
 
     def conclude(self, key: AttemptKey, body: str, me: EntryIdentity) -> None:
         """The entry's conclusion, then its settled release of its own slot."""
+        if body == "failed" and not self.checks.results(key):
+            block = self.checks.block(key)
+            self.checks.start(key, block, 0, "test", "c" * 64, 600, self.now)
+            self.checks.finish(key, block, 0, CommandConclusion.FAILED, 1, self.now)
         if body == "passed":
             self.checks.conclude(key, "passed", None, self.now)
         else:
