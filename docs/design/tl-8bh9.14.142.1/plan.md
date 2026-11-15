@@ -1,86 +1,89 @@
 # Header
 Task: tl-8bh9.14.142.1
-Base: 220beb55af526f716b1d5e0d3f2e6e700e126801
-Depth: medium; two owning modules.
-Owner decisions: settled; no dependency stated unlanded.
+Base: 8458045eea670bf77b98fd6f57dba379e30c024c
+Depth: medium; three owning modules.
+Decisions: settled; no unlanded dependency.
 Evidence budget: 12 model calls.
-Size: 7 changed files, 2 independent behaviours, about 60 implement model calls.
+Size: 14 files including tests/artifacts; 3 independent behaviours; ~60 implement calls.
 
 ## Outcome and non-goals
-An implement commit includes eligible slot changes omitted from the answer. Typed dirty reads, baseline comparisons and staging fences already exist; selecting and validating the complete set is the gap. No database, merge-resolution or answer-schema changes.
+Slot selection and guidance exist; verdict membership still rejects safe changes omitted from implement answers. Complete verification and repair affected tests. No schema, shelf, merge-resolution or publication changes.
 
 ## Settled decisions
-- Derive only for implement commit effects; preserve keep and unfinished effects.
-- Retain the answer schema, decoder bounds and cross-field checks; its list does not select commit contents.
-- Use pinned typed dirty evidence relative to base, never display listings.
-- Validate the whole set before staging; refuse unsafe or excess paths without truncation.
-- Retain 96-path and file-byte ceilings, plan.md prohibition, factory Git writes, fences and crash adoption.
+- Implement selection uses typed slot status against base; answer.paths remains accepted but does not restrict implement commit contents.
+- Plan commits retain per-attempt answer-path membership throughout their chain.
+- Preserve unsafe, ignored, count and byte refusals, preview parity and factory-owned Git writes.
+- Preserve chain ancestry, modes, artifacts, fencing, crash adoption and existing answer-list contracts.
 
 ## Open decisions
 - None.
 
 ## Change map
-- `src/taskloop/factory_commit.py`: `_review`, `_commit`, `refusal`, `leftovers` derive and validate implement paths; preserve public signatures and plan selection.
-- `src/taskloop/implement_step.py`: `input_text`, `PLAN_HANDOFF`, `OPENING`, `repeat_instructions`, `failed_check_feedback` align selection guidance; preserve decoder/schema.
-- `tests/steps/test_commit_paths.py`: `answer`, `stages` support omitted-change and refusal coverage; adapt shared feedback assertions.
-- `tests/steps/test_steps.py`: `test_fixed_input_and_repeat_keep_unfinished_answer_and_saved_work_guidance` and failed-check guidance distinguish plan/implement selection.
-- `tests/steps/test_implement_feedback.py`: `test_failed_check_repeat_retains_the_original_implement_policy` updates selection guidance.
-- `src/taskloop/steps.py`: consult `IMPLEMENT`, `kind`, `failed_check_feedback`, the answer/rules producer and prompt callers.
-- `src/taskloop/slot_state.py`: consult `observe_slot`, `staged`, `bounded`; keep `listing` display-only.
-- `src/taskloop/attempt_types.py`: consult `StepRules`, `AnswerState`, `path_allowed`; no stored-field changes.
-- `src/taskloop/answer_decode.py`: consult `paths`, `message` for retained answer checks.
-- `src/taskloop/verifier.py`: consult `Verifier._settle`, `Verifier.leftovers`, settlement and preview callers.
-- `src/taskloop/merge/git.py`: preserve `accepted`'s `unsafe_path` call contract.
+- `src/taskloop/factory_commit.py`: retain `_review`, `_commit`, `_foreign`, `leftovers`; audit complete selection and pre-stage refusals.
+- `src/taskloop/implement_step.py`: retain `COMMIT_SELECTION`, `input_text`, `repeat_instructions`, `failed_check_feedback` and schema.
+- `src/taskloop/verdict.py`: `judge`, `_link`, `_changes` require answer membership for plan links, allowing reviewed implement changes omitted from answers.
+- `tests/steps/test_commit_paths.py`: `answer`, `stages` and selection cases retain complete-set safety, limits and preview coverage.
+- `tests/steps/test_verifier.py`: `test_judge_rules_the_verify_path_cannot_reach` and commit cases cover implement omission acceptance and plan rejection.
+- `tests/steps/test_repeat_dispatch.py`: cover implement chain omissions and retain plan membership/ancestry checks.
+- `tests/steps/test_check_repeat.py`: `repair_agent` and repair cases verify omitted safe changes through fresh checks; correct exposed assumptions.
+- `tests/steps/test_steps.py`: prompt and `attributes` cases retain selection guidance and plan policy.
+- `tests/steps/test_implement_feedback.py`: failed-check assertions retain complete-slot guidance.
+- `tests/steps/test_agent_launch.py`: input/feedback assertions retain policy across launch paths.
+- `tests/steps/test_input_context.py`: `settle` caller retains digest freshness and post-commit leftover fixtures.
+- `tests/steps/real/test_commit_real.py`: `settle`, `clean_at`, `judge` callers retain pointer, safety and omission coverage with local fixtures.
+- `src/taskloop/verifier.py`: consult `Verifier._settle`, `Verifier.leftovers`, settlement and judgment callers.
+- `src/taskloop/steps.py`: consult `IMPLEMENT`, `PLAN`, `kind`, `failed_check_feedback`, rule/schema producers and prompt dispatch.
+- `src/taskloop/check_repeat/repair.py`: consult the `failed_check_feedback` caller.
+- `src/taskloop/slot_state.py`: consult `observe_slot`, pinned typed status and display listing boundaries.
+- `src/taskloop/attempt_types.py`: consult `StepRules`, `AnswerState`, `ChainLink`, `path_allowed`; retain stored shapes.
+- `src/taskloop/answer_decode.py`: consult `paths`, `message`; retain decoder bounds.
+- `src/taskloop/merge/git.py`: consult `accepted`, the shared `unsafe_path` caller.
 - `tests/steps/test_answer_contract.py`: consult implement decoding and bounds cases.
-- `tests/steps/test_verifier.py`: consult commit and fresh-leftover callers.
-- `tests/steps/test_merge_prepare.py`: preserve keep-effect `settle` caller.
-- `tests/steps/test_slot_lock.py`: preserve serialization wrapper's `settle` signature.
-- `tests/steps/real/test_commit_real.py`: consult `settle`, `clean_at` callers; no live execution.
-- `docs/design/tl-8bh9.14.142.1/plan.md`: new; implement-step instructions.
-- `docs/design/tl-8bh9.14.142.1/plan-metadata.json`: new; plan-reuse metadata.
+- `tests/steps/test_merge_prepare.py`: consult keep-effect `settle` caller.
+- `tests/steps/test_slot_lock.py`: consult wrapped `settle` signature and serialization coverage.
+- `docs/design/tl-8bh9.14.142.1/plan.md`: revise contract and read list.
+- `docs/design/tl-8bh9.14.142.1/plan-metadata.json`: record preparation commit and consulted paths.
 
 ## Read list
-- `src/taskloop/factory_commit.py:91-188` — settlement, selection, ignored checks and foreign index.
-- `src/taskloop/factory_commit.py:191-222` — unchanged filtering and nothing-written result.
-- `src/taskloop/factory_commit.py:246-365` — Git-file protection, file safety and read-only parity.
-- `src/taskloop/implement_step.py:27-43` — accepted answer schema.
-- `src/taskloop/implement_step.py:76-203` — decoder, initial prompt and both feedback paths.
-- `src/taskloop/steps.py:28-74` — rule and answer producer registration, feedback caller.
-- `src/taskloop/slot_state.py:122-135` — existing pinned typed dirty read.
-- `src/taskloop/slot_state.py:176-196` — display listing versus staged evidence and diagnostic bounds.
-- `src/taskloop/attempt_types.py:66-75` — step limits.
-- `src/taskloop/attempt_types.py:200-207` — stored answer contract.
-- `src/taskloop/attempt_types.py:350-359` — structural path restrictions.
-- `src/taskloop/answer_decode.py:13-45` — retained list and message checks.
-- `src/taskloop/verifier.py:129-184` — preview and settlement integration.
-- `src/taskloop/merge/git.py:78-89` — shared safety helper caller.
-- `tests/steps/test_commit_paths.py:21-173` — semantic staging fixtures, unsafe diagnostics and unchanged filtering.
-- `tests/steps/test_commit_paths.py:175-239` — baseline safety, foreign index and plan isolation.
-- `tests/steps/test_steps.py:287-309` — initial/repeat and failed-check guidance assertions.
-- `tests/steps/test_implement_feedback.py:21-35` — failed-check prompt composition.
-- `tests/steps/test_answer_contract.py:225-307` — retained implement list contract.
-- `tests/steps/test_verifier.py:291-311` — commit and read-only leftover integration.
-- `tests/steps/test_merge_prepare.py:155-168` — keep-effect saved-work review.
-- `tests/steps/test_slot_lock.py:190-207` — settlement signature and locking wrapper.
-- `tests/steps/real/test_commit_real.py:75-98` — existing real-adapter callers; no live execution.
+- `src/taskloop/factory_commit.py:121-214` — commit, selection, index fence and ignored checks.
+- `src/taskloop/factory_commit.py:300-394` — unsafe-file review, clean-tree and preview.
+- `src/taskloop/implement_step.py:92-210` — initial, repeat and failed-check guidance.
+- `src/taskloop/verdict.py:17-97` — chain assembly and membership/mode/blob rules.
+- `src/taskloop/verifier.py:129-190` — preview and settlement-to-judgment callers.
+- `src/taskloop/steps.py:28-74` — step identity, rules and prompt dispatch.
+- `src/taskloop/check_repeat/repair.py:55-72` — failed-check input producer.
+- `src/taskloop/slot_state.py:122-137` — pinned typed observation.
+- `src/taskloop/attempt_types.py:66-77` — path and file caps.
+- `src/taskloop/attempt_types.py:200-365` — answer/chain contracts and path restrictions.
+- `src/taskloop/answer_decode.py:13-46` — retained decoder checks.
+- `src/taskloop/merge/git.py:78-89` — safety helper consumer.
+- `tests/steps/test_commit_paths.py:237-353` — plan isolation and complete-slot safety cases.
+- `tests/steps/test_verifier.py:291-361` — factory commit and saved-work integration.
+- `tests/steps/test_verifier.py:430-497` — plan membership, limits and unknown reads.
+- `tests/steps/test_repeat_dispatch.py:285-318` — per-attempt membership and ancestry.
+- `tests/steps/test_check_repeat.py:88-184` — repair producer and fresh checks.
+- `tests/steps/test_steps.py:287-330` — prompt assertions.
+- `tests/steps/test_implement_feedback.py:21-35` — failed-check policy.
+- `tests/steps/test_agent_launch.py:111-139` — launch policy.
+- `tests/steps/test_input_context.py:256-285` — digest and post-commit leftovers.
+- `tests/steps/real/test_commit_real.py:273-353` — local-adapter omission and verdict cases.
+- `tests/steps/test_answer_contract.py:225-307` — implement schema bounds.
+- `tests/steps/test_merge_prepare.py:155-168` — keep-effect settlement.
+- `tests/steps/test_slot_lock.py:190-207` — serialization wrapper.
 
 ## Contract
-Intent: derive a deterministic unique tuple from typed tracked and untracked paths relative to base, including deletions and both rename paths. Keep stored AnswerState unchanged.
+Intent: distinguish membership by existing step identity. Keep public signatures, AnswerState, ChainLink and StepRules; add no stored data or vocabulary.
 
-Effect: before staging, apply unchanged-file filtering, path_allowed, plan.md prohibition, actual-path count, unsafe_path byte/type/content checks, changed Git-file protection and ignored attributes checks. Exclude unchanged ordinary files, including credential fixtures and over-cap baseline files. A foreign staged edit behind unchanged worktree content must still refuse.
+Effect: select unique sorted tracked/untracked paths against base, filtering byte-identical ordinary files. Review all changes before staging, including deletions and both rename paths. Retain path/plan.md, credential/type/content, ignored-attribute, count/byte and foreign-index checks. Bound diagnostics only; preserve unknown-read and fencing handling.
 
-Result: retain Committed, Rejected and Unsettled. Location, plan and count violations use unsafe with a nonempty predicate/limit explanation; ignored retains its meaning. Preview and commit share review. Empty changes retain nothing_written; unknown evidence propagates. Bound diagnostics, never candidate sets. No new vocabulary, schema or shelf API.
-
-Plan commits still select answer.paths. Retain fenced stage/record, answer message and attempt trailer. Every implement prompt explains complete-slot selection and removal/restoration of unwanted edits, retaining required answer-list guidance without claiming it restricts the commit.
+Result: judge passes step identity through private validation. Plan links require declared paths; implement links permit omissions. Retain location, deletion, mode, size, ancestry/artifact rules, existing result types, reuse/keep, crash adoption and clean-tree checks.
 
 ## Work packages
-1. `factory_commit.py`, `test_commit_paths.py`: derive/review the set; close A1-A4 and A6 with semantic fakes, rename deletion/addition, count boundaries and preview parity.
-2. `implement_step.py`, `test_steps.py`, `test_implement_feedback.py`, shared feedback assertions in `test_commit_paths.py`: close A5. Verify focused files, then run `just check 2>&1 | tail -60` and `just test 2>&1 | tail -40` once each, last, with pipeline failure propagation.
+1. `verdict.py`, `test_verifier.py`, `test_repeat_dispatch.py`: distinguish membership by step; close A2 with single/multiple-attempt omissions and unchanged plan regressions.
+2. `factory_commit.py`, `test_commit_paths.py`, `real/test_commit_real.py`: retain and verify selection/refusal boundaries; close A1.
+3. `implement_step.py` and mapped guidance/repair tests: close A3 and fix exposed failures. Run focused installed-package tests, then `just check 2>&1 | tail -60` and `just test 2>&1 | tail -40` once each, last, with pipefail; preserve unrelated assertions.
 
 ## Acceptance behaviours
-A1. A valid implement answer listing only one change commits all safe added, modified and deleted slot files, including both rename paths, in one factory commit with its message and trailer.
-A2. Answer-only unchanged entries do not stage files or bypass nothing_written; a foreign staged edit behind unchanged worktree content still refuses.
-A3. An unlisted forbidden location, plan.md, unsafe type/content or oversized file refuses before staging; 96 actual paths pass the count boundary and 97 refuse without truncation.
-A4. Ignored attributes affecting an unlisted changed path refuse, and read-only inspection reports the same refusal as settlement.
-A5. Initial, repeat and failed-check implement prompts consistently explain selection from the slot and removal/restoration of unwanted edits; the existing accepted answer-list contract and Git-write prohibition remain.
-A6. Planning still commits only its declared paths, while keep-effect saved-work review and factory crash-adoption/fencing contracts retain their existing results.
+A1. An implement answer omitting safe added, modified, deleted or renamed paths commits the complete reviewed slot set with its message and trailer. Unsafe/ignored omitted changes and excess paths/bytes refuse before staging; preview agrees. Unchanged entries, foreign index content and unknown evidence retain their handling.
+A2. Those implement commits verify across initial/repeat attempts, including failed-check repair followed by fresh passing checks. Plan commits still reject changes absent from that attempt's paths. Ancestry, modes, sizes, artifacts, keep and recovery constraints remain enforced.
+A3. Initial, repeat and failed-check inputs explain slot-derived selection and removing/restoring unwanted edits. The accepted answer-list schema and factory Git ownership remain intact.
