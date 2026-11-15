@@ -19,7 +19,8 @@ from pydantic import BaseModel, ConfigDict, Field, computed_field
 from sqlite_store import begin_immediate
 from stream_proc import OwnedProcess
 
-from taskloop.attempt_reads import AttemptReads, StoreRefused, StoreUnavailable, as_int, as_nullable_int, as_nullable_text, as_text
+from taskloop.attempt_reads import StoreRefused, StoreUnavailable, as_int, as_nullable_int, as_nullable_text, as_text
+from taskloop.attempt_store import AttemptReads
 from taskloop.attempt_types import AttemptKey
 from taskloop.check_store import RESULT_HELD
 from taskloop.command_conclusion import SETUP_CONCLUSIONS, CommandConclusion, decode, encode

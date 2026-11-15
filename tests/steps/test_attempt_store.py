@@ -9,7 +9,7 @@ import pytest
 from sqlite_store import Store
 
 from taskloop.attempt_reads import StoreUnavailable
-from taskloop.attempt_store import AttemptStore
+from taskloop.attempt_store import REGISTRATION_BUSY_MS, AttemptStore, configure_registration
 from taskloop.attempt_types import AttemptKey, EntryIdentity, Replaced
 from taskloop.factory_schema import SCHEMA
 
@@ -39,6 +39,40 @@ def con(factory: sqlite3.Connection) -> sqlite3.Connection:
 
 def entry(con: sqlite3.Connection) -> tuple[object, ...]:
     return con.execute("SELECT entry_pid,entry_start,entry_boot,rev FROM attempt").fetchone()
+
+
+def test_registration_configuration_is_connection_local_and_preserves_transaction(
+    con: sqlite3.Connection, tmp_path: Path,
+) -> None:
+    ordinary = Store(SCHEMA).open_rw(tmp_path / "ordinary.db")
+    assert ordinary is not None
+    try:
+        con.execute("BEGIN IMMEDIATE")
+        configure_registration(con)
+        assert con.in_transaction
+        assert con.execute("PRAGMA busy_timeout").fetchone() == (REGISTRATION_BUSY_MS,)
+        assert ordinary.execute("PRAGMA busy_timeout").fetchone() == (5000,)
+        con.rollback()
+    finally:
+        ordinary.close()
+
+
+def test_registration_configuration_propagates_sqlite_errors(con: sqlite3.Connection) -> None:
+    con.close()
+    with pytest.raises(sqlite3.Error):
+        configure_registration(con)
+
+
+def test_missing_status_results_and_required_input(con: sqlite3.Connection) -> None:
+    store = AttemptStore(lambda: con)
+    missing = AttemptKey("missing", "missing", 1)
+    assert store.state(missing) is None
+    assert store.tracker_root(missing) is None
+    assert store.release_of(missing) is None
+    assert store.attempt_of("tasks", "missing") is None
+    assert store.release_of(KEY) is None
+    with pytest.raises(StoreUnavailable, match="Attempt input reference unavailable"):
+        store.input_ref(missing)
 
 
 def test_first_registration_wins_and_a_second_is_a_conflict(con: sqlite3.Connection) -> None:
