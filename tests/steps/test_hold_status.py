@@ -211,7 +211,7 @@ def test_show_prints_the_hold_lines_and_the_answer_with_the_stored_label(factory
     text = "\n".join(human("show", shown, tmp_path / "factory.db"))
     assert "Hold: branch_moved at 1970-01-01 00:00:10 UTC (cause a)" in text
     assert "Hold tracker: `auto` removed, `held` added, commented" in text and "Hold claim: returned" in text
-    assert "Next: on_hold\nHeld: the factory abandoned" in text and "`bd label add tl-1 auto`" in text
+    assert "Next: on_hold\nHeld: the factory abandoned" in text and "restore its approval label `auto`" in text
     assert "First restore task/tl-1 to contain the verified commit" in text and "--abandon` again" not in text
     data = as_data(shown)
     assert data["label"] == "auto" and data["hold_due"] is None
@@ -219,14 +219,14 @@ def test_show_prints_the_hold_lines_and_the_answer_with_the_stored_label(factory
                             "labelled_at": 11.0, "commented_at": 13.0, "cleared_at": None}
 
 
-def test_the_on_hold_guide_gives_the_one_fix_of_the_cause(factory: sqlite3.Connection, tmp_path: Path) -> None:
+def test_the_on_hold_guide_explains_the_cause_and_recovery_decision(factory: sqlite3.Connection, tmp_path: Path) -> None:
     plan(factory, released="unclaimed")
     recorded(factory, reason="failed:run:timeout")
     shown = show_attempt(reads(factory), tmp_path, "tasks", "tl-1")
     assert isinstance(shown, Shown)
     text = "\n".join(human("show", shown, tmp_path / "factory.db"))
-    assert "did not finish before its deadline" in text and "To fix it, raise `--minutes` for the next run, then add back" in text
-    assert "`bd label add tl-1 auto`" in text
+    assert "did not finish before its deadline" in text and "allow more time for the next attempt" in text
+    assert "restore its approval label `auto`" in text and "--minutes" not in text and "bd label" not in text
     assert "edit the task's description" not in text
 
 

@@ -87,11 +87,12 @@ def b(tmp_path: Path) -> LandBench:
     return bench(tmp_path)
 
 
-def test_the_guide_names_real_commands_and_an_aside_no_earlier_recovery_used() -> None:
+def test_the_guide_preserves_old_work_and_explains_a_fresh_plan_on_current_main() -> None:
     first, second = restart("tl-1", "a" * 40), restart("tl-1", "b" * 40)
-    assert "git branch -m task/tl-1 old/tl-1-" + "a" * 12 in first and "old/tl-1-" + "a" * 12 not in second
-    assert "git push origin --delete task/tl-1" in first and "stay only in your checkout" in first and "cannot fast-forward" in first
-    assert "tl step release tl-1 --abandon" in first and "tl step start tl-1" in first
+    assert "old/tl-1-" + "a" * 12 in first and "old/tl-1-" + "a" * 12 not in second
+    assert "including saved work, locally" in first and "unpublished commits" in first
+    assert "from plan on the current main" in first and "retiring its published branch" in first
+    assert "tl step" not in first and "git " not in first and "--" not in first
 
 
 def test_manual_recovery_after_a_read_only_conflict_is_restarted_abandoned_and_lands(b: LandBench) -> None:

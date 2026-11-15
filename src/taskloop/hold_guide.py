@@ -7,7 +7,7 @@ from typing import Final
 
 from taskloop.agents.stop_text import stop_text
 from taskloop.attempt_status import AttemptView
-from taskloop.hold_cause import cause, next_step, terminal_cause
+from taskloop.hold_cause import cause, terminal_cause
 from taskloop.hold_store import HoldRow
 from taskloop.printable import one_line
 from taskloop.round_guide import automatic_guide
@@ -19,8 +19,8 @@ OPEN: Final = ("The factory holds this task for a person but has not finished th
 HOLD: Final = OPEN
 LEAD: Final = "Held: the factory abandoned the attempt and waits for a person (the hold's comment on the task says why)."
 ON_HOLD: Final = (LEAD + " To answer, edit the task's description or acceptance criteria (the agent reads those, not comments), then "
-                  "add back the label the task was taken under (`bd label add <task> <label>`): the next round under that "
-                  "label starts it again at plan on task/<task> as it is. To give up, `bd close <task>`.")
+                  "restore the approval label the task was taken under. The next round under that label starts it again at plan "
+                  "on its retained task branch. To give up, close the task.")
 LABELS: Final = {"moved": "`{label}` removed, `held` added", "absent": "`held` added (`{label}` was not on the task)",
                  "not_ours": "no label changed (another actor holds the task)", "closed": "nothing written (the task is closed)",
                  "missing": "nothing written (no such task)", "superseded": "superseded (the task was taken again first)"}
@@ -78,10 +78,24 @@ def hold_guide(view: AttemptView) -> str:
     found, ours = cause(row.reason, stop=view.stop, rc=rc), row.labels != "not_ours"
     edit = "edit the task's description or acceptance criteria (the agent reads those, not comments)"
     again = f"the next round under that label starts it again at plan on task/{task} as it is"
-    back = (f"add back the label the task was taken under (`bd label add {task} {label}`): {again}" if ours
-            else f"start it by hand (`tl step start {task}`): rounds do not take it again")
+    back = (f"restore its approval label `{label}`: {again}" if ours and row.label is not None else
+            "arrange manual continuation with the current owner; rounds do not take it again" if not ours else
+            "choose manual continuation; no approval label was recorded for rounds to take it again")
     what = "" if found is None else " " + found.what
-    answer = f"{LEAD}{what} {next_step(found, back, edit)} To give up, `bd close {task}`."
+    reason = row.reason.removeprefix("failed:")
+    if reason in ("run:vendor_blip", "run:bad_request") and stop_text(view.stop, rc) is None:
+        what = (" The agent's vendor could not accept or complete the request. Review its explanation in the retained "
+                "evidence and the account's available model and reasoning effort choices.")
+    recovery = f"To answer, {edit}, then {back}."
+    if found is not None and found.fix is not None:
+        decision = ("allow more time for the next attempt" if reason in ("run:timeout", "stuck:expired_admitted") else
+                    "decide whether to retry the retained work" if found.fix == "" else
+                    "review the retained evidence and resolve the recorded cause")
+        recovery = f"To continue, {decision}, then {back}."
+        if reason == "land:checks_failed":
+            recovery = ("Decide whether to retry a flaky check or preserve the old task branch and restart from plan on "
+                        f"current main. Once that choice is settled, {back}.")
+    answer = f"{LEAD}{what} {recovery} To give up, close the task."
     if row.reason == "branch_moved":
         answer += (f" First restore task/{task} to contain the verified commit, or rename it aside (`old/<id>-` and the first 12 "
                    "characters of its tip).")
