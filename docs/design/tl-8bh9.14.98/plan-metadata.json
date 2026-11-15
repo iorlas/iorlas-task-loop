@@ -1,0 +1,25 @@
+{
+  "prepared_commit": "220beb55af526f716b1d5e0d3f2e6e700e126801",
+  "cited_paths": [
+    ".importlinter",
+    "pyproject.toml",
+    "tests/rules/test_policy.py",
+    "tests/rules/test_isolation.py",
+    "tests/rules/test_decision_boundaries.py",
+    "tests/steps/test_land_gate.py",
+    "docs/design/architecture-review/decision-register.md",
+    "docs/design/architecture-review/grilling-record.md",
+    "docs/design/architecture-review/constitution-draft.md",
+    "docs/design/architecture-review/docscheck-proto/docs/system/adr/one-owner-per-fact.md",
+    "docs/design/architecture-review/docscheck-proto/ontology/adr.yml",
+    "docs/design/tl-8bh9.14.119/adr-10-factory-management-boundary.md",
+    "docs/design/INDEX.md",
+    "README.md",
+    "src/taskloop/dash_server.py",
+    "src/taskloop/shelf_digest/identities.py",
+    "src/taskloop/slot_lock.py",
+    "src/taskloop/rounds_lock.py",
+    "src/taskloop/interrupts.py",
+    "src/taskloop/cli_composition.py"
+  ]
+}
