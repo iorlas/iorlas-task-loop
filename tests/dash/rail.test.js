@@ -540,6 +540,92 @@ async function usage() {
   closeDrawer();
 }
 
+const feedEvents = (count, start = 0) => Array.from({ length: count }, (_, i) => ({
+  id: `m${start + i}`, type: "message", text: `Message ${start + i}`, at: new Date((start + i) * 3000).toISOString(),
+}));
+const feedStep = { type: "step", step: "implement", attempt: 1, at: "1970-01-01T00:00:00Z" };
+const feedIds = () => [...document.querySelectorAll("#lines [data-eid]")].map((row) => row.dataset.eid);
+
+function feedDisplay() {
+  for (const state of ["running", "succeeded", "failed"]) {
+    for (const count of [0, 20, 26]) {
+      const feed = count ? [feedStep, ...feedEvents(count - 1)] : [];
+      const item = attempt("implement", 1, { state, feed });
+      const view = lines(item);
+      const note = state === "running" ? "Latest 20 lines, live" : "Retained lines";
+      assert(view.querySelector("#feednote").textContent === note, "initial note is set before mounting");
+      fixture.replaceChildren(view);
+      const expected = state === "running" ? feed.slice(-20) : feed;
+      assert(feedIds().join(",") === expected.map((e) => e.id || "").join(","), `${state}/${count}: ordered row identities`);
+      assert(feedIds().length === expected.length, `${state}/${count}: step counts toward the live cap`);
+      assert(Boolean(view.textContent.includes("No lines recorded")) === !count, "empty feed placeholder");
+      if (count === 26 && state === "running") {
+        assert(view.querySelector("#lines").firstChild.textContent.includes("paused"), "cutoff keeps preceding pause evidence");
+      }
+      for (const event of feedEvents(2, 25)) { apply(item, event); show(item, event); }
+      assert(item.feed.length === (state === "running" ? Math.min(count + 2, 20) : count + 2), "state governs model retention");
+      assert(feedIds().length === item.feed.length && feedIds().at(-1) === "m26", "incremental rows follow retention");
+      const changed = { ...item.feed.at(-1), text: "Updated message" };
+      apply(item, changed); show(item, changed);
+      assert(feedIds().length === item.feed.length && feedIds().filter((id) => id === "m26").length === 1,
+        "matching ID replaces without duplication");
+      assert(document.querySelector('#lines [data-eid="m26"]').textContent.includes("Updated message"), "replacement content");
+      setNote({ ...item, feedError: "offline" });
+      assert(view.querySelector("#feednote").textContent === "Feed stopped: offline. Reconnecting.", "errors override retention note");
+      setNote(item);
+      assert(view.querySelector("#feednote").textContent === note, "recovery restores state-specific note");
+    }
+  }
+}
+
+async function liveFeedDisplay() {
+  fixture.replaceChildren();
+  const interval = window.setInterval;
+  let poll;
+  window.setInterval = (callback, ms) => ms === 2000 ? (poll = callback, 0) : interval(callback, ms);
+  try {
+    for (const state of ["succeeded", "failed"]) {
+      const live = { ...task, column: "implement", status: "running" };
+      let detail = { task: live, attempts: [attempt("implement", 1, {
+        state: "running", feed: [feedStep, ...feedEvents(25)],
+      })] };
+      let page = { events: feedEvents(30), cursor: "replacement", replaced: true, duration: null };
+      let reads = 0;
+      initDrawer({
+        detail: async () => { reads++; return structuredClone(detail); },
+        tracker: async () => tracked,
+        feed: async () => structuredClone(page),
+      }, new Map([[task.id, live]]));
+      await openDrawer(task.id); await tick();
+      assert(feedIds().length === 20 && feedIds()[0] === "m5" && feedIds().at(-1) === "m24", "initial live tail");
+      await poll();
+      assert(feedIds().length === 20 && feedIds()[0] === "m10" && feedIds().at(-1) === "m29", "replacement page tail");
+      page = { ...page, replaced: false, events: feedEvents(30, 30) };
+      await poll();
+      assert(feedIds().length === 20 && feedIds()[0] === "m40" && feedIds().at(-1) === "m59", "large incremental batch tail");
+      const command = { id: "cmd", type: "command", cmd: "build", state: "running", at: "1970-01-01T00:03:00Z" };
+      page.events = [command];
+      await poll();
+      const completed = { ...command, state: "finished", duration_ms: 1000, exit_code: 0 };
+      page.events = [completed];
+      await poll();
+      assert(feedIds().length === 20 && feedIds()[0] === "m41" && feedIds().at(-1) === "cmd", "command replacement keeps tail");
+      assert(feedIds().filter((id) => id === "cmd").length === 1, "completed command replaces running row");
+      assert(!document.querySelector('#lines [data-eid="cmd"]').textContent.includes("running"), "finished command content");
+      const ended = { ...live, column: "held", status: "held" };
+      detail = { task: ended, attempts: [attempt("implement", 1, { state, feed: [feedStep, ...feedEvents(60), completed] })] };
+      await onTaskMoved(ended);
+      assert(reads === 2 && feedIds().length === 62, `${state}: completion refresh restores full history`);
+      assert(feedIds()[0] === "" && feedIds()[1] === "m0" && feedIds().at(-1) === "cmd", "full history includes step and endpoints");
+      assert(document.getElementById("feednote").textContent === "Retained lines", "completion removes live cap note");
+      closeDrawer();
+    }
+  } finally {
+    closeDrawer();
+    window.setInterval = interval;
+  }
+}
+
 async function liveDurations() {
   const sample = { execution: "drawer-duration", number: 1, elapsed_ms: 119999, quiet_ms: 119999, frozen: false };
   const live = { ...task, column: "implement", status: "running", duration: sample };
@@ -631,7 +717,7 @@ async function liveDurations() {
 try {
   for (const test of [healthyRows, verificationStates, gaps, restartsAndRepeats, pastRuns,
     drawerSelection, checksRestartDetail, landSelection, landStaleReplies, words, eventIndicators, vocabulary,
-    waitingRows, usage, liveDurations]) {
+    waitingRows, usage, feedDisplay, liveFeedDisplay, liveDurations]) {
     await test();
   }
   for (const dark of [false, true]) {
@@ -642,7 +728,7 @@ try {
   }
   document.documentElement.classList.toggle("dark", location.hash === "#dark");
   document.documentElement.classList.toggle("light", location.hash !== "#dark");
-  results.textContent = "PASS: 15 browser contracts, both themes";
+  results.textContent = "PASS: 17 browser contracts, both themes";
   document.documentElement.dataset.result = "passed";
 } catch (error) {
   results.textContent = `FAIL: ${error.stack}`;
