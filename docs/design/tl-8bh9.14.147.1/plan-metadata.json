@@ -1,0 +1,20 @@
+{
+  "prepared_commit": "220beb55af526f716b1d5e0d3f2e6e700e126801",
+  "cited_paths": [
+    "src/taskloop/dash_server.py",
+    "src/taskloop/dash_task.py",
+    "src/taskloop/evidence_files.py",
+    "src/taskloop/dash_model.py",
+    "src/taskloop/dash_composition.py",
+    "src/taskloop/checks.py",
+    "src/taskloop/check_store.py",
+    "src/taskloop/command_sink.py",
+    "src/taskloop/activity_file.py",
+    "src/taskloop/dash/static/api.js",
+    "src/taskloop/dash/static/lines.js",
+    "tests/cli/test_dash_server.py",
+    "tests/steps/test_dash_read.py",
+    "tests/steps/test_command_evidence.py",
+    "tests/steps/conftest.py"
+  ]
+}

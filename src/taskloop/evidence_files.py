@@ -11,6 +11,8 @@ from any_agent import RunOutcome
 
 from taskloop.activity_file import ActivityPage, command_time, follow, tail
 from taskloop.attempt_types import AttemptKey, Evidence, FileRef
+from taskloop.check_feed import CheckLog, CheckPage
+from taskloop.check_feed import read as read_checks
 from taskloop.check_repeat.feedback import TAIL_BYTES, TAIL_LINES, Availability, OutputTail
 from taskloop.clock_jumps import ClockJump, encode
 from taskloop.duration_evidence import DurationObserver, DurationSample
@@ -170,6 +172,16 @@ class EvidenceFiles:
     def open_check_log(self, key: AttemptKey, block: int, name: str) -> CappedLog:
         """`check_log`, opened for append; OSError propagates (the check has not started)."""
         return CappedLog(self.check_log(key, block, name))
+
+    def check_feed(self, key: AttemptKey, block: int, logs: tuple[CheckLog, ...], cursor: str | None) -> CheckPage:
+        """Read-only check output, from key-derived paths; no log bytes supply lifecycle or workflow state."""
+        paths: list[tuple[CheckLog, Path | None]] = []
+        for log in logs:
+            try:
+                paths.append((log, self.check_path(key, block, log.name)))
+            except EvidenceError:
+                paths.append((log, None))
+        return read_checks(key.attempt_id, block, tuple(paths), cursor)
 
     def round_log(self) -> Path:
         """The scheduling rounds' append-only log (`rounds.log` beside `attempts/`), with the root made. Evidence for a
