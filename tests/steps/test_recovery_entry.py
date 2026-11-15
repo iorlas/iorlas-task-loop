@@ -18,6 +18,7 @@ from taskloop import attempt_entry, slot_lock
 from taskloop.attempt import Attempts
 from taskloop.attempt_entry import EntryArgs, enter
 from taskloop.attempt_types import AttemptKey, CaptureResult, PendingResult, Unsettled
+from taskloop.claim import ClaimWord
 from taskloop.claim_lease import Beat
 from taskloop.recovery.continuation_models import State
 from taskloop.recovery.continue_attempt import Continuation
@@ -95,7 +96,7 @@ def test_saved_owner_continues_under_custody_and_a_renewed_claim(
 
     def beat() -> Beat:
         beats.append("held")
-        return "held"
+        return ClaimWord.HELD
 
     execution.after_start = held
     monkeypatch.setattr(attempt_entry.Verifier, "verify", verify)
@@ -122,7 +123,7 @@ def test_changed_authority_and_failed_initial_renewal_run_no_harness(
             con.execute("UPDATE attempt SET session_ref='different'")
         if refusal == "claim_fault":
             raise RuntimeError("renewal unavailable")
-        return "lost" if refusal == "claim_lost" else "held"
+        return ClaimWord.LOST if refusal == "claim_lost" else ClaimWord.HELD
 
     lines: list[str] = []
     identity = OwnedProcess(30, 30, "different" if refusal == "identity" else "owner", "boot")

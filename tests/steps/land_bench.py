@@ -29,6 +29,7 @@ from taskloop.attempt_store import AttemptLoads
 from taskloop.attempt_types import AttemptKey, EntryIdentity, Seen
 from taskloop.check_store import CheckStore
 from taskloop.checks import Block, BlockPorts, argv_digest
+from taskloop.claim import ClaimWord
 from taskloop.claim_lease import Beat, Heartbeat
 from taskloop.composition import Checking
 from taskloop.evidence_files import EvidenceFiles
@@ -137,7 +138,7 @@ class LandBench:
     x: str
     status: str = "in_progress"
     assignee: str = "taskloop"
-    beats: list[Beat] = field(default_factory=lambda: ["held"])
+    beats: list[Beat] = field(default_factory=lambda: [ClaimWord.HELD])
     environ: dict[str, str] = field(default_factory=dict)
     seen: dict[EntryIdentity, Seen] = field(default_factory=dict)
     now: float = 10.0

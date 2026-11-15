@@ -24,6 +24,7 @@ from taskloop.agent_credentials import scrubbed
 from taskloop.attempt_types import DEFAULT_GIT_READ_SECONDS
 from taskloop.check_store import CheckStore
 from taskloop.checks import Block, BlockPorts, argv_digest
+from taskloop.claim import ClaimWord
 from taskloop.claim_lease import Beat, Heartbeat
 from taskloop.composition import Checking
 from taskloop.environment import EnvironmentPorts, Preparation
@@ -59,7 +60,7 @@ class Tracker:
 
 def heartbeat_for(_root: str, _task: str) -> Heartbeat:
     def beat() -> Beat:
-        return "held"
+        return ClaimWord.HELD
 
     return beat
 

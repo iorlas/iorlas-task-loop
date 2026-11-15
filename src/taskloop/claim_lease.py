@@ -13,12 +13,12 @@ from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from typing import Literal, Protocol
 
+from taskloop.claim import ClaimWord
 from taskloop.environment import Renew, Renewal
 
-type Beat = Literal["held", "lost", "unrenewed"]  # one renewal: renewed; the claim is gone (taken, reverted, closed); unknown
+type Beat = Literal[ClaimWord.HELD, ClaimWord.LOST, ClaimWord.UNRENEWED]  # renewed; claim gone; unknown
 type Heartbeat = Callable[[], Beat]  # bound to one tracker root and task by `tracker_client`
 type HeartbeatFor = Callable[[str, str], Heartbeat]  # (tracker root, task id)
-type ClaimWord = Literal["held", "lost", "unrenewed", "fault"]
 LEASE_TTL_S = 300.0  # bd 1.3.1's lease, measured; no flag, config key or variable sets it
 BEAT_EVERY_S = LEASE_TTL_S / 3
 # Each heartbeat is one bd call (`tracker_client` passes no lock retry) capped at BD_TIMEOUT_S, so a beat takes at most about
@@ -62,9 +62,9 @@ class KeepAlive:
         with self._lock:
             if end - self._since >= LEASE_TTL_S:
                 self._lapsed = True
-            if beat == "held":
+            if beat is ClaimWord.HELD:
                 self._since, self._held = start, True
-            elif beat == "lost":
+            elif beat is ClaimWord.LOST:
                 self._lost = True
 
     def _going(self) -> bool:
@@ -85,11 +85,11 @@ class KeepAlive:
         now = self._clock()
         with self._lock:
             if self._lost:
-                return "lost"
+                return ClaimWord.LOST
             if self._faulted:
-                return "fault"
+                return ClaimWord.FAULT
             lapsed = self._lapsed or now - self._since >= LEASE_TTL_S
-            return "held" if self._held and not lapsed else "unrenewed"
+            return ClaimWord.HELD if self._held and not lapsed else ClaimWord.UNRENEWED
 
 
 @contextmanager
@@ -112,6 +112,6 @@ def renewal(alive: KeepAlive) -> Renew:
     def renew() -> Renewal:
         alive.renew()
         word = alive.word()
-        return "lost" if word == "lost" else "held" if word == "held" else "unrenewed"
+        return "lost" if word is ClaimWord.LOST else "held" if word is ClaimWord.HELD else "unrenewed"
 
     return renew

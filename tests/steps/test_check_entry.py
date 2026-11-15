@@ -26,6 +26,7 @@ from taskloop.check_entry import Verdict, concluded, enter
 from taskloop.check_entry import main as check_main
 from taskloop.check_store import CheckStore
 from taskloop.checks import Block, BlockPorts
+from taskloop.claim import ClaimWord
 from taskloop.claim_lease import Beat, Heartbeat
 from taskloop.composition import Checking
 from taskloop.evidence_files import EvidenceFiles
@@ -76,8 +77,8 @@ class Bench:
     views: PinnedViews
     files: FakeSlotFiles
     environment: Environment
-    beats: list[Beat] = dataclasses.field(default_factory=lambda: ["held"])
-    thread: Beat = "held"  # the renewing thread's answer, once `go` is set
+    beats: list[Beat] = dataclasses.field(default_factory=lambda: [ClaimWord.HELD])
+    thread: Beat = ClaimWord.HELD  # the renewing thread's answer, once `go` is set
     go: threading.Event | None = None
     credentials: Exception | None = None  # raised by the scrubbed environment's read
     lines: list[str] = dataclasses.field(default_factory=list)
@@ -187,20 +188,20 @@ def test_a_failed_required_check_concludes_failed_with_its_reason_and_exit_1(ben
 
 
 def test_a_claim_lost_before_the_block_concludes_and_releases_without_touching_the_slot(bench: Bench) -> None:
-    bench.beats = ["lost"]
+    bench.beats = [ClaimWord.LOST]
     assert bench() == 1
     assert bench.lines == ["collected failed:claim_lost claim=lost release=released"]
     assert bench.execs() == [] and bench.head() == bench.d and bench.attempt()[:3] == ("concluded", "failed", "claim_lost")
 
 
 def test_a_claim_lost_at_the_renewal_after_setup_concludes_before_the_block(bench: Bench) -> None:
-    bench.beats = ["held", "lost"]
+    bench.beats = [ClaimWord.HELD, ClaimWord.LOST]
     assert bench() == 1 and bench.lines == ["collected failed:claim_lost claim=lost release=released"]
     assert bench.execs() == ["exec just bootstrap"]
 
 
 def test_a_claim_lost_later_by_the_keep_alive_is_recorded_and_the_results_stand(bench: Bench) -> None:
-    bench.thread, bench.go = "lost", threading.Event()
+    bench.thread, bench.go = ClaimWord.LOST, threading.Event()
     bench.environment.process.script = [Command(), Command(effect=bench.go.set)]  # the first check runs: the thread beats
     assert bench() == 0 and bench.lines == ["collected passed claim=lost release=released"] and bench.execs() == RUN
 
@@ -407,7 +408,7 @@ def test_a_fault_of_the_environment_is_counted_once_the_attempt_is_the_entry_s_o
 
 
 def test_a_lost_claim_still_marks_gone_unfinished_results_interrupted_before_it_concludes(bench: Bench) -> None:
-    bench.beats = ["lost"]
+    bench.beats = [ClaimWord.LOST]
     bench.result(1, 0, "check", None, pid=904)  # gone: its entry died mid-check
     assert bench() == 1 and bench.lines == ["collected failed:claim_lost claim=lost release=released"]
     assert bench.results() == [(1, "check", "interrupted")]

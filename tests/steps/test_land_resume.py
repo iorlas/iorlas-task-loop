@@ -13,6 +13,7 @@ from git_porcelain import Transient
 from land_bench import ME, RUN, LandBench, bench
 
 from taskloop.check_store import CheckStore
+from taskloop.claim import ClaimWord
 from taskloop.land import Landed, LandResult
 from taskloop.operations import Failed
 from taskloop.slot_lock import lock_path
@@ -136,7 +137,7 @@ def test_an_abandoned_checks_attempt_is_not_landed(b: LandBench) -> None:
 
 
 def test_a_claim_lost_at_the_first_renewal_concludes_the_candidate_failed_and_releases_it(b: LandBench) -> None:
-    b.beats = ["lost"]
+    b.beats = [ClaimWord.LOST]
     assert word(b.land()) == ("refused", "checks_failed")
     row = b.rows()[0]
     assert (row.validation, row.reason) == ("failed", "claim_lost") and b.execs() == [] and b.reservations() == []
