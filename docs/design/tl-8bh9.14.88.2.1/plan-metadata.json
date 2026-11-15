@@ -1,0 +1,25 @@
+{
+  "prepared_commit": "bd92e6dd4727b4047958c1d21eb7917c497b4b10",
+  "cited_paths": [
+    "src/taskloop/attempt_reads.py",
+    "src/taskloop/attempt_store.py",
+    "src/taskloop/attempt_loads.py",
+    "src/taskloop/setup_store.py",
+    "src/taskloop/composition.py",
+    "src/taskloop/launch.py",
+    "src/taskloop/attempt_status.py",
+    "src/taskloop/attempt_entry.py",
+    "src/taskloop/session.py",
+    "src/taskloop/recovery/registration.py",
+    "src/taskloop/drain/store.py",
+    "tests/steps/test_attempt_listing.py",
+    "tests/steps/test_attempt_store.py",
+    "tests/steps/test_attempt.py",
+    "tests/steps/test_setup_store.py",
+    "tests/steps/test_check_store.py",
+    "tests/steps/test_launch.py",
+    "tests/cli/test_writer_lifetime.py",
+    "tests/rules/test_policy.py",
+    "tests/steps/test_repeat.py"
+  ]
+}
