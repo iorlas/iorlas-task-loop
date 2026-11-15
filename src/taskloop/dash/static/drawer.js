@@ -12,40 +12,33 @@ import { prompt, result } from "./result.js";
 import { taskView } from "./taskview.js";
 import { usageNode } from "./usage.js";
 import { receiveDuration } from "./duration.js";
+import { ROUTE, TABS, VIEWS, resolveSelection, selectionRoute } from "./navigation.js";
 import { closeButton, closeDialog, initDialog, openDialog, preserveDialogFocus, tabBar, tabPanel } from "./accessibility.js";
 
 let source = null;
 let tasks = null;
 let open = null; // {id, detail, tracker, abort, sig, bodies, opened, step, n, tab, view}: the open task, its selected attempt and sub-tabs
+let changed = () => {};
 
-export function initDrawer(src, taskMap) {
+export function initDrawer(src, taskMap, observer = () => {}) {
   source = src;
   tasks = taskMap;
+  changed = observer;
   $("backdrop").addEventListener("click", closeDrawer);
   initDialog($("drawer"), closeDrawer);
 }
 
 const attemptOf = () => open.detail?.attempts.find((a) => a.step === open.step && a.n === open.n);
-const tabOf = (a) => (a.step === VERIFY.id ? "result" : open.tab ?? (a.state === "running" ? "lines" : "result")); // a verification has only its result
 const signature = (t) => JSON.stringify([
   t.column, t.attempt, t.repeat, t.slot, t.hold_cause, t.hold_explanation, t.ask, t.question, t.land, t.status,
 ]); // what changes the attempts or their presentation
 
-// Select an attempt: the given one, else the last of the step, else the last of the task.
+// All rail and cause links share selection and URL reporting.
 function select(step, n) {
-  if (step === "land") {
-    open.step = "land";
-    open.n = null;
-    render();
-    return;
-  }
-  const list = open.detail.attempts;
-  const a = n != null ? list.find((x) => x.step === step && x.n === n) : list.findLast((x) => !step || x.step === step) ?? list.at(-1);
-  open.step = a?.step;
-  open.n = a?.n;
+  Object.assign(open, resolveSelection(open.detail, { kind: step === "land" ? ROUTE.land : ROUTE.attempt, step, n, tab: open.tab }));
+  changed(selectionRoute(open));
   render();
 }
-
 function reveal() {
   $("drawer").classList.remove("translate-x-full");
   $("backdrop").classList.remove("pointer-events-none", "opacity-0");
@@ -54,11 +47,20 @@ function reveal() {
 
 // Open at once: the board's card is the head and the body says loading; the detail (factory.db and files, milliseconds) renders when
 // it arrives and the tracker's fields (`bd`, slow under load) when they do. Opening another task cancels the first one's tracker read.
-export async function openDrawer(id) {
+export async function openDrawer(id, request = null) {
+  if (open?.id === id) {
+    open.request = request;
+    if (open.detail) Object.assign(open, resolveSelection(open.detail, request ?? {}));
+    changed(selectionRoute(open), !!request);
+    render();
+    return;
+  }
   open?.abort.abort();
   $("drawer").setAttribute("aria-label", `${id}: ${tasks.get(id)?.title ?? "Task details"}`);
-  const mine = { id, detail: null, tracker: { state: "loading" }, abort: new AbortController(), sig: null, bodies: new Map(), opened: new Map(), runs: new Map(), tab: null, view: null };
+  const mine = { id, request, detail: null, tracker: { state: "loading" }, abort: new AbortController(), sig: null,
+    bodies: new Map(), opened: new Map(), runs: new Map(), tab: null, view: null };
   open = mine;
+  changed(selectionRoute(open), !!request);
   render();
   reveal();
   loadTracker(mine);
@@ -72,10 +74,11 @@ export async function openDrawer(id) {
   receiveDuration(mine.detail.task.duration);
   mine.detail.attempts.forEach((a) => receiveDuration(a.duration));
   mine.sig = signature(tasks.get(id) || mine.detail.task);
-  select();
+  Object.assign(mine, resolveSelection(mine.detail, mine.request ?? {}));
+  changed(selectionRoute(mine), true);
+  render();
   follow();
 }
-
 // One tracker read at a time per drawer: a retry cancels the read still in flight, and only the latest read may fill the view in.
 async function loadTracker(mine) {
   mine.load?.abort();
@@ -99,7 +102,6 @@ const taskTabOpen = () => (open.view ?? (open.detail?.attempts.length ? "attempt
 
 const FOLLOW_MS = 2000;
 let follower = null;
-
 // While the drawer shows a running attempt, ask for the lines after the cursor of the last answer. Closing the drawer or selecting
 // another attempt stops following this one; the page never jumps to the newest attempt by itself.
 function follow() {
@@ -130,7 +132,6 @@ function follow() {
     }
   }, FOLLOW_MS);
 }
-
 // The task could not be read: say so in the drawer, with nothing from an earlier read.
 function showError(id, error) {
   const head = el("header", "flex items-start gap-4 px-6 py-5");
@@ -144,7 +145,8 @@ function showError(id, error) {
   });
 }
 
-export function closeDrawer() {
+export function closeDrawer(fromURL = false) {
+  if (fromURL !== true) changed({ kind: ROUTE.closed });
   if (!open) return;
   clearInterval(follower);
   open?.abort.abort();
@@ -153,9 +155,6 @@ export function closeDrawer() {
   $("backdrop").classList.add("pointer-events-none", "opacity-0");
   closeDialog($("drawer"));
 }
-
-const VIEWS = [["attempts", "Steps"], ["task", "Task"]];
-
 // What the card says about the task's place: the column, and for a land the real state (waiting for the person, or landing).
 function placeOf(t) {
   const col = COLUMNS.find((c) => c.id === t.column);
@@ -226,13 +225,15 @@ function renderContent() {
   if (!detail) return drawer.append(el("p", "px-6 py-5 text-sm text-slate-500", "Loading the task's steps…"));
 
   const view = open.view ?? (detail.attempts.length ? "attempts" : "task");
-  const views = VIEWS.map(([id, label]) => [id,
-    id === "attempts" && detail.attempts.length ? `${label} ${detail.attempts.length}` : label]);
-  drawer.append(tabBar("drawer-view", "Task views", views, view, (id) => { open.view = id; render(); }));
+  const count = detail.attempts.filter((a) => a.step !== VERIFY.id).length;
+  const views = VIEWS.map(([id, label]) => [id, id === "attempts" && count ? `${label} ${count}` : label]);
+  drawer.append(tabBar("drawer-view", "Task views", views, view, (id) => {
+    open.view = id; changed(selectionRoute(open)); render();
+  }));
   if (view === "task") {
     return drawer.append(tabPanel(taskView(open.tracker, () => { loadTracker(open); render(); }, detail.usage), "drawer-view", view));
   }
-  if (!detail.attempts.length) {
+  if (!detail.attempts.length && open.step !== "land") {
     return drawer.append(tabPanel(el("p", "px-6 py-5 text-sm text-slate-500", "Not started: no attempt yet."), "drawer-view", view));
   }
   const body = el("div", "drawer-body flex min-h-0 min-w-0 flex-1");
@@ -243,9 +244,7 @@ function renderContent() {
   const tail = $("tail");
   if (tail) tail.scrollTop = kept && kept.key === tail.dataset.key && !kept.bottom ? kept.top : tail.scrollHeight;
 }
-
 // ---------- selected attempt ----------
-
 function loadDelivery(mine) {
   const own = {};
   mine.delivery = own;
@@ -307,7 +306,6 @@ function bodyTab(a, tab) {
   return el("p", "px-6 py-4 text-sm text-slate-500", "Loading…");
 }
 
-const TABS = [["lines", "Lines"], ["result", "Result"], ["prompt", "Prompt"]];
 const nameOf = stepInfo;
 
 // The selected attempt explains its restart/repeat, including navigation to a failed verification.
@@ -328,7 +326,7 @@ function began(a) {
 function pane() {
   const a = attemptOf();
   const st = STATE[a.state];
-  const tab = tabOf(a);
+  const tab = open.tab;
   const wrap = el("section", "attempt-pane flex min-h-0 min-w-0 flex-1 flex-col");
   const top = el("div", "flex flex-wrap items-center gap-x-3 gap-y-1 px-6 pt-4");
   const title = a.step === VERIFY.id ? `${VERIFY.emoji} ${verifyTitle(open.detail.attempts, a)}`
@@ -355,7 +353,9 @@ function pane() {
   const content = tab === "lines" ? lines(a) : bodyTab(a, tab);
   if (a.step === VERIFY.id) wrap.append(content);
   else {
-    wrap.append(tabBar("attempt-body", "Attempt output", TABS, tab, (id) => { open.tab = id; render(); }),
+    wrap.append(tabBar("attempt-body", "Attempt output", TABS, tab, (id) => {
+      open.tab = id; changed(selectionRoute(open)); render();
+    }),
       tabPanel(content, "attempt-body", tab));
   }
   return wrap;
@@ -377,21 +377,23 @@ export async function onTaskMoved(task) {
     return;
   }
   const mine = open;
-  const following = attemptOf()?.state === "running" && attemptOf() === open.detail.attempts.at(-1);
+  const refresh = {};
+  mine.refresh = refresh;
   try {
     const fresh = await source.detail(open.id);
-    if (open !== mine) return;
+    if (open !== mine || mine.refresh !== refresh) return;
     for (const a of fresh.attempts) if (open.bodies.get(`${a.step}/${a.n}`)?.state !== a.state) open.bodies.delete(`${a.step}/${a.n}`);
     open.detail = fresh;
     receiveDuration(fresh.task.duration);
     fresh.attempts.forEach((a) => receiveDuration(a.duration));
   } catch (error) {
-    if (open === mine) showError(mine.id, error);
+    if (open === mine && mine.refresh === refresh) showError(mine.id, error);
     return;
   }
   open.sig = signature(task);
   delete open.delivery;
-  if (open.step !== "land" && (following || !attemptOf())) select();
-  else render();
+  Object.assign(open, resolveSelection(open.detail, selectionRoute(open)));
+  changed(selectionRoute(open), true);
+  render();
   follow();
 }

@@ -1,0 +1,25 @@
+{
+  "prepared_commit": "d85192c086d24384fbd87f5192c7552e7cdf12b3",
+  "cited_paths": [
+    "src/taskloop/dash/static/app.js",
+    "src/taskloop/dash/static/drawer.js",
+    "src/taskloop/dash/static/taskview.js",
+    "src/taskloop/dash/static/api.js",
+    "src/taskloop/dash/static/accessibility.js",
+    "src/taskloop/dash/static/lines.js",
+    "src/taskloop/dash/static/logs.js",
+    "src/taskloop/dash/static/rail.js",
+    "src/taskloop/dash/static/ui.js",
+    "src/taskloop/dash/static/index.html",
+    "src/taskloop/dash_server.py",
+    "src/taskloop/dash_task.py",
+    "src/taskloop/dash_model.py",
+    "tests/dash/lines.test.js",
+    "tests/dash/rail.test.js",
+    "tests/dash/rail.html",
+    "tests/dash/owner-attention.html",
+    "tests/dash/owner-attention.test.js",
+    "tests/dash/test_accessibility_markup.py",
+    "tests/cli/test_dash_server.py"
+  ]
+}
