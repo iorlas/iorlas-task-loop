@@ -40,7 +40,7 @@ export function initTabList(bar) {
 }
 
 export function tabBar(group, label, items, selected, choose) {
-  const bar = el("div", "mt-3 flex gap-5 border-b border-slate-200 px-6 dark:border-slate-800");
+  const bar = el("div", "mt-3 flex min-w-0 flex-wrap gap-x-5 gap-y-2 border-b border-slate-200 px-6 dark:border-slate-800");
   bar.setAttribute("aria-label", label);
   for (const [id, text] of items) {
     const on = id === selected;
@@ -69,7 +69,7 @@ export function tabBar(group, label, items, selected, choose) {
 
 export function tabPanel(node, group, selected) {
   if (node.id) {
-    const wrap = el("div", "flex min-h-0 flex-1 flex-col");
+    const wrap = el("div", "flex min-h-0 min-w-0 flex-1 flex-col");
     wrap.append(node); // preserve content IDs used by scrolling and live updates
     node = wrap;
   }

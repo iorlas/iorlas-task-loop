@@ -47,7 +47,7 @@ function render(fresh) {
   const box = $("logs");
   const shown = rows.filter((r) => filter === "all" || attention(r)).slice().reverse();
   box.replaceChildren();
-  const bar = el("div", "flex items-center gap-3 px-1 pb-3");
+  const bar = el("div", "log-toolbar flex min-w-0 flex-wrap items-center gap-3 px-1 pb-3");
   bar.append(el("h2", "text-sm font-semibold", "Factory log"), el("span", "text-xs text-slate-500 dark:text-slate-400", `rounds.log · one line per move · ${shown.length} of ${rows.length} lines`));
   const live = el("span", "inline-flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400");
   live.append(el("span", "h-1.5 w-1.5 animate-pulse-dot rounded-full bg-sky-500"), "Live");
@@ -68,7 +68,7 @@ function render(fresh) {
       day = label;
       table.append(el("div", "sticky top-0 z-10 -mx-4 border-b border-slate-100 bg-slate-50 px-4 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:border-slate-800 dark:bg-slate-900/95", label));
     }
-    const row = el("div", `grid grid-cols-[4.5rem_4.5rem_4rem_minmax(0,1fr)] items-baseline gap-x-3 border-b border-slate-100 py-1.5 text-xs last:border-0 dark:border-slate-800/70 ${r === fresh ? "animate-line-in" : ""}`);
+    const row = el("div", `log-row grid grid-cols-[4.5rem_4.5rem_4rem_minmax(0,1fr)] items-baseline gap-x-3 border-b border-slate-100 py-1.5 text-xs last:border-0 dark:border-slate-800/70 ${r === fresh ? "animate-line-in" : ""}`);
     row.append(el("span", "font-mono tabular-nums text-slate-400 dark:text-slate-500", at.toLocaleTimeString([], { hour12: false })));
     if (r.task) {
       const link = el("button", "text-left font-mono text-slate-700 hover:underline dark:text-slate-200", r.task);

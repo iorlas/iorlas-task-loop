@@ -110,14 +110,13 @@ const laneOf = (t) => (lanes ? t.slot || "none" : "all");
 const isAsk = (t) => t.column === "held" && Boolean(t.ask);
 
 function buildBoard() {
-  const board = $("board");
+  const board = $("board-canvas");
   board.replaceChildren();
   columnHeads.clear();
   cells.clear();
   board.style.gridTemplateColumns = `${lanes ? "5.5rem " : ""}repeat(7, minmax(0, 1fr))`;
   board.style.gridTemplateRows = lanes ? `auto repeat(${slotNames.length + 1}, max-content)` : "auto minmax(0, 1fr)";
   board.style.alignContent = lanes ? "start" : "";
-  board.classList.toggle("overflow-y-auto", lanes);
   const sticky = "sticky top-0 z-20 bg-slate-100 dark:bg-slate-950";
   if (lanes) board.append(el("div", sticky));
   for (const col of COLUMNS) {
@@ -323,7 +322,7 @@ async function start() {
   $("view-columns").addEventListener("click", () => setLanes(false));
   $("view-lanes").addEventListener("click", () => setLanes(true));
   source = apiSource();
-  $("mode").className = "inline-flex items-center gap-2";
+  $("mode").className = "inline-flex flex-wrap items-center gap-2";
   $("mode").replaceChildren(streamLabel, roundLabel);
   initDrawer(source, tasks);
   initLogs(openDrawer);

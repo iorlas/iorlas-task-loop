@@ -261,7 +261,7 @@ function landRow(t, selected, select, events) {
 
 export function rail(list, t, selected, select, stepUsage = {}, events = []) {
   selected.runs ??= new Map();
-  const wrap = el("nav", "w-64 shrink-0 overflow-y-auto border-r border-slate-200 px-4 py-4 dark:border-slate-800");
+  const wrap = el("nav", "min-w-0 w-64 max-w-full shrink-0 overflow-y-auto border-r border-slate-200 px-4 py-4 dark:border-slate-800");
   wrap.id = "rail";
   wrap.append(el("h3", "mb-3 text-[11px] font-semibold uppercase tracking-wider text-slate-500", "Steps"));
   const groups = project(list);
