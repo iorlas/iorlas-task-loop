@@ -30,9 +30,9 @@ from taskloop.attempt_types import (
     AttemptKey,
     Checkouts,
     CommitRefused,
+    Committed,
     CommitWaiting,
     CommitWaitingReason,
-    Committed,
     SlotFiles,
     WorkerGone,
 )
