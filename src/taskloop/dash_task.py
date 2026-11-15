@@ -57,7 +57,7 @@ class TaskPorts:
 
 
 STEP_CHECKS = "checks"
-FEED_LINES = 20  # the agent's latest actions an attempt's detail carries
+FEED_LINES = 20  # the agent's latest actions a running attempt's detail carries
 FOLLOW_LINES = 20  # the tail a replaced follow answers with
 
 
@@ -85,7 +85,7 @@ def _page(page: ActivityPage, ended: bool = False, duration: Duration | None = N
 
 
 def build_feed(ports: TaskPorts, backlog: str, task_id: str, step: str, number: int, cursor: str | None) -> FeedPage | Failed | None:
-    """One numbered agent or checks attempt: its latest lines, or those after `cursor`. None: no such attempt."""
+    """One numbered attempt: retained lines when ended, latest lines when live, or those after `cursor`. None: no such attempt."""
     try:
         rows = ports.reads.store.attempts(backlog, task_id)
         if step == STEP_CHECKS:
@@ -99,9 +99,12 @@ def build_feed(ports: TaskPorts, backlog: str, task_id: str, step: str, number: 
         duration = read_duration(ports.reads.store, ports.files, row, result)
     except StoreUnavailable as error:
         return Failed("unavailable", "store", str(error))
-    page = (ports.files.activity_tail(row.key, FEED_LINES) if cursor is None
-            else ports.files.activity_after(row.key, cursor, FOLLOW_LINES))
-    return _page(page, ended=result.status == "collected" or not row.held, duration=duration)
+    ended = result.status == "collected" or not row.held
+    if cursor is not None:
+        page = ports.files.activity_after(row.key, cursor, FOLLOW_LINES)
+    else:
+        page = ports.files.activity_complete(row.key) if ended else ports.files.activity_tail(row.key, FEED_LINES)
+    return _page(page, ended=ended, duration=duration)
 
 
 def _checks_feed(ports: TaskPorts, row: ChecksRow, cursor: str | None) -> FeedPage:
@@ -131,7 +134,8 @@ def _agent(
     after = "repeat" if row.previous_attempt_id is not None else "restart_at_plan" if row.step == "plan" and row.seq > 1 else None
     reason = row.repeat_reason if after == "repeat" else "restarted at plan" if after else None
     begun = () if started is None else (FeedEvent("step", iso(started) or "", step=row.step, attempt=number),)
-    page = _page(ports.files.activity_tail(row.key, FEED_LINES), ended=state != "running")
+    activity = ports.files.activity_complete(row.key) if state != "running" else ports.files.activity_tail(row.key, FEED_LINES)
+    page = _page(activity, ended=state != "running")
     summary = result.explanation or result.reason or result.status
     return AttemptDetail(row.step, number, state, iso(started), iso(ended), summary, after, reason,
                          previous if after == "repeat" else None, begun + page.events, page.cursor, led_by if after == "repeat" else None,

@@ -8,11 +8,13 @@ from pathlib import Path
 
 import pytest
 from any_agent import RunOutcome, Summary, events
+from any_agent.activity import Activity
+from any_agent.activity import encode as encode_activity
 from conftest import DONE
 from doubles import CHECKS, REQUIRED, TARGET, D
 from sqlite_store import begin_immediate
 
-from taskloop import check_store
+from taskloop import activity_file, check_store
 from taskloop.agents.stop_models import AgentStop, Identity, StopCause, encode
 from taskloop.attempt_status import StatusPorts
 from taskloop.attempt_store import AttemptStore
@@ -365,16 +367,61 @@ def test_reasoning_is_a_collapsed_line_only_when_the_harness_gave_words(register
     assert [(line.type, line.text) for line in found.attempts[0].feed[1:]] == [("think", "check the schema first")]
 
 
-def test_a_poisoned_events_file_does_not_break_the_task_detail(registered: sqlite3.Connection, tmp_path: Path) -> None:
+@pytest.mark.parametrize("ended", [False, True])
+def test_a_poisoned_events_file_does_not_break_the_task_detail(
+    registered: sqlite3.Connection, tmp_path: Path, ended: bool,
+) -> None:
     files = EvidenceFiles(tmp_path)
     files.put_input(KEY, "Plan the actual task")
     sink = CommandSink(files, KEY, iter(range(100, 200, 2)).__next__)
     sink.feed(events.Msg(text="good"))
     with files.events_path(KEY).open("ab") as stream:
         stream.write(b'{"k":"message","s":"finished","at":Infinity,"t":"inf"}\n{"k":"message","s":"finished","at":1e999,"t":"big"}\n')
+    if ended:
+        saved_ask(registered, files)
     found = build_task(TaskPorts(reads_of(registered), files, Tracker()), "tasks", "tl-1")
     assert isinstance(found, TaskDetail)
     assert [line.text for line in found.attempts[0].feed[1:]] == ["good"]
+
+
+@pytest.mark.parametrize("collected", [False, True])
+def test_fresh_finished_feeds_expose_full_history_while_live_and_cursor_reads_stay_bounded(
+    registered: sqlite3.Connection, tmp_path: Path, collected: bool,
+) -> None:
+    files = EvidenceFiles(tmp_path)
+    files.put_input(KEY, "Plan the actual task")
+    sink = CommandSink(files, KEY, lambda: 100)
+    sink.feed(events.Cmd(id="c", text="make"))
+    long = "x" * (activity_file.READ_CAP + 1)
+    log = files.open_events(KEY)
+    log.write((encode_activity(Activity(kind="message", state="finished", at=100, text=long)) + "\n").encode())
+    log.close()
+    for n in range(40):
+        sink.feed(events.Msg(text=f"m{n}"))
+    ports = TaskPorts(reads_of(registered), files, Tracker())
+    live = build_feed(ports, "tasks", "tl-1", "plan", 1, None)
+    detail = build_task(ports, "tasks", "tl-1")
+    assert isinstance(live, FeedPage) and isinstance(detail, TaskDetail)
+    assert [e.text for e in live.events] == [f"m{n}" for n in range(20, 40)]
+    assert detail.attempts[0].feed[0].type == "step" and detail.attempts[0].feed[1:] == live.events
+    if collected:
+        saved_ask(registered, files)
+    else:
+        registered.execute("DELETE FROM reservation WHERE attempt_id='attempt'")
+    ended = build_feed(ports, "tasks", "tl-1", "plan", 1, None)
+    detail = build_task(ports, "tasks", "tl-1")
+    assert isinstance(ended, FeedPage) and isinstance(detail, TaskDetail)
+    assert ended.available and not ended.replaced and ended.cursor == live.cursor
+    assert ended.events[0].cmd == "make" and ended.events[0].state == "unfinished"
+    assert [e.text for e in ended.events[1:]] == [long, *(f"m{n}" for n in range(40))]
+    assert detail.attempts[0].feed[0].type == "step" and detail.attempts[0].feed[1:] == ended.events
+    assert detail.attempts[0].state != "running" and detail.attempts[0].duration == ended.duration
+    sink.feed(events.Msg(text="later"))
+    followed = build_feed(ports, "tasks", "tl-1", "plan", 1, ended.cursor)
+    assert isinstance(followed, FeedPage) and [e.text for e in followed.events] == ["later"] and not followed.replaced
+    reset = build_feed(ports, "tasks", "tl-1", "plan", 1, "1:0")
+    assert isinstance(reset, FeedPage) and reset.replaced and len(reset.events) == 20
+    assert [e.text for e in reset.events] == [*(f"m{n}" for n in range(21, 40)), "later"]
 
 
 def test_a_command_still_running_in_an_ended_attempt_is_shown_unfinished(checking: sqlite3.Connection, tmp_path: Path) -> None:
