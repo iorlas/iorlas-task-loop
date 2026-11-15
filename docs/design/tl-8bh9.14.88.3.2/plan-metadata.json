@@ -1,0 +1,28 @@
+{
+  "prepared_commit": "771f57ad2b82b9cb5e6e01e14966c82ad1705b7f",
+  "cited_paths": [
+    "src/taskloop/slot_release.py",
+    "src/taskloop/slot_state.py",
+    "src/taskloop/attempt_store.py",
+    "src/taskloop/setup_store.py",
+    "src/taskloop/recovery/store.py",
+    "src/taskloop/check_release.py",
+    "src/taskloop/land_conflict/store.py",
+    "src/taskloop/composition.py",
+    "src/taskloop/attempt_entry.py",
+    "src/taskloop/cli_composition.py",
+    "src/taskloop/result_data.py",
+    "src/taskloop/check_repeat/repair.py",
+    "src/taskloop/check_entry.py",
+    "src/taskloop/step_render.py",
+    "src/taskloop/repeat.py",
+    "src/taskloop/land_check.py",
+    "src/taskloop/operations.py",
+    "src/taskloop/round.py",
+    "tests/steps/doubles.py",
+    "tests/steps/test_slot_release.py",
+    "tests/steps/test_recovery_release.py",
+    "tests/rules/test_policy.py",
+    "tests/rules/test_attempt_sql_ownership.py"
+  ]
+}
