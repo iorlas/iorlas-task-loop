@@ -1,0 +1,13 @@
+{
+  "prepared_commit": "6a0bd3db681dec4fe29ab4b8abbfa4583a67c526",
+  "cited_paths": [
+    "src/taskloop/plan_step.py",
+    "src/taskloop/plan_content.py",
+    "src/taskloop/steps.py",
+    "tests/steps/test_steps.py",
+    "tests/steps/test_commit_paths.py",
+    "tests/steps/refusal_inventory.py",
+    "tests/rules/test_enum_values.py",
+    "tests/rules/repeated_string_exceptions.json"
+  ]
+}
