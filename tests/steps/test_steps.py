@@ -405,6 +405,12 @@ def test_plan_orientation_bounds_reads_searches_and_truncated_output(repeat: boo
     assert "bd and the beads skill are unavailable" not in text
 
 
+def test_plan_change_map_requires_first_line_bullet(plan_input: str) -> None:
+    guidance = plan_input.partition("## Change map:")[2].partition("\n")[0]
+    assert "the first line under ## Change map must be a bullet" in guidance
+    assert "put any explanation inside a bullet" in guidance
+
+
 @pytest.mark.parametrize("repeat", [False, True])
 def test_plan_requests_fixed_lean_template_and_immutable_handoff(repeat: bool) -> None:
     text = PLAN.input_text(TASK, PLAN.rules("tl-1"), CONTEXT)
