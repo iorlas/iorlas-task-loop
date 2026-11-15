@@ -13,6 +13,7 @@ ROOT = Path(__file__).resolve().parents[2] / "src" / "taskloop"
     [
         "attempt_reads.py", "attempt_loads.py", "attempt_entry.py", "composition.py",
         "launch.py", "publish.py", "slot_release.py", "slots.py",
+        "land.py", "land_check.py",
     ],
 )
 def test_attempt_read_modules_and_registration_callers_have_no_sql(module: str) -> None:
