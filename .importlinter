@@ -6,6 +6,7 @@ root_packages =
     http
     multiprocessing
 include_external_packages = True
+exclude_type_checking_imports = False
 
 [importlinter:contract:main-depends-on-cli]
 name = The `tl` module entry (`__main__`) delegates to the CLI; the CLI delegates to the step surface; neither imports upward
@@ -183,3 +184,684 @@ forbidden_modules =
     git_porcelain
     sqlite_store
     beads_client
+
+# BEGIN GENERATED FOLDER CONTRACTS
+
+[importlinter:contract:slice-taskloop.agents]
+name = Private modules belong to taskloop.agents; api.py is its public door
+type = protected
+protected_modules =
+
+    taskloop.agents.config
+    taskloop.agents.launch
+    taskloop.agents.settings
+    taskloop.agents.stop
+    taskloop.agents.stop_models
+    taskloop.agents.stop_store
+    taskloop.agents.stop_text
+allowed_importers =
+
+    taskloop.agents
+    taskloop.agents.config
+    taskloop.agents.launch
+    taskloop.agents.settings
+    taskloop.agents.stop
+    taskloop.agents.stop_models
+    taskloop.agents.stop_store
+    taskloop.agents.stop_text
+as_packages = False
+unmatched_ignore_imports_alerting = error
+ignore_imports =
+    taskloop.admit -> taskloop.agents.settings
+    taskloop.admit_chain -> taskloop.agents.settings
+    taskloop.agent_credentials -> taskloop.agents.launch
+    taskloop.attempt -> taskloop.agents.launch
+    taskloop.attempt -> taskloop.agents.stop
+    taskloop.attempt -> taskloop.agents.stop_store
+    taskloop.attempt_loads -> taskloop.agents.settings
+    taskloop.attempt_reads -> taskloop.agents.settings
+    taskloop.attempt_status -> taskloop.agents.stop_models
+    taskloop.attempt_status -> taskloop.agents.stop_store
+    taskloop.attempt_types -> taskloop.agents.settings
+    taskloop.check_repeat.store -> taskloop.agents.settings
+    taskloop.cli_step -> taskloop.agents.settings
+    taskloop.composition -> taskloop.agents.launch
+    taskloop.dash_board -> taskloop.agents.stop_text
+    taskloop.dash_task -> taskloop.agents.stop_store
+    taskloop.hold_cause -> taskloop.agents.stop_models
+    taskloop.hold_cause -> taskloop.agents.stop_text
+    taskloop.hold_facts -> taskloop.agents.stop_store
+    taskloop.hold_guide -> taskloop.agents.stop_text
+    taskloop.hold_text -> taskloop.agents.stop_models
+    taskloop.land_conflict.composition -> taskloop.agents.launch
+    taskloop.land_conflict.execute -> taskloop.agents.launch
+    taskloop.machine_config -> taskloop.agents.config
+    taskloop.machine_config -> taskloop.agents.settings
+    taskloop.merge.models -> taskloop.agents.settings
+    taskloop.merge.prepare -> taskloop.agents.launch
+    taskloop.merge.resolve -> taskloop.agents.launch
+    taskloop.operations -> taskloop.agents.settings
+    taskloop.recovery.native -> taskloop.agents.launch
+    taskloop.recovery.native -> taskloop.agents.stop
+    taskloop.recovery.native -> taskloop.agents.stop_store
+    taskloop.result_data -> taskloop.agents.config
+    taskloop.result_data -> taskloop.agents.stop_text
+    taskloop.round -> taskloop.agents.settings
+    taskloop.slot_release -> taskloop.agents.stop
+    taskloop.slot_release -> taskloop.agents.stop_store
+    taskloop.step_render -> taskloop.agents.config
+
+[importlinter:contract:slice-taskloop.check_repeat]
+name = Private modules belong to taskloop.check_repeat; api.py is its public door
+type = protected
+protected_modules =
+
+    taskloop.check_repeat.feedback
+    taskloop.check_repeat.repair
+    taskloop.check_repeat.status
+    taskloop.check_repeat.store
+allowed_importers =
+
+    taskloop.check_repeat
+    taskloop.check_repeat.feedback
+    taskloop.check_repeat.repair
+    taskloop.check_repeat.status
+    taskloop.check_repeat.store
+as_packages = False
+unmatched_ignore_imports_alerting = error
+ignore_imports =
+    taskloop.attempt_reads -> taskloop.check_repeat.feedback
+    taskloop.attempt_status -> taskloop.check_repeat.status
+    taskloop.cli_composition -> taskloop.check_repeat.repair
+    taskloop.cli_composition -> taskloop.check_repeat.store
+    taskloop.evidence_files -> taskloop.check_repeat.feedback
+    taskloop.factory_schema -> taskloop.check_repeat.feedback
+    taskloop.implement_step -> taskloop.check_repeat.feedback
+    taskloop.operations -> taskloop.check_repeat.feedback
+    taskloop.operations -> taskloop.check_repeat.status
+    taskloop.steps -> taskloop.check_repeat.feedback
+
+[importlinter:contract:slice-taskloop.drain]
+name = Private modules belong to taskloop.drain; api.py is its public door
+type = protected
+protected_modules =
+
+    taskloop.drain.actions
+    taskloop.drain.composition
+    taskloop.drain.drain
+    taskloop.drain.models
+    taskloop.drain.observe
+    taskloop.drain.reconcile
+    taskloop.drain.render
+    taskloop.drain.restart
+    taskloop.drain.store
+allowed_importers =
+
+    taskloop.drain
+    taskloop.drain.actions
+    taskloop.drain.composition
+    taskloop.drain.drain
+    taskloop.drain.models
+    taskloop.drain.observe
+    taskloop.drain.reconcile
+    taskloop.drain.render
+    taskloop.drain.restart
+    taskloop.drain.store
+as_packages = False
+unmatched_ignore_imports_alerting = error
+ignore_imports =
+    taskloop.admit -> taskloop.drain.models
+    taskloop.admit -> taskloop.drain.observe
+    taskloop.admit -> taskloop.drain.store
+    taskloop.admit_chain -> taskloop.drain.models
+    taskloop.admit_chain -> taskloop.drain.store
+    taskloop.answer_repair -> taskloop.drain.models
+    taskloop.answer_repair_store -> taskloop.drain.store
+    taskloop.attempt_entry -> taskloop.drain.models
+    taskloop.attempt_status_store -> taskloop.drain.models
+    taskloop.attempt_write_store -> taskloop.drain.models
+    taskloop.attempt_write_store -> taskloop.drain.store
+    taskloop.check_admit -> taskloop.drain.models
+    taskloop.check_admit -> taskloop.drain.store
+    taskloop.check_release -> taskloop.drain.actions
+    taskloop.check_release -> taskloop.drain.models
+    taskloop.check_repeat.store -> taskloop.drain.models
+    taskloop.check_repeat.store -> taskloop.drain.store
+    taskloop.check_store -> taskloop.drain.models
+    taskloop.check_store -> taskloop.drain.store
+    taskloop.cli_composition -> taskloop.drain.composition
+    taskloop.cli_composition -> taskloop.drain.drain
+    taskloop.cli_composition -> taskloop.drain.models
+    taskloop.cli_composition -> taskloop.drain.restart
+    taskloop.cli_composition -> taskloop.drain.store
+    taskloop.cli_drain -> taskloop.drain.composition
+    taskloop.cli_drain -> taskloop.drain.drain
+    taskloop.cli_drain -> taskloop.drain.models
+    taskloop.cli_drain -> taskloop.drain.render
+    taskloop.cli_step -> taskloop.drain.models
+    taskloop.exit_codes -> taskloop.drain.models
+    taskloop.factory_schema -> taskloop.drain.models
+    taskloop.land -> taskloop.drain.actions
+    taskloop.land -> taskloop.drain.models
+    taskloop.launch -> taskloop.drain.actions
+    taskloop.launch -> taskloop.drain.models
+    taskloop.launch -> taskloop.drain.store
+    taskloop.merge.models -> taskloop.drain.models
+    taskloop.merge.resolve -> taskloop.drain.models
+    taskloop.merge.store -> taskloop.drain.models
+    taskloop.publish -> taskloop.drain.actions
+    taskloop.publish -> taskloop.drain.models
+    taskloop.recovery.continue_attempt -> taskloop.drain.models
+    taskloop.recovery.entry -> taskloop.drain.models
+    taskloop.recovery.execution_models -> taskloop.drain.models
+    taskloop.recovery.launch -> taskloop.drain.models
+    taskloop.recovery.models -> taskloop.drain.models
+    taskloop.recovery.native -> taskloop.drain.models
+    taskloop.recovery.observe -> taskloop.drain.models
+    taskloop.recovery.recover -> taskloop.drain.models
+    taskloop.recovery.registration -> taskloop.drain.models
+    taskloop.recovery.status -> taskloop.drain.models
+    taskloop.recovery.store -> taskloop.drain.models
+    taskloop.recovery.store -> taskloop.drain.store
+    taskloop.release_proof -> taskloop.drain.models
+    taskloop.round -> taskloop.drain.actions
+    taskloop.round -> taskloop.drain.models
+    taskloop.round -> taskloop.drain.store
+    taskloop.rounds -> taskloop.drain.models
+    taskloop.setup_store -> taskloop.drain.models
+    taskloop.slot_release -> taskloop.drain.actions
+    taskloop.slot_release -> taskloop.drain.models
+    taskloop.step_render -> taskloop.drain.models
+    taskloop.verifier -> taskloop.drain.actions
+    taskloop.verifier -> taskloop.drain.models
+
+[importlinter:contract:slice-taskloop.land_conflict]
+name = Private modules belong to taskloop.land_conflict; api.py is its public door
+type = protected
+protected_modules =
+
+    taskloop.land_conflict.abort
+    taskloop.land_conflict.abort_models
+    taskloop.land_conflict.admit
+    taskloop.land_conflict.cleanup
+    taskloop.land_conflict.cleanup_models
+    taskloop.land_conflict.composition
+    taskloop.land_conflict.execute
+    taskloop.land_conflict.handoff
+    taskloop.land_conflict.models
+    taskloop.land_conflict.preserve
+    taskloop.land_conflict.release
+    taskloop.land_conflict.release_models
+    taskloop.land_conflict.reservation_store
+    taskloop.land_conflict.store
+allowed_importers =
+
+    taskloop.land_conflict
+    taskloop.land_conflict.abort
+    taskloop.land_conflict.abort_models
+    taskloop.land_conflict.admit
+    taskloop.land_conflict.cleanup
+    taskloop.land_conflict.cleanup_models
+    taskloop.land_conflict.composition
+    taskloop.land_conflict.execute
+    taskloop.land_conflict.handoff
+    taskloop.land_conflict.models
+    taskloop.land_conflict.preserve
+    taskloop.land_conflict.release
+    taskloop.land_conflict.release_models
+    taskloop.land_conflict.reservation_store
+    taskloop.land_conflict.store
+as_packages = False
+unmatched_ignore_imports_alerting = error
+ignore_imports =
+    taskloop.cli_composition -> taskloop.land_conflict.composition
+    taskloop.hold_facts -> taskloop.land_conflict.models
+    taskloop.hold_facts -> taskloop.land_conflict.store
+    taskloop.land -> taskloop.land_conflict.handoff
+    taskloop.land_check -> taskloop.land_conflict.handoff
+    taskloop.land_store -> taskloop.land_conflict.reservation_store
+    taskloop.setup_store -> taskloop.land_conflict.reservation_store
+
+[importlinter:contract:slice-taskloop.merge]
+name = Private modules belong to taskloop.merge; api.py is its public door
+type = protected
+protected_modules =
+
+    taskloop.merge.git
+    taskloop.merge.models
+    taskloop.merge.prepare
+    taskloop.merge.resolve
+    taskloop.merge.start
+    taskloop.merge.status
+    taskloop.merge.store
+allowed_importers =
+
+    taskloop.merge
+    taskloop.merge.git
+    taskloop.merge.models
+    taskloop.merge.prepare
+    taskloop.merge.resolve
+    taskloop.merge.start
+    taskloop.merge.status
+    taskloop.merge.store
+as_packages = False
+unmatched_ignore_imports_alerting = error
+ignore_imports =
+    taskloop.attempt -> taskloop.merge.prepare
+    taskloop.attempt_status -> taskloop.merge.status
+    taskloop.attempt_status -> taskloop.merge.store
+    taskloop.composition -> taskloop.merge.prepare
+    taskloop.dash_task -> taskloop.merge.status
+    taskloop.dash_task -> taskloop.merge.store
+    taskloop.drain.composition -> taskloop.merge.store
+    taskloop.hold_cause -> taskloop.merge.models
+    taskloop.hold_facts -> taskloop.merge.models
+    taskloop.hold_facts -> taskloop.merge.store
+    taskloop.hold_status -> taskloop.merge.models
+    taskloop.hold_store -> taskloop.merge.models
+    taskloop.land -> taskloop.merge.models
+    taskloop.land_conflict.abort -> taskloop.merge.models
+    taskloop.land_conflict.abort_models -> taskloop.merge.models
+    taskloop.land_conflict.cleanup -> taskloop.merge.models
+    taskloop.land_conflict.cleanup_models -> taskloop.merge.models
+    taskloop.land_conflict.composition -> taskloop.merge.models
+    taskloop.land_conflict.composition -> taskloop.merge.store
+    taskloop.land_conflict.execute -> taskloop.merge.models
+    taskloop.land_conflict.execute -> taskloop.merge.resolve
+    taskloop.land_conflict.execute -> taskloop.merge.start
+    taskloop.land_conflict.execute -> taskloop.merge.store
+    taskloop.land_conflict.handoff -> taskloop.merge.models
+    taskloop.land_conflict.models -> taskloop.merge.models
+    taskloop.land_conflict.preserve -> taskloop.merge.git
+    taskloop.land_conflict.preserve -> taskloop.merge.models
+    taskloop.land_conflict.release -> taskloop.merge.models
+    taskloop.land_conflict.release_models -> taskloop.merge.models
+    taskloop.slot_release -> taskloop.merge.store
+
+[importlinter:contract:slice-taskloop.recovery]
+name = Private modules belong to taskloop.recovery; api.py is its public door
+type = protected
+protected_modules =
+
+    taskloop.recovery.callbacks
+    taskloop.recovery.complete_attempt
+    taskloop.recovery.continuation_models
+    taskloop.recovery.continue_attempt
+    taskloop.recovery.entry
+    taskloop.recovery.execution_models
+    taskloop.recovery.launch
+    taskloop.recovery.models
+    taskloop.recovery.native
+    taskloop.recovery.observe
+    taskloop.recovery.recover
+    taskloop.recovery.registration
+    taskloop.recovery.state_store
+    taskloop.recovery.status
+    taskloop.recovery.store
+allowed_importers =
+
+    taskloop.recovery
+    taskloop.recovery.callbacks
+    taskloop.recovery.complete_attempt
+    taskloop.recovery.continuation_models
+    taskloop.recovery.continue_attempt
+    taskloop.recovery.entry
+    taskloop.recovery.execution_models
+    taskloop.recovery.launch
+    taskloop.recovery.models
+    taskloop.recovery.native
+    taskloop.recovery.observe
+    taskloop.recovery.recover
+    taskloop.recovery.registration
+    taskloop.recovery.state_store
+    taskloop.recovery.status
+    taskloop.recovery.store
+as_packages = False
+unmatched_ignore_imports_alerting = error
+ignore_imports =
+    taskloop.answer_repair -> taskloop.recovery.recover
+    taskloop.attempt -> taskloop.recovery.execution_models
+    taskloop.attempt_entry -> taskloop.recovery.continue_attempt
+    taskloop.attempt_entry -> taskloop.recovery.entry
+    taskloop.attempt_entry -> taskloop.recovery.models
+    taskloop.attempt_loads -> taskloop.recovery.execution_models
+    taskloop.attempt_loads -> taskloop.recovery.state_store
+    taskloop.attempt_status -> taskloop.recovery.models
+    taskloop.attempt_status -> taskloop.recovery.status
+    taskloop.attempt_write_store -> taskloop.recovery.execution_models
+    taskloop.attempt_write_store -> taskloop.recovery.models
+    taskloop.attempt_write_store -> taskloop.recovery.state_store
+    taskloop.cli_composition -> taskloop.recovery.status
+    taskloop.composition -> taskloop.recovery.complete_attempt
+    taskloop.composition -> taskloop.recovery.continue_attempt
+    taskloop.composition -> taskloop.recovery.launch
+    taskloop.composition -> taskloop.recovery.models
+    taskloop.composition -> taskloop.recovery.native
+    taskloop.composition -> taskloop.recovery.observe
+    taskloop.composition -> taskloop.recovery.recover
+    taskloop.composition -> taskloop.recovery.store
+    taskloop.dash_duration -> taskloop.recovery.state_store
+    taskloop.evidence_files -> taskloop.recovery.execution_models
+    taskloop.evidence_files -> taskloop.recovery.models
+    taskloop.launch -> taskloop.recovery.models
+    taskloop.release_proof -> taskloop.recovery.models
+    taskloop.session -> taskloop.recovery.execution_models
+    taskloop.slot_release_store -> taskloop.recovery.models
+    taskloop.slot_release_store -> taskloop.recovery.store
+    taskloop.tracker_client -> taskloop.recovery.models
+
+[importlinter:contract:slice-taskloop.shelf_digest]
+name = Private modules belong to taskloop.shelf_digest; api.py is its public door
+type = protected
+protected_modules =
+
+    taskloop.shelf_digest.__main__
+    taskloop.shelf_digest.artifact
+    taskloop.shelf_digest.cli
+    taskloop.shelf_digest.declarations
+    taskloop.shelf_digest.documentation
+    taskloop.shelf_digest.exports
+    taskloop.shelf_digest.facts
+    taskloop.shelf_digest.generate
+    taskloop.shelf_digest.identities
+    taskloop.shelf_digest.installed
+    taskloop.shelf_digest.models
+    taskloop.shelf_digest.render
+    taskloop.shelf_digest.signatures
+    taskloop.shelf_digest.source
+    taskloop.shelf_digest.validation
+allowed_importers =
+
+    taskloop.shelf_digest
+    taskloop.shelf_digest.__main__
+    taskloop.shelf_digest.artifact
+    taskloop.shelf_digest.cli
+    taskloop.shelf_digest.declarations
+    taskloop.shelf_digest.documentation
+    taskloop.shelf_digest.exports
+    taskloop.shelf_digest.facts
+    taskloop.shelf_digest.generate
+    taskloop.shelf_digest.identities
+    taskloop.shelf_digest.installed
+    taskloop.shelf_digest.models
+    taskloop.shelf_digest.render
+    taskloop.shelf_digest.signatures
+    taskloop.shelf_digest.source
+    taskloop.shelf_digest.validation
+as_packages = False
+unmatched_ignore_imports_alerting = error
+ignore_imports =
+    taskloop.input_context -> taskloop.shelf_digest.artifact
+    taskloop.input_context -> taskloop.shelf_digest.identities
+    taskloop.input_context -> taskloop.shelf_digest.source
+
+[importlinter:contract:sqlite-only-in-stores]
+name = Only literal store.py modules import SQLite, including connection types
+type = forbidden
+source_modules =
+
+    taskloop
+    taskloop.__main__
+    taskloop.access
+    taskloop.activity_file
+    taskloop.admit
+    taskloop.admit_chain
+    taskloop.admit_rows
+    taskloop.admit_store
+    taskloop.agent_credentials
+    taskloop.agents
+    taskloop.agents.config
+    taskloop.agents.launch
+    taskloop.agents.settings
+    taskloop.agents.stop
+    taskloop.agents.stop_models
+    taskloop.agents.stop_store
+    taskloop.agents.stop_text
+    taskloop.answer_decode
+    taskloop.answer_failures
+    taskloop.answer_read
+    taskloop.answer_repair
+    taskloop.answer_repair_models
+    taskloop.answer_repair_route
+    taskloop.answer_repair_store
+    taskloop.attempt
+    taskloop.attempt_entry
+    taskloop.attempt_loads
+    taskloop.attempt_reads
+    taskloop.attempt_result
+    taskloop.attempt_status
+    taskloop.attempt_status_store
+    taskloop.attempt_store
+    taskloop.attempt_types
+    taskloop.attempt_write_store
+    taskloop.captured_start
+    taskloop.check_admit
+    taskloop.check_admit_store
+    taskloop.check_entry
+    taskloop.check_feed
+    taskloop.check_release
+    taskloop.check_repeat
+    taskloop.check_repeat.feedback
+    taskloop.check_repeat.repair
+    taskloop.check_repeat.status
+    taskloop.check_status
+    taskloop.check_store
+    taskloop.checks
+    taskloop.claim
+    taskloop.claim_lease
+    taskloop.cli
+    taskloop.cli_composition
+    taskloop.cli_drain
+    taskloop.cli_step
+    taskloop.clock_jumps
+    taskloop.command_conclusion
+    taskloop.command_sink
+    taskloop.composition
+    taskloop.dash_board
+    taskloop.dash_composition
+    taskloop.dash_duration
+    taskloop.dash_land
+    taskloop.dash_model
+    taskloop.dash_server
+    taskloop.dash_task
+    taskloop.dash_tracker
+    taskloop.dash_usage
+    taskloop.dash_verify
+    taskloop.discussion
+    taskloop.drain
+    taskloop.drain.actions
+    taskloop.drain.composition
+    taskloop.drain.drain
+    taskloop.drain.models
+    taskloop.drain.observe
+    taskloop.drain.reconcile
+    taskloop.drain.render
+    taskloop.drain.restart
+    taskloop.duration_evidence
+    taskloop.duration_file
+    taskloop.earlier_attempt
+    taskloop.earlier_input
+    taskloop.environment
+    taskloop.evidence_files
+    taskloop.exit_codes
+    taskloop.factory_commit
+    taskloop.factory_schema
+    taskloop.factory_store
+    taskloop.git_views
+    taskloop.glossary_extract
+    taskloop.harness_choice
+    taskloop.hold
+    taskloop.hold_cause
+    taskloop.hold_facts
+    taskloop.hold_guide
+    taskloop.hold_status
+    taskloop.hold_store
+    taskloop.hold_text
+    taskloop.ids
+    taskloop.implement_step
+    taskloop.input_context
+    taskloop.inspection_guide
+    taskloop.interrupts
+    taskloop.land
+    taskloop.land_check
+    taskloop.land_close
+    taskloop.land_conflict
+    taskloop.land_conflict.abort
+    taskloop.land_conflict.abort_models
+    taskloop.land_conflict.admit
+    taskloop.land_conflict.cleanup
+    taskloop.land_conflict.cleanup_models
+    taskloop.land_conflict.composition
+    taskloop.land_conflict.execute
+    taskloop.land_conflict.handoff
+    taskloop.land_conflict.models
+    taskloop.land_conflict.preserve
+    taskloop.land_conflict.release
+    taskloop.land_conflict.release_models
+    taskloop.land_conflict.reservation_store
+    taskloop.land_data
+    taskloop.land_gate
+    taskloop.land_guide
+    taskloop.land_mode
+    taskloop.land_push
+    taskloop.land_render
+    taskloop.land_status
+    taskloop.land_store
+    taskloop.land_summary
+    taskloop.land_target
+    taskloop.launch
+    taskloop.machine_config
+    taskloop.merge
+    taskloop.merge.git
+    taskloop.merge.models
+    taskloop.merge.prepare
+    taskloop.merge.resolve
+    taskloop.merge.start
+    taskloop.merge.status
+    taskloop.operations
+    taskloop.owned_processes
+    taskloop.plan_content
+    taskloop.plan_reuse
+    taskloop.plan_step
+    taskloop.prepare
+    taskloop.printable
+    taskloop.profile
+    taskloop.publish
+    taskloop.publish_store
+    taskloop.recovery
+    taskloop.recovery.callbacks
+    taskloop.recovery.complete_attempt
+    taskloop.recovery.continuation_models
+    taskloop.recovery.continue_attempt
+    taskloop.recovery.entry
+    taskloop.recovery.execution_models
+    taskloop.recovery.launch
+    taskloop.recovery.models
+    taskloop.recovery.native
+    taskloop.recovery.observe
+    taskloop.recovery.recover
+    taskloop.recovery.registration
+    taskloop.recovery.state_store
+    taskloop.recovery.status
+    taskloop.release_proof
+    taskloop.repeat
+    taskloop.repo
+    taskloop.result_data
+    taskloop.resume_plan
+    taskloop.round
+    taskloop.round_guide
+    taskloop.round_land
+    taskloop.round_log
+    taskloop.round_reader
+    taskloop.round_trail
+    taskloop.rounds
+    taskloop.rounds_lock
+    taskloop.selection
+    taskloop.session
+    taskloop.setup_store
+    taskloop.setup_timing
+    taskloop.shelf_digest
+    taskloop.shelf_digest.__main__
+    taskloop.shelf_digest.artifact
+    taskloop.shelf_digest.cli
+    taskloop.shelf_digest.declarations
+    taskloop.shelf_digest.documentation
+    taskloop.shelf_digest.exports
+    taskloop.shelf_digest.facts
+    taskloop.shelf_digest.generate
+    taskloop.shelf_digest.identities
+    taskloop.shelf_digest.installed
+    taskloop.shelf_digest.models
+    taskloop.shelf_digest.render
+    taskloop.shelf_digest.signatures
+    taskloop.shelf_digest.source
+    taskloop.shelf_digest.validation
+    taskloop.shelf_request
+    taskloop.show_render
+    taskloop.slot_env
+    taskloop.slot_files
+    taskloop.slot_lock
+    taskloop.slot_park
+    taskloop.slot_release
+    taskloop.slot_release_store
+    taskloop.slot_state
+    taskloop.slots
+    taskloop.slots_store
+    taskloop.step
+    taskloop.step_guide
+    taskloop.step_refusal_guide
+    taskloop.step_render
+    taskloop.step_text
+    taskloop.steps
+    taskloop.task
+    taskloop.task_content
+    taskloop.task_content_store
+    taskloop.task_status
+    taskloop.tracker
+    taskloop.tracker_client
+    taskloop.tracker_discussion
+    taskloop.validate
+    taskloop.verdict
+    taskloop.verifier
+    taskloop.wip
+forbidden_modules = sqlite3
+as_packages = False
+allow_indirect_imports = True
+unmatched_ignore_alerting = error
+ignore_imports =
+    taskloop.admit -> sqlite3
+    taskloop.admit_chain -> sqlite3
+    taskloop.admit_store -> sqlite3
+    taskloop.answer_repair_store -> sqlite3
+    taskloop.attempt_entry -> sqlite3
+    taskloop.attempt_loads -> sqlite3
+    taskloop.attempt_reads -> sqlite3
+    taskloop.attempt_store -> sqlite3
+    taskloop.attempt_write_store -> sqlite3
+    taskloop.check_admit -> sqlite3
+    taskloop.check_admit_store -> sqlite3
+    taskloop.check_entry -> sqlite3
+    taskloop.check_release -> sqlite3
+    taskloop.check_store -> sqlite3
+    taskloop.cli_composition -> sqlite3
+    taskloop.composition -> sqlite3
+    taskloop.drain.composition -> sqlite3
+    taskloop.drain.drain -> sqlite3
+    taskloop.factory_store -> sqlite3
+    taskloop.hold_store -> sqlite3
+    taskloop.land -> sqlite3
+    taskloop.land_conflict.reservation_store -> sqlite3
+    taskloop.land_store -> sqlite3
+    taskloop.launch -> sqlite3
+    taskloop.operations -> sqlite3
+    taskloop.publish -> sqlite3
+    taskloop.publish_store -> sqlite3
+    taskloop.recovery.state_store -> sqlite3
+    taskloop.round -> sqlite3
+    taskloop.setup_store -> sqlite3
+    taskloop.slot_release -> sqlite3
+    taskloop.slot_release_store -> sqlite3
+    taskloop.slots_store -> sqlite3
+    taskloop.task_content_store -> sqlite3
+
+# END GENERATED FOLDER CONTRACTS
