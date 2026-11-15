@@ -1,0 +1,30 @@
+{
+  "prepared_commit": "220beb55af526f716b1d5e0d3f2e6e700e126801",
+  "cited_paths": [
+    "src/taskloop/implement_step.py",
+    "src/taskloop/factory_commit.py",
+    "src/taskloop/steps.py",
+    "src/taskloop/slot_state.py",
+    "src/taskloop/attempt_types.py",
+    "src/taskloop/answer_decode.py",
+    "src/taskloop/verifier.py",
+    "src/taskloop/merge/git.py",
+    "src/taskloop/dash_verify.py",
+    "src/taskloop/admit_chain.py",
+    "src/taskloop/git_views.py",
+    "src/taskloop/result_data.py",
+    "src/taskloop/verdict.py",
+    "tests/steps/doubles.py",
+    "tests/steps/refusal_inventory.py",
+    "tests/steps/test_commit_paths.py",
+    "tests/steps/test_steps.py",
+    "tests/steps/test_implement_feedback.py",
+    "tests/steps/test_answer_contract.py",
+    "tests/steps/test_verifier.py",
+    "tests/steps/test_merge_prepare.py",
+    "tests/steps/test_slot_lock.py",
+    "tests/steps/test_check_admit.py",
+    "tests/steps/test_admit_chain.py",
+    "tests/steps/real/test_commit_real.py"
+  ]
+}
