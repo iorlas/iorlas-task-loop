@@ -23,6 +23,7 @@ from sqlite_store import begin_immediate
 
 from taskloop.admit import AdmitRefused, AdmitRequest, Admitted, AttemptAdmission
 from taskloop.admit_chain import ChainAdmission, NextAdmission, NextStepRequest, RepeatRequest
+from taskloop.admit_store import current, previous, task_of
 from taskloop.agents.launch import AgentLaunch
 from taskloop.agents.settings import AgentSetting, CodexPolicy, Overrides, StepSettings
 from taskloop.attempt import Attempts
@@ -38,6 +39,7 @@ from taskloop.operations import Started, StartPorts, StartRequest, VerifiedTask,
 from taskloop.publish import BranchPublish, NotPublished, PublishResult
 from taskloop.slot_lock import custody, hold
 from taskloop.slot_release import NotReleased, Released, SlotRelease
+from taskloop.step import Step
 from taskloop.task import TaskBinding, TaskInspection, TaskScope
 from taskloop.tracker import inspect_task
 from taskloop.verifier import Verifier
@@ -119,6 +121,8 @@ def planned(
     monkeypatch: pytest.MonkeyPatch,
 ) -> str:
     """The registered plan attempt ran, was verified, released settled and published: its X."""
+    record = AttemptStore(lambda: registered).load(KEY)
+    assert record is not None and record.admission.step is Step.PLAN
     answer = {"disposition": "planned", "plan_path": PLAN, "paths": [PLAN], "message": "Plan", "explanation": "done"}
     assert execute(registered, tmp_path, KEY, agent(answer, lambda: slot.write_file(PLAN, PLAN_TEXT)), checkouts, slot_files) == (
         "verification")
@@ -263,7 +267,18 @@ def test_the_implement_step_commits_on_the_plan_and_is_published_then_advances_t
     registered: sqlite3.Connection, planned: str, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles
 ) -> None:
     """Code, its test and a deletion, committed by the factory as one commit on the published plan commit."""
+    plan = current(registered, "tasks", "tl-1")
+    assert plan is not None and plan.step is Step.PLAN
     key = implement(registered, tmp_path, slot.repo, checkouts, slot_files)
+    reader = AttemptStore(lambda: registered)
+    implementation = reader.load(key)
+    assert implementation is not None and implementation.admission.step is Step.IMPLEMENT
+    task = task_of(registered, key)
+    row = current(registered, "tasks", "tl-1")
+    predecessor = previous(registered, KEY)
+    assert task is not None and task.step is Step.IMPLEMENT
+    assert row is not None and row.step is Step.IMPLEMENT
+    assert predecessor is not None and predecessor.step is Step.PLAN
     paths = ["src/widget.py", "tests/test_widget.py", "README"]
 
     def change() -> None:
@@ -307,6 +322,8 @@ def test_a_repeat_of_implement_stays_in_implement_and_names_no_after_commit(
     row = registered.execute("SELECT step,number,after_commit,previous_attempt_id,compaction_token_limit FROM attempt WHERE attempt_id=?",
                              (repeated.key.attempt_id,)).fetchone()
     assert row == ("implement", 2, None, key.attempt_id, 100000)
+    repeated_row = current(registered, "tasks", "tl-1")
+    assert repeated_row is not None and repeated_row.step is Step.IMPLEMENT
 
 
 def test_advancement_captures_the_next_step_compaction_choice(

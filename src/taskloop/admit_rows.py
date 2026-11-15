@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from pydantic import BaseModel, ConfigDict, Field
 
 from taskloop.attempt_types import AttemptKey
+from taskloop.step import Step
 
 
 @dataclass(frozen=True)
@@ -26,7 +27,7 @@ class Task(BaseModel):
     task_id: str
     tracker_root: str
     repo_id: str
-    step: str
+    step: Step
     current: bool = Field(strict=False)
     end_commit: str | None
 
@@ -51,7 +52,7 @@ class Previous(BaseModel):
     tracker_root: str
     seq: int
     slot_head: str
-    step: str
+    step: Step
     label: str | None
     harness: str
     provider: str
@@ -67,7 +68,7 @@ class Current(BaseModel):
     dispatch_token: str
     generation: int
     done: bool = Field(strict=False)
-    step: str
+    step: Step
     end_commit: str | None
     tracker_root: str
     seq: int

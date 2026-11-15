@@ -7,7 +7,7 @@ check, then is done. The check step is not a kind (no agent: its attempt is a `c
 
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from typing import Final, Protocol
+from typing import Final, Literal, Protocol
 
 from git_porcelain import Tree
 
@@ -15,7 +15,7 @@ from taskloop import implement_step, plan_step
 from taskloop.attempt_types import CHAIN_RULES, Answer, Rejected, Rule, StepRules, Unsettled
 from taskloop.check_repeat.feedback import FailedCheck
 from taskloop.input_context import InputContext
-from taskloop.step import Step
+from taskloop.step import Step, decode_step
 from taskloop.task import TaskInspection
 
 
@@ -66,29 +66,34 @@ def failed_check_feedback(found: FailedCheck, task: str, nonce: str) -> str:
 def kind(step: str) -> StepKind:
     """The kind of a stored or admitted step; an unknown step is a programming error (the schema's CHECK lists the built
     ones)."""
-    match step:
-        case "plan":
+    try:
+        selected = decode_step(step)
+    except ValueError as error:
+        raise ValueError(f"Unknown step: {step}") from error
+    match selected:
+        case Step.PLAN:
             return PLAN
-        case "implement":
+        case Step.IMPLEMENT:
             return IMPLEMENT
-        case _:
-            raise ValueError(f"Unknown step: {step}")
 
 
 def is_agent(step: str) -> bool:
     """`step` has a kind (an agent attempt, `attempt` row); `check` has none."""
-    return any(each.step == step for each in STEPS)
+    try:
+        decode_step(step)
+    except ValueError:
+        return False
+    return True
 
 
-def following(step: str) -> str | None:
+def following(step: str) -> Step | Literal["check"] | None:
     """The step after `step` in `ORDER`; None after the last built step. An unknown step is a programming error."""
-    if step not in ORDER:
-        raise ValueError(f"Unknown step: {step}")
-    at = ORDER.index(step)
+    selected = CHECK if step == CHECK else kind(step).step
+    at = ORDER.index(selected)
     return ORDER[at + 1] if at + 1 < len(ORDER) else None
 
 
-def next_step(current: str | None, done: bool) -> str | None:
+def next_step(current: str | None, done: bool) -> Step | Literal["check"] | None:
     """What a task admits next. `current`: its current attempt's step, None when it has none or its abandon returned the
     claim (a fresh start: the first step). `done`: that attempt is verified, its release settled (claim kept) and its
     commit published. None: the current attempt's own `Next` applies, or the last step is done."""

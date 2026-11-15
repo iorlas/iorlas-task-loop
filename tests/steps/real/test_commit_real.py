@@ -32,6 +32,7 @@ from taskloop.git_views import GitViews
 from taskloop.repo import RepoId
 from taskloop.slot_files import RealSlotFiles
 from taskloop.slot_state import pointer
+from taskloop.step import Step
 from taskloop.steps import IMPLEMENT
 from taskloop.task import TaskReference, TaskScope
 from taskloop.verdict import judge
@@ -78,7 +79,7 @@ def repository(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, *relative: str) 
 def admission(main: Path, slot: Path) -> Admission:
     key = VIEWS.checkouts(main).identity().key
     task = TaskReference(TaskScope("tasks"), "tl-1")
-    choices = (AgentSetting(model="m", effort="e"), 100, (1, "", ""), 1, "plan")
+    choices = (AgentSetting(model="m", effort="e"), 100, (1, "", ""), 1, Step.PLAN)
     return Admission(AttemptKey("attempt", "dispatch", 1), task, RepoId(key), "s1", str(slot), FileRef("i", "d"), *choices)
 
 
@@ -274,7 +275,7 @@ def implementing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path,
     (slot / ".gitignore").write_text(".venv/\n")
     git(slot, "add", ".gitignore")
     git(slot, "commit", "-q", "--no-verify", "-m", "ignore the venv")
-    return main, slot, replace(admission(main, slot), step="implement"), git(slot, "rev-parse", "HEAD").strip()
+    return main, slot, replace(admission(main, slot), step=Step.IMPLEMENT), git(slot, "rev-parse", "HEAD").strip()
 
 
 def test_an_implement_commit_deletes_and_adds_anywhere_and_an_ignored_venv_does_not_block(
@@ -323,7 +324,7 @@ def typed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, Path, 
     git(slot, "update-index", "--add", "--cacheinfo", f"160000,{head},sub")
     (slot / "sub").mkdir()
     git(slot, "commit", "-q", "--no-verify", "-m", "typed entries")
-    return main, slot, replace(admission(main, slot), step="implement"), git(slot, "rev-parse", "HEAD").strip()
+    return main, slot, replace(admission(main, slot), step=Step.IMPLEMENT), git(slot, "rev-parse", "HEAD").strip()
 
 
 def plain(slot: Path, path: str) -> None:

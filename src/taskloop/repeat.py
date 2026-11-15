@@ -38,6 +38,7 @@ from taskloop.input_context import InputError
 from taskloop.operations import Clock, Failed, Launch, Started, deadline_after, launched, verify_failure
 from taskloop.slot_lock import SlotBusy, SlotLockUnavailable
 from taskloop.slot_release import ParkHold, entry_stopped, worker_stopped
+from taskloop.step import Step
 from taskloop.steps import kind
 from taskloop.task_content import TaskContentDigest
 
@@ -123,7 +124,7 @@ class StepRepeat:
             steps = self.store.chain(current)  # read after the verify: C's commit, if it made one, is stored now
             task = without(self.files.read(steps[0].input_ref))
             evidence = None
-            if record.admission.step == "plan" and self.discussion is None:
+            if record.admission.step == Step.PLAN and self.discussion is None:
                 raise InputError("A plan repeat requires a structured discussion collector")
             if self.discussion is not None:
                 root = self.store.tracker_root(current)

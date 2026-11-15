@@ -16,6 +16,7 @@ from taskloop.factory_commit import Committed, leftovers, settle
 from taskloop.operations import verify_failure
 from taskloop.prepare import task_branch
 from taskloop.repo import RepoId
+from taskloop.step import Step
 from taskloop.task import TaskReference, TaskScope
 
 FIXTURE = b"-----BEGIN " + b"OPENSSH PRIVATE " + b"KEY-----\n" + b'{"access_' + b'token":"a","refresh_' + b'token":"r"}'
@@ -26,7 +27,7 @@ def admission(slot: FakeWorktree) -> Admission:
     slot.checkout_new(task_branch("tl-1"))
     return Admission(AttemptKey("attempt", "dispatch", 1), TaskReference(TaskScope("tasks"), "tl-1"),
                      RepoId(slot.repo.identity().key), "s1", str(slot.path), FileRef("input", "digest"), AgentSetting(),
-                     100, (7, "start", "boot"), 1, "implement")
+                     100, (7, "start", "boot"), 1, Step.IMPLEMENT)
 
 
 @pytest.fixture
@@ -244,7 +245,7 @@ def test_unchanged_plan_path_is_filtered_with_the_same_rules(
     slot.write_file("docs/design/tl-1/unlisted.txt", "unlisted plan change")
     slot.write_file("outside.txt", "unlisted outside change")
     declared = replace(answer(path, "docs/design/tl-1/note.md"), disposition="planned")
-    result = settle(checkouts, slot_files, replace(admission, step="plan"), base, declared, lambda: None)
+    result = settle(checkouts, slot_files, replace(admission, step=Step.PLAN), base, declared, lambda: None)
     assert isinstance(result, Committed) and stages == [("docs/design/tl-1/note.md",)]
 
 

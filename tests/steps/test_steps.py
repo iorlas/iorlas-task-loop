@@ -11,7 +11,7 @@ from taskloop.plan_reuse import ReuseDecision
 from taskloop.resume_plan import Selection
 from taskloop.step import Step
 from taskloop.step_text import GIT_WRITES, SAVED_WORK
-from taskloop.steps import IMPLEMENT, ORDER, PLAN, failed_check_feedback, following, is_agent, kind, next_step
+from taskloop.steps import CHECK, IMPLEMENT, ORDER, PLAN, failed_check_feedback, following, is_agent, kind, next_step
 from taskloop.task import TaskInspection, TaskReference, TaskScope
 
 CONTEXT = InputContext("a" * 40, ("just check", "just test"), "Partial glossary: task: Work.\n", ())
@@ -40,24 +40,35 @@ def test_plan_producer_and_feedback_require_committed_preparation_evidence(plan_
 
 
 @pytest.mark.parametrize(("current", "done", "expected"), [
-    (None, False, "plan"), (None, True, "plan"), ("plan", True, "implement"), ("implement", True, "check"), ("check", True, None),
-    ("plan", False, None), ("implement", False, None),
+    (None, False, Step.PLAN), (None, True, Step.PLAN), ("plan", True, Step.IMPLEMENT), ("implement", True, CHECK),
+    (CHECK, True, None), ("plan", False, None), ("implement", False, None), (CHECK, False, None), ("review", False, None),
 ])
 def test_next_step_follows_the_fixed_order_only_after_a_done_step(current: str | None, done: bool, expected: str | None) -> None:
     """None: a fresh start (or after an abandon returned the claim) is the first step; a done step advances; the last
     built step (`check`) is done; an attempt not done keeps its own `Next`."""
-    assert next_step(current, done) == expected
+    found = next_step(current, done)
+    assert found == expected
+    if isinstance(expected, Step):
+        assert found is expected
 
 
 def test_the_check_step_follows_implement_and_is_no_agent_kind() -> None:
     """`ORDER` is every built step; only plan and implement have a kind (an agent): `check` is the checks admission's."""
     assert PLAN.step is Step.PLAN and IMPLEMENT.step is Step.IMPLEMENT
+    assert kind("plan") is kind(Step.PLAN) is PLAN
+    assert kind("implement") is kind(Step.IMPLEMENT) is IMPLEMENT
+    assert next_step(Step.PLAN, True) is Step.IMPLEMENT
+    assert following("plan") is Step.IMPLEMENT
     assert ORDER == ("plan", "implement", "check") and [following(step) for step in ORDER] == ["implement", "check", None]
     assert [is_agent(step) for step in ORDER] == [True, True, False] and not is_agent("review")
     with pytest.raises(ValueError, match="Unknown step"):
         following("review")
     with pytest.raises(ValueError, match="Unknown step"):
         kind("check")
+    with pytest.raises(ValueError, match="Unknown step"):
+        kind("review")
+    with pytest.raises(ValueError, match="Unknown step"):
+        next_step("review", True)
 
 
 @pytest.mark.parametrize(("decision", "expected"), [

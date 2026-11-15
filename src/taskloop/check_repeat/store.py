@@ -20,6 +20,7 @@ from taskloop.hold_store import HoldStore
 from taskloop.land_store import LandStore
 from taskloop.repo import RepoId
 from taskloop.slots import Probe, SlotGit
+from taskloop.step import Step, decode_step
 
 
 @dataclass(frozen=True)
@@ -40,7 +41,7 @@ class CheckRepeatStore(StoreConnection):
         if not rows or rows[0].key != previous:
             return None
         current = rows[0]
-        if (current.step != "implement" or current.release is None or current.release.claim != "kept"
+        if (decode_step(current.step) is not Step.IMPLEMENT or current.release is None or current.release.claim != "kept"
                 or current.published is None or current.published.commit != current.end_commit
                 or not succeeded(collect(attempts, previous))):
             return None
@@ -98,7 +99,7 @@ class CheckRepeatStore(StoreConnection):
             reserve(con, repo_id, name, key)
             insert_attempt(con, {
                 "attempt_id": key.attempt_id, "dispatch_token": key.dispatch_token, "generation": key.reservation_generation,
-                "step": "implement", "adapter": "beads", "backlog": row.backlog, "task_id": row.task_id,
+                "step": Step.IMPLEMENT, "adapter": "beads", "backlog": row.backlog, "task_id": row.task_id,
                 "tracker_root": source.tracker_root, "repo_id": repo_id, "slot": name,
                 "input_path": ref.path, "input_digest": ref.digest, "schema_version": 1,
                 "model": choices.model, "effort": choices.effort, "access_policy": encode_policy(choices.access),
