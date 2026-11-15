@@ -255,7 +255,7 @@ class PathExplanation:
 
 @dataclass(frozen=True)
 class Unsettled:
-    """The slot is not settled (`dirty`, `worker_alive`, `staged`, `uncommitted`, `unsafe`, `ignored`);
+    """The slot is not settled (`dirty`, `staged`, `uncommitted`, `unsafe`, `ignored`);
     nothing stored, retryable. `listing` is data for a person and a repeat's
     feedback (the leftovers, the unsafe path, the ignored paths), never parsed."""
 
@@ -280,15 +280,34 @@ class CommitRefused:
     explanations: tuple[PathExplanation, ...] = field(default=(), compare=False)
 
 
-@dataclass(frozen=True)
-class VerifyUnavailable:
-    """Unknown: nothing stored (`git:<Type>`, `repo`, `not_listed`, `store`, `validation_pending`)."""
+class CommitWaitingReason(StrEnum):
+    STORE = "store"
+    OBSERVE = "observe"
+    GIT = "git"
+    REPO = "repo"
+    NOT_LISTED = "not_listed"
+    SLOT_BUSY = "slot_busy"
+    LOCK = "lock"
+    VALIDATION_PENDING = "validation_pending"
+    SESSION_PENDING = "session_pending"
+    WORKER_ALIVE = "worker_alive"
 
-    reason: str
+
+@dataclass(frozen=True)
+class CommitWaiting:
+    """Commit evidence or custody is pending; no verdict stored. Git diagnostics retain their suffix."""
+
+    reason: CommitWaitingReason
+    diagnostic: str | None = None
+
+
+def waiting_reason(result: CommitWaiting) -> str:
+    """Encode a commit wait's reason at the display boundary."""
+    return f"{result.reason}:{result.diagnostic}" if result.diagnostic else str(result.reason)
 
 
 type Verdict = Committed | Rejected
-type CommitResult = Committed | Rejected | Unsettled | NotApplicable | CommitRefused | VerifyUnavailable
+type CommitResult = Committed | Rejected | Unsettled | NotApplicable | CommitRefused | CommitWaiting
 
 
 @dataclass(frozen=True)

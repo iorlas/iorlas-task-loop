@@ -60,7 +60,7 @@ class HoldPorts:
 @dataclass(frozen=True)
 class HoldMove:
     """What one `hold_task` call did: `held` (this call finished the hold), `pending` (`missing` names the first step
-    still to do, `refusal` the word that keeps it: `held:slot_dirty`, `unsettled:worker_alive`, `unavailable:tracker`,
+    still to do, `refusal` the word that keeps it: `held:slot_dirty`, `waiting:worker_alive`, `unavailable:tracker`,
     ...), or `refused` (`refusal`: `refused:changed` when A or its cause is no longer current, `refused:unlabelled` for a
     task started by hand, `refused:no_cause`). `attempt_id` is the hold's agent attempt A; `detail` is diagnostic only."""
 

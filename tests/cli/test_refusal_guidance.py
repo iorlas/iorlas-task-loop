@@ -57,7 +57,8 @@ def test_checks_land_and_candidate_release_keep_their_overrides() -> None:
         "tl step release", Failed("refused", "entry_running", land=True), None)
 
 
-@pytest.mark.parametrize("word", ["refused:label", "unavailable:store", "refused:conflict", "unusable:s1:dirty"])
+@pytest.mark.parametrize("word", ["refused:label", "unavailable:store", "refused:conflict", "unusable:s1:dirty",
+                                  "waiting:worker_alive", "waiting:git:Unreadable", "waiting:validation_pending"])
 def test_rounds_and_end_results_do_not_omit_reasons_or_request_cli_actions(word: str) -> None:
     result = Round("tasks", (Move("tl-1", "land", word),), "")
     lines = human("tl step next", result, None)

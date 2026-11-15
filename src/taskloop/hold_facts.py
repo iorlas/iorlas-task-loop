@@ -39,7 +39,7 @@ class Pending:
 
 def refusal(failed: Failed) -> str:
     """The abandon refusal's word as a round's line shows it: `held:<slot word>` for a slot left as it is, else the
-    refusal's own (`unsettled:worker_alive`, `unavailable:tracker`, `refused:landing`)."""
+    refusal's own (`waiting:worker_alive`, `unavailable:tracker`, `refused:landing`)."""
     return f"held:{failed.reason}" if failed.kind == "refused" and failed.reason.startswith("slot_") else failed.word
 
 

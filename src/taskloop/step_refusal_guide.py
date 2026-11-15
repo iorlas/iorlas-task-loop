@@ -1,6 +1,8 @@
 """Reason-specific guidance for step refusals, kept apart from the status/Next prose."""
 
 REFUSALS = {
+    "waiting": "Commit evidence or slot custody is pending. The factory retains the slot and waits for reliable evidence "
+    "and confirmed worker completion before committing or admitting a repeat.",
     "recovery_running": "A saved recovery process or group still runs. The factory retains the reservation and "
     "waits for confirmed completion before releasing the slot.",
     "recovery_unknown": "A saved recovery process or group cannot be observed reliably. The factory preserves "

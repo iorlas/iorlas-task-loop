@@ -30,10 +30,10 @@ from taskloop.attempt_types import (
     AttemptKey,
     Checkouts,
     CommitRefused,
+    CommitWaiting,
+    CommitWaitingReason,
     Committed,
     SlotFiles,
-    Unsettled,
-    VerifyUnavailable,
     WorkerGone,
 )
 from taskloop.commit import FactoryCommit
@@ -111,7 +111,7 @@ def test_a_held_slot_refuses_verify_before_any_git_write_and_then_it_settles(
 ) -> None:
     captured(registered, tmp_path, slot, checkouts, slot_files, {P: PLAN_TEXT})
     with occupy(lock_path(str(slot.path))):
-        assert factory_commit(registered, checkouts, slot_files).commit(KEY) == VerifyUnavailable("slot_busy")
+        assert factory_commit(registered, checkouts, slot_files).commit(KEY) == CommitWaiting(CommitWaitingReason.SLOT_BUSY)
     assert writes == [] and registered.execute("SELECT count(*) FROM verification").fetchone() == (0,)
     found = factory_commit(registered, checkouts, slot_files).commit(KEY)
     assert isinstance(found, Committed) and writes == ["stage", "record"]
@@ -124,7 +124,8 @@ def test_the_lock_is_released_after_a_verify_and_a_live_worker_is_still_alive(
 ) -> None:
     """A free lock is never a stop proof: the worker gate still refuses the Git write."""
     captured(registered, tmp_path, slot, checkouts, slot_files, {P: PLAN_TEXT})
-    assert factory_commit(registered, checkouts, slot_files, lambda _worker: False).commit(KEY) == Unsettled("worker_alive")
+    result = factory_commit(registered, checkouts, slot_files, lambda _worker: False).commit(KEY)
+    assert result == CommitWaiting(CommitWaitingReason.WORKER_ALIVE)
     assert writes == []
     acquire(str(slot.path), "probe", "verify").release()  # free again
 
@@ -140,13 +141,13 @@ def test_the_holder_record_names_the_attempt_and_the_role_only(slot: FakeWorktre
         lock.release()
 
 
-def test_an_uncreatable_lock_file_is_unavailable_lock(
+def test_an_uncreatable_lock_file_is_waiting_lock(
     registered: sqlite3.Connection, slot: FakeWorktree, tmp_path: Path, checkouts: Checkouts, slot_files: SlotFiles, writes: list[str]
 ) -> None:
     captured(registered, tmp_path, slot, checkouts, slot_files, {P: PLAN_TEXT})
     lock_path(str(slot.path)).parent.parent.mkdir(parents=True, exist_ok=True)
     lock_path(str(slot.path)).parent.write_text("not a folder")
-    assert factory_commit(registered, checkouts, slot_files).commit(KEY) == VerifyUnavailable("lock") and writes == []
+    assert factory_commit(registered, checkouts, slot_files).commit(KEY) == CommitWaiting(CommitWaitingReason.LOCK) and writes == []
 
 
 class Admits:
@@ -175,7 +176,7 @@ def test_a_repeat_whose_verify_finds_the_slot_held_admits_nothing(
     ids=NativeIds(), discussion=refresh_discussion)
     with occupy(lock_path(str(slot.path))):
         found = repeat.repeat("tasks", "tl-1", KEY, None, 30)
-    assert found == Failed("unavailable", "slot_busy") and admits.calls == [] and writes == []
+    assert found == Failed("waiting", "slot_busy") and admits.calls == [] and writes == []
 
 
 def test_a_read_only_verifier_asked_to_write_is_its_own_unknown(

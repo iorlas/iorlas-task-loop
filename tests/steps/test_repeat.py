@@ -37,6 +37,8 @@ from taskloop.attempt_types import (
     Checkouts,
     CommitRefused,
     CommitResult,
+    CommitWaiting,
+    CommitWaitingReason,
     Committed,
     EntryIdentity,
     FileRef,
@@ -46,7 +48,6 @@ from taskloop.attempt_types import (
     Seen,
     SlotFiles,
     Unsettled,
-    VerifyUnavailable,
 )
 from taskloop.commit import FactoryCommit
 from taskloop.discussion import DiscussionSnapshot, empty
@@ -449,7 +450,7 @@ def test_two_starts_on_two_connections_admit_exactly_one(
 @pytest.mark.parametrize(("observe", "alive", "expected"), [
     ("matching", False, Started("already_running", "tasks", "tl-1", "attempt", True, ENTRY)),
     ("unknown", False, Failed("unavailable", "observe")),
-    ("gone", True, Failed("unsettled", "worker_alive")),
+    ("gone", True, Failed("waiting", "worker_alive")),
 ])
 def test_no_verify_before_the_stop_proof(
     registered: sqlite3.Connection, slot: FakeWorktree, tmp_path: Path, checkouts: Checkouts, slot_files: FakeSlotFiles,
@@ -468,9 +469,9 @@ def test_no_verify_before_the_stop_proof(
     (Rejected("nothing_written"), Started("already_dispatched", "tasks", "tl-1", "attempt", True, result="rejected:nothing_written")),
     (NotApplicable("incomplete"), Started("already_dispatched", "tasks", "tl-1", "attempt", True, result="incomplete")),
     (CommitRefused("redirected"), Failed("refused", "redirected")),
-    (Unsettled("worker_alive"), Failed("unsettled", "worker_alive")),
+    *[(CommitWaiting(reason), Failed("waiting", str(reason))) for reason in CommitWaitingReason],
     (CommitRefused("session"), Failed("refused", "session")),
-    (VerifyUnavailable("git:NotARepo"), Failed("unavailable", "git:NotARepo")),
+    (CommitWaiting(CommitWaitingReason.GIT, "NotARepo"), Failed("waiting", "git:NotARepo")),
     (CommitRefused("inconsistent"), Failed("refused", "inconsistent", "Contradictory retained facts: inconsistent verdict or end commit.")),
 ])
 def test_only_git_leftovers_repeat(

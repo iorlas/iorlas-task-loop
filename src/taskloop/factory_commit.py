@@ -22,6 +22,7 @@ from taskloop.attempt_types import (
     AnswerState,
     Checkouts,
     CommitRefused,
+    CommitWaiting,
     PathExplanation,
     Rejected,
     SlotFiles,
@@ -53,8 +54,8 @@ class Committed:
     sha: str
 
 
-type Settled = Committed | Unsettled | CommitRefused | Rejected
-type GitQuiet = Callable[[], Unsettled | CommitRefused | None]  # None: the factory may write Git in the slot now; else why not
+type Settled = Committed | Unsettled | CommitRefused | CommitWaiting | Rejected
+type GitQuiet = Callable[[], CommitWaiting | CommitRefused | None]  # None: the factory may write Git in the slot now; else why not
 
 
 def attributes(rules: StepRules, paths: Sequence[str]) -> tuple[str, ...]:
@@ -165,7 +166,7 @@ def _commit(
     raise NotSettled("git:HookRejected")  # cannot happen with hooks off: unknown, never a verdict
 
 
-def _blocked(quiet: GitQuiet, files: SlotFiles, admission: Admission, state: SlotState) -> Unsettled | CommitRefused | None:
+def _blocked(quiet: GitQuiet, files: SlotFiles, admission: Admission, state: SlotState) -> CommitWaiting | CommitRefused | None:
     """Why the next Git write may not run: the caller's `quiet` (a live worker could rewrite `.git` between the check
     and the write; another attempt took the reservation over), then the slot pointer."""
     return quiet() or (CommitRefused("redirected") if _redirected(files, admission, state) else None)

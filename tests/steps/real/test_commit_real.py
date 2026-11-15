@@ -46,7 +46,7 @@ HOOKS = ("pre-commit", "commit-msg", "prepare-commit-msg", "post-commit", "post-
 ANSWER = AnswerState("valid", "planned", "commit", (P,), "Plan tl-1")
 
 
-def quiet() -> Unsettled | None:
+def quiet() -> None:
     """The worker is gone and the attempt holds its reservation (these tests run no agent)."""
     return None
 
