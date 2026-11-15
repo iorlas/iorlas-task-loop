@@ -35,6 +35,30 @@
 @utility animate-pulse-dot { animation: pulse-dot 1.2s ease-in-out infinite; }
 @utility animate-line-in { animation: line-in 0.25s ease-out; }
 
+/* Keep the wide board inside a viewport shared by Steps and By slot. */
+#board-canvas { min-width: 1100px; }
+.shell-header, .shell-controls { min-width: 0; flex-wrap: wrap; }
+.shell-header > *, .shell-controls > * { min-width: 0; max-width: 100%; }
+#drawer { min-width: 0; overflow-wrap: anywhere; }
+#drawer [role="tabpanel"] { min-width: 0; }
+.log-row > *, .event-row > * { min-width: 0; overflow-wrap: anywhere; }
+
+@media (max-width: 48rem) {
+  #drawer { overflow-y: auto; }
+  #drawer > * { flex-shrink: 0; }
+  .drawer-body, .task-body { flex-direction: column; }
+  .drawer-body, .task-body, .attempt-pane, #drawer [role="tabpanel"] { flex: none; }
+  #rail, .task-properties { width: 100%; max-width: 100%; border-inline: 0; }
+  #rail { max-height: 12rem; }
+  .log-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .log-row > :last-child { grid-column: 1 / -1; white-space: normal; overflow: visible; }
+  .event-row { grid-template-columns: 3.25rem minmax(0, 1fr); }
+  .event-row > * { grid-row: auto; grid-column: 1 / -1; }
+  .event-row > .event-offset { grid-column: 1; }
+  .event-row > .event-kind { grid-column: 2; }
+  .event-row code { white-space: pre-wrap; overflow-wrap: anywhere; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, ::before, ::after {
     animation: none !important;
