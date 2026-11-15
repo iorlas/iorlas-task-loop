@@ -66,6 +66,76 @@ export function messageFolding() {
   folded("nine", 8);
 }
 
+const commandText = (id) => document.querySelector(`#lines [data-eid="${id}"] code`);
+const commandButton = (id) => commandText(id).nextElementSibling;
+
+function compactCommand(row) {
+  const node = commandText(row.id);
+  const button = commandButton(row.id);
+  assert(node.textContent === row.cmd && node.childElementCount === 0, "complete command stays literal text");
+  assert(getComputedStyle(node).whiteSpace === "nowrap", "compact command uses one line");
+  assert(Math.abs(height(node) - parseFloat(getComputedStyle(node).lineHeight)) < 1, "preview has one rendered line");
+  assert(button.tagName === "BUTTON" && button.type === "button" && button.tabIndex === 0, "native keyboard-operable button");
+  assert(button.getAttribute("aria-expanded") === "false" && button.textContent === "Expand command", "compact action and state");
+}
+
+export function commandExpansion() {
+  const text = `  printf '<b>literal</b>'\n\n    ${"long-token".repeat(180)}\n  last line  `;
+  const rows = ["running", "finished", "unfinished"].map((state) => ({
+    id: state, type: "command", cmd: text, state, at: "2026-11-15T10:00:00Z", duration_ms: 2000,
+  }));
+  rows.push({ ...rows[1], id: "failed", exit_code: 2 });
+  rows.push({ ...rows[1], id: "short", cmd: "just test" });
+  for (const state of ["running", "succeeded", "failed"]) {
+    const item = attempt(state, [...rows]);
+    mount(item);
+    for (const row of rows) {
+      compactCommand(row);
+      const node = commandText(row.id);
+      const button = commandButton(row.id);
+      const status = node.closest(".event-row").lastElementChild;
+      const timing = status.textContent;
+      button.click();
+      assert(button.getAttribute("aria-expanded") === "true" && button.textContent === "Collapse command", "expanded action and state");
+      assert(node.textContent === row.cmd && node.childElementCount === 0, "expanded command preserves exact literal whitespace");
+      assert(getComputedStyle(node).whiteSpace === "pre-wrap", "expanded whitespace is rendered");
+      assert(node.clientHeight >= node.scrollHeight - 1 && node.clientWidth >= node.scrollWidth - 1,
+        "full multiline command and long tokens fit the content column");
+      assert(status.textContent === timing, "expansion preserves timing and status");
+    }
+    const expanded = commandText("finished");
+    const arriving = { ...rows[1], id: "arriving" };
+    apply(item, arriving); show(item, arriving);
+    compactCommand(arriving);
+    assert(commandText("finished") === expanded && commandButton("finished").getAttribute("aria-expanded") === "true",
+      "arrival preserves unrelated expanded commands");
+    const completed = { ...rows[0], state: "finished", exit_code: 3, cmd: text + "\nreplacement", duration_ms: 3000 };
+    apply(item, completed); show(item, completed);
+    compactCommand(completed);
+    commandButton(completed.id).click();
+    assert(commandText(completed.id).textContent === completed.cmd, "replacement expands to updated complete command");
+    assert(commandText(completed.id).closest(".event-row").lastElementChild.textContent.includes("exit 3"), "replacement keeps failure");
+    commandButton("finished").click();
+    compactCommand(rows[1]);
+    assert(commandText("unfinished").closest(".event-row").lastElementChild.textContent === "unfinished", "unfinished stays visible");
+  }
+}
+
+export function toolRows() {
+  const tool = { id: "tool", type: "tool", name: "Read", cmd: '"src/file with spaces.py"',
+    state: "running", at: "2026-11-15T10:00:00Z" };
+  const item = attempt("running", [tool]);
+  mount(item);
+  assert(commandText("tool").textContent === tool.cmd, "projected argument is displayed literally");
+  assert(!commandButton("tool") && !commandText("tool").closest(".event-row").querySelector("button"), "tools have no command control");
+  assert(commandText("tool").previousElementSibling.textContent === "Read", "tool name remains visible");
+  assert(commandText("tool").closest(".event-row").lastElementChild.textContent.startsWith("running "), "tool running timing");
+  const completed = { ...tool, state: "finished", duration_ms: 2000 };
+  apply(item, completed); show(item, completed);
+  assert(commandText("tool").textContent === tool.cmd, "replacement keeps relative argument");
+  assert(commandText("tool").closest(".event-row").lastElementChild.textContent === "2s", "tool completed timing");
+}
+
 function newestVisible(box) {
   const row = document.getElementById("lines").lastElementChild;
   row.style.animation = "none";

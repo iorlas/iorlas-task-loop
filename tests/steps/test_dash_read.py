@@ -28,7 +28,9 @@ from taskloop.dash_task import TaskPorts, build_body, build_feed, build_task, bu
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.hold_store import HoldInsert, HoldStore
 from taskloop.land_status import LandView, land_state, land_view
+from taskloop.operations import Failed
 from taskloop.profile import LandMode
+from taskloop.slots_store import SlotsStore, SlotsUnavailable
 from taskloop.step import Step, decode_step
 
 KEY = AttemptKey("attempt", "dispatch", 1)
@@ -343,6 +345,72 @@ def test_the_checks_attempt_follows_its_implement_attempt_in_the_history(checkin
     assert isinstance(build_feed(ports, "tasks", "tl-1", "checks", 1, None), FeedPage)
     assert build_body(ports, "tasks", "tl-1", "unknown", 1) is None
     assert build_feed(ports, "tasks", "tl-1", "unknown", 1, None) is None
+
+
+@pytest.mark.parametrize("custom", [False, True])
+@pytest.mark.parametrize("released", [False, True])
+def test_tool_paths_are_relative_in_detail_finished_and_cursor_feeds(
+    registered: sqlite3.Connection, tmp_path: Path, custom: bool, released: bool,
+) -> None:
+    files = EvidenceFiles(tmp_path)
+    ports = TaskPorts(reads_of(registered), files, Tracker())
+    row, = ports.reads.store.attempts("tasks", "tl-1")
+    if custom:
+        registered.execute("UPDATE slot SET path=?", ("/custom slots/[project]/worktree",))
+    root = str(SlotsStore(lambda: registered).adopted(row.repo_id)[row.slot])
+    cases = [
+        (root, "."), (root + "/src/a.py", "src/a.py"),
+        (f'"{root}/file with spaces.py"', '"file with spaces.py"'),
+        (f"'{root}'", "'.'"), (f"path={root}/src", "path=src"),
+        (f'["{root}/a", "{root}/b"]', '["a", "b"]'),
+        (root + "-other/a", root + "-other/a"), ("/external" + root + "/a", "/external" + root + "/a"),
+        ("src/relative.py /outside/file.py", "src/relative.py /outside/file.py"),
+    ]
+    sink = CommandSink(files, KEY, iter(range(100, 300, 2)).__next__)
+    sink.feed(events.Cmd(id="command", text=root + "/command"))
+    sink.feed(events.Msg(text=root + "/message"))
+    for i, (argument, _) in enumerate(cases):
+        sink.feed(events.Tool(id=str(i), name="Read", arg=argument))
+    if released:
+        registered.execute("INSERT INTO slot_release VALUES ('attempt','dispatch',1,?,12,'unclaimed')", (D,))
+        registered.execute("DELETE FROM reservation")
+    raw = files.events_path(KEY).read_bytes()
+    detail = build_task(ports, "tasks", "tl-1")
+    assert isinstance(detail, TaskDetail)
+    attempt, = detail.attempts
+    tools = [line for line in attempt.feed if line.type == "tool"]
+    assert [(line.name, line.cmd) for line in tools] == [("Read", expected) for _, expected in cases]
+    assert next(line.cmd for line in attempt.feed if line.type == "command") == root + "/command"
+    assert next(line.text for line in attempt.feed if line.type == "message") == root + "/message"
+    page = build_feed(ports, "tasks", "tl-1", "plan", 1, None)
+    assert isinstance(page, FeedPage) and page.events == attempt.feed
+    assert files.events_path(KEY).read_bytes() == raw
+    sink.feed(events.ToolEnd(id="0", name="Read", arg=root + "/finished.py"))
+    update = build_feed(ports, "tasks", "tl-1", "plan", 1, page.cursor)
+    assert isinstance(update, FeedPage)
+    assert [(line.name, line.cmd, line.state) for line in update.events] == [("Read", "finished.py", "finished")]
+    assert files.activity_complete(KEY).events[2].text == root + "/finished.py"
+
+
+@pytest.mark.parametrize("missing", [False, True])
+def test_tool_feed_fails_with_explanation_when_slot_context_is_unavailable(
+    registered: sqlite3.Connection, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, missing: bool,
+) -> None:
+    def unavailable(self: SlotsStore, repo_id: str) -> dict[str, Path]:
+        if missing:
+            return {}
+        raise SlotsUnavailable("Slot rows unavailable")
+
+    monkeypatch.setattr(SlotsStore, "adopted", unavailable)
+    files = EvidenceFiles(tmp_path)
+    ports = TaskPorts(reads_of(registered), files, Tracker())
+    sink = CommandSink(files, KEY, iter(range(100, 200, 2)).__next__)
+    sink.feed(events.Cmd(id="command", text="just test"))
+    assert isinstance(build_task(ports, "tasks", "tl-1"), TaskDetail)
+    sink.feed(events.Tool(id="tool", name="Read", arg="/unknown/file"))
+    for found in (build_task(ports, "tasks", "tl-1"), build_feed(ports, "tasks", "tl-1", "plan", 1, None),
+                  build_feed(ports, "tasks", "tl-1", "plan", 1, "0:0")):
+        assert isinstance(found, Failed) and found.kind == "unavailable" and "unavailable" in found.detail
 
 
 def test_an_agent_attempts_detail_and_feed_show_its_commands_and_messages_as_live_lines(

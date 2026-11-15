@@ -83,7 +83,7 @@ function fill(e, content, right) {
     const running = e.state === "running";
     const failed = !running && e.exit_code != null && e.exit_code !== 0;
     if (e.type === "tool") content.append(el("span", "font-semibold text-slate-600 dark:text-slate-300", e.name), " ");
-    content.append(el("code", `${e.type === "tool" ? "" : "block "}truncate font-mono text-[12px]`, e.cmd));
+    content.append(e.type === "command" ? command(e.cmd) : el("code", "truncate font-mono text-[12px]", e.cmd));
     if (running) {
       right.dataset.since = e.at;
       right.dataset.prefix = "running ";
@@ -112,6 +112,22 @@ function fill(e, content, right) {
   } else {
     content.append(el("span", "text-slate-500 dark:text-slate-400", `${stepInfo(e.step)?.label ?? e.step} attempt ${e.attempt} started`));
   }
+}
+
+function command(text) {
+  const wrap = el("span", "block min-w-0");
+  const words = el("code", "block truncate font-mono text-[12px]", text);
+  const button = el("button", "mt-1 block text-xs text-sky-600 dark:text-sky-400", "Expand command");
+  button.type = "button";
+  button.setAttribute("aria-expanded", "false");
+  button.addEventListener("click", () => {
+    const expanded = button.getAttribute("aria-expanded") !== "true";
+    words.className = `${expanded ? "block whitespace-pre-wrap break-words" : "block truncate"} font-mono text-[12px]`;
+    button.setAttribute("aria-expanded", String(expanded));
+    button.textContent = expanded ? "Collapse command" : "Expand command";
+  });
+  wrap.append(words, button);
+  return wrap;
 }
 
 function message(text) {
