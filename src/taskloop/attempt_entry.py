@@ -57,6 +57,7 @@ from taskloop.attempt_types import (
     WorkerGone,
     entry_identity,
 )
+from taskloop.claim import ClaimWord, encode_claim
 from taskloop.claim_lease import HeartbeatFor, KeepAlive, Stop, keeping, renewal
 from taskloop.composition import open_attempts, open_continuation
 from taskloop.drain.models import Identity
@@ -329,13 +330,13 @@ def _claimed(
     step's slot is then released (settled: parked when clean, the claim kept), still under the lock. The log line so far
     and whether the plan was verified."""
     alive.renew()
-    if alive.word() == "lost":
+    if alive.word() is ClaimWord.LOST:
         return "refused claim_lost", False
-    if found.recovery is not None and alive.word() != "held":
+    if found.recovery is not None and alive.word() is not ClaimWord.HELD:
         return "refused claim_unrenewed", False
     with keeping(alive):
         line, ok, collected = _step(found, clock, wait, gone, renewal(alive))
-    line = f"{line} claim={alive.word()}"
+    line = f"{line} claim={encode_claim(alive.word())}"
     if collected:
         app = found.app
         releaser = SlotRelease(app.store, app.checkouts, app.slot_files, entry_seen, gone, _unheld, unclaim, app.clock, setup_seen,

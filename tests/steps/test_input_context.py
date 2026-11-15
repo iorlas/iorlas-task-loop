@@ -23,6 +23,7 @@ from taskloop.agents.launch import AgentLaunch
 from taskloop.attempt import Attempts
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import TRAILER, AnswerState, Checkouts, SlotFiles, Unsettled
+from taskloop.claim import ClaimWord
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.factory_commit import Committed, settle
 from taskloop.glossary_extract import BUDGET, HEADING, MAX_BYTES, PRIORITY, extract
@@ -264,7 +265,7 @@ def test_ordinary_repeat_uses_original_spec_and_current_committed_context_once(
     prior = Attempts(AttemptStore(lambda: registered), files, AgentLaunch(lambda _kind: ("/bin/codex", {}), ids=NativeIds()),
                      repeat_agent(slot, changed, answer), lambda: 10, checkouts, slot_files,
                      environment=Environment(registered, checkouts, tmp_path, tmp_bytes=4096).preparation())
-    assert prior.execute(KEY, ENTRY, lambda: "held").reason == "verification"
+    assert prior.execute(KEY, ENTRY, lambda: ClaimWord.HELD).reason == "verification"
     captured = AttemptStore(lambda: registered).load(KEY)
     assert captured is not None
     settled = settle(checkouts, slot_files, captured.admission, commit,
@@ -280,7 +281,7 @@ def test_ordinary_repeat_uses_original_spec_and_current_committed_context_once(
     attempts = Attempts(store, files, AgentLaunch(lambda _kind: ("/bin/codex", {}), ids=NativeIds()),
                        run, lambda: 10, checkouts, slot_files,
                        environment=Environment(registered, checkouts, tmp_path, tmp_bytes=4096).preparation())
-    outcome = attempts.execute(current[0], SECOND, lambda: "held")
+    outcome = attempts.execute(current[0], SECOND, lambda: ClaimWord.HELD)
     if stale:
         assert outcome.reason == "input" and "package identities" in outcome.explanation and not run.calls
         return

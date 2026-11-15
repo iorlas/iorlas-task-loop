@@ -167,5 +167,5 @@ def test_the_one_renewal_shared_by_the_entries_and_the_land_answers_a_faulted_be
     clock = Clock()
     alive = KeepAlive(Beats(clock, RuntimeError("bd")), Stop(clock, 0), clock)
     renew = renewal(alive)
-    assert renew() == "unrenewed"
+    assert renew() is ClaimWord.UNRENEWED
     assert alive.word() is ClaimWord.FAULT

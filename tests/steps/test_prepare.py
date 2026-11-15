@@ -27,6 +27,7 @@ from taskloop.agents.settings import AgentSetting, CodexPolicy, StepSettings
 from taskloop.attempt import Attempts
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import TRAILER, AttemptKey, AttemptResult, Checkouts, FileRef, SlotFiles
+from taskloop.claim import ClaimWord
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.factory_schema import SCHEMA
 from taskloop.ids import NativeIds
@@ -116,7 +117,7 @@ def execute(
     environment = Environment(con, checkouts, tmp_path, tmp_bytes=4096).preparation()  # an implement attempt's setup passes
     result = Attempts(store, EvidenceFiles(tmp_path), AgentLaunch(lambda _harness: ("/bin/codex", {}),
         ids=NativeIds()), agent, lambda: 10, checkouts, files,
-                      environment=environment).execute(key, ENTRY, lambda: "held")
+                      environment=environment).execute(key, ENTRY, lambda: ClaimWord.HELD)
     return result.status, result.reason, agent
 
 

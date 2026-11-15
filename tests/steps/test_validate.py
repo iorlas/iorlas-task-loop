@@ -18,6 +18,7 @@ from sqlite_store import Store
 from taskloop.attempt_types import AttemptResult
 from taskloop.check_store import CheckStore
 from taskloop.checks import Block, BlockPorts
+from taskloop.claim import ClaimWord
 from taskloop.composition import Checking
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.factory_schema import SCHEMA
@@ -66,7 +67,7 @@ class Bench:
                       lambda digest: self.lands.profiled(CANDIDATE, digest))
 
     def __call__(self) -> Ended:
-        return validate(self.checking(), self.target(), lambda: "held")
+        return validate(self.checking(), self.target(), lambda: ClaimWord.HELD)
 
     def results(self) -> list[tuple[object, ...]]:
         return self.con.execute("SELECT attempt_id,block,name,conclusion FROM check_result ORDER BY block,position").fetchall()

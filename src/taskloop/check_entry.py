@@ -39,6 +39,7 @@ from taskloop.attempt_reads import StoreRefused, StoreUnavailable
 from taskloop.attempt_types import AttemptResult, EntryIdentity, entry_identity
 from taskloop.check_release import ChecksRelease
 from taskloop.check_store import ChecksRow
+from taskloop.claim import ClaimWord, encode_claim
 from taskloop.claim_lease import HeartbeatFor, KeepAlive, Stop, keeping, renewal
 from taskloop.composition import Checking, open_checking
 from taskloop.git_views import GitViews
@@ -128,7 +129,7 @@ def _claimed(found: _Registered, alive: KeepAlive) -> tuple[str, bool]:
     """Under the lock: one renewal, then the checks inside the keep-alive; a conclusion is written and the slot released."""
     alive.renew()
     ended: Ended = Verdict("failed", "claim_lost")
-    if alive.word() == "lost":  # the reconcile still marks its gone unfinished results before the conclusion
+    if alive.word() is ClaimWord.LOST:  # the reconcile still marks its gone unfinished results before the conclusion
         with contextlib.suppress(StoreRefused, StoreUnavailable):
             reconcile(found.work, _target(found))
     else:
@@ -137,25 +138,25 @@ def _claimed(found: _Registered, alive: KeepAlive) -> tuple[str, bool]:
     if isinstance(ended, AttemptResult):
         verdict = concluded(ended)
         if verdict is None:
-            return f"{_counted(found, ended)} claim={alive.word()}", False
+            return f"{_counted(found, ended)} claim={encode_claim(alive.word())}", False
         ended = verdict
     return _ended(found, ended, alive.word())
 
 
-def _ended(found: _Registered, verdict: Verdict, claim: str) -> tuple[str, bool]:
+def _ended(found: _Registered, verdict: Verdict, claim: ClaimWord) -> tuple[str, bool]:
     """The conclusion, written once (fenced), then the settled release of the entry's own slot under its lock."""
     work, key = found.work, found.row.key
     try:
         work.store.conclude(key, verdict.outcome, verdict.reason, work.clock(), verdict.seen)
     except StoreRefused as refused:
-        return f"refused {refused.reason} claim={claim}", False
+        return f"refused {refused.reason} claim={encode_claim(claim)}", False
     except StoreUnavailable:
-        return f"{_counted(found, AttemptResult('unavailable', 'store'))} claim={claim}", False
+        return f"{_counted(found, AttemptResult('unavailable', 'store'))} claim={encode_claim(claim)}", False
     release = ChecksRelease(work.store, work.checkouts, work.slot_files, work.entry_seen, _unheld, work.clock,
         work.seen, work.scratch, ids=work.ids)
     word = release_word(release.release(key, False, found.me))
     shown = verdict.outcome if verdict.reason is None else f"{verdict.outcome}:{verdict.reason}"
-    return f"collected {shown} claim={claim} release={word}", verdict.outcome == "passed"
+    return f"collected {shown} claim={encode_claim(claim)} release={word}", verdict.outcome == "passed"
 
 
 def _target(found: _Registered) -> Target:
