@@ -33,6 +33,7 @@ from taskloop.dash_model import (
     DashTracker,
     FeedEvent,
     FeedPage,
+    OperationDetail,
     Outcome,
     Run,
     State,
@@ -41,6 +42,7 @@ from taskloop.dash_model import (
     Verification,
     iso,
 )
+from taskloop.dash_operation import project as project_operations
 from taskloop.dash_usage import project, totals
 from taskloop.dash_verify import STEP as VERIFICATION
 from taskloop.dash_verify import applies, verification
@@ -274,17 +276,17 @@ def history(ports: TaskPorts, rows: tuple[AttemptRow, ...]) -> tuple[AttemptDeta
     the latest abandoned attempt (the chain boundary) is `past`: a person gave that chain up, it is not the task's current steps."""
     cut = max((each.seq for each in rows if each.release is not None and each.release.abandoned), default=0)
     past = {each.key.attempt_id for each in rows if each.seq <= cut}
-    return tuple(replace(each, past=owner in past) for each, owner in _history(ports, rows))
+    return tuple(replace(each, past=owner in past) for each, owner in _history(ports, rows, _chain(ports, rows)))
 
 
-def _history(ports: TaskPorts, rows: tuple[AttemptRow, ...]) -> tuple[tuple[AttemptDetail, str], ...]:
+def _history(ports: TaskPorts, rows: tuple[AttemptRow, ...], chain: tuple[Link, ...]) -> tuple[tuple[AttemptDetail, str], ...]:
     """Each entry with the agent attempt it belongs to (a checks attempt: the implement attempt it follows)."""
     store = CheckStore(ports.reads.store.connect, ports.reads.store.begin)
     numbers = tries(rows)
     found: list[tuple[AttemptDetail, str]] = []
     earlier: dict[str, int] = {}
     led: dict[str, int] = {}  # agent attempt id -> the try of its verification
-    for link in _chain(ports, rows):
+    for link in chain:
         if link.checks is not None:
             found.append((_checks(store, link.checks, link.number, earlier.get(link.checks.after)), link.checks.after))
             earlier[link.checks.after] = link.number
@@ -295,6 +297,18 @@ def _history(ports: TaskPorts, rows: tuple[AttemptRow, ...]) -> tuple[tuple[Atte
             previous = link.agent.previous_attempt_id or ""
             found.append((_agent(ports, link.agent, link.number, link.result, numbers.get(previous), led.get(previous)),
                           link.agent.key.attempt_id))
+    return tuple(found)
+
+
+def _operations(files: EvidenceFiles, chain: tuple[Link, ...], past: set[str]) -> tuple[OperationDetail, ...]:
+    found: list[OperationDetail] = []
+    for link in chain:
+        if link.checks is not None:
+            found.extend(project_operations(files.operations(link.checks.key), STEP_CHECKS, link.number,
+                                            past=link.checks.after in past))
+        elif link.agent is not None and not link.verifies:
+            found.extend(project_operations(files.operations(link.agent.key), link.agent.step, link.number,
+                                            past=link.agent.key.attempt_id in past))
     return tuple(found)
 
 
@@ -328,11 +342,13 @@ def build_task(ports: TaskPorts, backlog: str, task_id: str) -> TaskDetail | Fai
             view = with_hold(view, holds.get(agent_attempt(view)))
             view = replace(view, stop=StopStore(ports.reads.store.connect).get(
                 view.attempt_id if view.hold is None else view.hold.cause_id))
-        attempts = history(ports, rows)
+        chain = _chain(ports, rows)
         cut = max((each.seq for each in rows if each.release is not None and each.release.abandoned), default=0)
         past = {each.key.attempt_id for each in rows if each.seq <= cut}
+        attempts = tuple(replace(each, past=owner in past) for each, owner in _history(ports, rows, chain))
         checks = tuple((link.checks, link.number, link.checks.after in past)
-                       for link in _chain(ports, rows) if link.checks is not None)
+                       for link in chain if link.checks is not None)
+        operations = _operations(ports.files, chain, past)
         events = build_events(LandStore(ports.reads.store.connect, ports.reads.store.begin), checks, ports.reads.observe)
     except (StoreUnavailable, SlotsUnavailable) as error:
         return Failed("unavailable", "store", str(error))
@@ -342,7 +358,7 @@ def build_task(ports: TaskPorts, backlog: str, task_id: str) -> TaskDetail | Fai
         view, rows[0], title, ports.files, ports.reads.clock(), tries(rows).get(view.attempt_id),
         admission, duration_of(view, rows[0], ports.reads, ports.files))
     step_usage, usage = totals(attempts)
-    return TaskDetail(card, attempts, step_usage, usage, events)
+    return TaskDetail(card, attempts, step_usage, usage, events, operations)
 
 
 def build_tracker(tracker: DashTracker, task_id: str) -> TrackerDetail | None:

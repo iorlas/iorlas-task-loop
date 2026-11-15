@@ -43,7 +43,7 @@ function gapWords(ms) {
 }
 
 // The ordering contract puts verification immediately after its agent, with its own task-wide number.
-function project(list) {
+function project(list, operations) {
   const groups = [];
   let previous = null;
   for (const a of list) {
@@ -53,7 +53,8 @@ function project(list) {
       continue;
     }
     if (!groups.length || a.after === "restart_at_plan") groups.push([]);
-    groups.at(-1).push({ a, verification: null, gap: gapBetween(previous, a) });
+    groups.at(-1).push({ a, verification: null, gap: gapBetween(previous, a),
+      operations: operations.filter((o) => o.step === a.step && o.n === a.n) });
     previous = a;
   }
   return groups;
@@ -173,7 +174,26 @@ function summary(entries, n) {
     const lastStatus = status(last);
     parts.push(`${step.label} ${lastStatus.mark} ${lastStatus.label}${earlierFailure ? " (earlier failure)" : ""}`);
   }
+  for (const entry of entries) {
+    for (const operation of entry.operations.filter((o) => o.state !== "completed")) parts.push(operationWords(operation));
+  }
   return parts.join(" · ");
+}
+
+const operationKinds = { commit: "Commit", publish: "Publish", "checks-start": "Start checks" };
+const operationStates = { completed: "Completed", failed: "Failed", uncertain: "Result unconfirmed", active: "Completion unrecorded" };
+
+function operationWords(operation) {
+  return `${operationKinds[operation.kind]} · ${operationStates[operation.state]}`;
+}
+
+function operationRow(operation) {
+  const li = el("li", `relative py-1 pl-4 text-[11px] ${muted}`, operationWords(operation));
+  li.dataset.operation = operation.operation;
+  const measured = operation.state !== "active" && Number.isFinite(operation.elapsed_ms) && operation.elapsed_ms >= 0;
+  li.append(el("span", "ml-2 tabular-nums", measured ? fmtDur(operation.elapsed_ms) : "Duration unavailable"));
+  li.title = `Recorded start: ${operation.started_at}`;
+  return li;
 }
 
 function groupRows(entries, selected, select, stepUsage, events) {
@@ -181,11 +201,13 @@ function groupRows(entries, selected, select, stepUsage, events) {
   for (const entry of entries) {
     if (entry.a.after === "restart_at_plan") ol.append(restart(entry, select));
     if (!entry.a.after && entry.gap !== null && entry.gap >= WORK_MS) {
-      const work = el("li", "relative py-1 pl-4 text-[11px] text-slate-400 dark:text-slate-500", `Factory work · ${fmtDur(entry.gap)}`);
+      const work = el("li", "relative py-1 pl-4 text-[11px] text-slate-400 dark:text-slate-500", `Approximate gap · ${fmtDur(entry.gap)}`);
       work.title = gapWords(entry.gap);
       ol.append(work);
     }
+    if (entry.a.step === "checks") entry.operations.forEach((o) => ol.append(operationRow(o)));
     ol.append(row(entry, selected, select, stepUsage[entry.a.step]));
+    if (entry.a.step !== "checks") entry.operations.forEach((o) => ol.append(operationRow(o)));
     if (entry.a.step === "checks") {
       for (const event of events.filter((e) => e.checks_n === entry.a.n)) ol.append(landEvent(event, selected, select));
     }
@@ -259,12 +281,12 @@ function landRow(t, selected, select, events) {
   return li;
 }
 
-export function rail(list, t, selected, select, stepUsage = {}, events = []) {
+export function rail(list, t, selected, select, stepUsage = {}, events = [], operations = []) {
   selected.runs ??= new Map();
   const wrap = el("nav", "min-w-0 w-64 max-w-full shrink-0 overflow-y-auto border-r border-slate-200 px-4 py-4 dark:border-slate-800");
   wrap.id = "rail";
   wrap.append(el("h3", "mb-3 text-[11px] font-semibold uppercase tracking-wider text-slate-500", "Steps"));
-  const groups = project(list);
+  const groups = project(list, operations);
   let current = null;
   groups.forEach((entries, i) => {
     if (entries.every(({ a }) => a.past)) wrap.append(pastGroup(entries, i + 1, selected, select, stepUsage, events));

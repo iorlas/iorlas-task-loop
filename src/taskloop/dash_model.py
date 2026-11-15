@@ -10,6 +10,7 @@ from pydantic import BaseModel, ConfigDict
 
 from taskloop.dash_duration import Duration
 from taskloop.land_status import LandState
+from taskloop.operation_evidence import OperationKind, OperationState
 
 type Column = Literal["waiting", "plan", "implement", "checks", "land", "held", "landed"]
 type State = Literal["running", "succeeded", "failed"]
@@ -219,6 +220,20 @@ class TaskDetail:
     step_usage: dict[str, Usage]
     usage: Usage
     land_events: tuple[LandEvent, ...] = ()
+    operations: tuple[OperationDetail, ...] = ()
+
+
+class OperationDetail(BaseModel):
+    model_config = ConfigDict(frozen=True, strict=True, extra="forbid")
+
+    operation: str
+    step: str
+    n: int
+    past: bool
+    kind: OperationKind
+    state: OperationState
+    started_at: str
+    elapsed_ms: int | None
 
 
 @dataclass(frozen=True)

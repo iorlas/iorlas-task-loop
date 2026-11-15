@@ -11,6 +11,7 @@ import { usageText } from "../../src/taskloop/dash/static/usage.js";
 import { receiveDuration } from "../../src/taskloop/dash/static/duration.js";
 import { commandExpansion, toolRows, messageFolding, jumpToLatest } from "./lines.test.js";
 import { checkFollowing, checkActivation, checkStaleFeed } from "./check-lines.test.js";
+import { operationRail } from "./operation-rail.test.js";
 
 let monotonic = 0;
 Object.defineProperty(performance, "now", { value: () => monotonic, configurable: true });
@@ -94,13 +95,13 @@ function gaps() {
   for (const seconds of [119, 120]) {
     const list = [attempt("plan", 1, { ended_at: end }), verify(), attempt("implement", 1, { started_at: new Date(Date.parse(end) + seconds * 1000).toISOString() })];
     const node = mount(list);
-    assert(node.textContent.includes("Factory work") === (seconds === 120), `gap boundary ${seconds}`);
+    assert(node.textContent.includes("Approximate gap") === (seconds === 120), `gap boundary ${seconds}`);
     assert(node.querySelectorAll("li[title]")[1].title.includes("Approximate elapsed gap"), "short gaps stay in hover");
     assert(!node.textContent.includes("idle"), "no idle rows");
   }
   for (const start of [null, "invalid", "2026-11-14T09:59:00Z"]) {
     const node = mount([attempt("plan", 1, { ended_at: end }), attempt("implement", 1, { started_at: start })]);
-    assert(!node.textContent.includes("Factory work") && !node.textContent.includes("NaN"), "invalid gap omitted");
+    assert(!node.textContent.includes("Approximate gap") && !node.textContent.includes("NaN"), "invalid gap omitted");
   }
   const node = mount(healthy(), { ...task, column: "land", land: "manual",
     status_note: "waiting for land: waits for a person; the profile says land: manual" });
@@ -123,7 +124,7 @@ function restartsAndRepeats() {
   let row = [...node.querySelectorAll("button")].find((b) => b.textContent.startsWith("Restarted at plan"));
   assert(row.textContent === "Restarted at plan · 20:38 · waited 8m 21s", "today restart is short, contains wait");
   assert(row.title.startsWith("Reason not recorded"), "placeholder not a cause");
-  assert(!node.textContent.includes("Factory work"), "restart gap never factory work");
+  assert(!node.textContent.includes("Approximate gap"), "restart gap stays in restart row");
   const yesterday = new Date(today); yesterday.setDate(today.getDate() - 1);
   node = mount([restart(2, { started_at: yesterday.toISOString(), reason: "Owner changed scope" })]);
   row = [...node.querySelectorAll("button")].find((b) => b.textContent.startsWith("Restarted at plan"));
@@ -209,7 +210,10 @@ async function drawerSelection() {
   const requested = [];
   const verification = { of_step: "implement", of: 2, listed: ["src/link.py"], listing: ["src/link.py"], result: "unsettled:unsafe", checks: [{ name: "Path must be a plain file", state: "failed" }] };
   const source = {
-    detail: async () => ({ task, attempts: list }),
+    detail: async () => ({ task, attempts: list, operations: [
+      { operation: "drawer-commit", step: "implement", n: 3, kind: "commit", state: "completed", elapsed_ms: 1250,
+        started_at: "2026-11-14T10:00:00Z", past: false },
+    ] }),
     tracker: async () => tracked,
     body: async (id, step, n) => {
       requested.push(`${step}/${n}`);
@@ -219,6 +223,7 @@ async function drawerSelection() {
   initDrawer(source, new Map([[task.id, task]]));
   await openDrawer(task.id); await tick();
   const drawer = document.getElementById("drawer");
+  assert(drawer.querySelector('[data-operation="drawer-commit"]'), "drawer passes operation evidence to rail");
   drawer.querySelector("#rail details").open = true;
   button(drawer, "Prompt").click();
   assert(drawer.querySelector("#rail details").open, "disclosure survives redraw before toggle event fires");
@@ -766,7 +771,7 @@ try {
     document.documentElement.classList.toggle("light", !dark);
   for (const test of [healthyRows, verificationStates, gaps, restartsAndRepeats, pastRuns,
     drawerSelection, checksRestartDetail, landSelection, landStaleReplies, words, eventIndicators, vocabulary,
-    landEvents, waitingRows, usage, feedDisplay, liveFeedDisplay, liveDurations,
+    landEvents, waitingRows, usage, feedDisplay, liveFeedDisplay, liveDurations, operationRail,
     commandExpansion, toolRows, messageFolding, jumpToLatest, checkFollowing, checkActivation, checkStaleFeed]) {
     await test();
   }
@@ -779,7 +784,7 @@ try {
   }
   document.documentElement.classList.toggle("dark", location.hash === "#dark");
   document.documentElement.classList.toggle("light", location.hash !== "#dark");
-  results.textContent = "PASS: 25 browser contracts, both themes";
+  results.textContent = "PASS: 26 browser contracts, both themes";
   document.documentElement.dataset.result = "passed";
 } catch (error) {
   results.textContent = `FAIL: ${error.stack}`;

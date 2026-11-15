@@ -224,7 +224,8 @@ function renderContent() {
     return drawer.append(tabPanel(el("p", "px-6 py-5 text-sm text-slate-500", "Not started: no attempt yet."), "drawer-view", view));
   }
   const body = el("div", "drawer-body flex min-h-0 min-w-0 flex-1");
-  body.append(rail(detail.attempts, t, open, select, detail.step_usage, detail.land_events), open.step === "land" ? deliveryPane() : pane());
+  body.append(rail(detail.attempts, t, open, select, detail.step_usage, detail.land_events, detail.operations),
+    open.step === "land" ? deliveryPane() : pane());
   drawer.append(tabPanel(body, "drawer-view", view));
   if ($("rail") && railTop) $("rail").scrollTop = railTop;
   else body.querySelector("[data-selected]")?.scrollIntoView({ block: "nearest" });

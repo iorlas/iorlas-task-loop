@@ -26,12 +26,14 @@ from taskloop.dash_model import (
     LandEvent,
     LandEventKind,
     LandWait,
+    OperationDetail,
     Outcome,
     TaskDetail,
     TrackerDetail,
     Usage,
 )
 from taskloop.dash_server import PAGES, DashPorts, DashServer, Hub
+from taskloop.operation_evidence import OperationKind, OperationState
 from taskloop.operations import Failed
 from taskloop.round_reader import LogRow
 
@@ -256,13 +258,16 @@ def test_delivery_details_are_selected_by_task_and_preserve_failure_explanations
     assert status == 503 and json.loads(body) == {"error": "Delivery facts are temporarily unavailable."}
 
 
-def test_task_detail_encodes_nested_land_events_and_waits() -> None:
+def test_task_detail_encodes_nested_land_events_waits_and_operations() -> None:
     wait = LandWait(after="checks/ready", started_at=AT, ended_at=None, open=True, awaited="Waiting for delivery.")
     event = LandEvent(id=wait.after, kind=LandEventKind.READY, checks_id="checks", checks_n=1, at=AT,
                       past=False, explanation="Ready for delivery.", waits=(wait,))
-    reply = dash_server._json(TaskDetail(card(), (), {}, Usage(), (event,)))
+    operation = OperationDetail(operation="a" * 32, step="checks", n=1, past=False, kind=OperationKind.CHECKS_START,
+                                state=OperationState.ACTIVE, started_at=AT, elapsed_ms=None)
+    reply = dash_server._json(TaskDetail(card(), (), {}, Usage(), (event,), (operation,)))
     assert reply.status == 200
     assert json.loads(reply.body)["land_events"] == [event.model_dump(mode="json")]
+    assert json.loads(reply.body)["operations"] == [operation.model_dump(mode="json")]
 
 
 def test_a_connected_page_is_told_of_a_moved_card_a_vanished_one_and_every_new_log_line(served: tuple[Ports, DashServer]) -> None:
