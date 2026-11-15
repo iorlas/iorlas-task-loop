@@ -4,7 +4,7 @@ import json
 import sqlite3
 from collections.abc import Callable
 from contextlib import AbstractContextManager
-from dataclasses import astuple, dataclass, replace
+from dataclasses import dataclass, replace
 from functools import partial
 from pathlib import Path
 
@@ -20,14 +20,14 @@ from taskloop.admit import (
     checkout_repo,
     deadline_refusal,
     free_slots,
-    issued,
     open_store,
     read_task,
     task_text,
-    unheld,
     why,
 )
-from taskloop.admit_rows import as_count, insert_attempt, issue, reserve
+from taskloop.admit_rows import Task
+from taskloop.admit_store import current, insert_attempt, issued, reserve, task_of, transfer, unheld
+from taskloop.admit_store import previous as read_previous
 from taskloop.agents.settings import AgentSetting, encode_policy
 from taskloop.attempt_reads import StoreUnavailable
 from taskloop.attempt_store import AttemptStore
@@ -38,7 +38,6 @@ from taskloop.drain.store import blocked
 from taskloop.earlier_attempt import EarlierAttempt
 from taskloop.earlier_input import EarlierInput, commit_names
 from taskloop.evidence_files import EvidenceError, EvidenceFiles
-from taskloop.factory_schema import LATER, REPEATED
 from taskloop.git_views import GitProfileFiles
 from taskloop.hold_store import HoldStore
 from taskloop.ids import Ids
@@ -51,19 +50,6 @@ from taskloop.steps import is_agent, next_step
 from taskloop.task import TaskInspection
 from taskloop.task_content import TaskContentDigest
 from taskloop.tracker import ACTOR
-
-# The previous attempt under the write lock: its numbers, its copied choices, a successor, the held reservation, a valid
-# clean answer with its session complete, of effect `commit`/`keep` (the rule check of `factory_commit` and the verdict), no verdict, the
-# tracker root its claim was taken at (copied: a repeat claims nothing), its task-wide order, D, step and label (all carried on).
-PREVIOUS = f"""SELECT p.generation,p.number,p.adapter,p.backlog,p.task_id,p.repo_id,p.slot,p.model,p.effort,p.access_policy,
-{REPEATED},
-p.phase='captured' AND EXISTS (SELECT 1 FROM reservation r WHERE r.repo_id=p.repo_id AND r.slot=p.slot AND r.attempt_id=p.attempt_id
- AND r.generation=p.generation)
-AND EXISTS (SELECT 1 FROM execution e WHERE e.attempt_id=p.attempt_id AND e.answer_kind='valid' AND e.rc=0 AND e.timed_out=0
- AND e.effect IN ('commit','keep') AND e.session_state='complete')
-AND NOT EXISTS (SELECT 1 FROM verification v WHERE v.attempt_id=p.attempt_id),
-p.tracker_root,p.seq,p.slot_head,p.step,p.label,p.harness,p.provider,p.compaction_token_limit
-FROM attempt p WHERE p.attempt_id=? AND p.dispatch_token=? AND p.generation=?"""
 
 
 @dataclass(frozen=True)
@@ -80,17 +66,6 @@ class RepeatRequest:
 
 class _Lost(Exception):
     """No reservation row moved from the previous attempt: roll the new attempt back."""
-
-
-def transfer(con: sqlite3.Connection, previous: AttemptKey, key: AttemptKey, repo_id: object, slot: object) -> bool:
-    """Move one reservation inside its successor's admission transaction, fencing the predecessor."""
-    moved = con.execute(
-        "UPDATE reservation SET attempt_id=?,generation=? WHERE repo_id=? AND slot=? AND attempt_id=? AND generation=?",
-        (key.attempt_id, key.reservation_generation, repo_id, slot, previous.attempt_id, previous.reservation_generation),
-    ).rowcount
-    if moved == 1:
-        issue(con, repo_id, slot, key.reservation_generation)
-    return moved == 1
 
 
 class ChainAdmission:
@@ -142,48 +117,41 @@ class ChainAdmission:
 
     def _takeover_open(self, con: sqlite3.Connection, request: RepeatRequest, key: AttemptKey, ref: FileRef) -> Admitted | AdmitRefused:
         previous = request.previous
-        row: tuple[object, ...] | None = con.execute(PREVIOUS, (previous.attempt_id, previous.dispatch_token,
-                                                                previous.reservation_generation)).fetchone()
+        row = read_previous(con, previous)
         if row is None:
             return AdmitRefused("not_repeatable")
-        if row[10]:
+        if row.repeated:
             return AdmitRefused("task_attempted")
-        number = row[1]
-        if not isinstance(number, int) or number >= ATTEMPTS:
+        number = row.number
+        if number >= ATTEMPTS:
             return AdmitRefused("repeat_cap")
-        if not row[11]:
+        if not row.repeatable:
             return AdmitRefused("not_repeatable")
         refused = deadline_refusal(self.clock, request.deadline)
         if refused is not None:
             return refused
-        if row[15] == "plan" and request.content_digest is None:
+        if row.step == "plan" and request.content_digest is None:
             raise InputError("A plan repeat requires freshly collected task-content evidence")
         insert_attempt(con, {
             "attempt_id": key.attempt_id, "dispatch_token": key.dispatch_token, "generation": key.reservation_generation,
-            "adapter": row[2], "backlog": row[3], "task_id": row[4], "tracker_root": row[12], "repo_id": row[5], "slot": row[6],
-            "input_path": ref.path, "input_digest": ref.digest, "schema_version": 1, "model": row[7], "effort": row[8],
-            "access_policy": row[9], "deadline": request.deadline, "number": number + 1, "previous_attempt_id": previous.attempt_id,
-            "repeat_reason": request.reason, "repeat_listing": json.dumps(request.listing), "seq": as_count(row[13]) + 1,
-            "slot_head": row[14], "step": row[15],
-            "harness": row[17], "provider": row[18],
-            "compaction_token_limit": row[19],
-            "after_commit": None, "label": row[16],  # a repeat starts at E, the chain's own
+            "adapter": row.adapter, "backlog": row.backlog, "task_id": row.task_id, "tracker_root": row.tracker_root,
+            "repo_id": row.repo_id, "slot": row.slot,
+            "input_path": ref.path, "input_digest": ref.digest, "schema_version": 1, "model": row.model, "effort": row.effort,
+            "access_policy": row.access_policy, "deadline": request.deadline, "number": number + 1,
+            "previous_attempt_id": previous.attempt_id,
+            "repeat_reason": request.reason, "repeat_listing": json.dumps(request.listing), "seq": row.seq + 1,
+            "slot_head": row.slot_head, "step": row.step,
+            "harness": row.harness, "provider": row.provider,
+            "compaction_token_limit": row.compaction_token_limit,
+            "after_commit": None, "label": row.label,  # a repeat starts at E, the chain's own
         }, request.content_digest)
-        if not transfer(con, previous, key, row[5], row[6]):
+        if not transfer(con, previous, key, row.repo_id, row.slot):
             raise _Lost
-        return Admitted(key, str(row[6]))
+        return Admitted(key, row.slot)
 
 
 # The task's current attempt (its highest `seq`) under the write lock: its key, whether it is done (verified, released
 # settled with the claim kept, its X published), its step, X, tracker root, order and label (the next step's copy).
-CURRENT = """SELECT p.attempt_id,p.dispatch_token,p.generation,
-EXISTS (SELECT 1 FROM verification v WHERE v.attempt_id=p.attempt_id AND v.verdict='verified')
-AND EXISTS (SELECT 1 FROM slot_release x WHERE x.attempt_id=p.attempt_id AND x.claim='kept')
-AND EXISTS (SELECT 1 FROM published_branch b WHERE b.attempt_id=p.attempt_id AND b.commit_sha=p.end_commit),
-p.step,p.end_commit,p.tracker_root,p.seq,p.label
-FROM attempt p WHERE p.adapter='beads' AND p.backlog=? AND p.task_id=? ORDER BY p.seq DESC LIMIT 1"""
-
-
 @dataclass(frozen=True)
 class NextStepRequest:
     """Attempt 1 of the step after `previous`'s; every choice is the caller's (no label: claimed work is not ingested)."""
@@ -192,20 +160,6 @@ class NextStepRequest:
     checkout: Path
     setting: AgentSetting
     deadline: float
-
-
-@dataclass(frozen=True)
-class Task:
-    """The previous attempt's task, read before any effect; `current`: it is still the task's current attempt (also the
-    checks admission's read, `check_admit`)."""
-
-    backlog: str
-    task_id: str
-    tracker_root: str
-    repo_id: str
-    step: str
-    current: bool
-    end_commit: str | None  # X: the commit the next step starts from
 
 
 @dataclass(frozen=True)
@@ -325,12 +279,12 @@ class NextAdmission:
         with self.begin(con):
             if blocked(con):
                 return AdmitRefused(Reason.DRAINING, detail=BLOCKED)
-            row: tuple[object, ...] | None = con.execute(CURRENT, (found.backlog, found.task_id)).fetchone()
-            if row is None or row[0:3] != astuple(request.previous):
+            row = current(con, found.backlog, found.task_id)
+            if row is None or row.key != request.previous:
                 return AdmitRefused("task_attempted")
             if AttemptStore(lambda: con).earlier_for(request.previous) != ready.earlier:
                 return AdmitRefused("task_attempted", detail="The earlier attempt changed while the input was being prepared.")
-            if not row[3] or next_step(str(row[4]), True) != step:
+            if not row.done or next_step(row.step, True) != step:
                 return AdmitRefused("not_advanceable")
             chosen = next((slot for each in free if (slot := unheld(con, repo_id, each, generation)) is not None), None)
             if chosen is None:
@@ -346,7 +300,7 @@ class NextAdmission:
                     "adapter": "beads",
                     "backlog": found.backlog,
                     "task_id": found.task_id,
-                    "tracker_root": row[6],
+                    "tracker_root": row.tracker_root,
                     "repo_id": repo_id,
                     "slot": name,
                     "step": step,
@@ -362,29 +316,15 @@ class NextAdmission:
                     "previous_attempt_id": None,
                     "repeat_reason": None,
                     "repeat_listing": None,
-                    "seq": as_count(row[7]) + 1,
+                    "seq": row.seq + 1,
                     "slot_head": head,
-                    "after_commit": row[5],
-                    "label": row[8],
+                    "after_commit": row.end_commit,
+                    "label": row.label,
                     "harness": request.setting.harness,
                     "provider": request.setting.provider,
                 },
             )
         return Admitted(key, name)
-
-
-def task_of(con: sqlite3.Connection, previous: AttemptKey) -> Task | None:
-    row: tuple[object, ...] | None = con.execute(
-        "SELECT p.backlog,p.task_id,p.tracker_root,p.repo_id,p.step,NOT " + LATER + ",p.end_commit FROM attempt p "
-        "WHERE p.attempt_id=? AND p.dispatch_token=? AND p.generation=?",
-        astuple(previous),
-    ).fetchone()
-    if row is None:
-        return None
-    backlog, task_id, root, repo_id, step, current, end = row
-    if not all(isinstance(each, str) for each in row[:5]) or not isinstance(end, (str, type(None))):
-        raise sqlite3.DatabaseError("Malformed attempt row")
-    return Task(str(backlog), str(task_id), str(root), str(repo_id), str(step), bool(current), end)
 
 
 def _containing(repo: Repo, found: Task, free: tuple[Free, ...]) -> tuple[Free, ...] | AdmitRefused | AdmitUnavailable:

@@ -23,8 +23,8 @@ from pathlib import Path
 
 from git_porcelain import Repo
 
-from taskloop.admit import AdmitRefused, Tasks, free_slots, issued, unheld
-from taskloop.admit_rows import reserve
+from taskloop.admit import AdmitRefused, Tasks, free_slots
+from taskloop.admit_store import issued, reserve, unheld
 from taskloop.attempt_reads import StoreRefused, StoreUnavailable
 from taskloop.attempt_types import AttemptKey, AttemptResult, Checkouts, EntryIdentity, Replaced
 from taskloop.check_admit import heads

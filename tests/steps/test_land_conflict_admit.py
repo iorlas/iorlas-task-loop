@@ -11,7 +11,7 @@ from git_porcelain.testing import FakeRepo
 from land_conflict_bench import Bench, bench, copy_row
 from sqlite_store import Store, begin_immediate
 
-from taskloop.admit_rows import reserve
+from taskloop.admit_store import reserve
 from taskloop.attempt_reads import StoreRefused, StoreUnavailable
 from taskloop.attempt_types import AttemptKey, FileRef
 from taskloop.factory_schema import SCHEMA
