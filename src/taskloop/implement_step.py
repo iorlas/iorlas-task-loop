@@ -230,5 +230,5 @@ def failed_check_feedback(found: FailedCheck, task: str, nonce: str) -> str:
 
 
 def artifact(_tip: Tree, _rules: StepRules) -> None:
-    """No artifact rule at X: `Verified.blob` stays NULL."""
+    """No artifact rule at X: `Committed.blob` stays NULL."""
     return None

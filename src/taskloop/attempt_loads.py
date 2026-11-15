@@ -26,13 +26,13 @@ from taskloop.attempt_types import (
     AnswerState,
     AttemptKey,
     AttemptRecord,
+    Committed,
     Evidence,
     ExecutionFacts,
     FileRef,
     Rejected,
     StoredExecution,
     Verdict,
-    Verified,
 )
 from taskloop.earlier_attempt import EarlierAttempt
 from taskloop.recovery.execution_models import Callback
@@ -79,7 +79,7 @@ def verdict_of(row: tuple[object, ...]) -> Verdict | None:
     if kind is None:
         return None
     if kind == "verified":
-        return Verified(as_nullable_text(blob), bool(as_int(reused)))  # a kind without an artifact stores no blob
+        return Committed(as_nullable_text(blob), bool(as_int(reused)))  # a kind without an artifact stores no blob
     rule = next((rule for rule in RULES if rule == reason), None)
     if kind != "rejected" or rule is None:
         raise StoreUnavailable("Invalid stored verdict")

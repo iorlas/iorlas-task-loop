@@ -21,6 +21,7 @@ from taskloop.attempt_types import (
     AttemptKey,
     AttemptRecord,
     Checkouts,
+    CommitResult,
     NotApplicable,
     Rejected,
     SlotFiles,
@@ -29,7 +30,6 @@ from taskloop.attempt_types import (
     Unsettled,
     Verdict,
     VerifyRefused,
-    VerifyResult,
     VerifyUnavailable,
     WorkerGone,
 )
@@ -51,7 +51,7 @@ LOCK_WORDS: dict[type[Exception], str] = {
 }  # the slot lock's refusals, as `unavailable:<word>`
 
 
-def applicable(stored: StoredExecution | None) -> StoredExecution | VerifyResult:
+def applicable(stored: StoredExecution | None) -> StoredExecution | CommitResult:
     """The stored execution when a verdict is still to be made; otherwise what `commit` returns, with no Git read."""
     if stored is None:
         return VerifyRefused("not_captured")
@@ -83,7 +83,7 @@ class FactoryCommit:
         self.timing = timing
         self.store, self.checkouts, self.files, self.gone, self.clock, self.hold = store, checkouts, files, gone, clock, hold
 
-    def commit(self, key: AttemptKey) -> VerifyResult:
+    def commit(self, key: AttemptKey) -> CommitResult:
         try:
             with operation(self.store, ActionKind.FINALIZE, ids=self.ids, subject=key.attempt_id,
                            existing=lambda owner: self.store.owns_entry(key, owner)):
@@ -95,7 +95,7 @@ class FactoryCommit:
         except StoreUnavailable:
             return VerifyUnavailable("store")
 
-    def _committed(self, key: AttemptKey) -> VerifyResult:
+    def _committed(self, key: AttemptKey) -> CommitResult:
         try:
             return self._commit(key)
         except StoreUnavailable:
@@ -109,7 +109,7 @@ class FactoryCommit:
         except (GitUnavailable, Unreadable) as error:
             return VerifyUnavailable("git:" + type(error).__name__)
 
-    def _commit(self, key: AttemptKey) -> VerifyResult:
+    def _commit(self, key: AttemptKey) -> CommitResult:
         """A stored verdict or a refusal takes no lock; otherwise everything is read again under the slot's lock, so the
         commit through the verdict never acts on a record read before it."""
         found = self._ready(key)
@@ -119,7 +119,7 @@ class FactoryCommit:
             again = self._ready(key)
             return again if not isinstance(again, tuple) else self._settle(*again)
 
-    def _ready(self, key: AttemptKey) -> tuple[AttemptRecord, str, StoredExecution] | VerifyResult:
+    def _ready(self, key: AttemptKey) -> tuple[AttemptRecord, str, StoredExecution] | CommitResult:
         stored = applicable(self.store.collect(key))
         if not isinstance(stored, StoredExecution):
             return stored
@@ -169,7 +169,7 @@ class FactoryCommit:
         worker = record.worker
         return None if worker is not None and self.gone(worker) else Unsettled("worker_alive")
 
-    def _settle(self, record: AttemptRecord, base: str, stored: StoredExecution) -> VerifyResult:
+    def _settle(self, record: AttemptRecord, base: str, stored: StoredExecution) -> CommitResult:
         """Outside any transaction: X (stored, adopted or made), then the clean tree at X, then the verdict over the
         step's chain."""
         admission, answer, commit = record.admission, stored.answer, record.end_commit

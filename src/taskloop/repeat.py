@@ -19,15 +19,15 @@ from taskloop.attempt_types import (
     REPEATABLE,
     AttemptKey,
     AttemptRecord,
+    CommitResult,
+    Committed,
     EntryIdentity,
     NotApplicable,
     Observe,
     Rejected,
     RepeatReason,
     Unsettled,
-    Verified,
     VerifyRefused,
-    VerifyResult,
     WorkerGone,
 )
 from taskloop.discussion import RefreshDiscussion, replace_block
@@ -46,7 +46,7 @@ from taskloop.task_content import TaskContentDigest
 class Settle(Protocol):
     """The factory commit as a repeat uses it: the step's own commit, then the slot's staged paths (None: unknown)."""
 
-    def commit(self, key: AttemptKey) -> VerifyResult: ...
+    def commit(self, key: AttemptKey) -> CommitResult: ...
 
     def staged(self, key: AttemptKey) -> tuple[str, ...] | None: ...
 
@@ -55,7 +55,7 @@ class AdmitRepeat(Protocol):
     def admit_repeat(self, request: RepeatRequest) -> Admitted | AdmitRefused | AdmitUnavailable: ...
 
 
-def _words(found: Verified | Rejected | NotApplicable) -> str:
+def _words(found: Committed | Rejected | NotApplicable) -> str:
     return found.what if isinstance(found, NotApplicable) else judged(found)
 
 
@@ -101,7 +101,7 @@ class StepRepeat:
         """C's own verify: a stored or new verdict, or no step to verify, is `already_dispatched` with that result; any
         other unsettled reason or unknown is that failure, never a repeat."""
         found = self.factory_commit.commit(current)
-        if isinstance(found, (Verified, Rejected, NotApplicable)):
+        if isinstance(found, (Committed, Rejected, NotApplicable)):
             return Started("already_dispatched", backlog, task_id, current.attempt_id, True, result=_words(found))
         if isinstance(found, VerifyRefused) and found.reason == "stale_reservation":
             return self._existing(backlog, task_id, current, minutes)  # another start took the step over after this one's read

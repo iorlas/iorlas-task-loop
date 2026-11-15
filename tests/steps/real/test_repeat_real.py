@@ -24,7 +24,7 @@ from taskloop.admit_chain import ChainAdmission
 from taskloop.agents.launch import AgentLaunch
 from taskloop.attempt import Attempts, Execution
 from taskloop.attempt_store import AttemptStore
-from taskloop.attempt_types import DEFAULT_GIT_READ_SECONDS, AttemptKey, Unsettled, Verified
+from taskloop.attempt_types import DEFAULT_GIT_READ_SECONDS, AttemptKey, Committed, Unsettled
 from taskloop.commit import FactoryCommit
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.git_views import GitViews
@@ -108,7 +108,7 @@ def test_a_repeat_commits_x2_on_x1_from_the_dirty_worktree_and_the_chain_verifie
     second = agent(slot, {P: PLAN_V2}, ("scratch.txt",), [P])
     assert attempts(second).execute(found[0], SECOND).reason == "verification"
     verdict = factory_commit.commit(found[0])
-    assert isinstance(verdict, Verified) and not verdict.reused
+    assert isinstance(verdict, Committed) and not verdict.reused
     assert git(slot, "rev-parse", "HEAD^").strip() == x1 and git(slot, "rev-parse", "HEAD^^").strip() == base
     assert git(slot, "status", "--porcelain").strip() == ""
     assert git(slot, "log", "-1", "--format=%B").strip().endswith(f"Task-Loop-Attempt: {found[0].attempt_id}")

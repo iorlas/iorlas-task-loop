@@ -10,7 +10,7 @@ from pathlib import Path
 
 from git_porcelain import Repo, Tree
 
-from taskloop.attempt_types import MODE, ChainLink, Rejected, Rule, StepRules, Unreadable, Verdict, Verified, path_allowed
+from taskloop.attempt_types import MODE, ChainLink, Committed, Rejected, Rule, StepRules, Unreadable, Verdict, path_allowed
 from taskloop.step import Step
 from taskloop.steps import StepKind
 
@@ -46,7 +46,7 @@ def judge(repo: Repo, root: Path, commit: str, step: StepKind, rules: StepRules,
 
 def _artifact(step: StepKind, tip: Tree, rules: StepRules, *, reused: bool) -> Verdict:
     found = step.artifact(tip, rules)
-    return found if isinstance(found, Rejected) else Verified(found, reused)
+    return found if isinstance(found, Rejected) else Committed(found, reused)
 
 
 def _link(repo: Repo, root: Path, sha: str, parent: str, step: StepKind, rules: StepRules, paths: tuple[str, ...]) -> Rule | None:

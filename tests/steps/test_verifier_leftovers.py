@@ -8,7 +8,7 @@ from git_porcelain import Recorded
 from git_porcelain.testing import FakeWorktree
 from test_verifier import KEY, PLANNED, captured, factory_commit, head, trailer_commit
 
-from taskloop.attempt_types import Checkouts, Unsettled, Verified
+from taskloop.attempt_types import Checkouts, Committed, Unsettled
 
 
 def test_leftovers_read_the_adopt_rule_commit_as_none_and_a_slot_left_detached_as_branch(
@@ -17,7 +17,7 @@ def test_leftovers_read_the_adopt_rule_commit_as_none_and_a_slot_left_detached_a
     captured(registered, tmp_path, slot, checkouts, slot_files, PLANNED)
     check = factory_commit(registered, checkouts, slot_files)
     trailer_commit(slot, slot_files)
-    assert check.leftovers(KEY) is None and isinstance(check.commit(KEY), Verified)
+    assert check.leftovers(KEY) is None and isinstance(check.commit(KEY), Committed)
 
 
 def test_a_slot_left_detached_by_the_agent_is_branch_in_the_leftovers(

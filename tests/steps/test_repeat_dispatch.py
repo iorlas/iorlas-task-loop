@@ -30,6 +30,8 @@ from taskloop.attempt_types import (
     AttemptKey,
     ChainLink,
     Checkouts,
+    CommitResult,
+    Committed,
     Effect,
     EntryIdentity,
     FileRef,
@@ -38,9 +40,7 @@ from taskloop.attempt_types import (
     SlotFiles,
     StepRules,
     Unsettled,
-    Verified,
     VerifyRefused,
-    VerifyResult,
 )
 from taskloop.commit import FactoryCommit
 from taskloop.evidence_files import EvidenceFiles
@@ -168,7 +168,7 @@ def test_the_next_attempt_dispatches_at_e_with_the_leftovers_as_a_fresh_session_
     assert "resume" not in spec.argv and spec.argv[1] == "exec"  # a fresh session, never a resumed one
     assert f"?? {STRAY}" in spec.stdin + " ".join(spec.argv) and TASK in spec.stdin + " ".join(spec.argv)
     found = step.factory_commit.commit(key)
-    assert isinstance(found, Verified) and not found.reused  # X1, then `unchanged`: verified, not reused
+    assert isinstance(found, Committed) and not found.reused  # X1, then `unchanged`: verified, not reused
     assert made(slot, base) == ["Plan tl-1"] and slot.dirty().raw is False
 
 
@@ -179,7 +179,7 @@ def test_a_second_commit_on_the_first_is_verified_with_each_held_to_its_own_path
     key, entry = step.next_attempt(KEY)
     step.run(key, entry, Agent(slot, {P: PLAN_V2}, PLAN | {"paths": [P, NOTE]}))
     found = step.factory_commit.commit(key)
-    assert isinstance(found, Verified) and not found.reused
+    assert isinstance(found, Committed) and not found.reused
     assert made(slot, base) == ["Plan tl-1", "Plan tl-1"]
     rows = step.con.execute("SELECT number,base_commit,end_commit FROM attempt ORDER BY number").fetchall()
     assert rows[0][1] == base and rows[1][1] == rows[0][2] and rows[1][2] == head(slot)
@@ -239,7 +239,7 @@ def test_three_attempts_then_the_owner(step: Step, slot: FakeWorktree, tmp_path:
     assert step.repeat(third) == Failed("refused", "repeats_exhausted")
     assert step.con.execute("SELECT count(*) FROM attempt").fetchone() == (3,)
     slot.remove_file(STRAY)
-    assert isinstance(step.factory_commit.commit(third), Verified)  # the owner tidies the slot; attempt 3 can still verify
+    assert isinstance(step.factory_commit.commit(third), Committed)  # the owner tidies the slot; attempt 3 can still verify
 
 
 def test_a_late_verify_of_a_superseded_attempt_writes_no_git(step: Step, slot: FakeWorktree) -> None:
@@ -299,13 +299,13 @@ def test_judge_requires_each_attempts_paths_only_for_plan_commits(repo: FakeRepo
     x2 = commit(slot, {NOTE: "changed"})
     first = attempt(1, base, x1, (P, NOTE))
     operation = kind(step)
-    assert isinstance(judge(repo, repo.path, x2, operation, rules(), (first, attempt(2, x1, None, (P, NOTE)))), Verified)
+    assert isinstance(judge(repo, repo.path, x2, operation, rules(), (first, attempt(2, x1, None, (P, NOTE)))), Committed)
     for chain in ((first, attempt(2, x1, None, (P,))),
                   (attempt(1, base, x1, (P,)), attempt(2, x1, None, (P, NOTE)))):
         result = judge(repo, repo.path, x2, operation, rules(), chain)
-        assert result == Rejected("paths") if step == "plan" else isinstance(result, Verified)
+        assert result == Rejected("paths") if step == "plan" else isinstance(result, Committed)
     unchanged = judge(repo, repo.path, x1, operation, rules(), (first, attempt(2, x1, x1, (), "keep")))
-    assert isinstance(unchanged, Verified) and not unchanged.reused
+    assert isinstance(unchanged, Committed) and not unchanged.reused
 
 
 def test_judge_refuses_a_foreign_commit_inside_the_chain(repo: FakeRepo, slot: FakeWorktree) -> None:
@@ -341,7 +341,7 @@ def test_after_an_attempt_that_committed_nothing_the_repeat_lists_every_file_aga
     step.run(key, entry, Agent(slot, {}, PLAN, removed=[stray] if reason == "ignored" else []))
     record = step.store.load(key)
     assert record is not None and record.base_commit == base == record.start
-    assert isinstance(step.factory_commit.commit(key), Verified) and made(slot, base) == ["Plan tl-1"]
+    assert isinstance(step.factory_commit.commit(key), Committed) and made(slot, base) == ["Plan tl-1"]
 
 
 def test_the_true_count_of_leftovers_reaches_the_next_attempt(step: Step, slot: FakeWorktree) -> None:
@@ -441,7 +441,7 @@ def test_a_takeover_during_the_repeats_verify_launches_the_winner(step: Step, sl
     taken: list[AttemptKey] = []
 
     class Racing:
-        def commit(self, key: AttemptKey) -> VerifyResult:
+        def commit(self, key: AttemptKey) -> CommitResult:
             won = step.admission().admit_repeat(REPEAT)
             assert isinstance(won, Admitted)
             taken.append(won.key)

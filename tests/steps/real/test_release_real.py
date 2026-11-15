@@ -25,7 +25,7 @@ from taskloop.agents.launch import AgentLaunch
 from taskloop.agents.settings import AgentSetting, CodexPolicy, StepSettings
 from taskloop.attempt import Attempts
 from taskloop.attempt_store import AttemptStore
-from taskloop.attempt_types import DEFAULT_GIT_READ_SECONDS, AttemptKey, Verified
+from taskloop.attempt_types import DEFAULT_GIT_READ_SECONDS, AttemptKey, Committed
 from taskloop.commit import FactoryCommit
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.git_views import GitViews
@@ -135,7 +135,7 @@ class Repository:
 
         key = self.run(answered(PLAN, write))
         assert isinstance(FactoryCommit(self.store, VIEWS.checkouts, self.files, gone, lambda: 20, hold,
-                                        ids=NativeIds()).commit(key), Verified)
+                                        ids=NativeIds()).commit(key), Committed)
         return key, self.rev("HEAD")
 
 

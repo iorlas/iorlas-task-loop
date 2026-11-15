@@ -24,7 +24,7 @@ from taskloop.agents.launch import AgentLaunch
 from taskloop.agents.settings import AgentSetting, CodexPolicy, StepSettings
 from taskloop.attempt import Attempts
 from taskloop.attempt_store import AttemptStore
-from taskloop.attempt_types import DEFAULT_GIT_READ_SECONDS, Verified
+from taskloop.attempt_types import DEFAULT_GIT_READ_SECONDS, Committed
 from taskloop.commit import FactoryCommit
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.git_views import GitViews
@@ -107,7 +107,7 @@ def test_a_detached_slot_is_prepared_on_its_task_branch_and_the_plan_is_committe
     )
     assert attempts.execute(admitted.key, ENTRY).reason == "verification"
     verdict = FactoryCommit(store, VIEWS.checkouts, files, lambda _worker: True, lambda: 20, hold, ids=NativeIds()).commit(admitted.key)
-    assert isinstance(verdict, Verified) and not verdict.reused
+    assert isinstance(verdict, Committed) and not verdict.reused
     x = git(slot, "rev-parse", "HEAD").strip()
     assert git(main, "rev-parse", "refs/heads/task/tl-1").strip() == x and git(slot, "rev-parse", "HEAD^").strip() == m != d
     assert git(slot, "status", "--porcelain").strip() == "" and lock_path(str(slot)).is_file()

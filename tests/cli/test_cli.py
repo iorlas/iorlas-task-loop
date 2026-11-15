@@ -24,7 +24,7 @@ def test_help(arguments: list[str], capsys: pytest.CaptureFixture[str]) -> None:
     assert output.err == ""
 
 
-BUILT = ("Steps built: plan, implement and check. Verified results are published on the task branch. "
+BUILT = ("Steps built: plan, implement and check. Committed results are published on the task branch. "
          "The profile selects automatic land during a round or manual land by the owner.")
 
 

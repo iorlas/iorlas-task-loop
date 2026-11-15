@@ -15,7 +15,7 @@ from taskloop.admit import AdmitRequest, AdmitResult
 from taskloop.agents.settings import Overrides, StepSettings
 from taskloop.attempt_reads import PublishedRow
 from taskloop.attempt_store import AttemptStore
-from taskloop.attempt_types import AttemptKey, EntryIdentity, Verified, VerifyResult
+from taskloop.attempt_types import AttemptKey, CommitResult, Committed, EntryIdentity
 from taskloop.check_store import ChecksAdmitted, CheckStore, insert
 from taskloop.launch import Launched, LaunchRefused, LaunchResult, LaunchUnavailable
 from taskloop.operations import (
@@ -242,9 +242,9 @@ class Recorded:
     sha: str
     keys: list[str] = dataclasses.field(default_factory=list)
 
-    def commit(self, key: AttemptKey) -> VerifyResult:
+    def commit(self, key: AttemptKey) -> CommitResult:
         self.keys.append(key.attempt_id)
-        return Verified("blob", reused=True)
+        return Committed("blob", reused=True)
 
     def publish(self, key: AttemptKey) -> PublishResult:
         self.keys.append(key.attempt_id)
