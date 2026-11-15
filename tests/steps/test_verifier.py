@@ -32,6 +32,7 @@ from taskloop.attempt_types import (
     AttemptKey,
     ChainLink,
     Checkouts,
+    CommitRefused,
     CommitResult,
     Committed,
     FileRef,
@@ -41,7 +42,6 @@ from taskloop.attempt_types import (
     StepRules,
     StoredExecution,
     Unsettled,
-    VerifyRefused,
     VerifyUnavailable,
 )
 from taskloop.commit import CommitHold, FactoryCommit
@@ -237,11 +237,11 @@ CASES: list[tuple[str, Files | None, Files, Mapping[str, object], After | None, 
     ("hfs_ignorable_gitattributes", None, PLANNED | {"docs/.g\u200cit\ufeffattributes": "x"}, PLAN, None, None, "unsettled:unsafe", 0),
     ("git_file_elsewhere", None, PLANNED | {"src/.gitignore": "x"}, PLAN, None, None, "unsettled:uncommitted", 1),
     ("adopted_after_a_crash", None, PLANNED, PLAN, adopt, None, "verified", 1),
-    ("foreign_commit", None, PLANNED, PLAN, foreign, None, "unsettled:head_moved", 1),
-    ("unchanged_head_moved", PLANNED, {}, UNCHANGED, lambda slot, _files: commit(slot, {"README": "two"}), None, "unsettled:head_moved", 1),
-    ("unchanged_never_adopts", PLANNED, {}, UNCHANGED, trailer_commit, None, "unsettled:head_moved", 1),
-    ("another_branch", None, PLANNED, PLAN, lambda slot, _files: slot.checkout_new("other"), None, "unsettled:branch", 0),
-    ("detached", None, PLANNED, PLAN, lambda slot, _files: slot.park("HEAD"), None, "unsettled:branch", 0),
+    ("foreign_commit", None, PLANNED, PLAN, foreign, None, "refused:head_moved", 1),
+    ("unchanged_head_moved", PLANNED, {}, UNCHANGED, lambda slot, _files: commit(slot, {"README": "two"}), None, "refused:head_moved", 1),
+    ("unchanged_never_adopts", PLANNED, {}, UNCHANGED, trailer_commit, None, "refused:head_moved", 1),
+    ("another_branch", None, PLANNED, PLAN, lambda slot, _files: slot.checkout_new("other"), None, "refused:branch", 0),
+    ("detached", None, PLANNED, PLAN, lambda slot, _files: slot.park("HEAD"), None, "refused:branch", 0),
     ("index_locked", None, PLANNED, PLAN, lambda slot, _files: slot.lock_index(), None, "unavailable:git:IndexLocked", 0),
     ("lost_base", None, PLANNED, PLAN, None, LOSE_BASE, LOST, 0),
     ("dropped", None, PLANNED, PLAN, lambda slot, _files: slot.repo.drop_checkout(slot.path), None, "unavailable:git:NotARepo", 0),
@@ -367,7 +367,7 @@ def test_a_rewritten_slot_pointer_is_redirected_before_any_git_call(
     captured(registered, tmp_path, slot, checkouts, slot_files, PLANNED)
     rewrite(slot, slot_files)
     counted = Counted(checkouts)
-    assert factory_commit(registered, counted, slot_files).commit(KEY) == Unsettled("redirected") and counted.opens == 0
+    assert factory_commit(registered, counted, slot_files).commit(KEY) == CommitRefused("redirected") and counted.opens == 0
     assert stored(registered) == [] and end_commit(registered) is None
 
 
@@ -376,8 +376,7 @@ def test_a_pointer_is_judged_as_git_resolves_it(
     registered: sqlite3.Connection, slot: FakeWorktree, repo: FakeRepo, tmp_path: Path, checkouts: Checkouts,
     slot_files: FakeSlotFiles, target: str,
 ) -> None:
-    """A symlinked slot path, or a pointer whose Git directory or common directory resolves inside the slot (the agent's
-    own symlinks), is `redirected` before any Git call, though every name is right lexically."""
+    """An agent-controlled symlink in the slot, Git directory or common directory redirects before any Git read."""
     captured(registered, tmp_path, slot, checkouts, slot_files, PLANNED)
     gitdir = repo.identity().common_dir / "worktrees" / "s1"
     inside = slot.path / "repo/.git/worktrees/s1"
@@ -389,7 +388,7 @@ def test_a_pointer_is_judged_as_git_resolves_it(
     }
     slot_files.resolved.update(redirects[target])
     counted = Counted(checkouts)
-    assert factory_commit(registered, counted, slot_files).commit(KEY) == Unsettled("redirected") and counted.opens == 0
+    assert factory_commit(registered, counted, slot_files).commit(KEY) == CommitRefused("redirected") and counted.opens == 0
     assert made(slot, head(slot)) == [] and end_commit(registered) is None
 
 
@@ -399,7 +398,7 @@ def test_a_wrong_back_pointer_is_redirected(
     captured(registered, tmp_path, slot, checkouts, slot_files, PLANNED)
     slot_files.contents[repo.identity().common_dir / "worktrees" / "s1" / "gitdir"] = b"/elsewhere/.git\n"
     counted = Counted(checkouts)
-    assert factory_commit(registered, counted, slot_files).commit(KEY) == Unsettled("redirected") and counted.opens == 0
+    assert factory_commit(registered, counted, slot_files).commit(KEY) == CommitRefused("redirected") and counted.opens == 0
 
 
 def test_a_rewritten_pointer_refuses_dispatch(
@@ -541,7 +540,7 @@ def test_refusals_and_unknowns_before_any_git_read(
     registered: sqlite3.Connection, slot: FakeWorktree, tmp_path: Path, checkouts: Checkouts, slot_files: FakeSlotFiles
 ) -> None:
     counted = Counted(checkouts)
-    assert factory_commit(registered, counted, slot_files).commit(KEY) == VerifyRefused("not_captured")
+    assert factory_commit(registered, counted, slot_files).commit(KEY) == CommitRefused("not_captured")
     captured(registered, tmp_path, slot, checkouts, slot_files, PLANNED)
     registered.execute(
         "UPDATE execution SET answer_kind='validation_pending',disposition=NULL,effect=NULL,commit_paths=NULL,commit_message=NULL"
@@ -552,17 +551,12 @@ def test_refusals_and_unknowns_before_any_git_read(
     assert counted.opens == 0 and stored(registered) == []
 
 
-@pytest.mark.parametrize(
-    ("session_state", "expected"), [("pending", VerifyUnavailable("session_pending")), ("conflict", VerifyRefused("session"))]
-)
+@pytest.mark.parametrize(("session_state", "expected"), [
+    ("pending", VerifyUnavailable("session_pending")), ("conflict", CommitRefused("session")), ("fault", CommitRefused("session_fault")),
+])
 def test_an_unfinished_session_state_is_never_verified(
-    registered: sqlite3.Connection,
-    slot: FakeWorktree,
-    tmp_path: Path,
-    checkouts: Checkouts,
-    slot_files: FakeSlotFiles,
-    session_state: str,
-    expected: object,
+    registered: sqlite3.Connection, slot: FakeWorktree, tmp_path: Path, checkouts: Checkouts, slot_files: FakeSlotFiles,
+    session_state: str, expected: object,
 ) -> None:
     captured(registered, tmp_path, slot, checkouts, slot_files, PLANNED)
     registered.execute("UPDATE execution SET session_state=?", (session_state,))
@@ -582,7 +576,7 @@ def test_a_stale_reservation_refuses_and_stores_nothing(
 ) -> None:
     captured(registered, tmp_path, slot, checkouts, slot_files, PLANNED)
     registered.execute("UPDATE reservation SET generation=2")
-    assert factory_commit(registered, checkouts, slot_files).commit(KEY) == VerifyRefused("stale_reservation")
+    assert factory_commit(registered, checkouts, slot_files).commit(KEY) == CommitRefused("stale_reservation")
     assert stored(registered) == [] and made(slot, head(slot)) == []
 
 
@@ -607,13 +601,13 @@ def test_another_verifier_storing_first_is_inconsistent(
             return None if found is None else dataclasses.replace(found, verification=None)
 
     racing = FactoryCommit(Racing(lambda: registered), checkouts, slot_files, gone, lambda: 3, hold, ids=NativeIds())
-    assert racing.commit(KEY) == VerifyUnavailable("inconsistent")
+    assert racing.commit(KEY) == CommitRefused("inconsistent")
 
 
 def test_the_real_composition_opens_the_factory_database(tmp_path: Path) -> None:
     store = Store(SCHEMA)
     factory_commit = open_factory_commit(tmp_path / "factory.db", store, GitViews(DEFAULT_GIT_READ_SECONDS), tmp_path)
-    assert factory_commit.commit(KEY) == VerifyRefused("not_captured")
+    assert factory_commit.commit(KEY) == CommitRefused("not_captured")
     store.close_shared()
 
 
@@ -706,7 +700,7 @@ def test_a_pointer_rewritten_after_the_slot_read_stops_before_stage(
         return read(self, base, ignored_under=ignored_under)
 
     monkeypatch.setattr(FakeWorktree, "dirty", dirty)
-    assert factory_commit(registered, checkouts, slot_files).commit(KEY) == Unsettled("redirected")
+    assert factory_commit(registered, checkouts, slot_files).commit(KEY) == CommitRefused("redirected")
     assert slot.state().index == index and made(slot, base) == [] and end_commit(registered) is None
 
 
@@ -723,7 +717,7 @@ def test_a_pointer_rewritten_during_stage_stops_before_record(
         flip(slot, slot_files)
 
     monkeypatch.setattr(FakeWorktree, "stage", stage)
-    assert factory_commit(registered, checkouts, slot_files).commit(KEY) == Unsettled("redirected")
+    assert factory_commit(registered, checkouts, slot_files).commit(KEY) == CommitRefused("redirected")
     assert made(slot, base) == [] and end_commit(registered) is None and stored(registered) == []
 
 
@@ -799,7 +793,7 @@ def test_a_moved_head_lists_the_tags_the_agent_made_and_the_guide_names_the_work
     commit(slot, {}, "agent commit")
     slot.repo.tag("task/evil", head(slot))
     result = factory_commit(registered, checkouts, slot_files).commit(KEY)
-    assert result == Unsettled("head_moved", ("refs/tags/task/evil",))
+    assert result == CommitRefused("head_moved", ("refs/tags/task/evil",))
     assert factory_commit(registered, checkouts, slot_files).leftovers(KEY) == result  # what `tl step show` reads, with no write
     guide = GUIDE["unsettled"]
     assert "abandon before admitting a fresh attempt" in guide and "`head_moved`" in guide

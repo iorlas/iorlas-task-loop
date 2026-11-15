@@ -30,6 +30,7 @@ from taskloop.attempt_types import (
     AttemptKey,
     ChainLink,
     Checkouts,
+    CommitRefused,
     CommitResult,
     Committed,
     Effect,
@@ -40,7 +41,6 @@ from taskloop.attempt_types import (
     SlotFiles,
     StepRules,
     Unsettled,
-    VerifyRefused,
 )
 from taskloop.commit import FactoryCommit
 from taskloop.evidence_files import EvidenceFiles
@@ -247,7 +247,7 @@ def test_a_late_verify_of_a_superseded_attempt_writes_no_git(step: Step, slot: F
     step.run(KEY, ENTRY, Agent(slot, {P: PLAN_TEXT}, PLAN))
     taken = step.admission().admit_repeat(REPEAT)
     assert isinstance(taken, Admitted)
-    assert step.factory_commit.commit(KEY) == VerifyRefused("stale_reservation") and made(slot, base) == []
+    assert step.factory_commit.commit(KEY) == CommitRefused("stale_reservation") and made(slot, base) == []
 
 
 def test_a_takeover_during_the_verify_is_superseded_before_any_git_write(
@@ -264,7 +264,7 @@ def test_a_takeover_during_the_verify_is_superseded_before_any_git_write(
         return read(self, base, ignored_under=ignored_under)
 
     monkeypatch.setattr(FakeWorktree, "dirty", dirty)
-    assert step.factory_commit.commit(KEY) == Unsettled("superseded")
+    assert step.factory_commit.commit(KEY) == CommitRefused("superseded")
     assert slot.state().index == index and made(slot, base) == []
     assert step.con.execute("SELECT end_commit FROM attempt WHERE attempt_id='attempt'").fetchone() == (None,)
     assert step.con.execute("SELECT count(*) FROM verification").fetchone() == (0,)
@@ -403,7 +403,7 @@ def test_a_superseded_verify_that_staged_leaves_the_next_attempt_undispatched(
         assert isinstance(step.admission().admit_repeat(REPEAT), Admitted)
 
     monkeypatch.setattr(FakeWorktree, "stage", staging)
-    assert step.factory_commit.commit(KEY) == Unsettled("superseded") and made(slot, base) == []
+    assert step.factory_commit.commit(KEY) == CommitRefused("superseded") and made(slot, base) == []
     monkeypatch.setattr(FakeWorktree, "stage", stage)
     found = step.store.attempt_of("tasks", "tl-1")
     assert found is not None and step.store.register_entry(found[0], (9, "s", "boot"), 10) == "accepted"

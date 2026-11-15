@@ -10,7 +10,7 @@ ROOT = Path(__file__).resolve().parents[2] / "src" / "taskloop"
 # Argument carrying a refusal reason, including helpers that construct owning results.
 PRODUCERS = {
     "Failed": 1, "AdmitRefused": 0, "AdmitUnavailable": 0, "LaunchRefused": 0, "LaunchUnavailable": 0,
-    "VerifyRefused": 0, "VerifyUnavailable": 0, "NotApplicable": 0, "Unsettled": 0, "NotReleased": 1,
+    "CommitRefused": 0, "VerifyUnavailable": 0, "NotApplicable": 0, "Unsettled": 0, "NotReleased": 1,
     "NotPublished": 1, "_refused": 0, "_unavailable": 0, "StoreRefused": 0, "Rejected": 0,
 }
 
@@ -84,9 +84,6 @@ REVIEWED_DYNAMIC = {
     ('checks.py', '_refused', "f'expired:{check.name}'"),
     ('cli_composition.py', 'Failed', 'Reason.DRAINING'),
     ('cli_step.py', 'Failed', 'INTERRUPTED'),
-    ('factory_commit.py', 'Unsettled', "'unborn' if head is None else 'branch'"),
-    ('factory_commit.py', 'Unsettled', "'unborn' if state.head is None else 'branch'"),
-    ('factory_commit.py', 'Unsettled', 'problem'),
     ('land.py', 'Failed', "'task' if isinstance(read, AdmitRefused) else 'tracker'"),
     ('land.py', 'Failed', 'Reason.DRAINING'),
     ('land.py', 'Failed', 'checked.what'),
@@ -142,9 +139,13 @@ REVIEWED_DYNAMIC = {
     ('wip.py', 'Refused', 'SaveReason.REF_MOVED'),
     ('verdict.py', 'Rejected', 'broken'),
     ('commit.py', 'NotApplicable', 'end_word(stored)'),
-    ('commit.py', 'VerifyRefused', "'absent' if record is None else 'no_base'"),
-    ('commit.py', 'VerifyRefused', 'Reason.DRAINING'),
-    ('commit.py', 'VerifyRefused', 'str(error)'),
+    ('commit.py', 'CommitRefused', "'absent' if record is None else 'no_base'"),
+    ('commit.py', 'CommitRefused', 'Reason.DRAINING'),
+    ('commit.py', 'CommitRefused', 'str(error)'),
+    ('commit.py', 'CommitRefused', "'session' if stored.session_state == 'conflict' else 'session_fault'"),
+    ('factory_commit.py', 'CommitRefused', "'unborn' if head is None else 'branch'"),
+    ('factory_commit.py', 'CommitRefused', "'unborn' if state.head is None else 'branch'"),
+    ('factory_commit.py', 'CommitRefused', 'problem'),
     ('commit.py', 'VerifyUnavailable', "'git:' + type(error).__name__"),
     ('commit.py', 'VerifyUnavailable', "'session_' + stored.session_state"),
     ('commit.py', 'VerifyUnavailable', 'LOCK_WORDS[type(error)]'),

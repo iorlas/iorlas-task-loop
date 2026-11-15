@@ -29,6 +29,7 @@ from taskloop.attempt_types import (
     AttemptKey,
     AttemptResult,
     Checkouts,
+    CommitRefused,
     CommitResult,
     Committed,
     EntryIdentity,
@@ -37,7 +38,6 @@ from taskloop.attempt_types import (
     Seen,
     SlotFiles,
     Unsettled,
-    VerifyRefused,
     VerifyUnavailable,
 )
 from taskloop.cli_composition import adopt, open_commit, open_land, open_reads, open_start
@@ -406,10 +406,11 @@ def test_list_keeps_only_stuck_or_unknown_when_asked(reader: AttemptStore, now: 
     (Committed("blob", reused=True), VerifiedTask("reused", "tasks", "tl-1", "attempt", "released", "published")),
     (Rejected("paths"), Failed("rejected", "paths", "Release: released")),
     (NotApplicable("incomplete"), Failed("not_applicable", "incomplete")),
-    (VerifyRefused("session"), Failed("refused", "session")),
+    (CommitRefused("session"), Failed("refused", "session")),
+    (CommitRefused("head_moved", ("refs/tags/task/evil",)), Failed("refused", "head_moved", "refs/tags/task/evil")),
     (Unsettled("dirty"), Failed("unsettled", "dirty")),
     (VerifyUnavailable("git:NotARepo"), Failed("unavailable", "git:NotARepo")),
-    (VerifyUnavailable("inconsistent"), Failed("defect", "inconsistent")),
+    (CommitRefused("inconsistent"), Failed("refused", "inconsistent", "Contradictory retained facts: inconsistent verdict or end commit.")),
 ])
 def test_verify_maps_every_verdict(reader: AttemptStore, verdict: CommitResult, expected: VerifiedTask | Failed) -> None:
     factory_commit, releases, publishes = FakeFactoryCommit(verdict), Releases(), Publishes()
@@ -490,7 +491,7 @@ def test_show_reads_leftovers_fresh_and_names_the_repeat(
     assert shown.view.leftovers == ("uncommitted", f"?? {stray}")
     probed: list[AttemptKey] = []
 
-    def counted(key: AttemptKey) -> Unsettled | None:
+    def counted(key: AttemptKey) -> Unsettled | CommitRefused | None:
         probed.append(key)
         return factory_commit.leftovers(key)
 
@@ -530,10 +531,10 @@ def test_show_and_verify_agree_on_a_slot_moved_off_its_task_branch(
     assert on.view.leftovers[0] == "unsafe" and on.view.leftovers[-1] == near
     assert "A changed Git file" in on.view.leftovers[1] and near in on.view.leftovers[1]
     slot.checkout_new("other")
-    assert factory_commit.leftovers(KEY) == Unsettled("branch")
+    assert factory_commit.leftovers(KEY) == CommitRefused("branch")
     off = show_attempt(reads, tmp_path / "art", "tasks", "tl-1")
     assert isinstance(off, Shown) and (off.view.next, off.view.leftovers) == ("verify", ("branch",))
-    assert commit_task(store, factory_commit, Releases(), Publishes(), "tasks", "tl-1") == Failed("unsettled", "branch")
+    assert commit_task(store, factory_commit, Releases(), Publishes(), "tasks", "tl-1") == Failed("refused", "branch")
 
 
 def test_every_opener_but_adopt_refuses_a_missing_database_and_creates_none(tmp_path: Path) -> None:

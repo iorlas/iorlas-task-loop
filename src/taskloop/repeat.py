@@ -19,6 +19,7 @@ from taskloop.attempt_types import (
     REPEATABLE,
     AttemptKey,
     AttemptRecord,
+    CommitRefused,
     CommitResult,
     Committed,
     EntryIdentity,
@@ -27,7 +28,6 @@ from taskloop.attempt_types import (
     Rejected,
     RepeatReason,
     Unsettled,
-    VerifyRefused,
     WorkerGone,
 )
 from taskloop.discussion import RefreshDiscussion, replace_block
@@ -103,7 +103,7 @@ class StepRepeat:
         found = self.factory_commit.commit(current)
         if isinstance(found, (Committed, Rejected, NotApplicable)):
             return Started("already_dispatched", backlog, task_id, current.attempt_id, True, result=_words(found))
-        if isinstance(found, VerifyRefused) and found.reason == "stale_reservation":
+        if isinstance(found, CommitRefused) and found.reason == "stale_reservation":
             return self._existing(backlog, task_id, current, minutes)  # another start took the step over after this one's read
         if not isinstance(found, Unsettled):
             return commit_failure(found)

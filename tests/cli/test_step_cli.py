@@ -179,7 +179,7 @@ CASES: list[tuple[list[str], Result, int, list[str], set[str]]] = [
     (START, Failed("refused", "not_repeatable"), 1, ["tl step start: refused:not_repeatable"], ADMISSION_ERROR),
     (START, Failed("unsettled", "worker_alive"), 3, ["tl step start: unsettled:worker_alive", step_guide.GUIDE["unsettled"]],
      ADMISSION_ERROR),
-    (START, Failed("unsettled", "superseded"), 3, ["tl step start: unsettled:superseded"], ADMISSION_ERROR),
+    (START, Failed("refused", "superseded"), 1, ["tl step start: refused:superseded"], ADMISSION_ERROR),
     (START, Failed("refused", "no_free_slot", slots=(VIEW,)), 1, ["tl step start: refused:no_free_slot", "s2 unknown dirty /slots/s2"],
      ADMISSION_ERROR),
     (START, Failed("refused", "registration_refused"), 1, ["refused:registration_refused"], ADMISSION_ERROR),

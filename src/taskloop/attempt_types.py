@@ -255,8 +255,8 @@ class PathExplanation:
 
 @dataclass(frozen=True)
 class Unsettled:
-    """The slot is not settled (`unborn`, `branch`, `head_moved`, `dirty`, `redirected`, `worker_alive`, `superseded`,
-    `staged`, `uncommitted`, `unsafe`, `ignored`); nothing stored, retryable. `listing` is data for a person and a repeat's
+    """The slot is not settled (`dirty`, `worker_alive`, `staged`, `uncommitted`, `unsafe`, `ignored`);
+    nothing stored, retryable. `listing` is data for a person and a repeat's
     feedback (the leftovers, the unsafe path, the ignored paths), never parsed."""
 
     reason: str
@@ -272,19 +272,23 @@ class NotApplicable:
 
 
 @dataclass(frozen=True)
-class VerifyRefused:
+class CommitRefused:
+    """A condition prevents the factory commit; no verdict stored. Listings retain refs for inspection."""
+
     reason: str
+    listing: tuple[str, ...] = ()
+    explanations: tuple[PathExplanation, ...] = field(default=(), compare=False)
 
 
 @dataclass(frozen=True)
 class VerifyUnavailable:
-    """Unknown: nothing stored (`git:<Type>`, `repo`, `not_listed`, `store`, `validation_pending`, `inconsistent`)."""
+    """Unknown: nothing stored (`git:<Type>`, `repo`, `not_listed`, `store`, `validation_pending`)."""
 
     reason: str
 
 
 type Verdict = Committed | Rejected
-type CommitResult = Committed | Rejected | Unsettled | NotApplicable | VerifyRefused | VerifyUnavailable
+type CommitResult = Committed | Rejected | Unsettled | NotApplicable | CommitRefused | VerifyUnavailable
 
 
 @dataclass(frozen=True)

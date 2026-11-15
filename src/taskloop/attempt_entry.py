@@ -46,13 +46,13 @@ from taskloop.attempt_types import (
     AttemptResult,
     CaptureResult,
     Checkouts,
+    CommitRefused,
     CommitResult,
     Committed,
     EntryIdentity,
     NotApplicable,
     Rejected,
     Unsettled,
-    VerifyRefused,
     VerifyUnavailable,
     WorkerGone,
     entry_identity,
@@ -151,7 +151,7 @@ def shown(result: CommitResult) -> str:
             return "unsettled:" + reason
         case VerifyUnavailable(reason=reason):
             return "unavailable:" + reason
-        case VerifyRefused(reason=reason):
+        case CommitRefused(reason=reason):
             return "refused:" + reason
         case NotApplicable():
             return "not_applicable"

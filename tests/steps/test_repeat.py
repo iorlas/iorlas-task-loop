@@ -35,6 +35,7 @@ from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import (
     AttemptKey,
     Checkouts,
+    CommitRefused,
     CommitResult,
     Committed,
     EntryIdentity,
@@ -45,7 +46,6 @@ from taskloop.attempt_types import (
     Seen,
     SlotFiles,
     Unsettled,
-    VerifyRefused,
     VerifyUnavailable,
 )
 from taskloop.commit import FactoryCommit
@@ -467,11 +467,11 @@ def test_no_verify_before_the_stop_proof(
     (Committed("blob", reused=True), Started("already_dispatched", "tasks", "tl-1", "attempt", True, result="reused")),
     (Rejected("nothing_written"), Started("already_dispatched", "tasks", "tl-1", "attempt", True, result="rejected:nothing_written")),
     (NotApplicable("incomplete"), Started("already_dispatched", "tasks", "tl-1", "attempt", True, result="incomplete")),
-    (Unsettled("redirected"), Failed("unsettled", "redirected")),
+    (CommitRefused("redirected"), Failed("refused", "redirected")),
     (Unsettled("worker_alive"), Failed("unsettled", "worker_alive")),
-    (VerifyRefused("session"), Failed("refused", "session")),
+    (CommitRefused("session"), Failed("refused", "session")),
     (VerifyUnavailable("git:NotARepo"), Failed("unavailable", "git:NotARepo")),
-    (VerifyUnavailable("inconsistent"), Failed("defect", "inconsistent")),
+    (CommitRefused("inconsistent"), Failed("refused", "inconsistent", "Contradictory retained facts: inconsistent verdict or end commit.")),
 ])
 def test_only_git_leftovers_repeat(
     registered: sqlite3.Connection, slot: FakeWorktree, tmp_path: Path, checkouts: Checkouts, slot_files: FakeSlotFiles,

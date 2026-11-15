@@ -21,6 +21,7 @@ from taskloop.attempt_types import (
     Admission,
     AnswerState,
     Checkouts,
+    CommitRefused,
     PathExplanation,
     Rejected,
     SlotFiles,
@@ -52,8 +53,8 @@ class Committed:
     sha: str
 
 
-type Settled = Committed | Unsettled | Rejected
-type GitQuiet = Callable[[], Unsettled | None]  # None: the factory may write Git in the slot now; else why not
+type Settled = Committed | Unsettled | CommitRefused | Rejected
+type GitQuiet = Callable[[], Unsettled | CommitRefused | None]  # None: the factory may write Git in the slot now; else why not
 
 
 def attributes(rules: StepRules, paths: Sequence[str]) -> tuple[str, ...]:
@@ -73,10 +74,10 @@ def _way(path: str) -> tuple[str, ...]:
     return tuple("/".join([*folders[:depth], ".gitattributes"]) for depth in range(len(folders) + 1))
 
 
-def _observed(checkouts: Checkouts, files: SlotFiles, admission: Admission) -> SlotState | Unsettled:
+def _observed(checkouts: Checkouts, files: SlotFiles, admission: Admission) -> SlotState | CommitRefused:
     state = observe_slot(checkouts, files, admission.slot_path, admission.repo_id)
     if state == "redirected":
-        return Unsettled("redirected")
+        return CommitRefused("redirected")
     if isinstance(state, str):
         raise NotSettled(state)
     return state
@@ -96,11 +97,11 @@ def settle(checkouts: Checkouts, files: SlotFiles, admission: Admission, base: s
     """Steps 2 to 5 of the step commit for a valid answer of effect `commit` or `keep` with no stored `end_commit`.
     `quiet` is asked right before each Git write: its answer (`worker_alive`, `superseded`) stops it, nothing written."""
     state = _observed(checkouts, files, admission)
-    if isinstance(state, Unsettled):
+    if isinstance(state, CommitRefused):
         return state
     head = state.head
     if head is None or state.branch != task_branch(admission.task.task_id):
-        return Unsettled("unborn" if head is None else "branch")
+        return CommitRefused("unborn" if head is None else "branch")
     if answer.effect == "keep":  # X is B: a `keep` step never adopts a commit
         if head != base:
             return _moved(checkouts(state.root), head, base, admission)
@@ -164,10 +165,10 @@ def _commit(
     raise NotSettled("git:HookRejected")  # cannot happen with hooks off: unknown, never a verdict
 
 
-def _blocked(quiet: GitQuiet, files: SlotFiles, admission: Admission, state: SlotState) -> Unsettled | None:
+def _blocked(quiet: GitQuiet, files: SlotFiles, admission: Admission, state: SlotState) -> Unsettled | CommitRefused | None:
     """Why the next Git write may not run: the caller's `quiet` (a live worker could rewrite `.git` between the check
     and the write; another attempt took the reservation over), then the slot pointer."""
-    return quiet() or (Unsettled("redirected") if _redirected(files, admission, state) else None)
+    return quiet() or (CommitRefused("redirected") if _redirected(files, admission, state) else None)
 
 
 def _foreign(checkouts: Checkouts, admission: Admission, paths: tuple[str, ...], gitdir: Path) -> Unsettled | None:
@@ -240,17 +241,17 @@ def _unwritten(checkouts: Checkouts, files: SlotFiles, admission: Admission, bas
     """Nothing to commit is `nothing_written` only while HEAD is still B: a factory commit racing this one may have committed
     the same index first, so a moved HEAD goes back to the adopt rule (its trailer commit) or `head_moved`."""
     state = _observed(checkouts, files, admission)
-    if isinstance(state, Unsettled):
+    if isinstance(state, CommitRefused):
         return state
     head = state.head
     if head is None or state.branch != task_branch(admission.task.task_id):
-        return Unsettled("unborn" if head is None else "branch")
+        return CommitRefused("unborn" if head is None else "branch")
     if head == base:
         return Rejected("nothing_written")
     return Committed(head) if _ours(checkouts(state.root), head, base, admission) else _moved(checkouts(state.root), head, base, admission)
 
 
-def _moved(repo: Repo, head: str, base: str, admission: Admission) -> Unsettled:
+def _moved(repo: Repo, head: str, base: str, admission: Admission) -> CommitRefused:
     """`head_moved`, listing the tags and branches that name a commit the agent made beside the moved HEAD (B excluded, the
     task's own branch excluded; annotated tags peeled to their commit). A ref whose commit is reachable from `main` or an
     `origin` ref can be the person's (the agent reset to `main`): never listed. The release does not remove any of them."""
@@ -262,7 +263,7 @@ def _moved(repo: Repo, head: str, base: str, admission: Admission) -> Unsettled:
         commit = _peeled(repo, each.sha)
         if each.name != own and commit in made and not any(repo.is_ancestor(commit, tip) for tip in theirs):
             named.append(each.name)
-    return Unsettled("head_moved", bounded(named))
+    return CommitRefused("head_moved", bounded(named))
 
 
 def _peeled(repo: Repo, sha: str) -> str | None:
@@ -358,36 +359,36 @@ def _file_explanation(files: SlotFiles, path: Path, rules: StepRules) -> str:
     return "The file content matches a credential signature (private key or login tokens)." if secret(data) else ""
 
 
-def clean_at(checkouts: Checkouts, files: SlotFiles, admission: Admission, commit: str) -> Path | Unsettled:
+def clean_at(checkouts: Checkouts, files: SlotFiles, admission: Admission, commit: str) -> Path | Unsettled | CommitRefused:
     """Step 6: the slot is on its task branch at X with nothing tracked or untracked left over (ignored files are not counted),
     returning the root its pointer names; leftovers are `uncommitted` with their listing, read fresh and never stored."""
     state = _observed(checkouts, files, admission)
-    if isinstance(state, Unsettled):
+    if isinstance(state, CommitRefused):
         return state
     problem = state.problem(task_branch(admission.task.task_id), commit)
     if problem is None:
         return state.root
     if problem != "dirty":
-        return Unsettled(problem)
+        return CommitRefused(problem)
     path = Path(admission.slot_path)
     return Unsettled("uncommitted", listing(checkouts(path, git_dir=state.gitdir), path))
 
 
 def leftovers(
     checkouts: Checkouts, files: SlotFiles, admission: Admission, base: str, answer: AnswerState, end_commit: str | None
-) -> Unsettled | None:
+) -> Unsettled | CommitRefused | None:
     """Read-only, for a person (`tl step show`): what a verify would report as a step to repeat, read now. Before the
     factory's commit the same `refusal` as `settle` (`unsafe`, `ignored`); after it, or for effect `keep`, the clean-tree
     check."""
     if answer.effect == "commit" and end_commit is None:
         state = _observed(checkouts, files, admission)
-        if isinstance(state, Unsettled):
+        if isinstance(state, CommitRefused):
             return None
         if state.head is None or state.branch != task_branch(admission.task.task_id):  # as `settle` reports it
-            return Unsettled("unborn" if state.head is None else "branch")
+            return CommitRefused("unborn" if state.head is None else "branch")
         if state.head != base:  # moved: the adopt rule's commit settles, else `head_moved` with the refs the agent made
             repo = checkouts(state.root)
             return None if _ours(repo, state.head, base, admission) else _moved(repo, state.head, base, admission)
         return refusal(checkouts(Path(admission.slot_path), git_dir=state.gitdir), files, admission, base, answer)
     found = clean_at(checkouts, files, admission, end_commit or base)
-    return found if isinstance(found, Unsettled) else None
+    return found if isinstance(found, (Unsettled, CommitRefused)) else None
