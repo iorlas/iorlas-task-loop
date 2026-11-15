@@ -24,7 +24,7 @@ from taskloop.agents.config import resolve_agents
 from taskloop.agents.settings import Overrides
 from taskloop.attempt_status import current_view, list_attempts, show_attempt
 from taskloop.attempt_store import AttemptStore
-from taskloop.attempt_types import AttemptKey, FileRef, SlotFiles, Unsettled
+from taskloop.attempt_types import AttemptKey, FileRef, SlotFiles, Uncommitted
 from taskloop.check_admit import ChecksRequest
 from taskloop.check_repeat.feedback import FailedCheck
 from taskloop.check_repeat.repair import CheckRepeat
@@ -402,7 +402,7 @@ def test_a_prior_path_repeat_consumes_the_same_budget(rig: Repairing) -> None:
     assert rig.store.attempts("tasks", "tl-1")[0].number == 1
     # Verify without the round immediately dispatching a repeat with the same dirty keep agent.
     found = rig.ports().factory_commit.commit(rig.store.attempts("tasks", "tl-1")[0].key)
-    assert isinstance(found, Unsettled) and found.reason == "uncommitted"
+    assert isinstance(found, Uncommitted) and found.reason == "uncommitted"
     view = current_view(rig.ports().reads, "tasks", "tl-1")
     assert view is not None and view.next == "repeat"
     specs = repair_agent(rig, change=True)
@@ -438,7 +438,7 @@ def test_unsafe_feedback_names_a_nearby_git_file_from_the_slot(rig: Repairing, p
     rig.round()
     row = rig.store.attempts("tasks", "tl-1")[0]
     found = rig.ports().factory_commit.commit(row.key)
-    assert isinstance(found, Unsettled) and found.reason == "unsafe" and found.explanations[0].path == path
+    assert isinstance(found, Uncommitted) and found.reason == "unsafe" and found.explanations[0].path == path
     step = kind("implement")
     text = step.feedback(found, step.rules("tl-1"), 1, "Task", "NONCE", unrecorded=True)
     assert json.dumps(path, ensure_ascii=True) in text.splitlines()[0] and "\x1b" not in text

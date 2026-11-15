@@ -18,7 +18,7 @@ from taskloop.attempt_types import (
     RepeatReason,
     Rule,
     StepRules,
-    Unsettled,
+    Uncommitted,
 )
 from taskloop.check_repeat.feedback import FailedCheck, output_text
 from taskloop.command_conclusion import encode
@@ -202,7 +202,7 @@ def repeat_instructions(number: int, *, unrecorded: bool) -> str:
     )
 
 
-def feedback(found: Unsettled, rules: StepRules, number: int, task: str, nonce: str, *, unrecorded: bool) -> str:
+def feedback(found: Uncommitted, rules: StepRules, number: int, task: str, nonce: str, *, unrecorded: bool) -> str:
     """The next attempt's complete input in the shared frame (`step_text.feedback`): the implement step's fixed words for
     the reason, the listing, its fixed instructions, then the task. `found.reason` is one of REPEATABLE."""
     opening = next(text for reason, text in OPENING.items() if reason == found.reason)

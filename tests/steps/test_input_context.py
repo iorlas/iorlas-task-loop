@@ -22,7 +22,7 @@ from taskloop.admit import AdmitRefused, Admitted
 from taskloop.agents.launch import AgentLaunch
 from taskloop.attempt import Attempts
 from taskloop.attempt_store import AttemptStore
-from taskloop.attempt_types import TRAILER, AnswerState, Checkouts, SlotFiles, Unsettled
+from taskloop.attempt_types import TRAILER, AnswerState, Checkouts, SlotFiles, Uncommitted
 from taskloop.claim import ClaimWord
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.factory_commit import Committed, settle
@@ -94,7 +94,7 @@ def test_context_refresh_removes_unsupported_tracker_claims(step: StepKind, repe
     text = text.replace("No task tracker lookup is required: use the supplied task text.",
                         "You have no task tracker: bd and the beads skill are unavailable.")
     if repeat:
-        text = step.feedback(Unsettled("uncommitted"), step.rules("tl-1"), 1, text, "nonce", unrecorded=True)
+        text = step.feedback(Uncommitted("uncommitted"), step.rules("tl-1"), 1, text, "nonce", unrecorded=True)
     text = refresh(text, context)
     assert "You have no task tracker" not in text and "bd and the beads skill are unavailable" not in text
     assert text.count("No task tracker lookup is required: use the supplied task text.") == 1

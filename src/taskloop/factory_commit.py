@@ -27,8 +27,8 @@ from taskloop.attempt_types import (
     Rejected,
     SlotFiles,
     StepRules,
+    Uncommitted,
     Unreadable,
-    Unsettled,
     dot_git,
     path_allowed,
 )
@@ -54,7 +54,7 @@ class Committed:
     sha: str
 
 
-type Settled = Committed | Unsettled | CommitRefused | CommitWaiting | Rejected
+type Settled = Committed | Uncommitted | CommitRefused | CommitWaiting | Rejected
 type GitQuiet = Callable[[], CommitWaiting | CommitRefused | None]  # None: the factory may write Git in the slot now; else why not
 
 
@@ -172,22 +172,22 @@ def _blocked(quiet: GitQuiet, files: SlotFiles, admission: Admission, state: Slo
     return quiet() or (CommitRefused("redirected") if _redirected(files, admission, state) else None)
 
 
-def _foreign(checkouts: Checkouts, admission: Admission, paths: tuple[str, ...], gitdir: Path) -> Unsettled | None:
+def _foreign(checkouts: Checkouts, admission: Admission, paths: tuple[str, ...], gitdir: Path) -> Uncommitted | None:
     """`record` commits the whole index: any staged path the review did not select (a person's, or an earlier attempt's
     left staged by a superseded verify) is `staged`, nothing committed."""
     path = Path(admission.slot_path)
     extra = sorted(set(staged(checkouts(path, git_dir=gitdir), path)) - set(paths))
-    return Unsettled("staged", bounded(extra)) if extra else None
+    return Uncommitted("staged", bounded(extra)) if extra else None
 
 
-def refusal(view: Repo, files: SlotFiles, admission: Admission, base: str, answer: AnswerState) -> Unsettled | None:
+def refusal(view: Repo, files: SlotFiles, admission: Admission, base: str, answer: AnswerState) -> Uncommitted | None:
     """Read-only settlement checks, with exactly the same unchanged-file decision as the commit."""
     return _review(view, files, admission, base, answer)[1]
 
 
 def _review(
     view: Repo, files: SlotFiles, admission: Admission, base: str, answer: AnswerState
-) -> tuple[tuple[str, ...], Unsettled | None]:
+) -> tuple[tuple[str, ...], Uncommitted | None]:
     rules = kind(admission.step).rules(admission.task.task_id)
     path = Path(admission.slot_path)
     tree = _base_tree(view, base)
@@ -214,8 +214,8 @@ def _review(
                     for each in git_paths if each not in {found.path for found in unsafe})
     if unsafe:
         beside = sorted(set(dirt.tracked + dirt.untracked) - {*(found.path for found in unsafe), *answer.paths})
-        return paths, Unsettled("unsafe", bounded((*(found.path for found in unsafe), *beside)), explanations=unsafe)
-    return paths, Unsettled("ignored", bounded(dirt.ignored)) if dirt.ignored else None
+        return paths, Uncommitted("unsafe", bounded((*(found.path for found in unsafe), *beside)), explanations=unsafe)
+    return paths, Uncommitted("ignored", bounded(dirt.ignored)) if dirt.ignored else None
 
 
 def _unchanged(files: SlotFiles, slot: Path, tree: Tree, path: str) -> bool:
@@ -360,7 +360,7 @@ def _file_explanation(files: SlotFiles, path: Path, rules: StepRules) -> str:
     return "The file content matches a credential signature (private key or login tokens)." if secret(data) else ""
 
 
-def clean_at(checkouts: Checkouts, files: SlotFiles, admission: Admission, commit: str) -> Path | Unsettled | CommitRefused:
+def clean_at(checkouts: Checkouts, files: SlotFiles, admission: Admission, commit: str) -> Path | Uncommitted | CommitRefused:
     """Step 6: the slot is on its task branch at X with nothing tracked or untracked left over (ignored files are not counted),
     returning the root its pointer names; leftovers are `uncommitted` with their listing, read fresh and never stored."""
     state = _observed(checkouts, files, admission)
@@ -372,12 +372,12 @@ def clean_at(checkouts: Checkouts, files: SlotFiles, admission: Admission, commi
     if problem != "dirty":
         return CommitRefused(problem)
     path = Path(admission.slot_path)
-    return Unsettled("uncommitted", listing(checkouts(path, git_dir=state.gitdir), path))
+    return Uncommitted("uncommitted", listing(checkouts(path, git_dir=state.gitdir), path))
 
 
 def leftovers(
     checkouts: Checkouts, files: SlotFiles, admission: Admission, base: str, answer: AnswerState, end_commit: str | None
-) -> Unsettled | CommitRefused | None:
+) -> Uncommitted | CommitRefused | None:
     """Read-only, for a person (`tl step show`): what a verify would report as a step to repeat, read now. Before the
     factory's commit the same `refusal` as `settle` (`unsafe`, `ignored`); after it, or for effect `keep`, the clean-tree
     check."""
@@ -392,4 +392,4 @@ def leftovers(
             return None if _ours(repo, state.head, base, admission) else _moved(repo, state.head, base, admission)
         return refusal(checkouts(Path(admission.slot_path), git_dir=state.gitdir), files, admission, base, answer)
     found = clean_at(checkouts, files, admission, end_commit or base)
-    return found if isinstance(found, (Unsettled, CommitRefused)) else None
+    return found if isinstance(found, (Uncommitted, CommitRefused)) else None

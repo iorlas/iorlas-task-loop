@@ -43,7 +43,7 @@ from taskloop.attempt_types import (
     Rejected,
     StepRules,
     StoredExecution,
-    Unsettled,
+    Uncommitted,
 )
 from taskloop.commit import CommitHold, FactoryCommit
 from taskloop.composition import open_factory_commit
@@ -209,34 +209,34 @@ CASES: list[tuple[str, Files | None, Files, Mapping[str, object], After | None, 
     ("plan_only", None, PLANNED, PLAN, None, None, "verified", 1),
     ("plan_and_note", None, PLANNED | {NOTE: "n"}, PLAN | {"paths": [P, NOTE]}, None, None, "verified", 1),
     ("replan", PLANNED, {P: PLAN_V2}, PLAN, None, None, "verified", 1),
-    ("unlisted_file", None, PLANNED | {NOTE: "n"}, PLAN, None, None, "unsettled:uncommitted", 1),
+    ("unlisted_file", None, PLANNED | {NOTE: "n"}, PLAN, None, None, "uncommitted:uncommitted", 1),
     ("nothing_written", PLANNED, PLANNED, PLAN, None, None, "rejected:nothing_written", 0),
     ("unchanged", PLANNED, {}, UNCHANGED, None, None, "reused", 0),
     ("unchanged_without_plan", None, {}, UNCHANGED, None, None, "rejected:plan_missing", 0),
     ("unchanged_empty_plan", {P: "  \n"}, {}, UNCHANGED, None, None, "rejected:plan_empty", 0),
-    ("unchanged_with_a_stray_file", PLANNED, {NOTE: "n"}, UNCHANGED, None, None, "unsettled:uncommitted", 0),
+    ("unchanged_with_a_stray_file", PLANNED, {NOTE: "n"}, UNCHANGED, None, None, "uncommitted:uncommitted", 0),
     ("plan_empty", None, {P: " \n\t"}, PLAN, None, None, "rejected:plan_empty", 1),
     ("plan_encoding", None, {P: b"\xff\xfe plan"}, PLAN, None, None, "rejected:plan_encoding", 1),
     ("plan_at_file_cap", None, {P: PLAN_TEXT + "a" * ((1 << 20) - len(PLAN_TEXT.encode()))},
      PLAN, None, None, "rejected:plan_size", 1),
-    ("plan_over_cap", None, {P: "a" * ((1 << 20) + 1)}, PLAN, None, None, "unsettled:unsafe", 0),
-    ("plan_missing", None, {NOTE: "n"}, PLAN | {"paths": [P, NOTE]}, None, None, "unsettled:unsafe", 0),
-    ("executable", None, PLANNED, PLAN, entry(P, FileStat("file", 7, True)), None, "unsettled:unsafe", 0),
-    ("unreadable_listed_file", None, PLANNED, PLAN, unreadable(P), None, "unsettled:unsafe", 0),  # named, not unavailable:git forever
+    ("plan_over_cap", None, {P: "a" * ((1 << 20) + 1)}, PLAN, None, None, "uncommitted:unsafe", 0),
+    ("plan_missing", None, {NOTE: "n"}, PLAN | {"paths": [P, NOTE]}, None, None, "uncommitted:unsafe", 0),
+    ("executable", None, PLANNED, PLAN, entry(P, FileStat("file", 7, True)), None, "uncommitted:unsafe", 0),
+    ("unreadable_listed_file", None, PLANNED, PLAN, unreadable(P), None, "uncommitted:unsafe", 0),  # named, not unavailable:git forever
     # Assemble synthetic signatures at runtime so this test source itself remains safe to commit.
     ("committed_private_key", None, {P: "# Plan\n-----BEGIN OPENSSH PRIVATE " + "KEY-----\nx\n"},
-     PLAN, None, None, "unsettled:unsafe", 0),
+     PLAN, None, None, "uncommitted:unsafe", 0),
     ("committed_codex_login", None, {P: json.dumps({"access_" + "token": "a", "refresh_" + "token": "r"})},
-     PLAN, None, None, "unsettled:unsafe", 0),
-    ("symlinked_root", None, PLANNED, PLAN, entry(D.rstrip("/"), FileStat("link", 9, False)), None, "unsettled:unsafe", 0),
-    ("ignored", {".gitignore": "*.log\n"}, PLANNED | {D + "x.log": "x"}, PLAN, None, None, "unsettled:ignored", 0),
-    ("listed_path_ignored", {".gitignore": "*.md\n"}, PLANNED, PLAN, None, None, "unsettled:ignored", 0),
-    ("gitattributes_at_the_top", None, PLANNED | {".gitattributes": "* filter=x\n"}, PLAN, None, None, "unsettled:unsafe", 0),
-    ("gitmodules_on_the_way", None, PLANNED | {"docs/.gitmodules": "x"}, PLAN, None, None, "unsettled:unsafe", 0),
-    ("github_folder_on_the_way", None, PLANNED | {"docs/.github/x.yml": "x"}, PLAN, None, None, "unsettled:unsafe", 0),
-    ("gitignore_under_the_root", None, PLANNED | {D + "sub/.gitignore": "x"}, PLAN, None, None, "unsettled:unsafe", 0),
-    ("hfs_ignorable_gitattributes", None, PLANNED | {"docs/.g\u200cit\ufeffattributes": "x"}, PLAN, None, None, "unsettled:unsafe", 0),
-    ("git_file_elsewhere", None, PLANNED | {"src/.gitignore": "x"}, PLAN, None, None, "unsettled:uncommitted", 1),
+     PLAN, None, None, "uncommitted:unsafe", 0),
+    ("symlinked_root", None, PLANNED, PLAN, entry(D.rstrip("/"), FileStat("link", 9, False)), None, "uncommitted:unsafe", 0),
+    ("ignored", {".gitignore": "*.log\n"}, PLANNED | {D + "x.log": "x"}, PLAN, None, None, "uncommitted:ignored", 0),
+    ("listed_path_ignored", {".gitignore": "*.md\n"}, PLANNED, PLAN, None, None, "uncommitted:ignored", 0),
+    ("gitattributes_at_the_top", None, PLANNED | {".gitattributes": "* filter=x\n"}, PLAN, None, None, "uncommitted:unsafe", 0),
+    ("gitmodules_on_the_way", None, PLANNED | {"docs/.gitmodules": "x"}, PLAN, None, None, "uncommitted:unsafe", 0),
+    ("github_folder_on_the_way", None, PLANNED | {"docs/.github/x.yml": "x"}, PLAN, None, None, "uncommitted:unsafe", 0),
+    ("gitignore_under_the_root", None, PLANNED | {D + "sub/.gitignore": "x"}, PLAN, None, None, "uncommitted:unsafe", 0),
+    ("hfs_ignorable_gitattributes", None, PLANNED | {"docs/.g\u200cit\ufeffattributes": "x"}, PLAN, None, None, "uncommitted:unsafe", 0),
+    ("git_file_elsewhere", None, PLANNED | {"src/.gitignore": "x"}, PLAN, None, None, "uncommitted:uncommitted", 1),
     ("adopted_after_a_crash", None, PLANNED, PLAN, adopt, None, "verified", 1),
     ("foreign_commit", None, PLANNED, PLAN, foreign, None, "refused:head_moved", 1),
     ("unchanged_head_moved", PLANNED, {}, UNCHANGED, lambda slot, _files: commit(slot, {"README": "two"}), None, "refused:head_moved", 1),
@@ -304,7 +304,7 @@ def test_leftovers_are_listed_fresh_and_a_tidied_slot_then_verifies(
 ) -> None:
     captured(registered, tmp_path, slot, checkouts, slot_files, PLANNED | {NOTE: "n", "scratch.txt": "s"})
     check = factory_commit(registered, checkouts, slot_files)
-    assert check.commit(KEY) == Unsettled("uncommitted", ("?? docs/design/tl-1/note.md", "?? scratch.txt"))
+    assert check.commit(KEY) == Uncommitted("uncommitted", ("?? docs/design/tl-1/note.md", "?? scratch.txt"))
     x = end_commit(registered)
     assert x == head(slot) and check.leftovers(KEY) == check.commit(KEY)  # X stays recorded; the listing is read again
     slot.remove_file(NOTE)
@@ -317,7 +317,7 @@ def test_the_listing_is_bounded(
 ) -> None:
     captured(registered, tmp_path, slot, checkouts, slot_files, PLANNED | {f"stray-{n:02}": "s" for n in range(53)})
     result = factory_commit(registered, checkouts, slot_files).commit(KEY)
-    assert isinstance(result, Unsettled) and len(result.listing) == 51 and result.listing[-1] == "+3 more"
+    assert isinstance(result, Uncommitted) and len(result.listing) == 51 and result.listing[-1] == "+3 more"
 
 
 def test_unchanged_records_b_only_after_the_tree_is_clean(
@@ -327,7 +327,7 @@ def test_unchanged_records_b_only_after_the_tree_is_clean(
     origin_main_at(slot)
     captured(registered, tmp_path, slot, checkouts, slot_files, {NOTE: "n"}, UNCHANGED)
     check = factory_commit(registered, checkouts, slot_files)
-    assert shown(check.commit(KEY)) == "unsettled:uncommitted" and end_commit(registered) is None
+    assert shown(check.commit(KEY)) == "uncommitted:uncommitted" and end_commit(registered) is None
     slot.remove_file(NOTE)
     tree = slot.repo.tree(base)
     assert tree is not None and check.commit(KEY) == Committed(tree.files[P][1], reused=True)
@@ -737,7 +737,7 @@ def test_a_verifier_racing_another_adopts_its_commit_never_nothing_written(
 
     def record(self: FakeWorktree, message: str, **options: Literal["staged"] | bool) -> RecordResult:
         if not raced:
-            raced.append(Unsettled("racing"))
+            raced.append(Uncommitted("racing"))
             raced[0] = factory_commit(registered, checkouts, slot_files, unheld).commit(KEY)
         return recorded(self, message, paths="staged", hooks=False)
 
@@ -767,7 +767,7 @@ def test_the_listing_is_safe_to_print(
 ) -> None:
     captured(registered, tmp_path, slot, checkouts, slot_files, PLANNED | {"evil\x1b[31m\nname\x9b": "x", "x" * 400: "y"})
     result = factory_commit(registered, checkouts, slot_files).commit(KEY)
-    assert isinstance(result, Unsettled) and result.listing[0] == "?? evil?[31m?name?"
+    assert isinstance(result, Uncommitted) and result.listing[0] == "?? evil?[31m?name?"
     assert len(result.listing[1]) == 300 and result.listing[1].endswith("...")
 
 

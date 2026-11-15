@@ -80,7 +80,7 @@ def _step_lines(command: str, result: StepResult, db: Path | None) -> list[str]:
             told = ({"done": NEEDS_OWNER, "release": f"{told} {NEEDS_OWNER}"}.get(each.next, told)) if asked else told
             told = hold_guide(each) if each.next in ("hold", "on_hold") else told
             steps = [told, *(stuck if each.next.startswith("stuck:") else [])]
-            left = [f"Unsettled: {each.leftovers[0]}", *(f"  {line}" for line in each.leftovers[1:])] if each.leftovers else []
+            left = [f"Uncommitted: {each.leftovers[0]}", *(f"  {line}" for line in each.leftovers[1:])] if each.leftovers else []
             last = [] if each.last_entry is None else [f"Last entry result: {each.last_entry}"]
             return [*show_lines(result), *paths, *last, *left, f"Status: {status_words(task_status(each))}", f"Next: {each.next}", *steps]
         case Listed() | Round() | Ended() | SetupTimingReport():

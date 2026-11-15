@@ -27,7 +27,7 @@ from taskloop.attempt_types import (
     Committed,
     FileRef,
     Rejected,
-    Unsettled,
+    Uncommitted,
 )
 from taskloop.factory_commit import clean_at, settle
 from taskloop.git_views import GitViews
@@ -107,7 +107,7 @@ def test_a_symlinked_listed_path_is_unsafe_and_nothing_is_staged(tmp_path: Path,
     base = git(slot, "rev-parse", "HEAD").strip()
     (slot / "docs/design/tl-1").mkdir(parents=True)
     (slot / P).symlink_to(main / "README")
-    assert settle(VIEWS.checkouts, RealSlotFiles(), admission(main, slot), base, ANSWER, quiet) == Unsettled("unsafe", (P,))
+    assert settle(VIEWS.checkouts, RealSlotFiles(), admission(main, slot), base, ANSWER, quiet) == Uncommitted("unsafe", (P,))
     assert list(markers.iterdir()) == []
     assert git(slot, "rev-parse", "HEAD").strip() == base and git(slot, "diff", "--cached", "--name-only").strip() == ""
 
@@ -310,7 +310,7 @@ def test_a_changed_gitignore_is_unsafe_regardless_of_answer_paths(
     (slot / ".gitignore").write_text(".venv/\nsrc/b.py\n")
     answer = AnswerState("valid", "implemented", "commit", paths, "Implement")
     found = settle(VIEWS.checkouts, RealSlotFiles(), attempt, base, answer, quiet)
-    assert found == Unsettled("unsafe", unsafe)  # the leftovers beside the first are named too
+    assert found == Uncommitted("unsafe", unsafe)  # the leftovers beside the first are named too
     assert git(slot, "rev-parse", "HEAD").strip() == base and git(slot, "diff", "--cached", "--name-only").strip() == ""
 
 
@@ -349,7 +349,7 @@ def test_a_typed_entry_of_b_replaced_by_a_plain_file_is_unsafe(tmp_path: Path, m
     plain(slot, path)
     answer = AnswerState("valid", "implemented", "commit", (path,), "Implement")
     made = settle(VIEWS.checkouts, RealSlotFiles(), attempt, base, answer, quiet)
-    assert isinstance(made, Unsettled) and made.reason == "unsafe" and path in made.listing
+    assert isinstance(made, Uncommitted) and made.reason == "unsafe" and path in made.listing
     assert any(each.path == path and each.explanation for each in made.explanations)
     assert git(slot, "rev-parse", "HEAD").strip() == base and git(slot, "diff", "--cached", "--name-only").strip() == ""
 

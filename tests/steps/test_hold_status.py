@@ -17,7 +17,7 @@ from taskloop.answer_failures import AnswerFailureData, AnswerRule, encode
 from taskloop.attempt_reads import ReleaseRow, StoreUnavailable
 from taskloop.attempt_status import AttemptView, Listed, Shown, StatusPorts, agent_attempt, list_attempts, show_attempt, with_hold
 from taskloop.attempt_store import AttemptStore
-from taskloop.attempt_types import AttemptResult, CommitRefused, Unsettled
+from taskloop.attempt_types import AttemptResult, CommitRefused, Uncommitted
 from taskloop.check_status import ChecksView
 from taskloop.check_store import CheckStore
 from taskloop.evidence_files import EvidenceFiles
@@ -286,9 +286,9 @@ def test_list_stuck_reads_the_leftovers_of_a_round_taken_attempt_so_a_due_repeat
             session_state) VALUES ('a3','a3-token',1,0,0,1,1,'o','d','e','d','a','d','g','d','valid','commit','complete')""")
     probed: list[str] = []
 
-    def leftovers(key: object) -> Unsettled:
+    def leftovers(key: object) -> Uncommitted:
         probed.append(str(key))
-        return Unsettled("uncommitted", ("a.py",))
+        return Uncommitted("uncommitted", ("a.py",))
 
     ports = replace(reads(factory), leftovers=leftovers)
     found = list_attempts(ports, stuck=True)
@@ -301,7 +301,7 @@ def test_list_stuck_reads_the_leftovers_of_a_round_taken_attempt_so_a_due_repeat
 
 
 def test_a_moved_head_shows_the_refs_the_agent_made_but_stays_next_verify_not_a_repeat(factory: sqlite3.Connection) -> None:
-    """`tl step show` prints `Unsettled:` from the attempt's leftovers: `head_moved` carries its listing there too, though
+    """`tl step show` prints `Uncommitted:` from the attempt's leftovers: `head_moved` carries its listing there too, though
     it is no repeatable leftover (the next action stays `verify`)."""
     plan(factory)
     factory.execute("UPDATE attempt SET phase='captured',base_commit=?", (D,))
@@ -315,7 +315,7 @@ def test_a_moved_head_shows_the_refs_the_agent_made_but_stays_next_verify_not_a_
     for reason in ("branch", "unborn"):  # no listing: the reason alone, which the `unsettled` guide's `branch` text answers
         found = list_attempts(replace(ports, leftovers=lambda _key, why=reason: CommitRefused(why)))
         assert isinstance(found, Listed) and [(each.next, each.leftovers) for each in found.attempts] == [("verify", (reason,))]
-    found = list_attempts(replace(ports, leftovers=lambda _key: Unsettled("dirty", ("a",))))  # not shown: only the three
+    found = list_attempts(replace(ports, leftovers=lambda _key: Uncommitted("dirty", ("a",))))  # not shown: only the three
     assert isinstance(found, Listed) and [each.leftovers for each in found.attempts] == [()]
 
 

@@ -24,7 +24,7 @@ from taskloop.attempt_types import (
     FileStat,
     PathExplanation,
     Rejected,
-    Unsettled,
+    Uncommitted,
 )
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.factory_commit import Committed, leftovers, settle
@@ -154,7 +154,7 @@ def test_changed_or_added_credential_fixture_names_the_real_predicate_without_st
     base = record(slot)
     slot.write_file(path, FIXTURE)
     found = settle(checkouts, slot_files, admission, base, answer("unrelated.txt"), lambda: None)
-    assert isinstance(found, Unsettled) and found.reason == "unsafe"
+    assert isinstance(found, Uncommitted) and found.reason == "unsafe"
     assert found.explanations == (PathExplanation(path, "The file content matches a credential signature (private key or login tokens)."),)
     assert stages == [] and head(slot) == base
     assert leftovers(checkouts, slot_files, admission, base, answer("unrelated.txt"), None) == found
@@ -187,7 +187,7 @@ def test_multiple_refusals_keep_each_predicate_and_leftovers_in_both_step_prompt
         slot_files.unreadable.add(slot.path / path)
     slot_files.entries[slot.path / "linked"] = ancestor_stat
     found = settle(checkouts, slot_files, admission, base, answer("listed.txt"), lambda: None)
-    assert isinstance(found, Unsettled) and found.reason == "unsafe"
+    assert isinstance(found, Uncommitted) and found.reason == "unsafe"
     reasons = {each.path: each.explanation for each in found.explanations}
     assert set(reasons) == {path, linked, "src/.gitattributes"}
     assert words in reasons[path] and f"Ancestor 'linked' is {ancestor_words}" in reasons[linked]
@@ -266,7 +266,7 @@ def test_unchanged_content_does_not_hide_file_changes_or_unreadability(
         tree = slot.repo.tree(found.sha)
         assert tree is not None and path not in tree.files
     else:
-        assert read == found and isinstance(found, Unsettled) and found.reason == "unsafe"
+        assert read == found and isinstance(found, Uncommitted) and found.reason == "unsafe"
         assert found.explanations[0].explanation and stages == []
 
 
@@ -291,7 +291,7 @@ def test_baseline_mode_and_type_changes_are_explained(
         slot.remove_file("src")
     slot.write_file(path, "new")
     found = settle(checkouts, slot_files, admission, base, answer(path), lambda: None)
-    assert isinstance(found, Unsettled) and any(expected in each.explanation for each in found.explanations)
+    assert isinstance(found, Uncommitted) and any(expected in each.explanation for each in found.explanations)
 
 
 def test_empty_explanation_is_invalid() -> None:
@@ -301,7 +301,7 @@ def test_empty_explanation_is_invalid() -> None:
 
 def test_diagnostic_bounds_keep_the_predicate_after_a_long_escaped_path() -> None:
     path = "src/" + "x" * 230 + "\x1b.py"
-    found = Unsettled("unsafe", explanations=tuple(PathExplanation(path + str(n), "The file has an execute bit set.")
+    found = Uncommitted("unsafe", explanations=tuple(PathExplanation(path + str(n), "The file has an execute bit set.")
                                                  for n in range(96)))
     text = step_text.unsafe_details(found)
     assert json.dumps(path + "0") in text.splitlines()[0]
@@ -320,7 +320,7 @@ def test_omitting_an_unchanged_path_does_not_allow_its_foreign_index_entry(
     slot.write_file("edit.txt", "our edit")
     stages.clear()
     found = settle(checkouts, slot_files, admission, base, answer("unchanged.txt", "edit.txt"), lambda: None)
-    assert isinstance(found, Unsettled) and found.reason == "staged" and found.listing == ("unchanged.txt",)
+    assert isinstance(found, Uncommitted) and found.reason == "staged" and found.listing == ("unchanged.txt",)
     assert stages == [("edit.txt",)] and head(slot) == base
 
 
@@ -371,7 +371,7 @@ def test_unlisted_forbidden_paths_refuse_before_staging_and_match_preview(
     slot.write_file("edit.txt", "allowed")
     slot.write_file(path, "forbidden")
     found = settle(checkouts, slot_files, admission, base, answer("edit.txt"), lambda: None)
-    assert isinstance(found, Unsettled) and found.reason == "unsafe"
+    assert isinstance(found, Uncommitted) and found.reason == "unsafe"
     assert any(each.path == path and predicate in each.explanation for each in found.explanations)
     assert leftovers(checkouts, slot_files, admission, base, answer("edit.txt"), None) == found
     assert stages == [] and head(slot) == base
@@ -393,7 +393,7 @@ def test_actual_changed_path_limit_is_applied_without_truncating_the_selection(
         assert preview is None and isinstance(found, Committed) and stages == [paths]
         assert slot.dirty().raw is False
     else:
-        assert preview == found and isinstance(found, Unsettled) and found.reason == "unsafe"
+        assert preview == found and isinstance(found, Uncommitted) and found.reason == "unsafe"
         assert found.explanations == (PathExplanation(paths[0], "The slot has 97 changed paths; the limit is 96 paths."),)
         assert stages == [] and head(slot) == base
 
@@ -407,7 +407,7 @@ def test_ignored_attributes_for_an_unlisted_change_refuse_and_match_preview(
     slot.write_file("nested/file.py", "unlisted")
     slot.write_file("nested/.gitattributes", "*.py filter=custom\n")
     declared = answer("edit.txt")
-    expected = Unsettled("ignored", ("nested/.gitattributes",))
+    expected = Uncommitted("ignored", ("nested/.gitattributes",))
     assert leftovers(checkouts, slot_files, admission, base, declared, None) == expected
     assert settle(checkouts, slot_files, admission, base, declared, lambda: None) == expected
     assert stages == [] and head(slot) == base
@@ -422,7 +422,7 @@ def test_a_foreign_index_entry_with_no_worktree_changes_still_refuses(
     slot.stage(("file.txt",))
     slot.write_file("file.txt", "original")
     stages.clear()
-    assert settle(checkouts, slot_files, admission, base, answer("file.txt"), lambda: None) == Unsettled("staged", ("file.txt",))
+    assert settle(checkouts, slot_files, admission, base, answer("file.txt"), lambda: None) == Uncommitted("staged", ("file.txt",))
     assert stages == [] and head(slot) == base
 
 

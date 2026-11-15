@@ -29,7 +29,7 @@ from taskloop.attempt_types import (
     Observe,
     Rejected,
     RepeatReason,
-    Unsettled,
+    Uncommitted,
     WorkerGone,
 )
 from taskloop.discussion import RefreshDiscussion, replace_block
@@ -99,7 +99,7 @@ class StepRepeat:
 
     def _leftovers(
         self, backlog: str, task_id: str, current: AttemptKey, minutes: int
-    ) -> tuple[Unsettled, RepeatReason] | Started | Failed:
+    ) -> tuple[Uncommitted, RepeatReason] | Started | Failed:
         """C's own verify: a stored or new verdict, or no step to verify, is `already_dispatched` with that result; any
         other unsettled reason or unknown is that failure, never a repeat."""
         found = self.factory_commit.commit(current)
@@ -107,7 +107,7 @@ class StepRepeat:
             return Started("already_dispatched", backlog, task_id, current.attempt_id, True, result=_words(found))
         if isinstance(found, CommitRefused) and found.reason == "stale_reservation":
             return self._existing(backlog, task_id, current, minutes)  # another start took the step over after this one's read
-        if not isinstance(found, Unsettled):
+        if not isinstance(found, Uncommitted):
             return commit_failure(found)
         reason = next((each for each in REPEATABLE if each == found.reason), None)
         return commit_failure(found) if reason is None else (found, reason)
@@ -118,9 +118,9 @@ class StepRepeat:
         held = self.factory_commit.staged(current)
         if held is None:
             return Failed("unavailable", "staged")
-        return Failed("unsettled", "staged", "\n".join(held)) if held else None
+        return Failed("uncommitted", "staged", "\n".join(held)) if held else None
 
-    def _input(self, current: AttemptKey, found: Unsettled, record: AttemptRecord) -> tuple[str, TaskContentDigest | None] | Failed:
+    def _input(self, current: AttemptKey, found: Uncommitted, record: AttemptRecord) -> tuple[str, TaskContentDigest | None] | Failed:
         """The feedback over attempt 1's input, read through its digest."""
         try:
             steps = self.store.chain(current)  # read after the verify: C's commit, if it made one, is stored now

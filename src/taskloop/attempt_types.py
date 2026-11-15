@@ -254,8 +254,8 @@ class PathExplanation:
 
 
 @dataclass(frozen=True)
-class Unsettled:
-    """The slot is not settled (`dirty`, `staged`, `uncommitted`, `unsafe`, `ignored`);
+class Uncommitted:
+    """Files remain uncommitted (`dirty`, `staged`, `uncommitted`, `unsafe`, `ignored`);
     nothing stored, retryable. `listing` is data for a person and a repeat's
     feedback (the leftovers, the unsafe path, the ignored paths), never parsed."""
 
@@ -307,7 +307,7 @@ def waiting_reason(result: CommitWaiting) -> str:
 
 
 type Verdict = Committed | Rejected
-type CommitResult = Committed | Rejected | Unsettled | NotApplicable | CommitRefused | CommitWaiting
+type CommitResult = Committed | Rejected | Uncommitted | NotApplicable | CommitRefused | CommitWaiting
 
 
 @dataclass(frozen=True)

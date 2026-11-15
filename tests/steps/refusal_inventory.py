@@ -11,7 +11,7 @@ ROOT = Path(__file__).resolve().parents[2] / "src" / "taskloop"
 # Argument carrying a refusal reason, including helpers that construct owning results.
 PRODUCERS = {
     "Failed": 1, "AdmitRefused": 0, "AdmitUnavailable": 0, "LaunchRefused": 0, "LaunchUnavailable": 0,
-    "CommitRefused": 0, "CommitWaiting": 0, "NotApplicable": 0, "Unsettled": 0, "NotReleased": 1,
+    "CommitRefused": 0, "CommitWaiting": 0, "NotApplicable": 0, "Uncommitted": 0, "NotReleased": 1,
     "NotPublished": 1, "_refused": 0, "_unavailable": 0, "StoreRefused": 0, "Rejected": 0,
 }
 

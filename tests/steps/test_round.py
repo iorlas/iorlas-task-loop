@@ -26,7 +26,7 @@ from taskloop.agents.settings import Overrides, StepSettings
 from taskloop.attempt import Attempts
 from taskloop.attempt_status import StatusPorts
 from taskloop.attempt_store import AttemptStore
-from taskloop.attempt_types import AttemptKey, Checkouts, CommitResult, Committed, EntryIdentity, Seen, SlotFiles, Unsettled
+from taskloop.attempt_types import AttemptKey, Checkouts, CommitResult, Committed, EntryIdentity, Seen, SlotFiles, Uncommitted
 from taskloop.commit import FactoryCommit
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.exit_codes import exit_code
@@ -163,7 +163,7 @@ class Bench:
         self.now = 10.0
         self.during: Callable[[], object] = lambda: None
         self.seen: Seen = "gone"
-        self.left: Unsettled | None = None
+        self.left: Uncommitted | None = None
         self.lines: list[str] = []
         self.log: Callable[[str], None] = self.lines.append
         self.factory_commit: Commit = self.recorded
@@ -177,7 +177,7 @@ class Bench:
         self.during()
         return self.seen
 
-    def leftovers(self, _key: AttemptKey) -> Unsettled | None:
+    def leftovers(self, _key: AttemptKey) -> Uncommitted | None:
         return self.left
 
     def ports(self) -> RoundPorts:
@@ -301,7 +301,7 @@ def test_a_step_that_ran_is_verified_repeated_or_reported_every_round(
     captured(registered, tmp_path, slot, checkouts, slot_files, rc=1 if case in ("failed", "held") else 0)
     bench = Bench(registered)
     if case in ("repeat", "repeats_exhausted"):
-        bench.left = Unsettled("uncommitted", ("?? docs/design/tl-1/x.md",))
+        bench.left = Uncommitted("uncommitted", ("?? docs/design/tl-1/x.md",))
     if case == "repeats_exhausted":
         registered.execute("UPDATE attempt SET seq=2")
         seed(registered, "tl-1", "older", phase="captured")

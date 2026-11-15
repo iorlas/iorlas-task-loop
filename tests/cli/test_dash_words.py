@@ -10,7 +10,8 @@ from taskloop.dash_verify import CHECKS
 PAGE = Path(__file__).resolve().parents[2] / "src/taskloop/dash/static"
 REQUIRED = (
     "needs_owner", "failed:needs_owner", "answer:schema_invalid", "failed:answer:schema_invalid", "failed:test:failed", "held:slot_dirty",
-    "verified", "reused", "unsettled:branch", "unsettled:unsafe", "unsettled:ignored", "unsettled:uncommitted", "unsettled:rejected",
+    "verified", "reused", "unsettled:branch", "uncommitted:unsafe", "uncommitted:ignored", "uncommitted:uncommitted",
+    "uncommitted:staged", "uncommitted:dirty", "unsettled:rejected",
     "pending", "registered", "passed", "verification", "unsafe", "uncommitted", "ignored", "branch", "rejected", "repeat", "failed_check",
 )
 
@@ -27,7 +28,8 @@ def test_a_typed_code_of_the_data_shapes_has_words(code: str) -> None:
 
 
 def test_the_verification_reasons_the_backend_names_are_all_worded() -> None:
-    assert {"unsettled:" + reason for _text, reason in CHECKS} <= set(table())
+    assert {("uncommitted:" if reason in {"unsafe", "ignored", "uncommitted"} else "unsettled:") + reason
+            for _text, reason in CHECKS} <= set(table())
 
 
 def test_the_page_prints_its_codes_through_the_table() -> None:
@@ -41,7 +43,7 @@ def test_the_page_prints_its_codes_through_the_table() -> None:
     ("answer:schema_invalid", "The agent's answer was in the wrong format"),
     ("verification", "The factory's check of the answer failed"),
     ("unsafe", "A listed path is unsafe"),
-    ("unsettled:unsafe", "Not committed: a listed path is unsafe"),
+    ("uncommitted:unsafe", "Not committed: a listed path is unsafe"),
     ("unsettled:rejected", "Not committed: the commit broke a rule"),
 ])
 def test_outcomes_repeat_causes_and_verification_failures_have_readable_words(code: str, expected: str) -> None:

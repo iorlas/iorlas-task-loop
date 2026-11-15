@@ -193,7 +193,7 @@ CASES: list[tuple[list[str], Result, int, list[str], set[str]]] = [
       "Next: verify", "The result is captured and awaits verification before it can be accepted."],
      STATUS_KEYS | {"directory", "entry_log", "events_path", "setup", "failed_checks"}),
     (["step", "show", "tl-1", "--backlog", "tasks"], Shown(REPEAT, Path("/a/d"), Path("/a/d/entry.log"), EVENTS), 0,
-     ["Worker: last known pid 42, process group 41 (not checked)", "Result: pending repeat", "Unsettled: uncommitted",
+     ["Worker: last known pid 42, process group 41 (not checked)", "Result: pending repeat", "Uncommitted: uncommitted",
       "  ?? docs/design/tl-1/note.md", "  +3 more", f"Next: repeat\n{step_guide.GUIDE['repeat']}",
       "Attempt: attempt (2 of at most 3; repeats first, uncommitted)\nEarlier: first repeated (uncommitted)\nSlot: s1"],
      STATUS_KEYS | {"directory", "entry_log", "events_path", "setup", "failed_checks"}),
@@ -251,7 +251,8 @@ CASES: list[tuple[list[str], Result, int, list[str], set[str]]] = [
      ["unavailable:tracker\nReleased; the tracker claim is still to be returned"], ERROR),
     (["step", "commit", "tl-1", "--backlog", "tasks"], Failed("rejected", "paths"), 1, ["tl step commit: rejected:paths"], ERROR),
     (["step", "commit", "tl-1", "--backlog", "tasks"], Failed("not_applicable", "incomplete"), 1, ["not_applicable:incomplete"], ERROR),
-    (["step", "commit", "tl-1", "--backlog", "tasks"], Failed("unsettled", "dirty"), 3, ["unsettled:dirty", step_guide.GUIDE["unsettled"]],
+    (["step", "commit", "tl-1", "--backlog", "tasks"], Failed("uncommitted", "dirty"), 3,
+     ["uncommitted:dirty", step_guide.GUIDE["uncommitted"]],
      ERROR),
     (["step", "commit", "tl-1", "--backlog", "tasks"], Failed("unavailable", "slot_busy"), 3,
      ["unavailable:slot_busy", step_guide.GUIDE["slot_busy"]], ERROR),
@@ -340,7 +341,7 @@ def test_every_failure_kind_has_its_exit_code(
     kind: FailureKind, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     monkeypatch.setitem(cli_step.OPERATIONS, ("step", "list"), lambda _arguments, _loaded: Failed(kind, "choices"))
-    assert main(["step", "list"]) == (3 if kind in ("unavailable", "uncertain", "unsettled", "waiting") else 1)
+    assert main(["step", "list"]) == (3 if kind in ("unavailable", "uncertain", "unsettled", "uncommitted", "waiting") else 1)
     assert capsys.readouterr().err.startswith("tl step list: ")
 
 

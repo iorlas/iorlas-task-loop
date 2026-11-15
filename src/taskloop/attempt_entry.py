@@ -53,7 +53,7 @@ from taskloop.attempt_types import (
     EntryIdentity,
     NotApplicable,
     Rejected,
-    Unsettled,
+    Uncommitted,
     WorkerGone,
     entry_identity,
     waiting_reason,
@@ -148,8 +148,8 @@ def shown(result: CommitResult) -> str:
     match result:
         case Committed() | Rejected():
             return judged(result)
-        case Unsettled(reason=reason):
-            return "unsettled:" + reason
+        case Uncommitted(reason=reason):
+            return "uncommitted:" + reason
         case CommitWaiting():
             return "waiting:" + waiting_reason(result)
         case CommitRefused(reason=reason):

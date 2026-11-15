@@ -17,7 +17,7 @@ GUIDE = {
     "start": "The admitted entry needs launching; the factory retains its original choices.",
     "wait": "The entry is running; the factory waits for it.",
     "verify": "The result is captured; the factory will verify it before advancing.",
-    "repeat": "Unsettled files require another attempt; the factory retains the work as feedback.",
+    "repeat": "Uncommitted files require another attempt; the factory retains the work as feedback.",
     "repeats_exhausted": "The allowed repeats are exhausted. The task needs the owner's decision and remains held.",
     "release": "The attempt ended but its slot or claim remains held. Release must finish before new work can use it.",
     "abandoned": "The attempt was abandoned. The factory waits for the owner's approval before starting afresh.",
@@ -117,7 +117,7 @@ def automatic_guide(word: str) -> str:
         if not word.startswith(("rejected:", "run:", "answer:", "environment:", "checks:")):
             return GUIDE.get(word, GUIDE["failed"])
     reason = word.split(":", 1)[1] if word.split(":", 1)[0] in {
-        "refused", "unavailable", "uncertain", "unsettled", "waiting", "rejected", "not_applicable", "defect", "held",
+        "refused", "unavailable", "uncertain", "unsettled", "uncommitted", "waiting", "rejected", "not_applicable", "defect", "held",
     } else word
     return _reason_guide(reason)
 

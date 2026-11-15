@@ -32,9 +32,9 @@ GUIDE = {
     "retakes the claim. Inspect its ownership, then decide whether to abandon the retained attempt and approve a fresh one.",
     "wait": "Its entry is running. Wait for its result before deciding the next step.",
     "verify": "The result is captured and awaits verification before it can be accepted.",
-    "repeat": "Unsettled work remains. Decide whether to repeat the step with this listing as feedback or settle the files "
+    "repeat": "Uncommitted work remains. Decide whether to repeat the step with this listing as feedback or settle the files "
     "and verify the result.",
-    "repeats_exhausted": "The step repeated twice and remains unsettled. Inspect and settle the slot for verification and "
+    "repeats_exhausted": "The step repeated twice and leaves uncommitted work. Inspect and settle the slot for verification and "
     "release, or decide to abandon the attempt.",
     "release": "The step ended but its slot is still held. Inspect and settle any listed files before release. Abandoning "
     "also returns the claim, unless a land may already have delivered to origin's main; then that land must finish first.",

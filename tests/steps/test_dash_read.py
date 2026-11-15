@@ -756,12 +756,12 @@ def test_an_unsettled_verification_is_its_own_row_that_names_the_failed_check_an
     assert isinstance(found, TaskDetail)
     assert [(each.step, each.n) for each in found.attempts] == [("implement", 1), ("verification", 1), ("checks", 1), ("implement", 2)]
     verifying, repeat = found.attempts[1], found.attempts[3]
-    assert (verifying.state, verifying.summary) == ("failed", "unsettled:unsafe")
+    assert (verifying.state, verifying.summary) == ("failed", "uncommitted:unsafe")
     assert (repeat.after, repeat.reason, repeat.repeat_of, repeat.led_by) == ("repeat", "unsafe", 1, 1)
     body = build_body(ports, "tasks", "tl-1", "verification", 1)
     assert isinstance(body, AttemptBody) and body.input is None and body.result.verification is not None
     shown = body.result.verification
-    assert (shown.of_step, shown.of, shown.result, shown.listing) == ("implement", 1, "unsettled:unsafe", ("src/link.py", "src/stray.py"))
+    assert (shown.of_step, shown.of, shown.result, shown.listing) == ("implement", 1, "uncommitted:unsafe", ("src/link.py", "src/stray.py"))
     assert [each.state for each in shown.checks] == ["passed", "failed", "not_run", "not_run", "not_run"]
 
 
