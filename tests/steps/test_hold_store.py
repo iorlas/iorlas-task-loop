@@ -9,17 +9,21 @@ import sqlite3
 
 import pytest
 from doubles import D, X
+from hold_fixtures import event
+from pydantic import ValidationError
 from sqlite_store import begin_immediate
 
-from taskloop.attempt_reads import StoreRefused
+from taskloop.attempt_reads import StoreRefused, StoreUnavailable
 from taskloop.hold_store import COMMENT_LEASE, HoldInsert, HoldRow, HoldStore, Labelled, Uncleared
+from taskloop.task_event_cause import ChecksCause, ChecksReason
+from taskloop.task_event_codec import encode as encode_event
 
 LABELS_IN = "labels IS NULL OR labels IN ('moved','absent','not_ours','closed','missing','superseded')"
 LABELLED_AT = "(labels IS NULL) = (labelled_at IS NULL)"
 LEASED = "commented_at IS NULL OR commenting_at IS NOT NULL"
 COMMENTS = "commented_at IS NULL OR (labels IS NOT NULL AND labels IN ('moved','absent','not_ours'))"
 CLEARED = "cleared_at IS NULL OR labels IS NOT NULL"
-REASON = "length(reason) BETWEEN 1 AND 200"
+EVENT = "json_valid(event)"
 LABEL = "label IS NULL OR length(label) BETWEEN 1 AND 200"
 
 
@@ -59,7 +63,8 @@ def store(con: sqlite3.Connection) -> HoldStore:
 
 
 def held(con: sqlite3.Connection, attempt_id: str = "a", cause: str = "a", now: float = 10.0) -> HoldRow:
-    return store(con).insert(HoldInsert(attempt_id, cause, "failed:answer:needs_owner", now))
+    cause_value = ChecksCause(reason=ChecksReason.EXPIRED) if cause != attempt_id else None
+    return store(con).insert(HoldInsert(event=event(cause_value, attempt_id, cause), now=now))
 
 
 def later(con: sqlite3.Connection, attempt_id: str = "b", task: str = "tl-1", seq: int = 2) -> None:
@@ -68,7 +73,7 @@ def later(con: sqlite3.Connection, attempt_id: str = "b", task: str = "tl-1", se
         attempt(con, attempt_id, task=task, seq=seq)
 
 
-HELD: dict[str, object] = {"attempt_id": "a", "cause_id": "a", "reason": "failed:run:timeout", "held_at": 10}
+HELD: dict[str, object] = {"attempt_id": "a", "event": encode_event(event()), "held_at": 10}
 MOVED = HELD | {"labels": "moved", "labelled_at": 11}
 LEASE = MOVED | {"commenting_at": 12}
 COMMENTED = LEASE | {"commented_at": 13}
@@ -77,15 +82,15 @@ COMMENTED = LEASE | {"commented_at": 13}
 @pytest.mark.parametrize("row", [
     HELD, MOVED, LEASE, COMMENTED, MOVED | {"labels": "not_ours"}, COMMENTED | {"labels": "absent", "cleared_at": 14},
     HELD | {"labels": "closed", "labelled_at": 11}, HELD | {"labels": "superseded", "labelled_at": 11, "cleared_at": 11},
-    HELD | {"commenting_at": 12}, HELD | {"reason": "r" * 200},
-], ids=["held", "moved", "lease", "commented", "not_ours", "cleared", "closed", "superseded", "early_lease", "long_reason"])
+    HELD | {"commenting_at": 12},
+], ids=["held", "moved", "lease", "commented", "not_ours", "cleared", "closed", "superseded", "early_lease"])
 def test_valid_holds_are_stored(con: sqlite3.Connection, row: dict[str, object]) -> None:
     put(con, row)
     assert con.execute("SELECT rev FROM task_hold").fetchone() == (0,)
 
 
 @pytest.mark.parametrize(("row", "check"), [
-    (HELD | {"reason": ""}, REASON), (HELD | {"reason": "r" * 201}, REASON),
+    (HELD | {"event": "not json"}, EVENT),
     (HELD | {"labels": "other", "labelled_at": 11}, LABELS_IN),
     (HELD | {"labelled_at": 11}, LABELLED_AT), (MOVED | {"labelled_at": None}, LABELLED_AT),
     (MOVED | {"commented_at": 13}, LEASED),
@@ -101,8 +106,7 @@ def test_every_hold_check_rejects_its_bad_row(con: sqlite3.Connection, row: dict
 
 
 @pytest.mark.parametrize(("row", "error"), [
-    (HELD | {"reason": None}, "NOT NULL constraint failed: task_hold.reason"),
-    (HELD | {"cause_id": None}, "NOT NULL constraint failed: task_hold.cause_id"),
+    (HELD | {"event": None}, "NOT NULL constraint failed: task_hold.event"),
     (HELD | {"held_at": None}, "NOT NULL constraint failed: task_hold.held_at"),
     (HELD | {"attempt_id": "nobody"}, "FOREIGN KEY constraint failed"),
 ])
@@ -114,7 +118,7 @@ def test_a_hold_names_an_attempt_and_has_its_record(con: sqlite3.Connection, row
 def test_one_hold_per_attempt(con: sqlite3.Connection) -> None:
     put(con, HELD)
     with pytest.raises(sqlite3.IntegrityError, match=r"^UNIQUE constraint failed: task_hold\.attempt_id$"):
-        put(con, HELD | {"reason": "other"})
+        put(con, HELD)
 
 
 @pytest.mark.parametrize("label", ["", "l" * 201])
@@ -127,9 +131,24 @@ def test_the_attempt_label_is_null_or_one_to_200_characters(factory: sqlite3.Con
 
 def test_the_insert_records_the_hold_joined_with_its_attempt(con: sqlite3.Connection) -> None:
     found = held(con)
-    assert found == HoldRow("a", "a", "failed:answer:needs_owner", 10.0, None, None, None, None, None, 0, "tasks", "tl-1", "/tracker",
-                            "auto")
+    assert found == HoldRow(event=event(), held_at=10.0, labels=None, labelled_at=None, commenting_at=None,
+                            commented_at=None, cleared_at=None, rev=0, backlog="tasks", task_id="tl-1", tracker_root="/tracker",
+                            label="auto")
     assert store(con).of_attempts(("a", "hand", "nobody")) == {"a": found} and store(con).of_attempts(()) == {}
+
+
+@pytest.mark.parametrize("payload", ["{}", encode_event(event(attempt_id="other")),
+                                   encode_event(event()).replace('"needs_owner"', '"invented"')])
+def test_corrupt_or_mismatched_payload_is_unavailable(con: sqlite3.Connection, payload: str) -> None:
+    put(con, HELD | {"event": payload})
+    with pytest.raises(StoreUnavailable, match="Malformed stored hold event"):
+        store(con).of_attempts(("a",))
+
+
+def test_invalid_input_is_rejected_before_recording(con: sqlite3.Connection) -> None:
+    with pytest.raises(ValidationError):
+        HoldInsert.model_validate({"event": {"attempt_id": "a"}, "now": 1.0})
+    assert store(con).of_attempts(("a",)) == {}
 
 
 def test_a_hand_started_attempt_is_never_held(con: sqlite3.Connection) -> None:

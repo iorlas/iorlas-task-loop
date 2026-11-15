@@ -9,6 +9,7 @@ import pytest
 from beads_client import Bead, Comment, Dep
 from beads_client.testing import FakeTaskReadClient
 from git_porcelain.testing import FakeRepo, FakeWorktree
+from hold_fixtures import event
 from test_admit import ENTRY, Tracker, admission, attempts, request, slots
 from test_admit_chain import abandon, advancing
 from test_admit_chain import planned as planned_fixture
@@ -93,7 +94,7 @@ def test_latest_cleared_hold_classifies_all_six_decisions_without_changing_state
     text = operation.for_task(reference, "/tracker").text
     assert text.count("comment after hold") == 6
     assert text.count("comment at or before hold") == 2 and text.count("time unclassified") == 2
-    assert "failed:answer:needs_owner" in text and "cause: recent" in text
+    assert "failed:needs_owner" in text and "cause: recent" in text
     assert all(f"Decision {number}" in text for number in range(1, 7))
     latest = HoldStore(lambda: factory).latest(reference)
     assert latest is not None and latest.cause_id == recorded.cause_id
@@ -193,7 +194,7 @@ def test_restart_after_hold_receives_six_answers_without_releasing_the_hold_duri
     reader = AttemptStore(lambda: factory)
     assert reader.register_entry(first.key, ENTRY, 10) == "accepted"
     holds = HoldStore(lambda: factory)
-    holds.insert(HoldInsert(first.key.attempt_id, first.key.attempt_id, "failed:answer:needs_owner", 1794564000.0))
+    holds.insert(HoldInsert(event=event(attempt_id=first.key.attempt_id), now=1794564000.0))
     abandon(factory, checkouts, slot_files, first.key)
     client.threads["tl-1"] = [Comment("owner", f"Decision {number}", AT) for number in range(1, 7)]
     before = factory.execute("SELECT * FROM task_hold").fetchall()

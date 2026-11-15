@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 from conftest import DONE
 from doubles import D
+from hold_fixtures import event
 from sqlite_store import SchemaError, Store
 
 from taskloop.attempt_reads import ReleaseRow, SlotUse, StoreUnavailable
@@ -18,6 +19,7 @@ from taskloop.drain.models import Identity
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.factory_schema import SCHEMA
 from taskloop.operations import Failed
+from taskloop.task_event_codec import encode as encode_event
 
 
 def add(con: sqlite3.Connection, key: str, seq: int, backlog: str = "tasks", task: str = "tl-1", repo: str = "repo",
@@ -246,14 +248,14 @@ def test_board_keeps_landed_cards_and_uses_the_checks_number(landing: sqlite3.Co
 @pytest.mark.parametrize("finished", [False, True])
 def test_board_keeps_finished_and_unfinished_holds(registered: sqlite3.Connection, tmp_path: Path, finished: bool) -> None:
     registered.execute("UPDATE attempt SET label='auto'")
-    registered.execute("""INSERT INTO task_hold (attempt_id,cause_id,reason,held_at,labels,labelled_at,commenting_at,commented_at)
-        VALUES ('attempt','attempt','needs_owner',1,'moved',2,3,?)""", (4 if finished else None,))
+    registered.execute("""INSERT INTO task_hold (attempt_id,event,held_at,labels,labelled_at,commenting_at,commented_at)
+        VALUES ('attempt',?,1,'moved',2,3,?)""", (encode_event(event(attempt_id="attempt")), 4 if finished else None))
     if finished:
         registered.execute("INSERT INTO slot_release VALUES ('attempt','dispatch',1,?,5,'unclaimed')", (D,))
     board = build_board(BoardPorts(ports(CurrentOnly(lambda: registered)), EvidenceFiles(tmp_path), Tracker()))
     assert isinstance(board, Board) and len(board.tasks) == 1
     assert (board.tasks[0].column, board.tasks[0].hold_cause, board.tasks[0].step_started_at) == (
-        "held", "needs_owner", "1970-01-01T00:00:01Z")
+        "held", "failed:needs_owner", "1970-01-01T00:00:01Z")
 
 
 def test_admission_during_selection_cannot_mix_the_current_row_and_its_count(registered: sqlite3.Connection, tmp_path: Path) -> None:

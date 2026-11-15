@@ -8,6 +8,7 @@ from pathlib import Path
 from threading import Barrier
 
 import pytest
+from hold_fixtures import STUCK_SQL
 from sqlite_store import begin_immediate
 
 from taskloop.attempt_reads import StoreUnavailable
@@ -176,7 +177,7 @@ CHANGES = [
     ("DELETE FROM reservation", Outcome.INELIGIBLE),
     ("INSERT INTO slot_release VALUES('attempt','dispatch',1,'" + "b" * 40 + "',10,'kept')", Outcome.INELIGIBLE),
     ("INSERT INTO slot_release VALUES('attempt','dispatch',1,'" + "b" * 40 + "',10,'unclaimed')", Outcome.INELIGIBLE),
-    ("INSERT INTO task_hold(attempt_id,cause_id,reason,held_at) VALUES('attempt','cause','held',10)", Outcome.INELIGIBLE),
+    (STUCK_SQL, Outcome.INELIGIBLE),
     ("INSERT INTO drain_state VALUES(1,1,'draining')", Outcome.DRAINING),
     ("INSERT INTO drain_state VALUES(1,2,'open')", Outcome.CHANGED),
     ("UPDATE attempt SET entry_start='replacement',rev=rev+1", Outcome.CHANGED),

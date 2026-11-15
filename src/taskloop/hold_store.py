@@ -18,12 +18,15 @@ import sqlite3
 from dataclasses import dataclass
 from typing import Final, Literal
 
-from taskloop.attempt_reads import StoreConnection, StoreRefused, as_int, as_nullable_text, as_text
+from taskloop.attempt_reads import StoreConnection, StoreRefused, StoreUnavailable, as_int, as_nullable_text, as_text
 from taskloop.check_store import stored_nullable_real, stored_real, stored_word
 from taskloop.factory_schema import HOLD, LATER, LATEST_CHECKS, SUCCESSOR, marks, prefixed
-from taskloop.hold_cause import LAND_CAUSE
-from taskloop.merge.models import PREFIX as MERGE
 from taskloop.task import TaskReference
+from taskloop.task_event import TaskEvent
+from taskloop.task_event_cause import LandCause, MergeCause, Value
+from taskloop.task_event_codec import decode as decode_event
+from taskloop.task_event_codec import encode as encode_event
+from taskloop.task_event_codec import reason
 from taskloop.wip import SavedCommit, decode, encode
 
 type Labels = Literal["moved", "absent", "not_ours", "closed", "missing", "superseded"]
@@ -54,23 +57,17 @@ UNCLEARED: Final = COLUMNS + """,(SELECT EXISTS (SELECT 1 FROM task_hold g WHERE
  ORDER BY h.held_at,h.attempt_id"""
 
 
-@dataclass(frozen=True)
-class HoldInsert:
-    """What the record stores: A, the cause (A or its latest checks attempt), the reason word and when."""
+class HoldInsert(Value):
+    """The deciding operation's validated cause snapshot and recording time."""
 
-    attempt_id: str
-    cause_id: str
-    reason: str
+    event: TaskEvent
     now: float
 
 
-@dataclass(frozen=True)
-class HoldRow:
+class HoldRow(Value):
     """One hold joined with its agent attempt A: the task, its tracker root and the label A was taken under."""
 
-    attempt_id: str
-    cause_id: str
-    reason: str
+    event: TaskEvent
     held_at: float
     labels: Labels | None
     labelled_at: float | None
@@ -83,6 +80,18 @@ class HoldRow:
     tracker_root: str
     label: str | None
 
+    @property
+    def attempt_id(self) -> str:
+        return self.event.attempt_id
+
+    @property
+    def cause_id(self) -> str:
+        return self.event.cause_id
+
+    @property
+    def reason(self) -> str:
+        return reason(self.event)
+
 
 @dataclass(frozen=True)
 class Uncleared:
@@ -93,11 +102,18 @@ class Uncleared:
 
 
 def _row(row: tuple[object, ...]) -> HoldRow:
-    return HoldRow(
-        as_text(row[0]), as_text(row[1]), as_text(row[2]), stored_real(row[3]), stored_word(row[4], LABELS),
-        stored_nullable_real(row[5]), stored_nullable_real(row[6]), stored_nullable_real(row[7]), stored_nullable_real(row[8]),
-        as_int(row[9]), as_text(row[10]), as_text(row[11]), as_text(row[12]), as_nullable_text(row[13]),
-    )
+    try:
+        event = decode_event(as_text(row[1]))
+        if event.attempt_id != as_text(row[0]):
+            raise ValueError("Hold event does not identify its relational attempt")
+        return HoldRow(
+            event=event, held_at=stored_real(row[2]), labels=stored_word(row[3], LABELS),
+            labelled_at=stored_nullable_real(row[4]), commenting_at=stored_nullable_real(row[5]),
+            commented_at=stored_nullable_real(row[6]), cleared_at=stored_nullable_real(row[7]), rev=as_int(row[8]),
+            backlog=as_text(row[9]), task_id=as_text(row[10]), tracker_root=as_text(row[11]), label=as_nullable_text(row[12]),
+        )
+    except ValueError as error:
+        raise StoreUnavailable("Malformed stored hold event") from error
 
 
 def recovery_held(con: sqlite3.Connection, attempt_id: str) -> bool:
@@ -150,7 +166,7 @@ class HoldStore(StoreConnection):
         listed."""
         with self._connection() as con:
             found = con.execute(UNCLEARED, (backlog,)).fetchall()
-        return tuple(Uncleared(_row(each[:14]), bool(as_int(each[14]))) for each in found)
+        return tuple(Uncleared(_row(each[:13]), bool(as_int(each[13]))) for each in found)
 
     def current_hold(self, attempt_id: str) -> HoldRow | None:
         """The hold of the current attempt (highest `seq`) of `attempt_id`'s task, when that is another attempt."""
@@ -163,15 +179,16 @@ class HoldStore(StoreConnection):
     def insert(self, hold: HoldInsert) -> HoldRow:
         """The hold's record: hand-started attempts may be held for merge or land refusals; otherwise `unlabelled`. `changed`
         when A or its cause is no longer current or A already has a hold (a concurrent caller recorded it)."""
+        event = hold.event
         with self._connection(write=True) as con:
-            fenced = con.execute(FENCE, (hold.cause_id, hold.cause_id, hold.attempt_id)).fetchone()
-            if fenced is not None and not fenced[0] and not hold.reason.startswith((MERGE, LAND_CAUSE)):
+            fenced = con.execute(FENCE, (event.cause_id, event.cause_id, event.attempt_id)).fetchone()
+            if fenced is not None and not fenced[0] and not isinstance(event.cause, (MergeCause, LandCause)):
                 raise StoreRefused("unlabelled")
             if fenced is None or not fenced[1] or fenced[2]:
                 raise StoreRefused("changed")
             con.execute(f"INSERT INTO task_hold ({HOLD}) VALUES ({marks(HOLD)})",
-                        (hold.attempt_id, hold.cause_id, hold.reason, hold.now, None, None, None, None, None, 0))
-            return self._read(con, hold.attempt_id)
+                        (event.attempt_id, encode_event(event), hold.now, None, None, None, None, None, 0))
+            return self._read(con, event.attempt_id)
 
     def labelled(self, attempt_id: str, rev: int, labels: Labelled, now: float) -> HoldRow:
         """The label step's word (5.2), once, while A is still its task's current attempt (taken again meanwhile:

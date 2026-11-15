@@ -4,22 +4,22 @@ from dataclasses import replace
 from pathlib import Path
 
 import pytest
+from hold_fixtures import event_for, events, row
 
 from taskloop.attempt_status import AttemptView, Shown
 from taskloop.attempt_types import AttemptResult
 from taskloop.exit_codes import ExitCode, exit_code
-from taskloop.hold_cause import LAND, OWNER, RULES, RUN, STUCK
 from taskloop.hold_guide import HOLD, ON_HOLD, hold_guide, pending_guide
-from taskloop.hold_store import HoldRow, Labels
+from taskloop.hold_store import Labels
 from taskloop.land_guide import CANDIDATE_RELEASE, INTERRUPTED, LAND_GUIDE, LAND_NEXT, restart
 from taskloop.operations import Failed, Move, Round
 from taskloop.step_guide import guide
 from taskloop.step_render import human
+from taskloop.task_event_codec import reason as event_reason
 
 VIEW = AttemptView("tasks", "tl-1", "plan", "a", "s1", "captured", "gone",
                    AttemptResult("collected", "needs_owner"), False, "on_hold", label="approved")
-ROW = HoldRow("a", "a", "failed:needs_owner", 10.0, "moved", 11.0, 12.0, 13.0, None,
-              4, "tasks", "tl-1", "/tracker", "approved")
+ROW = row(label="approved")
 
 
 def assert_prose(text: str) -> None:
@@ -64,15 +64,11 @@ def test_land_decisions_retain_delivery_and_retry_safety() -> None:
     assert "whole block" in human("tl step land", failed, None)[-2]
 
 
-@pytest.mark.parametrize("reason", [
-    *OWNER, *(f"failed:run:{word}" for word in RUN), "failed:run:timeout",
-    *(f"failed:rejected:{word}" for word in RULES), *(f"stuck:{word}" for word in STUCK),
-    *(f"land:{word}" for word in LAND), "failed:answer:encoding", "repeats_exhausted:uncommitted",
-])
+@pytest.mark.parametrize("reason", [event_reason(each) for each in events()])
 def test_known_hold_causes_cannot_forward_command_recipes(reason: str) -> None:
-    text = hold_guide(replace(VIEW, hold=replace(ROW, reason=reason)))
+    text = hold_guide(replace(VIEW, hold=ROW.model_copy(update={"event": event_for(reason)})))
     assert_prose(text)
-    if reason == "land:conflict":
+    if reason == "land:conflict" or reason.startswith("merge:"):
         assert "stays held" in text and "do not restart" in text
     else:
         assert "approval label `approved`" in text and "close the task" in text
@@ -90,7 +86,7 @@ def test_unanswered_holds_explain_answers_and_the_retained_branch(recorded: bool
 
 @pytest.mark.parametrize("labels", ["closed", "missing", "not_ours", "moved"])
 def test_hold_recovery_respects_tracker_ownership(labels: Labels) -> None:
-    text = hold_guide(replace(VIEW, hold=replace(ROW, labels=labels)))
+    text = hold_guide(replace(VIEW, hold=ROW.model_copy(update={"labels": labels})))
     assert_prose(text)
     if labels in ("closed", "missing"):
         assert "nothing to answer" in text and "approval label" not in text
@@ -102,7 +98,7 @@ def test_hold_recovery_respects_tracker_ownership(labels: Labels) -> None:
 
 
 def test_a_hold_without_a_recorded_approval_label_requires_manual_continuation() -> None:
-    text = hold_guide(replace(VIEW, hold=replace(ROW, label=None)))
+    text = hold_guide(replace(VIEW, hold=ROW.model_copy(update={"label": None})))
     assert_prose(text)
     assert "choose manual continuation" in text and "no approval label was recorded" in text
 
@@ -116,7 +112,7 @@ def test_a_hold_without_a_recorded_approval_label_requires_manual_continuation()
 def test_shown_holds_keep_the_cause_and_decision_in_prose(
     reason: str, situation: str, decision: str, tmp_path: Path,
 ) -> None:
-    view = replace(VIEW, hold=replace(ROW, reason=reason))
+    view = replace(VIEW, hold=ROW.model_copy(update={"event": event_for(reason)}))
     shown = Shown(view, tmp_path, tmp_path / "entry.log", tmp_path / "events.jsonl")
     text = human("show", shown, tmp_path / "factory.db")[-1]
     assert text == hold_guide(view) and situation in text and decision in text
@@ -126,7 +122,8 @@ def test_shown_holds_keep_the_cause_and_decision_in_prose(
 @pytest.mark.parametrize("recorded", [True, False])
 @pytest.mark.parametrize("reason", ["land:conflict", "merge:needs_owner"])
 def test_terminal_holds_stay_held_with_their_retained_work(reason: str, recorded: bool) -> None:
-    view = replace(VIEW, next="on_hold" if recorded else "hold", hold=replace(ROW, reason=reason) if recorded else None,
+    held = ROW.model_copy(update={"event": event_for(reason)}) if recorded else None
+    view = replace(VIEW, next="on_hold" if recorded else "hold", hold=held,
                    hold_due=None if recorded else reason)
     text = hold_guide(view)
     assert_prose(text)

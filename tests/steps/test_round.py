@@ -16,6 +16,7 @@ from any_agent.testing import FakeRun
 from beads_client import BdError, Bead
 from doubles import NO_CHECKS, NoAdvance, NoChecks, ReadyTracker, no_holds
 from git_porcelain.testing import FakeWorktree
+from hold_fixtures import event
 from plan_fixtures import PLAN_TEXT
 
 from taskloop.admit import AdmitRefused, AdmitRequest, AdmitResult, Admitted, AdmitUnavailable
@@ -51,6 +52,7 @@ from taskloop.slot_lock import custody, hold
 from taskloop.slot_release import NotReleased, Released, ReleaseResult, SlotRelease
 from taskloop.slots import SlotView
 from taskloop.step_render import human
+from taskloop.task_event_cause import StuckCause, StuckReason
 from taskloop.tracker import leaked_claim
 from taskloop.verifier import Verifier
 
@@ -214,7 +216,8 @@ def held(con: sqlite3.Connection, attempt_id: str) -> None:
     answer takes it again; the round skips it as `abandoned`."""
     con.execute("UPDATE attempt SET label='auto' WHERE attempt_id=?", (attempt_id,))  # only a round-taken attempt is held
     store = HoldStore(lambda: con)
-    row = store.labelled(attempt_id, store.insert(HoldInsert(attempt_id, attempt_id, "stuck:expired_admitted", 10.0)).rev, "not_ours", 11.0)
+    captured = event(StuckCause(reason=StuckReason.EXPIRED_ADMITTED), attempt_id)
+    row = store.labelled(attempt_id, store.insert(HoldInsert(event=captured, now=10.0)).rev, "not_ours", 11.0)
     leased = store.commenting(attempt_id, row.rev, 12.0)
     assert leased is not None
     store.commented(attempt_id, leased.rev, 13.0)
