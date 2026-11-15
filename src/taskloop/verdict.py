@@ -11,6 +11,7 @@ from pathlib import Path
 from git_porcelain import Repo, Tree
 
 from taskloop.attempt_types import MODE, ChainLink, Rejected, Rule, StepRules, Unreadable, Verdict, Verified, path_allowed
+from taskloop.step import Step
 from taskloop.steps import StepKind
 
 
@@ -69,7 +70,7 @@ def _changes(repo: Repo, root: Path, tip: Tree, base: Tree, step: StepKind, rule
     `file_cap` bytes after the full read."""
     for change in repo.worktree(root).diff(base.sha, tip.sha, cap=0).changes:
         if ((change.kind == "D" and not rules.deletions) or not path_allowed(change.path, rules)
-                or (step.step == "plan" and change.path not in paths)):
+                or (step.step is Step.PLAN and change.path not in paths)):
             return "paths"
         if change.kind != "A":
             before = base.files.get(change.path)

@@ -178,7 +178,7 @@ class AttemptLoads(StoreConnection, ABC):
             float(row[9]),
             (as_int(row[10]), as_text(row[11]), as_text(row[12])),
             as_int(row[23]),
-            as_text(row[25]),
+            decode_step(as_text(row[25])),
             as_nullable_text(row[26]),
             as_nullable_text(row[28]),
             None if row[33] is None else RepairContext.model_validate_json(as_text(row[33])),

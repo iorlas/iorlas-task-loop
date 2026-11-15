@@ -46,7 +46,8 @@ from taskloop.input_context import read as read_context
 from taskloop.prepare import HEADS, ORIGIN_MAIN, REMOTES, lacks
 from taskloop.repo import RepoId
 from taskloop.slots import Probe, SlotGit
-from taskloop.steps import is_agent, next_step
+from taskloop.step import Step
+from taskloop.steps import next_step
 from taskloop.task import TaskInspection
 from taskloop.task_content import TaskContentDigest
 from taskloop.tracker import ACTOR
@@ -130,7 +131,7 @@ class ChainAdmission:
         refused = deadline_refusal(self.clock, request.deadline)
         if refused is not None:
             return refused
-        if row.step == "plan" and request.content_digest is None:
+        if row.step is Step.PLAN and request.content_digest is None:
             raise InputError("A plan repeat requires freshly collected task-content evidence")
         insert_attempt(con, {
             "attempt_id": key.attempt_id, "dispatch_token": key.dispatch_token, "generation": key.reservation_generation,
@@ -168,7 +169,7 @@ class _Ready:
 
     con: sqlite3.Connection
     found: Task
-    step: str
+    step: Step
     task: TaskInspection
     free: tuple[Free, ...]
     earlier: EarlierAttempt | None = None
@@ -222,7 +223,7 @@ class NextAdmission:
         except (sqlite3.Error, StoreUnavailable) as error:
             return AdmitUnavailable("store", detail=why(error))
 
-    def _previous(self, request: NextStepRequest) -> tuple[sqlite3.Connection, Task, str] | AdmitRefused | AdmitUnavailable:
+    def _previous(self, request: NextStepRequest) -> tuple[sqlite3.Connection, Task, Step] | AdmitRefused | AdmitUnavailable:
         """The choices, the deadline, then the previous attempt's task and the step after it; a superseded previous
         attempt is `task_attempted` before any tracker read (the transaction checks it again)."""
         refused = deadline_refusal(self.clock, request.deadline)
@@ -234,7 +235,7 @@ class NextAdmission:
         except sqlite3.Error as error:
             return AdmitUnavailable("store", detail=why(error))
         step = None if found is None else next_step(found.step, True)
-        if found is None or step is None or not is_agent(step) or found.end_commit is None:
+        if found is None or not isinstance(step, Step) or found.end_commit is None:
             return AdmitRefused("not_advanceable")  # the check step is the checks admission's (`check_admit`)
         return (con, found, step) if found.current else AdmitRefused("task_attempted")
 

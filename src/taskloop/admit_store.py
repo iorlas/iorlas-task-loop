@@ -11,6 +11,7 @@ from taskloop.admit_rows import Current, Free, Previous, Task
 from taskloop.attempt_types import AttemptKey
 from taskloop.factory_schema import ATTEMPT_ADMITTED, LATER, REPEATED, RESERVATION, marks
 from taskloop.repo import RepoId
+from taskloop.step import Step, decode_step, encode_step
 from taskloop.task_content import TaskContentDigest
 from taskloop.task_content_store import TaskContentStore
 
@@ -56,11 +57,15 @@ def reserve(con: sqlite3.Connection, repo_id: RepoId, slot: str, key: AttemptKey
 
 def insert_attempt(con: sqlite3.Connection, attempt: Mapping[str, object], content_digest: TaskContentDigest | None = None) -> None:
     """The admitted attempt row, inside the caller's write transaction."""
-    values = _bound(ATTEMPT_ADMITTED, {"source_checks_id": None, "repair_context": None, **attempt})
-    if attempt["step"] == "plan" and content_digest is None:
+    raw_step = attempt["step"]
+    if not isinstance(raw_step, str):
+        raise sqlite3.IntegrityError("Admission requires an agent step")
+    step = decode_step(raw_step)
+    values = _bound(ATTEMPT_ADMITTED, {"source_checks_id": None, "repair_context": None, **attempt, "step": encode_step(step)})
+    if step is Step.PLAN and content_digest is None:
         raise sqlite3.IntegrityError("Plan admission requires task-content evidence")
     con.execute(f"INSERT INTO attempt ({ATTEMPT_ADMITTED}) VALUES ({marks(ATTEMPT_ADMITTED)})", values)
-    if attempt["step"] == "plan" and content_digest is not None:
+    if step is Step.PLAN and content_digest is not None:
         TaskContentStore.insert(con, str(attempt["attempt_id"]), content_digest)
 
 
@@ -123,7 +128,13 @@ def _decode[T: BaseModel](model: type[T], row: tuple[object, ...] | None) -> T |
     if row is None:
         return None
     try:
-        return model.model_validate(dict(zip(model.model_fields, row, strict=True)))
+        fields = dict(zip(model.model_fields, row, strict=True))
+        if "step" in fields:
+            raw_step = fields["step"]
+            if not isinstance(raw_step, str):
+                raise ValueError("Admission requires an agent step")
+            fields["step"] = decode_step(raw_step)
+        return model.model_validate(fields)
     except (ValidationError, ValueError) as error:
         raise sqlite3.DatabaseError("Malformed admission row") from error
 

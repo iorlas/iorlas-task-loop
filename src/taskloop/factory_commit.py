@@ -32,6 +32,7 @@ from taskloop.attempt_types import (
 )
 from taskloop.prepare import MAIN, task_branch
 from taskloop.slot_state import SlotState, bounded, listing, observe_slot, pointer, staged
+from taskloop.step import Step
 from taskloop.steps import kind
 
 
@@ -136,7 +137,7 @@ def _commit(
     if refused is not None:
         return refused
     if not paths:
-        foreign = _foreign(checkouts, admission, paths, state.gitdir) if admission.step == "implement" else None
+        foreign = _foreign(checkouts, admission, paths, state.gitdir) if admission.step == Step.IMPLEMENT else None
         return foreign or _unwritten(checkouts, files, admission, base)
     blocked = _blocked(quiet, files, admission, state)
     if blocked is not None:
@@ -178,7 +179,7 @@ def _review(
     rules = kind(admission.step).rules(admission.task.task_id)
     path = Path(admission.slot_path)
     tree = _base_tree(view, base)
-    implement = admission.step == "implement"
+    implement = admission.step == Step.IMPLEMENT
     selected = answer.paths
     if implement:
         dirty = view.worktree(path).dirty(base)

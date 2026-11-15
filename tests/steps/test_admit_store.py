@@ -107,14 +107,19 @@ def test_transfer_fences_the_previous_holder_and_updates_generation_only_when_mo
     assert admit_store.issued(con, REPO, ("s1",)) == 2
 
 
-def test_malformed_stored_admission_uses_the_store_error_path(con: sqlite3.Connection) -> None:
+@pytest.mark.parametrize(("column", "value"), [("seq", "malformed"), ("step", "check"), ("step", "review")])
+def test_malformed_stored_admission_uses_the_store_error_path(con: sqlite3.Connection, column: str, value: str) -> None:
     with begin_immediate(con):
         admit_store.insert_attempt(con, values(), EVIDENCE)
-    con.execute("UPDATE attempt SET seq='malformed' WHERE attempt_id=?", (KEY.attempt_id,))
+    con.execute("PRAGMA ignore_check_constraints=ON")
+    con.execute(f"UPDATE attempt SET {column}=? WHERE attempt_id=?", (value, KEY.attempt_id))
     with pytest.raises(sqlite3.DatabaseError, match="Malformed admission row"):
         admit_store.current(con, "tasks", "tl-1")
     with pytest.raises(sqlite3.DatabaseError, match="Malformed admission row"):
         admit_store.previous(con, KEY)
+    if column == "step":
+        with pytest.raises(sqlite3.DatabaseError, match="Malformed admission row"):
+            admit_store.task_of(con, KEY)
 
 
 def test_failed_transfer_allows_the_caller_to_roll_back_the_inserted_successor(con: sqlite3.Connection) -> None:
