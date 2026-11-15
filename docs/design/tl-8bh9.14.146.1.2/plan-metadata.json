@@ -1,0 +1,24 @@
+{
+  "prepared_commit": "cd64b25ec06d8255e15670a51b0aee06d3889bc9",
+  "cited_paths": [
+    "src/taskloop/land_guide.py",
+    "src/taskloop/hold_guide.py",
+    "src/taskloop/hold_cause.py",
+    "src/taskloop/round_guide.py",
+    "src/taskloop/step_render.py",
+    "src/taskloop/land_render.py",
+    "src/taskloop/step_guide.py",
+    "src/taskloop/show_render.py",
+    "src/taskloop/cli_step.py",
+    "src/taskloop/exit_codes.py",
+    "src/taskloop/operations.py",
+    "src/taskloop/land_push.py",
+    "tests/steps/test_conflict_recovery.py",
+    "tests/steps/test_hold_status.py",
+    "tests/steps/test_land_status.py",
+    "tests/steps/test_hold.py",
+    "tests/steps/test_hold_text.py",
+    "tests/cli/test_land_cli.py",
+    "tests/cli/test_refusal_guidance.py"
+  ]
+}
