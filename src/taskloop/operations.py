@@ -1,8 +1,8 @@
 """The step commands' operations over the existing ports: start (admit, launch, or repeat a captured step through the
 `Repeat` port; a done step with a following one advances to it through the `Advance` port, any other released attempt is
-answered, an abandoned one admitted afresh at the first step), verify (which then releases the slot,
-settled, and publishes a verified result), release (`Release`: settled or abandon) and publish (`Publish`: push the
-verified commit to origin's `task/<id>`), each following a task's current attempt, whatever its step; values in, values
+answered, an abandoned one admitted afresh at the first step), factory commit (which then releases the slot,
+settled, and publishes an accepted result), release (`Release`: settled or abandon) and publish (`Publish`: push the
+commit accepted by factory commit to origin's `task/<id>`), each following a task's current attempt; values in, values
 out. The status reads are `attempt_status`'s. Nothing here merges or lands. `result_data.as_data` is the one JSON shape
 of every result.
 
@@ -235,7 +235,7 @@ class Adoption:
     slots: tuple[Adopted | NotAdopted, ...]
 
 
-type Action = Literal["start", "relaunch", "repeat", "verify", "advance", "release", "publish", "report", "skip", "hold", "land"]
+type Action = Literal["start", "relaunch", "repeat", "commit", "advance", "release", "publish", "report", "skip", "hold", "land"]
 
 
 @dataclass(frozen=True)
@@ -308,7 +308,7 @@ def minutes_refused(minutes: int) -> Failed | None:
 
 @dataclass(frozen=True)
 class _Advance:
-    """The task's current attempt is done (verified, released settled, published) and its step has a following one:
+    """The task's current attempt is done (accepted by factory commit, released settled, published) and has a following step:
     `step`, whose attempt `number` is admitted next (a checks re-run's is its failed latest one's + 1)."""
 
     previous: AttemptKey
@@ -511,8 +511,8 @@ def launched(result: LaunchResult, backlog: str, task_id: str, key: AttemptKey, 
 def commit_task(
     reader: AttemptStore, factory_commit: Commit, releaser: Release, publisher: Publish, backlog: str, task_id: str
 ) -> CommittedTask | Failed:
-    """A stored verdict returns with no Git read; otherwise one verification, stored once when it settles. After a
-    verdict (new or stored) the slot is released, settled, and a verified result published: a held release or a failed
+    """A stored verdict returns with no Git read; otherwise one factory commit, stored once when it settles. After a
+    verdict (new or stored) the slot is released, settled, and an accepted result published: a held release or a failed
     publication does not change the result, its word says so."""
     try:
         found = reader.attempt_of(backlog, task_id)
@@ -581,7 +581,7 @@ def _halves(
 
 
 def publish_task(reader: AttemptStore, publisher: Publish, backlog: str, task_id: str) -> PublishedTask | Failed:
-    """`tl step publish`: the task's current attempt's verified commit pushed to origin's `task/<id>` (first try or retry)."""
+    """`tl step publish`: push the current attempt's commit accepted by factory commit to origin's `task/<id>` (or retry)."""
     try:
         found = reader.attempt_of(backlog, task_id)
     except StoreUnavailable as error:

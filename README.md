@@ -1,7 +1,7 @@
 # Task-loop successor foundation
 
 The successor task factory implements plan, implement and checks, task holds, explicit land, and an optional
-read-only dashboard. It admits approved tasks into free slots, publishes verified agent results as `task/<id>` on
+read-only dashboard. It admits approved tasks into free slots, publishes agent results accepted by factory commit as `task/<id>` on
 `origin`, and runs the repository profile's checks. Before implementation and checks, it prepares the slot's
 environment and runs the profile's `setup` (Linux only); Codex agents work offline with that environment.
 Rounds advance tasks through checks. Land defaults to `manual`: the person delivers a checked task with `tl step land`.
@@ -32,9 +32,9 @@ Start with [First landed task](#first-landed-task-linux) for an ordered setup an
 - `tl profile show [--checkout PATH] [--at REV] [--target REF] [--json]` prints the repository profile: `setup` and
   checks at the commit `--at`, `required` and `target` from `--target` (read-only).
 - `tl slot adopt CHECKOUT [--count N]` adopts hand-made detached worktrees as slots and creates `factory.db`.
-- `tl step start|show|list|verify|release|publish` run, inspect, verify, release (`--abandon` returns the tracker
-  claim) and publish one task's current attempt. `tl step start` on a done plan admits implementation; after a verified
-  implementation it admits checks. Checks run the profile's commands in the factory, with results and logs available
+- `tl step start|show|list|commit|release|publish` run, inspect, complete factory commit, release (`--abandon` returns the tracker
+  claim) and publish one task's current attempt. `tl step start` on a done plan admits implementation; after implementation
+  is accepted by factory commit it admits checks. Checks run the profile's commands in the factory, with results and logs available
   through `tl step show`. `tl step next` runs one
   scheduling round: it settles existing attempts, advances each claimed task whose step is done (no label check), then
   admits approved ready tasks (`--label`) into the slots left while fewer than `--max-running` (default 3) of the backlog's

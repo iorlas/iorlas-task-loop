@@ -57,6 +57,14 @@ def test_retry_limits_and_claim_boundaries_remain_explicit() -> None:
     assert "compare" in PUBLISH and "never forces" in PUBLISH
 
 
+@pytest.mark.parametrize("reason", ["not_committed", "read_only", "dirty", "uncommitted", "session_pending",
+                                  "branch", "unborn", "changed_answer", "not_advanceable", "plan_empty"])
+def test_completion_refusals_name_factory_commit(reason: str) -> None:
+    text = " ".join(human("tl step commit", Failed("refused", reason), None))
+    assert "factory commit" in text.lower()
+    assert "verify" not in text.lower() and "verification" not in text.lower()
+
+
 def test_started_and_failed_launches_render_progress_and_observation_decisions() -> None:
     started = Started("started", "tasks", "tl-1", "attempt", False)
     lines = human("tl step start", started, None)

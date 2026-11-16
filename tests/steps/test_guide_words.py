@@ -105,7 +105,7 @@ def test_a_hold_without_a_recorded_approval_label_requires_manual_continuation()
 
 @pytest.mark.parametrize(("reason", "situation", "decision"), [
     ("failed:run:timeout", "did not finish before its deadline", "allow more time"),
-    ("branch_moved", "Held:", "First restore task/tl-1 to contain the verified commit"),
+    ("branch_moved", "Held:", "First restore task/tl-1 to contain the commit accepted by factory commit"),
     ("claim_lost", "Someone else changed this task's claim", "approval label `approved`"),
     ("land:checks_failed", "checks failed", "preserve the old task branch and restart from plan"),
 ])

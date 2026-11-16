@@ -226,7 +226,7 @@ class SlotRelease:
             with self.hold(slot_path, row.key.attempt_id):
                 return self._parked(row, Path(slot_path), abandon)
         except SlotBusy:
-            return NotReleased("unavailable", "slot_busy", f"Another entry, verify or release holds the slot. {NOTHING}")
+            return NotReleased("unavailable", "slot_busy", f"Another entry, factory commit or release holds the slot. {NOTHING}")
         except SlotLockUnavailable:
             return NotReleased("unavailable", "lock", f"The slot's lock file cannot be opened. {NOTHING}")
 

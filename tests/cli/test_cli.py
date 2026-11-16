@@ -42,7 +42,25 @@ def test_publish_help_says_it_pushes_as_you_never_forced(capsys: pytest.CaptureF
         main(["step", "publish", "-h"])
     assert result.value.code == 0
     text = " ".join(capsys.readouterr().out.split())
-    assert "Push the step's verified commit to origin's task/<id> as you, never forced; nothing merges or lands" in text
+    assert ("Push the step's commit accepted by factory commit to origin's task/<id> as you, "
+            "never forced; nothing merges or lands") in text
+
+
+def test_commit_help_describes_judgment_release_and_publication(capsys: pytest.CaptureFixture[str]) -> None:
+    with pytest.raises(SystemExit) as result:
+        main(["step", "commit", "-h"])
+    assert result.value.code == 0
+    text = " ".join(capsys.readouterr().out.split())
+    assert ("Complete factory commit: obtain the result commit and judge the step's rules, "
+            "then release a clean slot and publish an accepted result") in text
+    assert "verify" not in text and "verification" not in text
+
+
+def test_verify_is_not_a_command_alias(capsys: pytest.CaptureFixture[str]) -> None:
+    with pytest.raises(SystemExit) as result:
+        main(["step", "verify"])
+    assert result.value.code == 2
+    assert "invalid choice: 'verify'" in capsys.readouterr().err
 
 
 @pytest.mark.parametrize(

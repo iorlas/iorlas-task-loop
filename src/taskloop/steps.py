@@ -95,7 +95,7 @@ def following(step: str) -> Step | Literal["check"] | None:
 
 def next_step(current: str | None, done: bool) -> Step | Literal["check"] | None:
     """What a task admits next. `current`: its current attempt's step, None when it has none or its abandon returned the
-    claim (a fresh start: the first step). `done`: that attempt is verified, its release settled (claim kept) and its
+    claim (a fresh start: the first step). `done`: that attempt is accepted by factory commit, its release settled (claim kept) and its
     commit published. None: the current attempt's own `Next` applies, or the last step is done."""
     if current is None:
         return STEPS[0].step

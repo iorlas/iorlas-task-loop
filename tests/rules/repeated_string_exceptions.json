@@ -82,7 +82,6 @@
     "unavailable": 4,
     "unknown": 12,
     "unreadable": 3,
-    "verify": 4,
     "wait": 4
   },
   "src/taskloop/attempt_store.py": {
@@ -546,8 +545,7 @@
     "skip": 3,
     "start": 5,
     "store": 3,
-    "unavailable": 6,
-    "verify": 4
+    "unavailable": 6
   },
   "src/taskloop/round_guide.py": {
     ":": 8

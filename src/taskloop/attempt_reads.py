@@ -33,7 +33,7 @@ class ReleaseRow:
 
 @dataclass(frozen=True)
 class PublishedRow:
-    """The attempt's verified commit on origin's `task/<id>` (`published_branch`): X pushed, the remote tip confirmed (X,
+    """The attempt's commit accepted by factory commit on origin's `task/<id>`: X pushed, the remote tip confirmed (X,
     or a later commit that contains X), and when."""
 
     commit: str
@@ -68,7 +68,7 @@ class AttemptRow:
     published: PublishedRow | None = None
     label: str | None = None  # the approval label a round took the task under (`attempt.label`); None: started by hand
     end_commit: str | None = None  # X, once stored
-    repeat_listing: tuple[str, ...] = ()  # a repeat's: what the verification that led to it listed
+    repeat_listing: tuple[str, ...] = ()  # a repeat's: what the factory commit that led to it listed
     source_checks_id: str | None = None
     run: RunChoices | None = None  # the agent's harness, provider, model, effort and sandbox as admitted
     try_number: int | None = None  # whole-task step count, captured with current selection

@@ -109,7 +109,7 @@ def test_captured_completion_and_explicit_holds_keep_their_own_paths(tmp_path: P
 
     reads = replace(ports(con, Processes()), recovery=forbidden, leftovers=lambda _key: None)
     view = current_view(reads, "tasks", "tl-1")
-    assert view is not None and view.next == "verify"
+    assert view is not None and view.next == "commit"
     con.execute("DELETE FROM execution")
     con.execute("UPDATE attempt SET phase='registered', label='auto'")
     con.execute(STUCK_SQL)

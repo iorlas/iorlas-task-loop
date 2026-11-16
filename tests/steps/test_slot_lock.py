@@ -127,7 +127,7 @@ def test_the_lock_is_released_after_a_verify_and_a_live_worker_is_still_alive(
     result = factory_commit(registered, checkouts, slot_files, lambda _worker: False).commit(KEY)
     assert result == CommitWaiting(CommitWaitingReason.WORKER_ALIVE)
     assert writes == []
-    acquire(str(slot.path), "probe", "verify").release()  # free again
+    acquire(str(slot.path), "probe", "commit").release()  # free again
 
 
 def test_the_holder_record_names_the_attempt_and_the_role_only(slot: FakeWorktree) -> None:

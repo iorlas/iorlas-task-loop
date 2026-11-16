@@ -491,9 +491,9 @@ def test_show_says_why_an_admitted_attempts_entry_gave_up(step: Step, slot: Fake
     step.factory_commit.commit(KEY)
     key, _entry = step.next_attempt(KEY)
     log = EvidenceFiles(tmp_path).entry_log(key)
-    log.write_text("refused slot_staged verify=refused:not_captured\nTraceback \x1b]0;owned\x07 (most recent call last)\n")
+    log.write_text("refused slot_staged commit=refused:not_captured\nTraceback \x1b]0;owned\x07 (most recent call last)\n")
     reads = StatusPorts(step.store, lambda _entry: "gone", lambda: 10, step.factory_commit.leftovers, lambda: "boot")
     found = show_attempt(reads, tmp_path, "tasks", "tl-1")
     assert not isinstance(found, Failed)
     assert (found.view.phase, found.view.next, found.view.last_entry) == (
-        "admitted", "start", "refused slot_staged verify=refused:not_captured")
+        "admitted", "start", "refused slot_staged commit=refused:not_captured")

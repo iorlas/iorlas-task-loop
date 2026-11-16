@@ -179,7 +179,7 @@ def test_start_dispatches_failed_check_output_at_x_and_fresh_checks_can_pass(rig
     assert rig.ran[-1] == "pending:commit"
     setup = SetupStore(lambda: rig.con).latest(row.key)
     assert setup is not None and setup.commit == x and setup.conclusion == CommandConclusion.PASSED
-    assert rig.round() == [("tl-1", "implement", "verify", "committed release=released branch=published")]
+    assert rig.round() == [("tl-1", "implement", "commit", "committed release=released branch=published")]
     if change:
         tree = rig.slot.repo.tree(rig.tip("tl-1"))
         assert tree is not None and tree.read("src/omitted.py") == b"safe = True\n"
@@ -345,7 +345,7 @@ def test_failed_check_repair_refreshes_origin_and_records_its_park_destination(r
     assert isinstance(result, Started)
     row = rig.store.attempts("tasks", "tl-1")[0]
     assert rig.store.slot_base(row.key) == target and dict(repo.branches())["main"] == original
-    assert rig.round() == [("tl-1", "implement", "verify", "committed release=released branch=published")]
+    assert rig.round() == [("tl-1", "implement", "commit", "committed release=released branch=published")]
     assert rig.slot.branch() is None
     assert next(info.head for info in repo.worktrees() if info.path == rig.slot.path) == target
 
@@ -415,7 +415,7 @@ def test_a_prior_path_repeat_consumes_the_same_budget(rig: Repairing) -> None:
     rig.agents["tl-1", "implement"] = tidy
     rig.round()  # path repeat 2
     assert rig.store.attempts("tasks", "tl-1")[0].number == 2
-    assert rig.round() == [("tl-1", "implement", "verify", "committed release=released branch=published")]
+    assert rig.round() == [("tl-1", "implement", "commit", "committed release=released branch=published")]
     rig.bodies = ["failed"]
     rig.round()
     assert rig.next_words() == {"tl-1": ("check", "repeat")}

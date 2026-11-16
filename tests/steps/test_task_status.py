@@ -33,7 +33,7 @@ ASKED = Admission(frozenset({"tl-1"}), "auto")
 @pytest.mark.parametrize(("view", "expected"), [
     (VIEW, TaskStatus(Status.RUNNING)),
     (replace(VIEW, step="check"), TaskStatus(Status.CHECKING)),
-    (replace(VIEW, next="verify"), TaskStatus(Status.SETTLING, "verify")),
+    (replace(VIEW, next="commit"), TaskStatus(Status.SETTLING, "commit")),
     (replace(VIEW, next="land", step="check"), TaskStatus(Status.WAITING_FOR_LAND, land=LandState.UNKNOWN)),
     (replace(VIEW, next="landed", step="check"), TaskStatus(Status.LANDED)),
     (replace(VIEW, next="hold", hold=HOLD), TaskStatus(Status.HELD, "failed:needs_owner")),

@@ -149,7 +149,7 @@ def test_an_unknown_slot_or_pid_is_named_neutrally(outcome: Kept, says: str) -> 
 def test_an_entry_signal_log_does_not_prove_its_sender_or_an_agent_stop() -> None:
     found = lines(replace(FACTS, reason="stuck:entry_lost", entry="failed terminated_by_signal"))
     assert found[2] == "The attempt's entry was terminated by a signal; its sender is unknown."
-    assert not any("terminated" in line for line in lines(replace(FACTS, entry="collected valid verify=committed")))
+    assert not any("terminated" in line for line in lines(replace(FACTS, entry="collected valid commit=committed")))
 
 
 @pytest.mark.parametrize(("reason", "says", "answer"), [

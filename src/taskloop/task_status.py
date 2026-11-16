@@ -21,7 +21,7 @@ from taskloop.land_status import LandState, land_state
 class Status(StrEnum):
     RUNNING = "running"  # an agent step runs (plan, implement)
     CHECKING = "checking"  # the check step runs
-    SETTLING = "settling"  # the factory moves it: starting, verifying, repeating, releasing, publishing, advancing
+    SETTLING = "settling"  # the factory moves it: starting, completing factory commit, repeating, releasing, publishing, advancing
     WAITING_FOR_LAND = "waiting_for_land"  # checked and passed: the person's `tl step land`
     LANDING = "landing"  # a land is observed running
     LANDED = "landed"
@@ -41,7 +41,7 @@ class Wait(StrEnum):
 
 
 IN_FLIGHT: Final = frozenset({Status.RUNNING, Status.CHECKING, Status.SETTLING, Status.WAITING_FOR_LAND, Status.LANDING})
-SETTLING: Final = frozenset({"start", "verify", "repeat", "release", "publish", "advance"})
+SETTLING: Final = frozenset({"start", "commit", "repeat", "release", "publish", "advance"})
 FRESH: Final = frozenset({Status.ABANDONED, Status.QUEUED})  # no current work: a new attempt is what comes next
 
 

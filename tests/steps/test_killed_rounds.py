@@ -99,7 +99,7 @@ def delivery_counts(
     return parks, pushes, deliveries
 
 
-@pytest.mark.parametrize("boundary", ["session", "capture", "verify", "release", "push", "publish"])
+@pytest.mark.parametrize("boundary", ["session", "capture", "commit", "release", "push", "publish"])
 def test_restart_completes_and_delivers_once(
     factory: RestartFactory, remote: FakeRemote, monkeypatch: pytest.MonkeyPatch, boundary: str,
     delivery_counts: tuple[list[Path], list[str], list[str]],
@@ -164,8 +164,8 @@ def test_reopened_completion_waits_for_every_recovery_process(
         factory.round()
     original = identity(factory)
     factory = factory.reopen()
-    factory.effects.stop = "verify"
-    with pytest.raises(Killed, match="verify"):
+    factory.effects.stop = "commit"
+    with pytest.raises(Killed, match="commit"):
         factory.round()
         factory.round()
     factory = factory.reopen()

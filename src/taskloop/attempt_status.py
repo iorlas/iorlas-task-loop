@@ -34,13 +34,14 @@ from taskloop.setup_store import SETUP_RUNS, ProcessSeen, SetupRow, SetupSeen, S
 from taskloop.step_text import unsafe_details
 from taskloop.steps import CHECK, following
 
+COMMIT: Final = "commit"
 type EntryState = Literal["none", "running", "gone", "different_process", "unknown"]
 type Stuck = Literal[
     "stuck:expired_admitted", "stuck:entry_lost", "stuck:hung", "stuck:uncollected", "stuck:conflict", "stuck:setup_failed",
     "stuck:checks_refused",
 ]
 type Next = (
-    Literal["start", "wait", "verify", "repeat", "repeats_exhausted", "release", "publish", "advance", "done", "unknown", "land",
+    Literal["start", "wait", "commit", "repeat", "repeats_exhausted", "release", "publish", "advance", "done", "unknown", "land",
             "landed", "hold", "on_hold"]
     | Stuck
 )
@@ -85,7 +86,7 @@ class AttemptView:
     last_entry: str | None = None  # the entry log's last line of fixed words (`refused slot_staged ...`), read now
     seq: int = 1  # the attempt's order among its task's attempts
     release: ReleaseRow | None = None  # how it ended its reservation, once released
-    published: PublishedRow | None = None  # its verified commit on origin's task/<id>, once published
+    published: PublishedRow | None = None  # its commit accepted by factory commit on origin's task/<id>, once published
     checks: ChecksView | None = None  # the latest checks attempt whose fields these are (section 9), None for an agent attempt
     land: LandView | None = None  # its latest land candidate (tl-8bh9.14.8 section 14), None before the first
     label: str | None = None  # the approval label the round took the task under (`attempt.label`); None: started by hand
@@ -147,12 +148,12 @@ def _stopped(phase: str, result: AttemptResult, expired: bool) -> Next:
     if result.status == "conflict":
         return "stuck:conflict"
     if result.status == "pending" and result.execution is not None:
-        return "verify"
+        return COMMIT
     if phase == "admitted":
         return "stuck:expired_admitted" if expired else "start"
     if phase in ("dispatching", "registered"):
         return "release"
-    return "verify" if result.reason == PendingReason.COMMIT else "stuck:uncollected"
+    return COMMIT if result.reason == PendingReason.COMMIT else "stuck:uncollected"
 
 
 def _observed(reads: StatusPorts, entry: EntryIdentity | None) -> EntryState:
@@ -222,7 +223,7 @@ def _agent(reads: StatusPorts, row: AttemptRow, *, probe: bool) -> AttemptView:
             result = merging
             next_word = "hold" if merging.status == "refused" else "wait" if entry == "running" else "start"
     found = (row.backlog, row.task_id, row.step, row.key.attempt_id, row.slot, row.phase)
-    left = reads.leftovers(row.key) if probe and next_word == "verify" else None
+    left = reads.leftovers(row.key) if probe and next_word == COMMIT else None
     chain = (row.number, row.previous_attempt_id, row.repeat_reason)
     ended = {"seq": row.seq, "release": row.release, "published": row.published, "label": row.label,
              "last_command": _idle(reads, row.key) if entry == "running" else None, "source_checks_id": row.source_checks_id,
@@ -256,7 +257,7 @@ def _setup_failed(reads: StatusPorts, row: AttemptRow, step: Next) -> Next:
 
 
 def _released(row: AttemptRow, step: Next, committed: bool) -> Next:
-    """A released attempt starts again if abandoned, publishes or advances if verified, otherwise is done.
+    """A released attempt starts again if abandoned, publishes or advances if accepted by factory commit, otherwise is done.
     A collected attempt still holding its slot requires release first."""
     if row.release is not None and row.release.claim == "unclaiming":
         return "release"  # the abandon's claim is still to be returned

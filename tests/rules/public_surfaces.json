@@ -1188,7 +1188,7 @@
               "leftovers": [
                 "uncommitted"
               ],
-              "next": "verify",
+              "next": "commit",
               "number": 2,
               "phase": "captured",
               "previous_attempt_id": "previous",
@@ -1751,7 +1751,7 @@
           "last_command": null,
           "last_entry": null,
           "leftovers": [],
-          "next": "verify",
+          "next": "commit",
           "number": 1,
           "phase": "captured",
           "previous_attempt_id": null,
@@ -1947,7 +1947,7 @@
           "leftovers": [
             "uncommitted"
           ],
-          "next": "verify",
+          "next": "commit",
           "number": 2,
           "phase": "captured",
           "previous_attempt_id": "previous",

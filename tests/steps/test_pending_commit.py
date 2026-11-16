@@ -39,7 +39,7 @@ def test_valid_answers_without_a_verdict_wait_for_commit(answer: AnswerState) ->
 
 
 @pytest.mark.parametrize(("entry", "expected"), [
-    ("none", "verify"), ("gone", "verify"), ("different_process", "verify"), ("running", "wait"), ("unknown", "unknown"),
+    ("none", "commit"), ("gone", "commit"), ("different_process", "commit"), ("running", "wait"), ("unknown", "unknown"),
 ])
 @pytest.mark.parametrize("with_execution", [False, True])
 def test_commit_pending_preserves_the_next_action(entry: EntryState, expected: str, with_execution: bool) -> None:
@@ -62,4 +62,4 @@ def test_a_missing_execution_keeps_its_existing_phase_action(phase: str, expecte
 def test_unfinished_capture_still_precedes_the_commit_wait(stored: StoredExecution, reason: str) -> None:
     result = report(stored)
     assert (result.status, result.reason) == ("pending", reason) and not succeeded(result)
-    assert next_action("captured", "gone", result, False) == "verify"
+    assert next_action("captured", "gone", result, False) == "commit"

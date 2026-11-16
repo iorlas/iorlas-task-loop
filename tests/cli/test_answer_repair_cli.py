@@ -58,6 +58,6 @@ def test_cli_repairs_once_and_reports_the_latest_rule(
             assert "paths_location:" in output.out + output.err and "json:" not in output.out + output.err
             assert len(first.calls) == len(correction.calls) == 1 and len(factory.ran) == 2
         else:
-            assert factory.next_words()["tl-1"] == ("plan", "verify")
+            assert factory.next_words()["tl-1"] == ("plan", "commit")
     finally:
         con.close()
