@@ -13,9 +13,9 @@ in one block); `setup_run.attempt_id` names an `attempt` or a `checks_attempt`, 
 close; `check_result.attempt_id` names a checks attempt or a land candidate, so it loses its foreign key. v14
 (tl-8bh9.14.9): `attempt.label`, the approval label a round ingested the task under (NULL: started by hand), and
 `task_hold`, a hold of a round-taken task's agent attempt with its tracker writes' phases (written only by `hold_store`).
-v15 (tl-8bh9.14.134): `attempt.repeat_listing`, the JSON array of paths the failed verification listed (the unsafe path,
+v15 (tl-8bh9.14.134): `attempt.repeat_listing`, the JSON array of paths the failed factory commit listed (the unsafe path,
 the leftovers, the ignored paths) that a repeat attempt answers; NULL for attempt 1. The dashboard shows it as the
-verification's result. v16 (tl-8bh9.14.149): `attempt.harness` and `attempt.provider`, the agent harness the step ran
+factory commit's result. v16 (tl-8bh9.14.149): `attempt.harness` and `attempt.provider`, the agent harness the step ran
 under and the provider of its model (`harness_choice`), shown on the dashboard. v19 (tl-8bh9.14.148): `task_hold.saved`, the JSON
 array of the commits a hold saved on the task branch (`wip.SavedCommit`), written only by `hold_store`.
 No migration: an older factory.db is refused (`schema`).

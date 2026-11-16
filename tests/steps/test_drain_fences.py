@@ -16,10 +16,10 @@ from sqlite_store import Store
 from test_admit import Tracker, admission, request, rows, slots
 from test_checks import CHECK, TEST
 from test_checks import Bench as ChecksBlock
+from test_commit import KEY, P, agent, attempts, factory_commit
 from test_land_push import lost
 from test_launch import FakeStart, launcher
 from test_round import REQUEST, Bench
-from test_verifier import KEY, P, agent, attempts, factory_commit
 
 from taskloop.admit import AdmitRefused, Admitted
 from taskloop.admit_chain import ChainAdmission, NextAdmission, NextStepRequest, RepeatRequest

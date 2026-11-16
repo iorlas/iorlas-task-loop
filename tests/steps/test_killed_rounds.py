@@ -54,8 +54,8 @@ def assert_completed(factory: RestartFactory, remote: FakeRemote, attempt: Attem
     assert "resume" not in factory.effects.calls[0].argv and "resume" in factory.effects.calls[1].argv
     captured = factory.store.collect(attempt)
     assert captured is not None and captured.answer.kind == "valid" and captured.session_state == "complete"
-    verified = factory.ports().factory_commit.commit(attempt)
-    assert isinstance(verified, Committed)
+    committed = factory.ports().factory_commit.commit(attempt)
+    assert isinstance(committed, Committed)
     tip = factory.tip("tl-1")
     tree = factory.slot.repo.tree(tip)
     assert tree is not None and tree.read(PLAN) == PLAN_TEXT.encode()
@@ -64,7 +64,7 @@ def assert_completed(factory: RestartFactory, remote: FakeRemote, attempt: Attem
     assert [commit.sha for commit in factory.slot.repo.history([tip], not_on=[base[0]])] == [tip]
     assert remote.branches()["task/tl-1"] == tip
     assert factory.con.execute("SELECT count(*) FROM slot_release").fetchone() == (1,)
-    return verified
+    return committed
 
 
 @pytest.fixture
@@ -132,7 +132,7 @@ def test_restart_completes_and_delivers_once(
             factory.round()
         assert identity(factory) == original
         assert reservation
-        verified = assert_completed(factory, remote, attempt)
+        committed = assert_completed(factory, remote, attempt)
         assert parks == [factory.slot.path] and deliveries == ["task/tl-1"]
         assert pushes == ["task/tl-1"] * (2 if boundary == "push" else 1)
         retained = artifacts(factory)
@@ -143,7 +143,7 @@ def test_restart_completes_and_delivers_once(
             factory = factory.reopen()
             factory.round()
             ports = factory.ports()
-            assert ports.factory_commit.commit(attempt) == verified
+            assert ports.factory_commit.commit(attempt) == committed
             assert isinstance(ports.releaser.release(attempt, False), AlreadyReleased)
             assert isinstance(ports.publisher.publish(attempt), PublishedRow)
             assert artifacts(factory) == retained and identity(factory) == original

@@ -1,5 +1,5 @@
 """The advance from a done plan to the implement step (`admit_next`), through real SQLite, the semantic Git fake with its
-fake remote, the owning agent and task-read fakes: what it stores, what refuses it, the implement step verified and
+fake remote, the owning agent and task-read fakes: what it stores, what refuses it, the implement step committed and
 published on top of the plan, a repeat staying in implement, an abandon restarting at plan, and the v11 CHECKs."""
 
 import json
@@ -122,7 +122,7 @@ def planned(
     registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles,
     monkeypatch: pytest.MonkeyPatch,
 ) -> str:
-    """The registered plan attempt ran, was verified, released settled and published: its X."""
+    """The registered plan attempt ran, was committed, released settled and published: its X."""
     record = AttemptStore(lambda: registered).load(KEY)
     assert record is not None and record.admission.step is Step.PLAN
     answer = {"disposition": "planned", "plan_path": PLAN, "paths": [PLAN], "message": "Plan", "explanation": "done"}
@@ -211,7 +211,7 @@ def abandon(con: sqlite3.Connection, checkouts: Checkouts, files: SlotFiles, key
 
 
 @pytest.mark.parametrize("case", ["unpublished", "published_elsewhere", "abandoned", "unknown_key"])
-def test_only_a_verified_settled_published_current_attempt_advances(
+def test_only_a_committed_settled_published_current_attempt_advances(
     registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles, case: str
 ) -> None:
     answer = {"disposition": "planned", "plan_path": PLAN, "paths": [PLAN], "message": "Plan", "explanation": "done"}

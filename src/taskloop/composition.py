@@ -202,7 +202,7 @@ def _operation_observer(artifacts: Path, key: AttemptKey, kind: OperationKind) -
 
 
 def open_factory_commit(database: Path, store: Store, views: GitViews, artifacts: Path) -> FactoryCommit:
-    """Real wiring for on-demand verification (`tl step commit`, a repeat's verify): a shared writer of `store` (the caller
+    """Real wiring for on-demand factory commit (`tl step commit`, a repeat's commit): a shared writer of `store` (the caller
     closes it) on factory.db, real Git, wall clock, its Git writes under the slot's custody lock."""
     writer = AttemptStore(lambda: store.shared_rw(database), store.begin_immediate)
     timing = partial(_operation_observer, artifacts)

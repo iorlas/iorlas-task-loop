@@ -39,7 +39,7 @@ def profile_exit_code(result: profile.Resolved | profile.Refused | profile.Unava
 
 
 def _round_exit(result: Round) -> ExitCode:
-    """3 when admission stopped on an unknown or a move's word is one, a verify's `branch=` word included, as a publish
+    """3 when admission stopped on an unknown or a move's word is one, a factory commit's `branch=` word included, as a publish
     move's (rerunning is safe); 1 when the round's own inputs were refused; else 0 (a per-task refusal, a held release
     and a leaked claim, reported as its own move, do not change the exit)."""
     words = [result.stopped, *(word.removeprefix("branch=") for move in result.moves for word in move.word.split(" "))]

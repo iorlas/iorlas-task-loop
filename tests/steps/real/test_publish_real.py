@@ -1,6 +1,6 @@
 """Real layer, the publication's wiring on the real Git adapter: a bare `remote.git` under tmp_path is `origin` (a
 `file://` URL) of a person's checkout with one adopted `--detach` slot; the task is admitted, run with a `FakeRun` agent,
-verified (X on `task/tl-1`), released, then published through `git_views.remotes` (hooks off, bounded transport).
+committed (X on `task/tl-1`), released, then published through `git_views.remotes` (hooks off, bounded transport).
 Set-up runs through `git_porcelain.testing`'s runner; nothing leaves tmp_path."""
 
 import json
@@ -74,7 +74,7 @@ def write_plan(slot: Path) -> Callable[[Harness, LaunchSpec, float, RunHooks | N
 
 
 class Published:
-    """A bare origin, the person's checkout and its adopted slot; one task run, verified and released: X."""
+    """A bare origin, the person's checkout and its adopted slot; one task run, committed and released: X."""
 
     def __init__(self, root: Path, factory: sqlite3.Connection) -> None:
         self.root, self.remote, self.main = root, root / "remote.git", root / "repo"

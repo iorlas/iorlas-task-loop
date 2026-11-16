@@ -141,8 +141,8 @@ def executed(con: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checko
     return attempts.execute(KEY, ENTRY).reason
 
 
-def verified(con: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, files: SlotFiles) -> str:
-    """The registered attempt run and verified: X, on `task/tl-1`."""
+def committed(con: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, files: SlotFiles) -> str:
+    """The registered attempt run and committed: X, on `task/tl-1`."""
     assert executed(con, tmp_path, slot, checkouts, files, {P: PLAN_TEXT}) == "commit"
     store = AttemptStore(lambda: con)
     assert isinstance(FactoryCommit(store, checkouts, files, lambda _w: True, lambda: 20, nowhere, ids=NativeIds()).commit(KEY), Committed)
@@ -164,11 +164,11 @@ def stored(con: sqlite3.Connection) -> tuple[list[tuple[object, ...]], list[tupl
             con.execute("SELECT head,released_at,claim FROM slot_release").fetchall())
 
 
-def test_a_settled_release_parks_the_verified_slot_at_d_keeps_the_claim_and_then_has_nothing_pending(
+def test_a_settled_release_parks_the_committed_slot_at_d_keeps_the_claim_and_then_has_nothing_pending(
     registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles
 ) -> None:
     d = head(slot)
-    x = verified(registered, tmp_path, slot, checkouts, slot_files)
+    x = committed(registered, tmp_path, slot, checkouts, slot_files)
     ports = Ports(registered, checkouts, slot_files)
     assert ports.releaser().release(KEY, False) == Released("s1", d, True, "kept", False)
     assert (slot.branch(), head(slot), tip(slot)) == (None, d, x)  # detached at D; the branch keeps X
@@ -184,7 +184,7 @@ def test_interrupted_release_converges_on_recorded_origin_tip_without_refreshing
     registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    x = verified(registered, tmp_path, slot, checkouts, slot_files)
+    x = committed(registered, tmp_path, slot, checkouts, slot_files)
     repo = slot.repo
     original = dict(repo.branches())["main"]
     origin = FakeRemote("https://example.invalid/current.git")
@@ -218,7 +218,7 @@ def test_settled_before_the_step_ended_is_not_terminal_and_changes_nothing(
     if phase == "registered":
         registered.execute("UPDATE attempt SET phase='registered',base_commit=?,worker_pid=42,worker_pgid=42,worker_start='s',"
                            "worker_boot='b'", (head(slot),))
-    elif phase == "captured":  # pending verification
+    elif phase == "captured":  # pending factory commit
         assert executed(registered, tmp_path, slot, checkouts, slot_files, {P: PLAN_TEXT}) == "commit"
     before, ports = stored(registered), Ports(registered, checkouts, slot_files)
     found = ports.releaser().release(KEY, False)
@@ -256,7 +256,7 @@ def test_abandon_without_a_stop_proof_takes_no_lock_and_reads_no_git(
 def test_the_entry_releasing_itself_passes_its_own_identity(
     registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles
 ) -> None:
-    verified(registered, tmp_path, slot, checkouts, slot_files)
+    committed(registered, tmp_path, slot, checkouts, slot_files)
     ports = Ports(registered, checkouts, slot_files, seen="matching")
     assert isinstance(ports.releaser().release(KEY, False, ENTRY), Released) and ports.observed == []
 
@@ -403,7 +403,7 @@ def test_abandoning_a_settled_release_flips_it_and_returns_the_claim_with_no_git
     registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles
 ) -> None:
     d = head(slot)
-    verified(registered, tmp_path, slot, checkouts, slot_files)
+    committed(registered, tmp_path, slot, checkouts, slot_files)
     assert isinstance(Ports(registered, checkouts, slot_files).releaser().release(KEY, False), Released)
     ports = Ports(registered, checkouts, slot_files)
     assert ports.releaser().release(KEY, True) == Released("s1", None, False, "unclaimed", True)
@@ -423,7 +423,7 @@ def test_the_abandon_through_the_real_unclaim_ends_for_a_closed_or_deleted_task(
     """bd refuses the unclaim of a closed task and writes nothing; the abandon records `not_held` instead of staying
     `unclaiming` forever (tl-8bh9.14.9 5.3)."""
     d = head(slot)
-    verified(registered, tmp_path, slot, checkouts, slot_files)
+    committed(registered, tmp_path, slot, checkouts, slot_files)
     assert isinstance(Ports(registered, checkouts, slot_files).releaser().release(KEY, False), Released)
     ports, script = Ports(registered, checkouts, slot_files), Script().say(*reply)
     releaser = SlotRelease(AttemptStore(lambda: registered), ports.checkouts, slot_files, ports.observe, ports.gone, ports.hold,
@@ -436,7 +436,7 @@ def test_after_a_release_every_other_writer_meets_the_fence_and_the_slot_is_free
     registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles, root: Path,
     occupy: Callable[[Path], AbstractContextManager[None]],
 ) -> None:
-    verified(registered, tmp_path, slot, checkouts, slot_files)
+    committed(registered, tmp_path, slot, checkouts, slot_files)
     assert isinstance(Ports(registered, checkouts, slot_files).releaser().release(KEY, False), Released)
     store = AttemptStore(lambda: registered)
     with pytest.raises(StoreRefused, match="stale_reservation"):
@@ -492,7 +492,7 @@ def test_a_release_waits_for_a_setup_process_left_running_and_never_stops_it(
     stop could not prove gone): both modes refuse `held:setup_running`, nothing changed and no lock or Git touched,
     until the group is gone; unknown is `unavailable:setup_unknown`. Only the latest run counts."""
     if not abandon:
-        verified(registered, tmp_path, slot, checkouts, slot_files)
+        committed(registered, tmp_path, slot, checkouts, slot_files)
     registered.execute(SETUP, (1, "b" * 40, "d" * 64, 500, 500, 2.0, "lingering"))  # an earlier run: never asked
     registered.execute(SETUP, (2, "b" * 40, "d" * 64, 501, 501, None if conclusion is None else 3.0, conclusion))
     before, ports = stored(registered), Ports(registered, checkouts, slot_files)
@@ -538,7 +538,7 @@ def checks_attempt(con: sqlite3.Connection, number: int, abandoned: bool) -> Non
 
 
 def settled(con: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, files: SlotFiles) -> Ports:
-    verified(con, tmp_path, slot, checkouts, files)
+    committed(con, tmp_path, slot, checkouts, files)
     assert isinstance(Ports(con, checkouts, files).releaser().release(KEY, False), Released)
     return Ports(con, checkouts, files)
 

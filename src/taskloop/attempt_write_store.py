@@ -271,7 +271,7 @@ class AttemptWrites(AttemptLoads):
 
     def verdict(self, admission: Admission, base: str, commit: str | None, result: Verdict, now: float) -> Verdict:
         """Insert-only: written while the reservation is held, the run was clean, its session state complete, the
-        stored valid answer's effect `commit` or `keep`, its base B and its stored `end_commit` exactly the verified ones;
+        stored valid answer's effect `commit` or `keep`, its base B and its stored `end_commit` exactly those judged by factory commit;
         `nothing_written` alone has no commit (effect `commit`, `end_commit` NULL) and `reused` needs `keep`. An
         existing row is kept, never rewritten. Returns the row now stored."""
         values = attempt_reads._verdict_values(result)

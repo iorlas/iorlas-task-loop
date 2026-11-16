@@ -105,7 +105,7 @@ def writes(monkeypatch: pytest.MonkeyPatch) -> list[str]:
     return found
 
 
-def test_a_held_slot_refuses_verify_before_any_git_write_and_then_it_settles(
+def test_a_held_slot_refuses_commit_before_any_git_write_and_then_it_settles(
     registered: sqlite3.Connection, slot: FakeWorktree, tmp_path: Path, checkouts: Checkouts, slot_files: SlotFiles, writes: list[str],
     occupy: Occupy,
 ) -> None:
@@ -119,7 +119,7 @@ def test_a_held_slot_refuses_verify_before_any_git_write_and_then_it_settles(
         assert factory_commit(registered, checkouts, slot_files).commit(KEY) == found
 
 
-def test_the_lock_is_released_after_a_verify_and_a_live_worker_is_still_alive(
+def test_the_lock_is_released_after_a_commit_and_a_live_worker_is_still_alive(
     registered: sqlite3.Connection, slot: FakeWorktree, tmp_path: Path, checkouts: Checkouts, slot_files: SlotFiles, writes: list[str]
 ) -> None:
     """A free lock is never a stop proof: the worker gate still refuses the Git write."""
@@ -164,7 +164,7 @@ class NoLaunch:
         raise AssertionError(f"nothing launches for {backlog}/{task_id}")
 
 
-def test_a_repeat_whose_verify_finds_the_slot_held_admits_nothing(
+def test_a_repeat_whose_commit_finds_the_slot_held_admits_nothing(
     registered: sqlite3.Connection, slot: FakeWorktree, tmp_path: Path, checkouts: Checkouts, slot_files: SlotFiles, writes: list[str],
     occupy: Occupy,
 ) -> None:
@@ -179,7 +179,7 @@ def test_a_repeat_whose_verify_finds_the_slot_held_admits_nothing(
     assert found == Failed("waiting", "slot_busy") and admits.calls == [] and writes == []
 
 
-def test_a_read_only_verifier_asked_to_write_is_its_own_unknown(
+def test_a_read_only_factory_commit_asked_to_write_is_its_own_unknown(
     registered: sqlite3.Connection, slot: FakeWorktree, tmp_path: Path, checkouts: Checkouts, slot_files: SlotFiles, writes: list[str]
 ) -> None:
     captured(registered, tmp_path, slot, checkouts, slot_files, {P: PLAN_TEXT})
@@ -188,7 +188,7 @@ def test_a_read_only_verifier_asked_to_write_is_its_own_unknown(
     assert found == CommitRefused("read_only") and writes == []
 
 
-def test_a_verify_reads_the_attempt_again_under_the_lock(
+def test_a_commit_reads_the_attempt_again_under_the_lock(
     registered: sqlite3.Connection, slot: FakeWorktree, tmp_path: Path, checkouts: Checkouts, slot_files: SlotFiles, writes: list[str],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

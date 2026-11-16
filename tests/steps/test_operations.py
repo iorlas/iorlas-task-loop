@@ -418,19 +418,19 @@ def test_list_keeps_only_stuck_or_unknown_when_asked(reader: AttemptStore, now: 
     *[(CommitWaiting(reason), Failed("waiting", str(reason))) for reason in CommitWaitingReason],
     (CommitRefused("inconsistent"), Failed("refused", "inconsistent", "Contradictory retained facts: inconsistent verdict or end commit.")),
 ])
-def test_verify_maps_every_verdict(reader: AttemptStore, verdict: CommitResult, expected: CommittedTask | Failed) -> None:
+def test_commit_maps_every_verdict(reader: AttemptStore, verdict: CommitResult, expected: CommittedTask | Failed) -> None:
     factory_commit, releases, publishes = FakeFactoryCommit(verdict), Releases(), Publishes()
     assert commit_task(reader, factory_commit, releases, publishes, "tasks", "tl-1") == expected
     assert factory_commit.keys == [KEY]
     assert releases.calls == ([(KEY, False)] if isinstance(verdict, (Committed, Rejected)) else [])  # only after a verdict, settled
-    assert publishes.keys == ([KEY] if isinstance(verdict, Committed) else [])  # only a verified plan, after its release
+    assert publishes.keys == ([KEY] if isinstance(verdict, Committed) else [])  # publish only after factory commit and release
     absent = FakeFactoryCommit(verdict)
     missing = Failed("refused", "absent", "No attempt for tl-9 in backlog tasks")
     assert commit_task(reader, absent, releases, publishes, "tasks", "tl-9") == missing
     assert absent.keys == []
 
 
-def test_verify_returns_a_stored_verdict_with_no_git_read(
+def test_commit_returns_a_stored_verdict_with_no_git_read(
     registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles
 ) -> None:
     path = "docs/design/tl-1/plan.md"
@@ -512,11 +512,11 @@ def test_show_reads_leftovers_fresh_and_names_the_repeat(
     assert isinstance(tidied, Shown) and (tidied.view.next, tidied.view.leftovers) == ("commit", ())
 
 
-def test_show_and_verify_agree_on_a_slot_moved_off_its_task_branch(
+def test_show_and_commit_agree_on_a_slot_moved_off_its_task_branch(
     registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles
 ) -> None:
-    """Before the factory's commit, `show` reads the leftovers only on the task branch: off it, as `verify` says, `branch`
-    (not repeatable, so the next word is `verify`), never a repeat of leftovers the commit would not reach."""
+    """Before the factory's commit, `show` reads the leftovers only on the task branch: off it, as `commit` says, `branch`
+    (not repeatable, so the next word is `commit`), never a repeat of leftovers the commit would not reach."""
     path, near = "docs/design/tl-1/plan.md", "docs/design/tl-1/.gitignore"
 
     def agent(harness: Harness, spec: LaunchSpec, timeout: float, hooks: RunHooks | None) -> RunOutcome:
@@ -596,7 +596,7 @@ def test_adopt_refuses_another_schema_and_otherwise_creates_the_database(
     assert database.exists()
 
 
-# the entry's longest line: a retried publication, its collected outcome, the verify, claim and release words
+# the entry's longest line: a retried publication, its collected outcome, the commit, claim and release words
 LONGEST = ("unavailable evidence publish=accepted then=collected:committed commit=unavailable:git claim=unrenewed release=held:slot_dirty "
            "branch=unavailable:remote")
 
@@ -708,7 +708,7 @@ def test_an_abandon_whose_claim_is_still_unclaiming_says_release_and_start_refus
     assert (admission.requests, launcher.calls) == ([], [])
 
 
-def test_verify_reports_a_failed_publication_without_changing_its_result(reader: AttemptStore) -> None:
+def test_commit_reports_a_failed_publication_without_changing_its_result(reader: AttemptStore) -> None:
     publishes = Publishes(NotPublished("unavailable", "remote"))
     checked = commit_task(reader, FakeFactoryCommit(Committed("blob")), Releases(), publishes, "tasks", "tl-1")
     assert checked == CommittedTask(
@@ -729,7 +729,7 @@ def test_publish_task_maps_every_result_and_its_exit_code(
     assert publish_task(reader, publishes, "tasks", "tl-9") == Failed("refused", "absent", "No attempt for tl-9 in backlog tasks")
 
 
-def test_a_verified_plan_is_release_first_then_publish_then_advance(
+def test_a_committed_plan_is_release_first_then_publish_then_advance(
     registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles
 ) -> None:
     path = "docs/design/tl-1/plan.md"
@@ -769,7 +769,7 @@ def test_a_verified_plan_is_release_first_then_publish_then_advance(
 @pytest.mark.parametrize("stopped, word, code", [
     ("", "started", 0),
     ("no_free_slot", "refused:claimed_elsewhere", 0),
-    ("", "committed release=unavailable:slot_busy branch=published", 0),  # a held release: as verify's own exit
+    ("", "committed release=unavailable:slot_busy branch=published", 0),  # a held release: as commit's own exit
     ("", "committed release=released branch=unavailable:remote", 3),  # as a publish move's
     ("", "claim_leaked", 0),
     ("", "unavailable:ancestry", 3),

@@ -58,7 +58,7 @@ class RetainedInputs(BaseModel):
 
 
 class PlanEvidence(BaseModel):
-    """The latest plan's verified committed artifact, scoped to one repository and tracker task."""
+    """The latest plan's artifact accepted by factory commit, scoped to one repository and tracker task."""
 
     model_config = ConfigDict(frozen=True, strict=True, extra="forbid")
     key: AttemptKey

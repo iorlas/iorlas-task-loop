@@ -1,5 +1,5 @@
 """A repeat is the step's next attempt: the takeover of the held reservation in one transaction (the previous attempt
-frozen), every gate of `admit_repeat` re-read under the lock, the stop proof and the verify before it, the cap, and the
+frozen), every gate of `admit_repeat` re-read under the lock, the stop proof and the commit before it, the cap, and the
 feedback input. Real SQLite, the owning agent fake, the semantic Git fake and the fake slot file port."""
 
 import dataclasses
@@ -320,7 +320,7 @@ def test_a_superseded_attempt_shows_repeated_and_the_current_one_is_followed(
     each, new = shown.view, launcher.calls[0]
     assert (each.attempt_id, each.number, each.previous_attempt_id, each.repeat_reason) == (new.attempt_id, 2, "attempt", "unsafe")
     assert (each.phase, each.next, each.earlier) == ("admitted", "start", (("attempt", "unsafe"),)) and probed == []
-    assert AttemptStore(lambda: registered).attempts("tasks", "tl-1")[0].repeat_listing != ()  # the verification's listing is stored
+    assert AttemptStore(lambda: registered).attempts("tasks", "tl-1")[0].repeat_listing != ()  # the commit's listing is stored
     assert shown.events_path == EvidenceFiles(artifacts).events_path(new)
     assert shown.events_path != EvidenceFiles(artifacts).events_path(KEY) and not artifacts.exists()
     data = as_data(shown)
@@ -452,7 +452,7 @@ def test_two_starts_on_two_connections_admit_exactly_one(
     ("unknown", False, Failed("unavailable", "observe")),
     ("gone", True, Failed("waiting", "worker_alive")),
 ])
-def test_no_verify_before_the_stop_proof(
+def test_no_commit_before_the_stop_proof(
     registered: sqlite3.Connection, slot: FakeWorktree, tmp_path: Path, checkouts: Checkouts, slot_files: FakeSlotFiles,
     observe: Seen, alive: bool, expected: Started | Failed,
 ) -> None:
@@ -495,7 +495,7 @@ def test_the_third_attempt_is_not_repeated(
     assert found == Failed("refused", "repeats_exhausted") and rows(registered) == before and launcher.calls == []
 
 
-def test_a_verdict_stored_between_the_verify_and_the_takeover_refuses_the_repeat(
+def test_a_verdict_stored_between_the_commit_and_the_takeover_refuses_the_repeat(
     registered: sqlite3.Connection, slot: FakeWorktree, tmp_path: Path, checkouts: Checkouts, slot_files: FakeSlotFiles
 ) -> None:
     unsafe(registered, tmp_path, slot, checkouts, slot_files)

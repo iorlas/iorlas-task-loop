@@ -1,7 +1,7 @@
 """Real layer, one wiring row of slot preparation on the real Git adapter: a person's `--detach` slot is adopted at D,
 `main` moves on, the task is admitted (the branch rule's real `for-each-ref`, worktree listing and ancestry reads), the
 attempt takes `task/tl-1` at `main`'s new tip M, not at D, with real `take_branch` on the slot's hardened view, the
-agent writes its plan, and the verify (under the real slot lock) commits X on the branch: verified, the branch tip is
+agent writes its plan, and the commit (under the real slot lock) commits X on the branch: committed, the branch tip is
 X. Set-up runs through `git_porcelain.testing`'s runner under tmp_path."""
 
 import json

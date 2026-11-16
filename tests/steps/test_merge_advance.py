@@ -59,7 +59,7 @@ def test_implementation_starts_with_its_published_plan_and_main_without_another_
         case.by_hand("tl-1")
     else:
         case.round()
-        case.round()  # verification, release and publication of the implementation
+        case.round()  # factory commit, release and publication of the implementation
     assert factory.execute("SELECT step FROM attempt ORDER BY seq").fetchall() == [("plan",), ("implement",)]
     assert len(case.ran) == 2 and tracker.claims == ["tl-1"]
     final = case.tip("tl-1")

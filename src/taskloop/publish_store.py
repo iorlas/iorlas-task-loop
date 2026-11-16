@@ -80,7 +80,7 @@ class PublishStore:
         return None if found is None else _row(found)
 
     def record(self, key: AttemptKey, commit: str, clock: Callable[[], float]) -> PublishedRow | RecordOutcome:
-        """After a push, record once if the attempt is still current and verified at the pushed commit."""
+        """After a push, record once if the attempt is still current and accepted by factory commit at the pushed commit."""
         con = self._connect()
         with self.store.begin(con):
             existing = con.execute("SELECT commit_sha,remote_head,published_at FROM published_branch WHERE attempt_id=?",

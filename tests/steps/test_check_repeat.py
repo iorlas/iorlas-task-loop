@@ -1,4 +1,4 @@
-"""Check-driven repeats through start and rounds, with real SQLite, admission, dispatch, verification and publication."""
+"""Check-driven repeats through start and rounds, with real SQLite, admission, dispatch, factory commit and publication."""
 
 import json
 from collections.abc import Generator
@@ -196,7 +196,7 @@ def test_rounds_share_the_implement_cap_and_hold_once_after_three_attempts(rig: 
         assert rig.next_words() == {"tl-1": ("check", "repeat")}
         assert rig.round() == [("tl-1", "implement", "repeat", "started")]
         assert rig.store.attempts("tasks", "tl-1")[0].number == number and not rig.tracker.holds
-        rig.round()  # verify, release, publish
+        rig.round()  # commit, release, publish
         rig.bodies = ["failed"]
         rig.round()
     assert rig.next_words() == {"tl-1": ("check", "hold")}
@@ -394,13 +394,13 @@ def test_overlapping_starts_adopt_one_successor(rig: Repairing, monkeypatch: pyt
 
 def test_a_prior_path_repeat_consumes_the_same_budget(rig: Repairing) -> None:
     rig.round()  # plan
-    rig.round()  # verify, release, publish
+    rig.round()  # commit, release, publish
     rig.agents["tl-1", "implement"] = scripted(rig.slot.repo, {
         "disposition": "unchanged", "message": None, "explanation": "Work left for review",
     }, {"src/x.py": "x = 1\n", "scratch.txt": "leftover"})
     rig.round()  # implement 1
     assert rig.store.attempts("tasks", "tl-1")[0].number == 1
-    # Verify without the round immediately dispatching a repeat with the same dirty keep agent.
+    # Commit without the round immediately dispatching a repeat with the same dirty keep agent.
     found = rig.ports().factory_commit.commit(rig.store.attempts("tasks", "tl-1")[0].key)
     assert isinstance(found, Uncommitted) and found.reason == "uncommitted"
     view = current_view(rig.ports().reads, "tasks", "tl-1")

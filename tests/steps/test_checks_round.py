@@ -1,5 +1,5 @@
 """The round takes a task through its check step (S6e, tl-8bh9.14.6 section 9), end to end over a factory.db file, the
-rounds bench (`round_bench`: real admission, verify, release and publish, scripted agents, the Git fake), the real checks
+rounds bench (`round_bench`: real admission, commit, release and publish, scripted agents, the Git fake), the real checks
 admission at a `main` requiring `check` and `test`, and the real checks launcher (`launch.Launcher` over `CheckStore`)
 whose registered start runs a scripted checks entry at once: it registers, then concludes and releases its slot as the
 entry does, counts a relaunchable refusal, stays running, crashes before counting, or never starts."""
@@ -202,7 +202,7 @@ def rig(tmp_path: Path, slot: FakeWorktree, checkouts: PinnedViews, slot_files: 
 
 
 def implemented(rig: Checking) -> None:
-    """tl-1 planned, advanced, implemented and verified by four rounds; its check advance is next."""
+    """tl-1 planned, advanced, implemented and committed by four rounds; its check advance is next."""
     assert rig.round() == [("tl-1", "plan", "start", "started")]
     assert rig.round() == [("tl-1", "plan", "commit", "committed release=released branch=published")]
     assert rig.round() == [("tl-1", "implement", "advance", "started")]

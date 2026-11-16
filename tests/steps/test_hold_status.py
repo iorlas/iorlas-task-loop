@@ -270,7 +270,7 @@ def test_end_commit_and_label_are_read_with_the_attempt(factory: sqlite3.Connect
 def test_list_stuck_reads_the_leftovers_of_a_round_taken_attempt_so_a_due_repeats_exhausted_hold_shows(
     factory: sqlite3.Connection,
 ) -> None:
-    """Attempt 3 of a step awaiting its verify whose slot has leftovers a repeat would hand back: `repeats_exhausted`, so
+    """Attempt 3 of a step awaiting its commit whose slot has leftovers a repeat would hand back: `repeats_exhausted`, so
     a due hold; the leftovers are read for a labelled attempt only (a hand-started one never becomes a hold)."""
     with begin_immediate(factory):
         for number in (1, 2, 3):
@@ -300,9 +300,9 @@ def test_list_stuck_reads_the_leftovers_of_a_round_taken_attempt_so_a_due_repeat
     assert isinstance(found, Listed) and found.attempts == () and probed == []
 
 
-def test_a_moved_head_shows_the_refs_the_agent_made_but_stays_next_verify_not_a_repeat(factory: sqlite3.Connection) -> None:
+def test_a_moved_head_shows_the_refs_the_agent_made_but_stays_next_commit_not_a_repeat(factory: sqlite3.Connection) -> None:
     """`tl step show` prints `Uncommitted:` from the attempt's leftovers: `head_moved` carries its listing there too, though
-    it is no repeatable leftover (the next action stays `verify`)."""
+    it is no repeatable leftover (the next action stays `commit`)."""
     plan(factory)
     factory.execute("UPDATE attempt SET phase='captured',base_commit=?", (D,))
     factory.execute("""INSERT INTO execution (attempt_id,dispatch_token,generation,rc,timed_out,work,stands,stdout_path,

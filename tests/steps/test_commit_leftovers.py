@@ -6,7 +6,7 @@ from pathlib import Path
 from doubles import FakeSlotFiles
 from git_porcelain import Recorded
 from git_porcelain.testing import FakeWorktree
-from test_verifier import KEY, PLANNED, captured, factory_commit, head, trailer_commit
+from test_commit import KEY, PLANNED, captured, factory_commit, head, trailer_commit
 
 from taskloop.attempt_types import Checkouts, CommitRefused, Committed
 

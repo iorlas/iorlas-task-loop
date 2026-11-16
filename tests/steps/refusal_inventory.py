@@ -62,7 +62,7 @@ def typed_reasons() -> set[str]:
             | {reason.value for reason in PublishRefusalReason})
 
 
-# Forwarded values originate in admission, launch, store, verification, publication,
+# Forwarded values originate in admission, launch, store, factory commit, publication,
 # release and status domains covered by census()/typed_reasons(). Expressions that
 # build a domain (slot state, environment, session, end_word, Git errors) have explicit
 # rendered cases in DYNAMIC_REASONS. A new expression or forwarding site fails review.

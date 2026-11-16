@@ -61,7 +61,7 @@ class RepeatRequest:
     text: str
     deadline: float
     reason: RepeatReason
-    listing: tuple[str, ...] = ()  # what the failed verification listed; stored with the repeat, the verification's typed result
+    listing: tuple[str, ...] = ()  # what the failed factory commit listed; stored with the repeat, the factory commit's typed result
     content_digest: TaskContentDigest | None = None
 
 
@@ -151,7 +151,7 @@ class ChainAdmission:
         return Admitted(key, row.slot)
 
 
-# The task's current attempt (its highest `seq`) under the write lock: its key, whether it is done (verified, released
+# The task's current attempt (its highest `seq`) under the write lock: its key, whether it is done (committed, released
 # settled with the claim kept, its X published), its step, X, tracker root, order and label (the next step's copy).
 @dataclass(frozen=True)
 class NextStepRequest:

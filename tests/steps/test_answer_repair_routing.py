@@ -101,7 +101,7 @@ def test_round_repairs_then_holds_once_with_the_latest_rule(factory: Factory) ->
     assert len(factory.tracker.comments) == 1 and factory.current("tl-1") == repaired
 
 
-def test_valid_repair_follows_normal_verification(factory: Factory) -> None:
+def test_valid_repair_follows_normal_commit(factory: Factory) -> None:
     factory.agents["tl-1", "plan"] = fake("not json", refs=("saved",))
     factory.round()
     scripts(factory, factory.slot, "tl-1")

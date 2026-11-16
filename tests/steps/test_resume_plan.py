@@ -1,4 +1,4 @@
-"""Fresh resumes reuse verified plans, with durable admission and entry fences."""
+"""Fresh resumes reuse plans accepted by factory commit, with durable admission and entry fences."""
 
 from collections.abc import Generator
 from dataclasses import replace
@@ -121,7 +121,7 @@ def test_override_is_validated_for_selected_implementation(resumable: Factory) -
     assert len(steps(resumable)) == 2
 
 
-@pytest.mark.parametrize("change", ["digest", "blob", "verification", "revision", "latest"])
+@pytest.mark.parametrize("change", ["digest", "blob", "verdict", "revision", "latest"])
 def test_changed_plan_evidence_during_claim_cannot_commit_stale_selection(resumable: Factory, change: str) -> None:
     factory = resumable
     admission = factory.starting().admission
@@ -135,7 +135,7 @@ def test_changed_plan_evidence_during_claim_cannot_commit_stale_selection(resuma
             factory.con.execute("UPDATE task_content SET digest=?", ("0" * 64,))
         elif change == "blob":
             factory.con.execute("UPDATE factory_commit SET blob=?", ("0" * 40,))
-        elif change == "verification":
+        elif change == "verdict":
             factory.con.execute("UPDATE factory_commit SET verdict='rejected',reason='paths',blob=NULL,reused=0")
         elif change == "revision":
             factory.con.execute("UPDATE attempt SET rev=rev+1 WHERE step='plan'")

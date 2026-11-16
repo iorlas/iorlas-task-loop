@@ -1,5 +1,5 @@
 """The implement step's own values: its dispositions and their effects, rules and answer contract (schema and decoder),
-its input, its repeat instructions and feedback. It has no artifact: verified means the generic chain rules and the clean
+its input, its repeat instructions and feedback. It has no artifact: committed means the generic chain rules and the clean
 tree, never "the code works" (the factory's own checks decide that). Only `steps` imports this module (an import-linter
 contract). Nothing here runs, reads a store or writes."""
 

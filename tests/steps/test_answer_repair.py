@@ -327,7 +327,7 @@ def test_implement_repair_preserves_work_without_running_setup(failed: sqlite3.C
     assert failed.execute("SELECT count(*) FROM setup_run").fetchone() == (0,)
 
 
-def test_repairs_preserve_verification_repeat_numbers_and_cap(failed: sqlite3.Connection, surroundings: AttemptSurroundings) -> None:
+def test_repairs_preserve_commit_repeat_numbers_and_cap(failed: sqlite3.Connection, surroundings: AttemptSurroundings) -> None:
     repair = operation(failed, surroundings)
     chain = ChainAdmission(repair.store.connect, repair.store.begin, repair.files, lambda: 10,
                            surroundings.checkouts, surroundings.files, ids=NativeIds())
@@ -341,7 +341,7 @@ def test_repairs_preserve_verification_repeat_numbers_and_cap(failed: sqlite3.Co
         assert app(failed, surroundings, fake(unchanged, refs=("saved",))).execute(key, ENTRY).execution is not None
         assert store.chain(key)[-1].number == number
         assert [link.number for link in store.chain(key)] == list(range(1, number + 1))
-        request = RepeatRequest(key, "Repeat verification feedback", 100, "uncommitted",
+        request = RepeatRequest(key, "Repeat factory commit feedback", 100, "uncommitted",
                                 content_digest=TaskContentDigest(value="f" * 64))
         repeated = chain.admit_repeat(request)
         if number == 3:
