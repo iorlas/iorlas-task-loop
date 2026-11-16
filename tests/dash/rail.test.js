@@ -649,6 +649,7 @@ async function liveFeedDisplay() {
       initDrawer({
         detail: async () => { reads++; return structuredClone(detail); },
         tracker: async () => tracked,
+        body: async () => ({ input: "Input", added: [], change: null, result: { summary: "pending", checks: [] } }),
         feed: async () => structuredClone(page),
       }, new Map([[task.id, live]]));
       await openDrawer(task.id); await tick();

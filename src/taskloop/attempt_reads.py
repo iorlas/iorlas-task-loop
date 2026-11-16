@@ -73,6 +73,7 @@ class AttemptRow:
     run: RunChoices | None = None  # the agent's harness, provider, model, effort and sandbox as admitted
     try_number: int | None = None  # whole-task step count, captured with current selection
     repo_id: str = ""
+    base_commit: str | None = None
 
 
 @dataclass(frozen=True)
@@ -217,6 +218,7 @@ def attempt_row(row: tuple[object, ...]) -> AttemptRow:
         as_int(row[17]), bool(as_int(row[18])), _released(row[19:22]), _published(row[22:25]),
         as_nullable_text(row[26]), as_nullable_text(row[27]), as_listed(row[28]), _source(row[34], row[15]),
         stored_setting(row[29], row[30], row[31], row[32], row[33], row[37]), as_nullable_int(row[35]), as_text(row[36]),
+        as_nullable_text(row[38]),
     )
 
 

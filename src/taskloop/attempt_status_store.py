@@ -114,7 +114,8 @@ class AttemptReads(StoreConnection):
                 EXISTS (SELECT 1 FROM reservation r WHERE r.repo_id=p.repo_id AND r.slot=p.slot AND r.attempt_id=p.attempt_id
                  AND r.generation=p.generation),x.head,x.released_at,x.claim,b.commit_sha,b.remote_head,b.published_at,p.step,
                 p.label,p.end_commit,p.repeat_listing,
-                p.harness,p.provider,p.model,p.effort,p.access_policy,p.source_checks_id,{count},p.repo_id,p.compaction_token_limit
+                p.harness,p.provider,p.model,p.effort,p.access_policy,p.source_checks_id,{count},p.repo_id,p.compaction_token_limit,
+                p.base_commit
                 FROM {source}
                 LEFT JOIN slot_release x ON x.attempt_id=p.attempt_id
                 LEFT JOIN published_branch b ON b.attempt_id=p.attempt_id

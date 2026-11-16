@@ -213,6 +213,15 @@ class Run:
     access: str
 
 
+class AttemptChange(BaseModel):
+    """The recorded bases of an agent attempt and its linked predecessor."""
+
+    model_config = ConfigDict(frozen=True, strict=True, extra="forbid")
+
+    base_before: str | None
+    base_after: str | None
+
+
 @dataclass(frozen=True)
 class AttemptBody:
     """`GET /api/tasks/<id>/attempts/<step>/<n>`: what a selected attempt shows besides its lines (prompt, answer, check outputs).
@@ -221,6 +230,7 @@ class AttemptBody:
     input: str | None
     result: Outcome
     added: tuple[tuple[int, int], ...] = ()  # a repeat's prompt: the line ranges [start, end) the previous attempt's prompt lacks
+    change: AttemptChange | None = None
 
 
 @dataclass(frozen=True)

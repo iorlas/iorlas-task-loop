@@ -30,6 +30,7 @@ from taskloop.dash_land import build_events
 from taskloop.dash_model import (
     Answer,
     AttemptBody,
+    AttemptChange,
     AttemptDetail,
     CheckLine,
     DashTracker,
@@ -199,7 +200,8 @@ def _agent_body(ports: TaskPorts, row: AttemptRow, result: AttemptResult, rows: 
     except EvidenceError as error:
         return Failed("unavailable", "input", str(error))
     added = () if before is None else added_lines(before, shown)
-    return AttemptBody(shown, Outcome(result.explanation or result.reason or result.status, answer, (), None), added)
+    change = None if earlier is None else AttemptChange(base_before=earlier.base_commit, base_after=row.base_commit)
+    return AttemptBody(shown, Outcome(result.explanation or result.reason or result.status, answer, (), None), added, change)
 
 
 def _check_line(ports: TaskPorts, row: ChecksRow, result: ResultRow) -> CheckLine:
