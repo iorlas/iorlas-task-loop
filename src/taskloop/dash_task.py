@@ -245,7 +245,7 @@ def _chain(ports: TaskPorts, rows: tuple[AttemptRow, ...]) -> tuple[Link, ...]:
     store = CheckStore(ports.reads.store.connect, ports.reads.store.begin)
     found: list[Link] = []
     numbers = tries(rows)
-    verified = checked = 0
+    committed = checked = 0
     for row in reversed(rows):
         result = collect(ports.reads.store, row.key)
         if row.phase == "admitted" and row.release is None:
@@ -253,9 +253,9 @@ def _chain(ports: TaskPorts, rows: tuple[AttemptRow, ...]) -> tuple[Link, ...]:
                                   ports.reads.clock()) or result
         found.append(Link(numbers[row.key.attempt_id], agent=row, result=result))
         if applies(result):
-            verified += 1
+            committed += 1
             successor = next((each for each in rows if each.previous_attempt_id == row.key.attempt_id), None)
-            found.append(Link(verified, agent=row, result=result, verifies=True, of=numbers[row.key.attempt_id], successor=successor))
+            found.append(Link(committed, agent=row, result=result, verifies=True, of=numbers[row.key.attempt_id], successor=successor))
         for checks in store.of_attempt(row.key.attempt_id) if row.step == Step.IMPLEMENT else ():
             checked += 1
             found.append(Link(checked, checks=checks))

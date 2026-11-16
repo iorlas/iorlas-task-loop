@@ -771,7 +771,7 @@ def test_a_stored_verdict_is_a_verification_row_that_passed_or_broke_a_rule(chec
     ports = TaskPorts(reads_of(checking), EvidenceFiles(tmp_path), Tracker())
     body = build_body(ports, "tasks", "tl-1", "verification", 1)
     assert isinstance(body, AttemptBody) and body.result.verification is not None
-    assert body.result.verification.result == "verified" and {each.state for each in body.result.verification.checks} == {"passed"}
+    assert body.result.verification.result == "committed" and {each.state for each in body.result.verification.checks} == {"passed"}
     checking.execute("DELETE FROM factory_commit")
     checking.execute("INSERT INTO factory_commit (attempt_id,dispatch_token,generation,verdict,reason,observed_at) "
                      "VALUES ('implement','implement-token',1,'rejected','paths',5)")

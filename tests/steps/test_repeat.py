@@ -463,8 +463,8 @@ def test_no_verify_before_the_stop_proof(
     assert factory_commit.keys == [] and len(rows(registered)) == 1
 
 
-@pytest.mark.parametrize(("verified", "expected"), [
-    (Committed("blob"), Started("already_dispatched", "tasks", "tl-1", "attempt", True, result="verified")),
+@pytest.mark.parametrize(("committed", "expected"), [
+    (Committed("blob"), Started("already_dispatched", "tasks", "tl-1", "attempt", True, result="committed")),
     (Committed("blob", reused=True), Started("already_dispatched", "tasks", "tl-1", "attempt", True, result="reused")),
     (Rejected("nothing_written"), Started("already_dispatched", "tasks", "tl-1", "attempt", True, result="rejected:nothing_written")),
     (NotApplicable("incomplete"), Started("already_dispatched", "tasks", "tl-1", "attempt", True, result="incomplete")),
@@ -476,10 +476,10 @@ def test_no_verify_before_the_stop_proof(
 ])
 def test_only_git_leftovers_repeat(
     registered: sqlite3.Connection, slot: FakeWorktree, tmp_path: Path, checkouts: Checkouts, slot_files: FakeSlotFiles,
-    verified: CommitResult, expected: Started | Failed,
+    committed: CommitResult, expected: Started | Failed,
 ) -> None:
     unsafe(registered, tmp_path, slot, checkouts, slot_files)
-    factory_commit, launcher = Commits(verified), RegisteringLauncher(AttemptStore(lambda: registered), SECOND)
+    factory_commit, launcher = Commits(committed), RegisteringLauncher(AttemptStore(lambda: registered), SECOND)
     found = repeater(registered, tmp_path, checkouts, slot_files, factory_commit=factory_commit, launcher=launcher)
     assert found.repeat("tasks", "tl-1", KEY, ENTRY, 30) == expected
     assert factory_commit.keys == [KEY] and launcher.calls == [] and len(rows(registered)) == 1

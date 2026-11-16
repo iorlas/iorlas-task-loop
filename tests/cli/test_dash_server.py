@@ -89,7 +89,7 @@ class Ports:
                 else TaskDetail(replace(card(task_id), duration=self.cards[0].duration), (), {"plan": usage}, usage))
 
     def body(self, task_id: str, step: str, number: int) -> AttemptBody | Failed | None:
-        return AttemptBody("prompt", Outcome("verified", None, (), None)) if (task_id, step, number) == ("tl-1", "plan", 1) else None
+        return AttemptBody("prompt", Outcome("committed", None, (), None)) if (task_id, step, number) == ("tl-1", "plan", 1) else None
 
     def tracker(self, task_id: str) -> TrackerDetail | Failed | None:
         """The tracker's side: tl-1 is known, `broken` is unavailable, `slow` raises, anything else is not in the tracker."""

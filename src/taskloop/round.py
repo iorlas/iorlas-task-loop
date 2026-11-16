@@ -46,6 +46,7 @@ from taskloop.operations import (
     UNKNOWN_KINDS,
     AgentRelease,
     Commit,
+    CommittedTask,
     Failed,
     Move,
     Publish,
@@ -55,7 +56,6 @@ from taskloop.operations import (
     Started,
     StartPorts,
     StartRequest,
-    VerifiedTask,
     commit_task,
     launched,
     minutes_refused,
@@ -352,11 +352,11 @@ def _committed(ports: RoundPorts, backlog: str, each: AttemptView) -> Move:
         if completed.status != "pending" or completed.reason != PendingReason.COMMIT:
             return Move(each.task_id, "verify", f"{completed.status}:{completed.reason}", each.attempt_id,
                         completed.explanation, each.step)
-    verified = commit_task(ports.reads.store, ports.factory_commit, ports.releaser, ports.publisher, backlog, each.task_id)
-    if isinstance(verified, VerifiedTask):
-        word = f"{verified.status} release={verified.release} branch={verified.published}"
+    committed = commit_task(ports.reads.store, ports.factory_commit, ports.releaser, ports.publisher, backlog, each.task_id)
+    if isinstance(committed, CommittedTask):
+        word = f"{committed.status} release={committed.release} branch={committed.published}"
         return Move(each.task_id, "verify", word, each.attempt_id, step=each.step)
-    return Move(each.task_id, "verify", verified.word, each.attempt_id, verified.detail, each.step)
+    return Move(each.task_id, "verify", committed.word, each.attempt_id, committed.detail, each.step)
 
 
 def _full(store: AttemptStore, reserve: int = 0) -> str:
@@ -466,11 +466,11 @@ def _start_each(ports: RoundPorts, request: NextRequest, ordered: tuple[TaskRow,
     return ""
 
 
-def _publish(ports: RoundPorts, backlog: str, verified: Iterable[AttemptView], trail: Trail) -> str:
+def _publish(ports: RoundPorts, backlog: str, committed: Iterable[AttemptView], trail: Trail) -> str:
     """The verified, released, unpublished results read before settling: pushed again every round until one succeeds. One
     whose entry still runs is left to that entry, which publishes right after its release; `interrupted` on a stop. A
     round-taken task refused `branch_moved` is held instead of being pushed again every round."""
-    for each in verified:
+    for each in committed:
         if ports.stopping():
             return INTERRUPTED
         if each.entry == "running":

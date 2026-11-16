@@ -61,7 +61,7 @@ function project(list, operations) {
 }
 
 function verdict(a) {
-  if (["verified", "reused"].includes(a.summary)) return { mark: "✓", label: say(a.summary), failed: false, text: STATE.succeeded.text };
+  if (["committed", "reused"].includes(a.summary)) return { mark: "✓", label: say(a.summary), failed: false, text: STATE.succeeded.text };
   if (a.state === "running" && (!a.summary || ["pending", "registered"].includes(a.summary))) {
     return { mark: "…", label: "Not checked yet", failed: false, text: muted };
   }

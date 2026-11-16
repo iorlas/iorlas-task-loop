@@ -12,6 +12,11 @@ class PendingReason(StrEnum):
     COMMIT = "commit"
 
 
+class CommittedStatus(StrEnum):
+    COMMITTED = "committed"
+    REUSED = "reused"
+
+
 def end_word(stored: StoredExecution) -> str:
     """The run's own end word, fixed words only: `run:<classified reason>` for a failed or timed-out run, else `answer:<kind>`
     for an unusable answer, else the valid answer's disposition (`planned` and `unchanged` go on to verification)."""
@@ -79,13 +84,13 @@ def judged(verdict: Verdict) -> str:
     """A verdict in fixed words: `verified` (new work), `reused` (an existing plan) or `rejected:<rule>`."""
     if isinstance(verdict, Rejected):
         return "rejected:" + verdict.reason
-    return "reused" if verdict.reused else "verified"
+    return CommittedStatus.REUSED if verdict.reused else CommittedStatus.COMMITTED
 
 
 def succeeded(result: AttemptResult) -> bool:
     """`collected` means terminal, never success: success is a verified step result, new (`verified`) or existing
     (`reused`), or a checks attempt concluded `passed` (`check_status.checks_result`)."""
-    return result.status == "collected" and result.reason in ("verified", "reused", "passed")
+    return result.status == "collected" and result.reason in (*CommittedStatus, "passed")
 
 
 def collect(store: AttemptStore, key: AttemptKey) -> AttemptResult:

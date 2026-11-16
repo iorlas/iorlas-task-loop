@@ -10,7 +10,7 @@ const operation = (id, step, n, kind, state = "completed", extra = {}) => ({
 export async function operationRail() {
   const fixture = document.getElementById("fixture");
   const task = { id: "operations", column: "landed" };
-  const attempts = [attempt("implement"), attempt("verification", 1, { summary: "verified" }),
+  const attempts = [attempt("implement"), attempt("verification", 1, { summary: "committed" }),
     attempt("checks"), attempt("implement", 2)];
   const operations = [operation("commit-failed", "implement", 1, "commit", "failed"),
     operation("commit-retry", "implement", 1, "commit"), operation("publication", "implement", 1, "publish", "uncertain"),

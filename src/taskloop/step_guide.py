@@ -110,7 +110,7 @@ GUIDE = {
     "Git diagnostic and noninteractive access before continuing.",
     "repository": "The slot's Git pointer or repository differs from the attempt's binding. Inspect and restore the "
     "expected repository before publication; nothing was pushed.",
-    "not_verified": "The step has no verified result to publish. Verification must accept it first; a rejected result "
+    "not_committed": "The step has no verified result to publish. Verification must accept it first; a rejected result "
     "cannot be published.",
     "remote_ahead": "The remote task branch contains the verified commit plus later commits. Compare the histories "
     "and decide how to reconcile them; the factory neither records this as its publication nor forces a push.",

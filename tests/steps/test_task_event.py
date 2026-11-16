@@ -148,7 +148,7 @@ def test_checks_causes_cannot_claim_agent_identity(cause: dict[str, object]) -> 
     {"family": "answer", "reason": "json_invalid", "failure": {"rule": "missing", "explanation": "Broken"}},
     {"family": "answer", "reason": "schema_invalid", "failure": {"rule": "json", "explanation": "Broken"}},
     {"family": "answer", "reason": "schema_invalid", "failure": {"rule": "unknown", "explanation": "Broken"}},
-    {"family": "rejection", "reason": "verified"},
+    {"family": "rejection", "reason": "committed"},
     {"family": "stuck", "reason": "hung"}, {"family": "stuck", "reason": "wait"},
     {"family": "stuck", "reason": "setup_failed", "rc": 1},
     {"family": "repeat", "leftovers": {"reason": "unknown", "paths": ["a"]}},

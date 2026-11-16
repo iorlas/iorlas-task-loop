@@ -8,6 +8,7 @@ from hold_fixtures import event
 
 from taskloop.agents.stop_models import AgentStop, Identity, StopCause, StopPhase, StopProof, Survivor
 from taskloop.attempt_reads import PublishedRow, ReleaseRow
+from taskloop.attempt_result import CommittedStatus
 from taskloop.attempt_status import AttemptView, Listed, SetupShown, Shown
 from taskloop.attempt_types import AttemptKey, AttemptResult
 from taskloop.check_status import ChecksView
@@ -21,7 +22,7 @@ from taskloop.land_status import LandView
 from taskloop.land_store import LandRow
 from taskloop.land_summary import LandSummary
 from taskloop.machine_config import Loaded, defaults
-from taskloop.operations import Adoption, Ended, Failed, Move, PublishedTask, ReleasedTask, Round, Started, VerifiedTask
+from taskloop.operations import Adoption, CommittedTask, Ended, Failed, Move, PublishedTask, ReleasedTask, Round, Started
 from taskloop.profile import Check
 from taskloop.publish import BranchPublished
 from taskloop.result_data import Result
@@ -97,8 +98,9 @@ def step_cases() -> dict[str, tuple[list[str], Result]]:
         "round.empty": (["step", "next", "--backlog", "tasks", *ROUND_FLAGS], Round("tasks", ())),
         "round.full": (["step", "next", "--backlog", "tasks", *ROUND_FLAGS],
                        Round("tasks", (Move("tl-1", "start", "started", "attempt", "detail"),), "capacity", False)),
-        "verified": (["step", "commit", "tl-1", "--backlog", "tasks"],
-                     VerifiedTask("verified", "tasks", "tl-1", "attempt", "released", "published")),
+        "committed": (["step", "commit", "tl-1", "--backlog", "tasks"],
+                     CommittedTask(
+                         CommittedStatus.COMMITTED, "tasks", "tl-1", "attempt", "released", "published")),
         "published": (["step", "publish", "tl-1", "--backlog", "tasks"],
                       PublishedTask("tasks", "tl-1", "attempt", BranchPublished("commit", "remote"))),
         "setup-times": (["step", "setup-times", "--backlog", "tasks"],

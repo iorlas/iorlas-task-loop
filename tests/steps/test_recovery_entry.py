@@ -69,7 +69,7 @@ def test_saved_owner_continues_under_custody_and_a_renewed_claim(
     before = con.execute(f"SELECT {columns} FROM attempt").fetchone()
     reservation = con.execute("SELECT * FROM reservation").fetchall()
     beats: list[str] = []
-    verified: list[AttemptKey] = []
+    committed: list[AttemptKey] = []
     capture = attempts.capture
     captures: list[PendingResult] = []
 
@@ -91,7 +91,7 @@ def test_saved_owner_continues_under_custody_and_a_renewed_claim(
         held()
         stored = attempts.store.collect(key)
         assert stored is not None and stored.answer.kind == "valid" and stored.session_state == "complete"
-        verified.append(key)
+        committed.append(key)
         return Uncommitted("uncommitted")
 
     def beat() -> Beat:
@@ -102,7 +102,7 @@ def test_saved_owner_continues_under_custody_and_a_renewed_claim(
     monkeypatch.setattr(attempt_entry.FactoryCommit, "commit", commit)
     lines: list[str] = []
     assert run_entry(tmp_path, attempts, continuation, lines, beat) == 1
-    assert execution.permits == 1 and verified == [KEY] and "claim=held" in lines[0], lines
+    assert execution.permits == 1 and committed == [KEY] and "claim=held" in lines[0], lines
     assert "saved" in execution.calls[0][1].argv
     assert con.execute(f"SELECT {columns} FROM attempt").fetchone() == before
     assert con.execute("SELECT * FROM reservation").fetchall() == reservation

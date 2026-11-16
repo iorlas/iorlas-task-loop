@@ -21,12 +21,12 @@ from taskloop.launch import Launched, LaunchRefused, LaunchResult, LaunchUnavail
 from taskloop.operations import (
     LATE,
     ChecksPorts,
+    CommittedTask,
     Failed,
     ReleasedTask,
     Started,
     StartPorts,
     StartRequest,
-    VerifiedTask,
     commit_task,
     relaunch_checks,
     release_task,
@@ -255,7 +255,7 @@ def test_verify_on_a_task_in_check_acts_on_its_implement_attempt_only(rig: Rig) 
     rig.start()
     seen, implement = Recorded(rig.bench.done.x), Releases(results=[AlreadyReleased("s0", "kept", False)])
     found = commit_task(AttemptStore(lambda: rig.bench.con), seen, implement, seen, "tasks", "tl-1")
-    assert isinstance(found, VerifiedTask) and (found.status, found.attempt_id) == ("reused", "implement")
+    assert isinstance(found, CommittedTask) and (found.status, found.attempt_id) == ("reused", "implement")
     assert seen.keys == ["implement", "implement"] and implement.calls == [("implement", False)]
 
 

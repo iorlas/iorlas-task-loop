@@ -206,9 +206,9 @@ OTHER_REPO = "UPDATE slot SET repo_id='other'; UPDATE reservation SET repo_id='o
 PLANNED = {P: PLAN_TEXT}
 # id, files committed before dispatch (B), files the agent writes, its answer, a change after the run, SQL, expected, commits
 CASES: list[tuple[str, Files | None, Files, Mapping[str, object], After | None, str | None, str, int]] = [
-    ("plan_only", None, PLANNED, PLAN, None, None, "verified", 1),
-    ("plan_and_note", None, PLANNED | {NOTE: "n"}, PLAN | {"paths": [P, NOTE]}, None, None, "verified", 1),
-    ("replan", PLANNED, {P: PLAN_V2}, PLAN, None, None, "verified", 1),
+    ("plan_only", None, PLANNED, PLAN, None, None, "committed", 1),
+    ("plan_and_note", None, PLANNED | {NOTE: "n"}, PLAN | {"paths": [P, NOTE]}, None, None, "committed", 1),
+    ("replan", PLANNED, {P: PLAN_V2}, PLAN, None, None, "committed", 1),
     ("unlisted_file", None, PLANNED | {NOTE: "n"}, PLAN, None, None, "uncommitted:uncommitted", 1),
     ("nothing_written", PLANNED, PLANNED, PLAN, None, None, "rejected:nothing_written", 0),
     ("unchanged", PLANNED, {}, UNCHANGED, None, None, "reused", 0),
@@ -237,7 +237,7 @@ CASES: list[tuple[str, Files | None, Files, Mapping[str, object], After | None, 
     ("gitignore_under_the_root", None, PLANNED | {D + "sub/.gitignore": "x"}, PLAN, None, None, "uncommitted:unsafe", 0),
     ("hfs_ignorable_gitattributes", None, PLANNED | {"docs/.g\u200cit\ufeffattributes": "x"}, PLAN, None, None, "uncommitted:unsafe", 0),
     ("git_file_elsewhere", None, PLANNED | {"src/.gitignore": "x"}, PLAN, None, None, "uncommitted:uncommitted", 1),
-    ("adopted_after_a_crash", None, PLANNED, PLAN, adopt, None, "verified", 1),
+    ("adopted_after_a_crash", None, PLANNED, PLAN, adopt, None, "committed", 1),
     ("foreign_commit", None, PLANNED, PLAN, foreign, None, "refused:head_moved", 1),
     ("unchanged_head_moved", PLANNED, {}, UNCHANGED, lambda slot, _files: commit(slot, {"README": "two"}), None, "refused:head_moved", 1),
     ("unchanged_never_adopts", PLANNED, {}, UNCHANGED, trailer_commit, None, "refused:head_moved", 1),
@@ -280,7 +280,7 @@ def test_the_stage_commit_and_verdict_table(
             registered.execute(statement)
     result = factory_commit(registered, checkouts, slot_files).commit(KEY)
     assert shown(result) == expected
-    final = expected.startswith(("verified", "reused", "rejected"))
+    final = expected.startswith(("committed", "reused", "rejected"))
     assert len(stored(registered)) == (1 if final else 0)  # slot state and unknowns are never stored
     if expected != "waiting:not_listed":
         assert len(made(slot, base)) == commits

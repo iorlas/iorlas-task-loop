@@ -31,7 +31,7 @@ export const WORDS = {
   branch: "The slot was not on the task branch",
   rejected: "The commit broke a rule",
   repeat: "Reason not recorded",
-  verified: "Checked and committed",
+  committed: "Checked and committed",
   reused: "Nothing new; earlier commit kept",
   "unsettled:branch": "Not committed: the slot was not on the task branch",
   "uncommitted:unsafe": "Not committed: a listed path is unsafe",

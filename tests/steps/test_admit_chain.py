@@ -27,6 +27,7 @@ from taskloop.admit_store import current, previous, task_of
 from taskloop.agents.launch import AgentLaunch
 from taskloop.agents.settings import AgentSetting, CodexPolicy, Overrides, StepSettings
 from taskloop.attempt import Attempts
+from taskloop.attempt_result import CommittedStatus
 from taskloop.attempt_status import Shown, StatusPorts, show_attempt
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import AttemptKey, Checkouts, EntryIdentity, FileRef, SlotFiles
@@ -37,7 +38,7 @@ from taskloop.earlier_input import START
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.ids import NativeIds
 from taskloop.launch import Launched, LaunchResult
-from taskloop.operations import Started, StartPorts, StartRequest, VerifiedTask, commit_task, start
+from taskloop.operations import CommittedTask, Started, StartPorts, StartRequest, commit_task, start
 from taskloop.publish import BranchPublish, NotPublished, PublishResult
 from taskloop.slot_lock import custody, hold
 from taskloop.slot_release import NotReleased, Released, SlotRelease
@@ -78,7 +79,7 @@ def execute(con: sqlite3.Connection, tmp_path: Path, key: AttemptKey, run: Agent
     return attempts.execute(key, ENTRY, lambda: ClaimWord.HELD).reason
 
 
-def finish(con: sqlite3.Connection, checkouts: Checkouts, files: SlotFiles, *, publish: bool = True) -> VerifiedTask:
+def finish(con: sqlite3.Connection, checkouts: Checkouts, files: SlotFiles, *, publish: bool = True) -> CommittedTask:
     """`tl step commit` as built: the verdict, the settled release (the real one) and the publication to origin."""
     store = AttemptStore(lambda: con)
     factory_commit = FactoryCommit(store, checkouts, files, lambda _worker: True, lambda: 20, hold, ids=NativeIds())
@@ -87,7 +88,7 @@ def finish(con: sqlite3.Connection, checkouts: Checkouts, files: SlotFiles, *, p
     found = commit_task(store, factory_commit, releaser, BranchPublish(store, checkouts, files, lambda: 40,
         ids=NativeIds()) if publish else Unpublished(),
                         "tasks", "tl-1")
-    assert isinstance(found, VerifiedTask)
+    assert isinstance(found, CommittedTask)
     return found
 
 
@@ -288,7 +289,8 @@ def test_the_implement_step_commits_on_the_plan_and_is_published_then_advances_t
 
     answer = {"disposition": "implemented", "message": "Add the widget", "explanation": "ran the tests"}
     assert execute(registered, tmp_path, key, agent(answer, change), checkouts, slot_files) == "commit"
-    assert finish(registered, checkouts, slot_files) == VerifiedTask("verified", "tasks", "tl-1", key.attempt_id, "released", "published")
+    assert finish(registered, checkouts, slot_files) == CommittedTask(
+        CommittedStatus.COMMITTED, "tasks", "tl-1", key.attempt_id, "released", "published")
     x = tip(slot.repo)
     tree = slot.repo.tree(x)
     assert tree is not None and set(tree.files) == {PLAN, "src/widget.py", "tests/test_widget.py", ".task-loop.json"}

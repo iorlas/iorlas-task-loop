@@ -6,7 +6,7 @@ page's wording, never parsed from a log."""
 from typing import Final
 
 from taskloop.attempt_reads import AttemptRow
-from taskloop.attempt_result import committing
+from taskloop.attempt_result import committing, judged
 from taskloop.attempt_types import AttemptResult, Rejected
 from taskloop.dash_model import State, Verification, VerifyCheck
 
@@ -46,10 +46,8 @@ def verification(row: AttemptRow, number: int, result: AttemptResult, successor:
     at = names.index(failed) if failed in names else len(names) if verdict is not None else -1
     checks = tuple(VerifyCheck(text, "failed" if index == at else "passed" if index < at else "not_run")
                    for index, (text, _reason) in enumerate(CHECKS))
-    if isinstance(verdict, Rejected):
-        word = "rejected:" + verdict.reason
-    elif verdict is not None:
-        word = "reused" if verdict.reused else "verified"
+    if verdict is not None:
+        word = judged(verdict)
     elif failed in {"unsafe", "ignored", "uncommitted"}:
         word = f"uncommitted:{failed}"
     else:

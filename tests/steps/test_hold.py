@@ -480,7 +480,7 @@ def test_a_retried_comment_of_a_checks_cause_describes_the_checks_attempt_not_th
                        hold_due="failed:test:failed", checks=ChecksView(replace(row, reason="test:failed"), ()))
     bench.tracker.commented = "unavailable"
     assert bench.hold(view).missing == "comment"
-    after = AttemptView("tasks", "tl-1", "implement", "implement", "s1", "captured", "gone", AttemptResult("collected", "verified"),
+    after = AttemptView("tasks", "tl-1", "implement", "implement", "s1", "captured", "gone", AttemptResult("collected", "committed"),
                         False, "hold", label="auto", release=ReleaseRow(D, 11.0, "unclaimed"))  # the hold's abandon is recorded
     bench.fresh = after
     bench.tracker.commented, bench.now = "done", 10.0 + COMMENT_LEASE + 1

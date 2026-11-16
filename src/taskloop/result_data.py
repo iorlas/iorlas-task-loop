@@ -20,13 +20,13 @@ from taskloop.land_summary import LandSummary
 from taskloop.machine_config import Loaded
 from taskloop.operations import (
     Adoption,
+    CommittedTask,
     Ended,
     Failed,
     PublishedTask,
     ReleasedTask,
     Round,
     Started,
-    VerifiedTask,
 )
 from taskloop.publish import publish_word
 from taskloop.setup_timing import SetupTimingReport
@@ -37,7 +37,7 @@ from taskloop.task_status import task_status, words
 # every command result of the config, slot and step commands: rendered by `step_render.human`, shaped here, exit-coded by
 # `exit_codes`
 type StepResult = (
-    Started | Shown | Listed | VerifiedTask | ReleasedTask | PublishedTask | Adoption | Loaded | Round | Ended | Failed | SetupTimingReport
+    Started | Shown | Listed | CommittedTask | ReleasedTask | PublishedTask | Adoption | Loaded | Round | Ended | Failed | SetupTimingReport
 )
 type Result = StepResult | Landed | Withdrawn | LandSummary
 
@@ -103,10 +103,10 @@ def _published_data(published: PublishedRow | None) -> dict[str, object] | None:
     return {"commit": published.commit, "remote_head": published.remote_head, "published_at": published.published_at}
 
 
-def _released_data(result: VerifiedTask | ReleasedTask | PublishedTask) -> dict[str, object]:
+def _released_data(result: CommittedTask | ReleasedTask | PublishedTask) -> dict[str, object]:
     if isinstance(result, PublishedTask):
         return _publish_data(result)
-    if isinstance(result, VerifiedTask):
+    if isinstance(result, CommittedTask):
         return {"status": result.status, "backlog": result.backlog, "task": result.task_id, "attempt_id": result.attempt_id,
                 "release": result.release, "published": result.published}
     found = result.result
@@ -170,7 +170,7 @@ def _step_data(result: StepResult, *, admission: bool) -> dict[str, object]:
                                                    "failed_checks": _checks_data(result.failed)}
         case Listed() | Round() | Ended() | SetupTimingReport():
             return _rows_data(result)
-        case VerifiedTask() | ReleasedTask() | PublishedTask():
+        case CommittedTask() | ReleasedTask() | PublishedTask():
             return _released_data(result)
         case Adoption() | Loaded():
             return _setup_data(result)

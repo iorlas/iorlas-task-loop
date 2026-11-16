@@ -4,6 +4,7 @@ import ast
 from pathlib import Path
 
 from taskloop.attempt_types import CommitWaitingReason
+from taskloop.publish import PublishRefusalReason
 from taskloop.recovery.models import Outcome
 from taskloop.release_proof import RecoveryReason
 
@@ -57,7 +58,8 @@ def typed_reasons() -> set[str]:
             for field in node.body:
                 if isinstance(field, ast.AnnAssign) and isinstance(field.target, ast.Name) and field.target.id == "reason":
                     reasons.update(n.value for n in ast.walk(field.annotation) if isinstance(n, ast.Constant) and isinstance(n.value, str))
-    return reasons | {reason.value for reason in RecoveryReason} | {str(reason) for reason in CommitWaitingReason}
+    return (reasons | {reason.value for reason in RecoveryReason} | {str(reason) for reason in CommitWaitingReason}
+            | {reason.value for reason in PublishRefusalReason})
 
 
 # Forwarded values originate in admission, launch, store, verification, publication,
@@ -120,6 +122,7 @@ REVIEWED_DYNAMIC = {
     ('prepare.py', '_refused', 'found'),
     ('publish.py', 'NotPublished', "'abandoned' if gone else 'changed'"),
     ('publish.py', 'NotPublished', 'reason'),
+    ('publish.py', '_refused', 'PublishRefusalReason.NOT_COMMITTED'),
     ('publish.py', '_refused', 'Reason.DRAINING'),
     ('repeat.py', 'Failed', 'admitted.reason'),
     ('repeat.py', 'Failed', 'admitted.what'),

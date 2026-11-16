@@ -38,13 +38,13 @@ from taskloop.operations import (
     Advance,
     AgentRelease,
     Commit,
+    CommittedTask,
     Failed,
     Move,
     Publish,
     Round,
     Started,
     StartPorts,
-    VerifiedTask,
     commit_task,
 )
 from taskloop.publish import BranchPublish, BranchPublished, NotPublished, PublishResult
@@ -288,7 +288,7 @@ def captured(con: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checko
 
 
 @pytest.mark.parametrize("case, expected, calls", [
-    ("verify", ("verify", "verified release=released branch=published"), ["verify", "release", "publish"]),
+    ("verify", ("verify", "committed release=released branch=published"), ["verify", "release", "publish"]),
     ("repeat", ("repeat", "repeated"), []),
     ("repeats_exhausted", ("report", "repeats_exhausted"), []),
     ("failed", ("report", "failed:run:worker_failed"), []),
@@ -327,7 +327,7 @@ def verified_released(
     factory_commit = FactoryCommit(store, checkouts, slot_files, lambda _worker: True, lambda: 20, hold, ids=NativeIds())
     held = Recorded(NotReleased("unavailable", "slot_busy"))
     checked = commit_task(store, factory_commit, held, held, "tasks", "tl-1")  # its own publication is the recording stub's
-    assert isinstance(checked, VerifiedTask) and checked.release == "unavailable:slot_busy"
+    assert isinstance(checked, CommittedTask) and checked.release == "unavailable:slot_busy"
     real = SlotRelease(store, checkouts, slot_files, lambda _entry: "gone", lambda _worker: True, custody, lambda _r, _t: True, lambda: 30,
                        lambda _setup: "gone", lambda _scratch: True, ids=NativeIds())
     assert isinstance(real.release(KEY, False), Released)

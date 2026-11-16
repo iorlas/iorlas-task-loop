@@ -51,7 +51,7 @@ GUIDE = {
     "remote": "The remote could not answer reliably. Publication or land waits for network and authorization to be restored.",
     "git": "Git could not answer reliably. The factory waits for repository access to be restored.",
     "repository": "The slot is no longer in the expected repository. The factory leaves it untouched pending restoration.",
-    "not_verified": "The result has not passed verification. The factory cannot publish it.",
+    "not_committed": "The result has not passed verification. The factory cannot publish it.",
     "remote_ahead": "The remote branch includes later work. Publication waits for the owner to reconcile its history.",
     "no_remote": "The repository has no configured origin. The owner must configure the intended remote before publication.",
     "not_advanceable": "The current attempt has not met the conditions for advancing. The factory waits for "
@@ -105,7 +105,7 @@ GUIDE = {
 
 def automatic_guide(word: str) -> str:
     """Decode the fixed round-result codec, including nested release/publication refusals."""
-    if word.startswith(("verified ", "reused ")):
+    if word.startswith(("committed ", "reused ")):
         nested = [part.split("=", 1)[1] for part in word.split()[1:] if "=" in part and ":" in part]
         return " ".join(dict.fromkeys(automatic_guide(part) for part in nested))
     if word.startswith("held "):
