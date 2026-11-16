@@ -32,7 +32,7 @@ def test_reopened_attempt_uses_its_captured_compaction_for_launch_and_retained_i
         assert loaded is not None and loaded.admission.setting.compaction_token_limit == limit
         assert store.attempts("tasks", "tl-1")[0].run == loaded.admission.setting
         execution = fake()
-        assert app(reopened, surroundings, execution).execute(KEY, ENTRY).reason == "verification"
+        assert app(reopened, surroundings, execution).execute(KEY, ENTRY).reason == "commit"
         overrides = [item for item in execution.calls[0][1].argv if item.startswith("model_auto_compact_token_limit=")]
         assert overrides == ([] if limit is None else [f"model_auto_compact_token_limit={limit}"])
         # Retained inputs belong to implement attempts whose checked commit has been captured.

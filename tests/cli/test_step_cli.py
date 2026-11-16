@@ -56,7 +56,7 @@ ENTRY = (7, "entry-start", "boot")
 START = ["step", "start", "tl-1", "--backlog", "tasks", "--tracker-root", "/tracker", "--checkout", "/checkout", "--model", "m",
          "--effort", "high", "--minutes", "30"]
 STATUS = AttemptView(
-    "tasks", "tl-1", "plan", "attempt", "s1", "captured", "gone", AttemptResult("pending", "verification"), False, "verify"
+    "tasks", "tl-1", "plan", "attempt", "s1", "captured", "gone", AttemptResult("pending", "commit"), False, "verify"
 )
 ERROR = {"kind", "reason", "message"}  # every refusal or unknown but an admission's
 ADMISSION_ERROR = ERROR | {"claim_leaked", "admitted", "slots"}  # `tl step start`
@@ -189,7 +189,7 @@ CASES: list[tuple[list[str], Result, int, list[str], set[str]]] = [
     (START, Failed("unavailable", "tracker", claim_leaked=True), 3, ["unavailable:tracker"], ADMISSION_ERROR),
     (START, Failed("uncertain", "launch"), 3, ["tl step start: uncertain:launch"], ADMISSION_ERROR),
     (["step", "show", "tl-1", "--backlog", "tasks"], Shown(STATUS, Path("/a/d"), Path("/a/d/entry.log"), EVENTS), 0,
-     ["Step: plan", "Phase: captured", "Result: pending verification", "Setup: none\nDirectory: /a/d", "Entry log: /a/d/entry.log",
+     ["Step: plan", "Phase: captured", "Result: pending commit", "Setup: none\nDirectory: /a/d", "Entry log: /a/d/entry.log",
       "Next: verify", "The result is captured and awaits verification before it can be accepted."],
      STATUS_KEYS | {"directory", "entry_log", "events_path", "setup", "failed_checks"}),
     (["step", "show", "tl-1", "--backlog", "tasks"], Shown(REPEAT, Path("/a/d"), Path("/a/d/entry.log"), EVENTS), 0,
@@ -205,7 +205,7 @@ CASES: list[tuple[list[str], Result, int, list[str], set[str]]] = [
      [f"Setup: run 3 unfinished at {D}; log /a/d/setup-3.log"],
      STATUS_KEYS | {"directory", "entry_log", "events_path", "setup", "failed_checks"}),
     (["step", "list", "--stuck"], Listed((STATUS,)), 0,
-     ["task\tbacklog\tstep\tattempt\tslot", "pending verification\tsettling\tverify"], {"attempts"}),
+     ["task\tbacklog\tstep\tattempt\tslot", "pending commit\tsettling\tverify"], {"attempts"}),
     (["step", "show", "tl-1", "--backlog", "tasks"], Shown(STATUS, Path("/a/d"), Path("/a/d/entry.log"), EVENTS), 0,
      ["Attempt: attempt (1 of at most 3)\nSlot: s1"], STATUS_KEYS | {"directory", "entry_log", "events_path", "setup", "failed_checks"}),
     (["step", "commit", "tl-1", "--backlog", "tasks"], VerifiedTask("reused", "tasks", "tl-1", "attempt", "released", "published"), 0,

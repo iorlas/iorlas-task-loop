@@ -79,7 +79,7 @@ def commentary_gap(replay: Replay) -> None:
 
 
 @pytest.mark.parametrize(("answer", "kind", "reason"), [
-    (json.dumps(PLAN), "valid", "verification"),
+    (json.dumps(PLAN), "valid", "commit"),
     ("The plan is ready.", "json_invalid", "answer:json_invalid"),
     ("{}", "schema_invalid", "answer:schema_invalid"),
 ])

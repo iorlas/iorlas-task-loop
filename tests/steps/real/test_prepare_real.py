@@ -105,7 +105,7 @@ def test_a_detached_slot_is_prepared_on_its_task_branch_and_the_plan_is_committe
         store, EvidenceFiles(art), AgentLaunch(lambda _harness: ("/bin/codex", {}), ids=NativeIds()), run,
             lambda: 10, VIEWS.checkouts, files
     )
-    assert attempts.execute(admitted.key, ENTRY).reason == "verification"
+    assert attempts.execute(admitted.key, ENTRY).reason == "commit"
     verdict = FactoryCommit(store, VIEWS.checkouts, files, lambda _worker: True, lambda: 20, hold, ids=NativeIds()).commit(admitted.key)
     assert isinstance(verdict, Committed) and not verdict.reused
     x = git(slot, "rev-parse", "HEAD").strip()

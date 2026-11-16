@@ -50,7 +50,7 @@ def land_row() -> LandRow:
 
 def shown_cases() -> tuple[Shown, Shown]:
     view = AttemptView("tasks", "tl-1", "implement", "attempt", "s1", "captured", "gone",
-                       AttemptResult("pending", "verification"), False, "verify")
+                       AttemptResult("pending", "commit"), False, "verify")
     checks = ChecksView(
         ChecksRow(KEY, "agent", 1, "s1", "head", "main", "origin", (("test", "argv-digest"),), "digest", 100.0,
                   ENTRY, "concluded", 1, None, 0, "passed", None, 11.0, 12.0, "parked", False,

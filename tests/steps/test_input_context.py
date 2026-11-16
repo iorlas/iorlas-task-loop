@@ -220,7 +220,7 @@ def test_moved_source_is_refreshed_before_dispatch_and_complete_input_is_retaine
     commit = committed(surroundings.slot.repo.worktree(surroundings.slot.repo.identity().root), "New meaning.")
     run = fake()
     result = app(con, surroundings, run).execute(KEY, ENTRY)
-    assert result.reason == "verification" and len(run.calls) == 1
+    assert result.reason == "commit" and len(run.calls) == 1
     text = run.calls[0][1].stdin
     assert "Complete task spec" in text and SAVED_WORK in text
     assert f"Source commit: {commit}" in text and "task: New meaning." in text and "obsolete check" not in text
@@ -265,7 +265,7 @@ def test_ordinary_repeat_uses_original_spec_and_current_committed_context_once(
     prior = Attempts(AttemptStore(lambda: registered), files, AgentLaunch(lambda _kind: ("/bin/codex", {}), ids=NativeIds()),
                      repeat_agent(slot, changed, answer), lambda: 10, checkouts, slot_files,
                      environment=Environment(registered, checkouts, tmp_path, tmp_bytes=4096).preparation())
-    assert prior.execute(KEY, ENTRY, lambda: ClaimWord.HELD).reason == "verification"
+    assert prior.execute(KEY, ENTRY, lambda: ClaimWord.HELD).reason == "commit"
     captured = AttemptStore(lambda: registered).load(KEY)
     assert captured is not None
     settled = settle(checkouts, slot_files, captured.admission, commit,
@@ -285,7 +285,7 @@ def test_ordinary_repeat_uses_original_spec_and_current_committed_context_once(
     if stale:
         assert outcome.reason == "input" and "package identities" in outcome.explanation and not run.calls
         return
-    assert outcome.reason == "verification"
+    assert outcome.reason == "commit"
     text = run.calls[0][1].stdin
     record = store.load(current[0])
     assert record is not None and f"Source commit: {record.base_commit}" in text

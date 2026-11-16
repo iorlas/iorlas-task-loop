@@ -294,7 +294,7 @@ NEXT: list[tuple[str, EntryState, AttemptResult, bool, Next]] = [
     ("registered", "running", AttemptResult("pending", "registered"), True, "stuck:hung"),
     ("dispatching", "gone", AttemptResult("pending", "dispatching"), False, "release"),
     ("registered", "different_process", AttemptResult("pending", "registered"), True, "release"),
-    ("captured", "gone", AttemptResult("pending", "verification"), True, "verify"),
+    ("captured", "gone", AttemptResult("pending", "commit"), True, "verify"),
     ("captured", "gone", AttemptResult("pending", "session_pending"), False, "stuck:uncollected"),
     ("captured", "gone", AttemptResult("pending", "validation_pending"), False, "stuck:uncollected"),
     ("captured", "gone", AttemptResult("conflict", "session"), False, "stuck:conflict"),
@@ -443,7 +443,7 @@ def test_verify_returns_a_stored_verdict_with_no_git_read(
         store, EvidenceFiles(tmp_path), AgentLaunch(lambda _harness: ("/bin/codex", {}), ids=NativeIds()),
             agent, lambda: 10, checkouts, slot_files
     )
-    assert attempts.execute(KEY, ENTRY).reason == "verification"
+    assert attempts.execute(KEY, ENTRY).reason == "commit"
     releasing, publishing = releaser(store, checkouts, slot_files), BranchPublish(store, checkouts, slot_files, lambda: 40, ids=NativeIds())
     first = commit_task(store, FactoryCommit(store, checkouts, slot_files, gone, lambda: 20, hold,
         ids=NativeIds()), releasing, publishing, "tasks", "tl-1")
@@ -481,7 +481,7 @@ def test_show_reads_leftovers_fresh_and_names_the_repeat(
         store, EvidenceFiles(tmp_path), AgentLaunch(lambda _harness: ("/bin/codex", {}), ids=NativeIds()),
             agent, lambda: 10, checkouts, slot_files
     )
-    assert attempts.execute(KEY, ENTRY).reason == "verification"
+    assert attempts.execute(KEY, ENTRY).reason == "commit"
     factory_commit = FactoryCommit(store, checkouts, slot_files, gone, lambda: 20, hold, ids=NativeIds())
     reads = StatusPorts(store, observe("gone", []), lambda: 10, factory_commit.leftovers, lambda: "boot")
     before = show_attempt(reads, tmp_path / "art", "tasks", "tl-1")
@@ -526,7 +526,7 @@ def test_show_and_verify_agree_on_a_slot_moved_off_its_task_branch(
         store, EvidenceFiles(tmp_path), AgentLaunch(lambda _harness: ("/bin/codex", {}), ids=NativeIds()),
             agent, lambda: 10, checkouts, slot_files
     )
-    assert attempts.execute(KEY, ENTRY).reason == "verification"
+    assert attempts.execute(KEY, ENTRY).reason == "commit"
     factory_commit = FactoryCommit(store, checkouts, slot_files, gone, lambda: 20, hold, ids=NativeIds())
     reads = StatusPorts(store, observe("gone", []), lambda: 10, factory_commit.leftovers, lambda: "boot")
     on = show_attempt(reads, tmp_path / "art", "tasks", "tl-1")
@@ -739,7 +739,7 @@ def test_a_verified_plan_is_release_first_then_publish_then_advance(
         store, EvidenceFiles(tmp_path), AgentLaunch(lambda _harness: ("/bin/codex", {}), ids=NativeIds()),
             agent, lambda: 10, checkouts, slot_files
     )
-    assert attempts.execute(KEY, ENTRY).reason == "verification"
+    assert attempts.execute(KEY, ENTRY).reason == "commit"
     factory_commit = FactoryCommit(store, checkouts, slot_files, gone, lambda: 20, hold, ids=NativeIds())
     reads = StatusPorts(store, observe("gone", []), lambda: 10, nothing_left, lambda: "boot")
 

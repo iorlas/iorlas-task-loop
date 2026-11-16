@@ -77,7 +77,7 @@ def captured(
         checkouts,
         files,
     )
-    assert attempts.execute(KEY, ENTRY).reason == "verification"
+    assert attempts.execute(KEY, ENTRY).reason == "commit"
 
 
 def factory_commit(

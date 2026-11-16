@@ -41,7 +41,7 @@ ROW = hold_row()
     (replace(VIEW, result=AttemptResult("collected", "rejected:paths")), "failed:rejected:paths"),
     (replace(VIEW, result=AttemptResult("collected", "verified")), None),
     (replace(VIEW, result=AttemptResult("collected", "passed")), None),
-    (replace(VIEW, result=AttemptResult("pending", "verification")), None),
+    (replace(VIEW, result=AttemptResult("pending", "commit")), None),
     (replace(VIEW, next="repeats_exhausted", leftovers=("uncommitted", "a.py")), "repeats_exhausted:uncommitted"),
     *((replace(VIEW, next=word), word) for word in ("stuck:expired_admitted", "stuck:entry_lost", "stuck:uncollected",
                                                    "stuck:conflict", "stuck:setup_failed", "stuck:checks_refused")),

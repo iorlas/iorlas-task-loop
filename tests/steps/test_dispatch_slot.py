@@ -73,7 +73,7 @@ def test_the_dispatch_records_the_slot_head_as_base_and_keeps_the_fenced_admissi
     assert before is not None and before.base_commit is None
     agent = run()
     result = attempts(con, tmp_path, agent, checkouts, slot_files).execute(KEY, ENTRY)
-    assert (result.status, result.reason) == ("pending", "verification") and len(agent.calls) == 1
+    assert (result.status, result.reason) == ("pending", "commit") and len(agent.calls) == 1
     after = store.load(KEY)
     assert after is not None and after.admission == before.admission  # B is not part of the fence: every later write passed
     assert after.base_commit == head(repo, slot.path) and after.phase == "captured"
@@ -106,7 +106,7 @@ def test_worker_registration_commits_before_target_effects_and_refusal_forbids_t
     owner.execution = gated
     result = owner.execute(KEY, ENTRY)
     assert effects == (["target executed"] if mode == "execute" else [])
-    expected = {"execute": ("pending", "verification"), "refused": ("conflict", "registration_conflict"),
+    expected = {"execute": ("pending", "commit"), "refused": ("conflict", "registration_conflict"),
                 "crashed": ("unavailable", "run_failed:RuntimeError")}
     assert (result.status, result.reason) == expected[mode]
     if mode == "crashed":

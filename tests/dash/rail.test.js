@@ -65,7 +65,7 @@ function verificationStates() {
   for (const code of ["verified", "reused", "uncommitted:unsafe", "rejected:paths", "rejected:plan_rule"]) {
     const failed = !["verified", "reused"].includes(code);
     const selected = [];
-    const node = mount([attempt("plan", 1, { state: failed ? "failed" : "succeeded", summary: failed ? "verification" : "verified" }), verify(42, { summary: code, state: failed ? "failed" : "succeeded" })], task, {}, (...args) => selected.push(args));
+    const node = mount([attempt("plan", 1, { state: failed ? "failed" : "succeeded", summary: failed ? "commit" : "verified" }), verify(42, { summary: code, state: failed ? "failed" : "succeeded" })], task, {}, (...args) => selected.push(args));
     const label = failed && !say(code).startsWith("Not committed:") ? `Not committed: ${say(code)}` : say(code);
     assert(marks(node)[0].textContent === `${failed ? "✗" : "✓"} ${label}`, `${code} mark has visible verdict words`);
     marks(node)[0].click();
@@ -78,7 +78,8 @@ function verificationStates() {
     }
     assert(selected.every((args) => args.join("/") === "verification/42"), "all failure controls select Result");
   }
-  let node = mount([attempt("plan"), verify(4, { state: "running", summary: "pending" })]);
+  let node = mount([attempt("plan", 1, { state: "failed", summary: "commit" }), verify(4, { state: "running", summary: "pending" })]);
+  assert(!node.textContent.includes(say("commit")), "attached pending result covers the agent's commit summary");
   assert(marks(node)[0].textContent === "… Not checked yet" && !node.textContent.includes("Not committed:"), "pending neutral with words");
   node = mount([attempt("plan"), verify(4, { state: "failed", summary: "pending" })]);
   assert(node.textContent.includes("verification outcome was not recorded"), "terminal missing outcome truthful");
@@ -162,7 +163,7 @@ function restartsAndRepeats() {
 
 function reviewed() {
   const past = healthy().map((a) => ({ ...a, past: true }));
-  return [...past, restart(2), verify(39), attempt("implement", 2, { state: "failed", summary: "verification" }), verify(40, { state: "failed", summary: "uncommitted:unsafe" }),
+  return [...past, restart(2), verify(39), attempt("implement", 2, { state: "failed", summary: "commit" }), verify(40, { state: "failed", summary: "uncommitted:unsafe" }),
     repeat("implement", 3, { led_by: 40 }), verify(41), attempt("checks", 2, { summary: "passed" })];
 }
 async function pastRuns() {

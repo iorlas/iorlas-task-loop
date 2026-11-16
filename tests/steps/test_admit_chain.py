@@ -126,7 +126,7 @@ def planned(
     assert record is not None and record.admission.step is Step.PLAN
     answer = {"disposition": "planned", "plan_path": PLAN, "paths": [PLAN], "message": "Plan", "explanation": "done"}
     assert execute(registered, tmp_path, KEY, agent(answer, lambda: slot.write_file(PLAN, PLAN_TEXT)), checkouts, slot_files) == (
-        "verification")
+        "commit")
     assert finish(registered, checkouts, slot_files).published == "published"
     guard_git(registered, monkeypatch)
     return tip(slot.repo)
@@ -287,7 +287,7 @@ def test_the_implement_step_commits_on_the_plan_and_is_published_then_advances_t
         slot.remove_file("README")
 
     answer = {"disposition": "implemented", "message": "Add the widget", "explanation": "ran the tests"}
-    assert execute(registered, tmp_path, key, agent(answer, change), checkouts, slot_files) == "verification"
+    assert execute(registered, tmp_path, key, agent(answer, change), checkouts, slot_files) == "commit"
     assert finish(registered, checkouts, slot_files) == VerifiedTask("verified", "tasks", "tl-1", key.attempt_id, "released", "published")
     x = tip(slot.repo)
     tree = slot.repo.tree(x)

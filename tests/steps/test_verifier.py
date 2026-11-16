@@ -131,7 +131,7 @@ def captured(
     con: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, files: FakeSlotFiles,
     written: Files, answer: Mapping[str, object] = PLAN,
 ) -> None:
-    assert attempts(con, tmp_path, checkouts, files, agent(slot, written, answer)).execute(KEY, ENTRY).reason == "verification"
+    assert attempts(con, tmp_path, checkouts, files, agent(slot, written, answer)).execute(KEY, ENTRY).reason == "commit"
 
 
 def unheld(_admission: Admission) -> AbstractContextManager[None]:
@@ -286,7 +286,7 @@ def test_the_stage_commit_and_verdict_table(
         assert len(made(slot, base)) == commits
         assert all(body == TRAILER for subject, body in made(slot, base) if subject == "Plan tl-1")
     collected = attempts(registered, tmp_path, checkouts, slot_files, agent(slot, {})).collect(KEY)
-    assert (collected.status, collected.reason) == (("collected", expected) if final else ("pending", "verification"))
+    assert (collected.status, collected.reason) == (("collected", expected) if final else ("pending", "commit"))
 
 
 def test_one_factory_commit_with_the_agents_message_and_the_trailer_is_recorded_once(

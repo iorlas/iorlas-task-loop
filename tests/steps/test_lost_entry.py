@@ -91,7 +91,7 @@ def test_capture_and_explicit_hold_prevent_reconciliation_even_after_stop_proof(
     slot_files: SlotFiles, race: bool, capture: bool,
 ) -> None:
     if capture:
-        assert executed(registered, tmp_path, slot, checkouts, slot_files, {}) == "verification"
+        assert executed(registered, tmp_path, slot, checkouts, slot_files, {}) == "commit"
     captured = registered.execute("SELECT * FROM execution").fetchone()
     if race and capture:
         registered.execute("DELETE FROM execution")
