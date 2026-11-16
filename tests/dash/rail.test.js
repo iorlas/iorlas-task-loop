@@ -12,6 +12,7 @@ import { receiveDuration } from "../../src/taskloop/dash/static/duration.js";
 import { commandExpansion, toolRows, messageFolding, jumpToLatest } from "./lines.test.js";
 import { checkFollowing, checkActivation, checkStaleFeed } from "./check-lines.test.js";
 import { operationRail } from "./operation-rail.test.js";
+import { taskEvents } from "./task-events.test.js";
 
 let monotonic = 0;
 Object.defineProperty(performance, "now", { value: () => monotonic, configurable: true });
@@ -193,7 +194,7 @@ async function pastRuns() {
   assert(summaries.length === 2 && summaries[1].textContent.startsWith("History 2"), "restart boundaries split past history");
   assert(summaries[0].textContent.includes("Plan ✓ Factory commit completed (earlier failure)"), "success never hides earlier failures");
   node = mount([attempt("plan", 1, { past: true })], { ...task, column: "waiting" });
-  assert(!node.textContent.includes("pending") && !primary(node).length, "entirely past waiting task invents no steps");
+  assert(!node.querySelector(":scope > ol") && !primary(node).length, "entirely past waiting task invents no steps");
   assert(node.querySelector("summary").textContent.includes("Plan … Success; Factory commit pending"),
     "answer without a factory commit never marked committed and has visible outcome words");
   for (const state of ["running", "failed"]) {
@@ -448,7 +449,7 @@ function vocabulary() {
   assert(fixture.textContent.includes("Check attempt 2 started"), "feed uses the step's display label");
   assert(fixture.textContent.includes("Success") && fixture.textContent.includes("Failure"), "feed check outcomes");
   assert(fixture.textContent.includes("try external command"), "external check name preserved");
-  setNote({ ...item, feedError: "offline" });
+  setNote({ ...item, state: "running", feedError: "offline" });
   assert(document.getElementById("feednote").textContent === "Feed stopped: offline. Reconnecting.", "feed reconnection");
   const body = { result: { summary: "passed", checks: [
     { name: "build", passed: true, duration_ms: 1000, block: 1, output: "try raw output" },
@@ -466,7 +467,8 @@ function vocabulary() {
   const clock = Date.now;
   Date.now = () => Date.parse("2026-11-14T10:15:00Z");
   try {
-    const duration = { execution: "vocabulary", number: 1, elapsed_ms: 119999, quiet_ms: 119999, frozen: false };
+    const duration = { execution: `vocabulary-${document.documentElement.classList.contains("dark")}`,
+      number: 1, elapsed_ms: 119999, quiet_ms: 119999, frozen: false };
     receiveDuration(duration);
     const activity = quietSpan(duration);
     assert(activity.hidden, "activity age hidden under two minutes");
@@ -623,7 +625,8 @@ function feedDisplay() {
         "matching ID replaces without duplication");
       assert(document.querySelector('#lines [data-eid="m26"]').textContent.includes("Updated message"), "replacement content");
       setNote({ ...item, feedError: "offline" });
-      assert(view.querySelector("#feednote").textContent === "Feed stopped: offline. Reconnecting.", "errors override retention note");
+      assert(view.querySelector("#feednote").textContent === `Feed stopped: offline.${state === "running" ? " Reconnecting." : ""}`,
+        "errors override retention note without reconnecting ended attempts");
       setNote(item);
       assert(view.querySelector("#feednote").textContent === note, "recovery restores state-specific note");
     }
@@ -679,7 +682,8 @@ async function liveFeedDisplay() {
 }
 
 async function liveDurations() {
-  const sample = { execution: "drawer-duration", number: 1, elapsed_ms: 119999, quiet_ms: 119999, frozen: false };
+  const sample = { execution: `drawer-duration-${document.documentElement.classList.contains("dark")}`,
+    number: 1, elapsed_ms: 119999, quiet_ms: 119999, frozen: false };
   const live = { ...task, column: "implement", status: "running", duration: sample };
   const list = [attempt("implement", 1, { state: "running", started_at: "2099-01-01T00:00:00Z", duration: sample,
     feed: [{ type: "step", at: "1900-01-01T00:00:00Z", step: "implement", attempt: 1 }] })];
@@ -773,7 +777,8 @@ try {
   for (const test of [healthyRows, factoryCommitStates, gaps, restartsAndRepeats, pastRuns,
     drawerSelection, checksRestartDetail, landSelection, landStaleReplies, words, eventIndicators, vocabulary,
     landEvents, waitingRows, usage, feedDisplay, liveFeedDisplay, liveDurations, operationRail,
-    commandExpansion, toolRows, messageFolding, jumpToLatest, checkFollowing, checkActivation, checkStaleFeed]) {
+    commandExpansion, toolRows, messageFolding, jumpToLatest, checkFollowing, checkActivation, checkStaleFeed, taskEvents]) {
+    fixture.replaceChildren();
     await test();
   }
   }
@@ -785,7 +790,7 @@ try {
   }
   document.documentElement.classList.toggle("dark", location.hash === "#dark");
   document.documentElement.classList.toggle("light", location.hash !== "#dark");
-  results.textContent = "PASS: 26 browser contracts, both themes";
+  results.textContent = "PASS: 27 browser contracts, both themes";
   document.documentElement.dataset.result = "passed";
 } catch (error) {
   results.textContent = `FAIL: ${error.stack}`;

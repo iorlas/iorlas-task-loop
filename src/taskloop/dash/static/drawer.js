@@ -3,12 +3,13 @@
 // fields (`bd` calls) load second and fill the Task view in. Shapes: docs/design/dashboard-ui.md.
 
 import {
-  $, COLUMNS, JUMP, LAND, STATE, COMMIT, ago, callout, el, elapsedSpan, holdCallout, isWaiting, position, quietSpan, stepInfo,
+  $, COLUMNS, LAND, COMMIT, callout, el, holdCallout, isWaiting, position,
   tag, tick, waitingNote,
 } from "./ui.js";
 import { atBottom, lines } from "./lines.js";
 import { followFeed } from "./feed.js";
-import { causeLink, changeReason, lasted, rail, commitTitle } from "./rail.js";
+import { rail } from "./rail.js";
+import { attemptPanel, landPanel } from "./event-detail.js";
 import { prompt, result } from "./result.js";
 import { taskView } from "./taskview.js";
 import { usageNode } from "./usage.js";
@@ -35,8 +36,9 @@ const signature = (t) => JSON.stringify([
 ]); // what changes the attempts or their presentation
 
 // All rail and cause links share selection and URL reporting.
-function select(step, n) {
+function select(step, n, eventId = null) {
   delete open.target;
+  open.landEvent = step === "land" ? eventId : null;
   Object.assign(open, resolveSelection(open.detail, { kind: step === "land" ? ROUTE.land : ROUTE.attempt, step, n, tab: open.tab }));
   changed(selectionRoute(open));
   render();
@@ -155,7 +157,8 @@ function head(t) {
   const wrap = el("header", "flex items-start gap-4 px-6 pb-3 pt-5");
   const title = el("div", "min-w-0 flex-1");
   const status = el("div", "flex min-w-0 flex-wrap items-center gap-2");
-  status.append(el("span", "font-mono text-xs text-slate-500 dark:text-slate-400", t.id), tag(place.label, { cls: "text-slate-700 dark:text-slate-200" }));
+  status.append(el("span", "font-mono text-xs text-slate-500 dark:text-slate-400", t.id),
+    tag(place.label, { cls: "text-slate-700 dark:text-slate-200" }));
   if (t.slot) status.append(tag(`slot ${t.slot}`, { cls: "font-mono" }));
   if (position(t)) status.append(el("span", "text-xs text-slate-500 dark:text-slate-400", position(t)));
   status.append(el("span", "truncate text-xs text-slate-500 dark:text-slate-400", place.help));
@@ -224,6 +227,10 @@ function renderContent() {
     return drawer.append(tabPanel(el("p", "px-6 py-5 text-sm text-slate-500", "Not started: no attempt yet."), "drawer-view", view));
   }
   const body = el("div", "drawer-body flex min-h-0 min-w-0 flex-1");
+  if (open.step === "land") {
+    const events = detail.land_events ?? [];
+    open.landEvent = events.find((event) => event.id === open.landEvent)?.id ?? events.at(-1)?.id;
+  } else open.landEvent = null;
   body.append(rail(detail.attempts, t, open, select, detail.step_usage, detail.land_events, detail.operations),
     open.step === "land" ? deliveryPane() : pane());
   drawer.append(tabPanel(body, "drawer-view", view));
@@ -243,36 +250,37 @@ function loadDelivery(mine) {
 }
 
 function deliveryPane() {
-  const wrap = el("section", "min-w-0 flex-1 overflow-y-auto px-6 py-4");
-  wrap.append(el("h3", "text-sm font-semibold", "Land · Delivery details"));
+  const wrap = landPanel(open.detail.land_events?.find((event) => event.id === open.landEvent));
+  const content = el("div", "px-6 pb-4");
+  wrap.append(content);
   if (!open.delivery) loadDelivery(open);
   const kept = open.delivery;
   if (kept.error) {
-    wrap.append(el("p", "py-3 text-sm text-rose-700 dark:text-rose-300", `Delivery details cannot be read: ${kept.error}`));
+    content.append(el("p", "py-3 text-sm text-rose-700 dark:text-rose-300", `Delivery details cannot be read: ${kept.error}`));
     const retry = el("button", "rounded border px-2 py-1 text-sm", "Retry");
     retry.type = "button";
     retry.addEventListener("click", () => { delete open.delivery; render(); });
-    wrap.append(retry);
+    content.append(retry);
     return wrap;
   }
   if (!kept.detail) {
-    wrap.append(el("p", "py-3 text-sm text-slate-500", "Loading delivery details…"));
+    content.append(el("p", "py-3 text-sm text-slate-500", "Loading delivery details…"));
     return wrap;
   }
   const detail = kept.detail;
-  wrap.append(el("h4", "mt-4 text-sm font-medium", "Intended actions"));
+  content.append(el("h4", "mt-4 text-sm font-medium", "Intended actions"));
   const actions = el("ul", "list-disc pl-5 text-sm");
   for (const action of detail.actions) actions.append(el("li", "py-1", action));
-  wrap.append(actions, el("h4", "mt-4 text-sm font-medium", "Diff summary"));
-  wrap.append(el("p", "py-2 text-sm", detail.diff_files == null ? "Diff totals unavailable for this delivery."
+  content.append(actions, el("h4", "mt-4 text-sm font-medium", "Diff summary"));
+  content.append(el("p", "py-2 text-sm", detail.diff_files == null ? "Diff totals unavailable for this delivery."
     : `${detail.diff_files} files changed (+${detail.added} −${detail.deleted})`));
-  wrap.append(el("pre", "overflow-x-auto whitespace-pre-wrap break-words text-xs", detail.summary.join("\n")));
+  content.append(el("pre", "overflow-x-auto whitespace-pre-wrap break-words text-xs", detail.summary.join("\n")));
   if (/^https?:\/\//i.test(detail.pr_url ?? "")) {
     const link = el("a", "mt-3 inline-block text-sm underline", "View pull request");
     link.href = detail.pr_url;
     link.target = "_blank";
     link.rel = "noopener noreferrer";
-    wrap.append(link);
+    content.append(link);
   }
   return wrap;
 }
@@ -308,50 +316,10 @@ function activateCheck(a, target) {
   render();
 }
 
-const nameOf = stepInfo;
-
-// The selected attempt explains its restart/repeat, including navigation to a failed factory commit.
-function began(a) {
-  const list = open.detail.attempts;
-  const prev = a.after === "repeat" ? list.find((x) => x.step === a.step && x.n === a.repeat_of) : list.slice(0, list.indexOf(a)).findLast((x) => x.step !== COMMIT.id);
-  const at = `${nameOf(prev?.step ?? a.step).label}${prev ? `, attempt ${prev.n}` : ""}`;
-  const what = a.after === "repeat" ? `a repeat of ${at}` : `a restart at plan (after ${at})`;
-  const description = a.after === "repeat" && a.step === "checks" ? `Re-run after restart of ${at}` : `Began after ${what}`;
-  const line = el("p", `w-full text-xs ${JUMP[a.after].text}`);
-  line.append(el("span", "font-medium", description),
-    el("span", "text-slate-500 dark:text-slate-400", ` · ${changeReason(a)}`));
-  line.title = `${changeReason(a)}${a.reason ? ` (${a.reason})` : ""}`;
-  if (a.led_by) line.append(" ", causeLink(a, select));
-  return line;
-}
-
 function pane() {
   const a = attemptOf();
-  const st = STATE[a.state];
   const tab = open.tab;
-  const wrap = el("section", "attempt-pane flex min-h-0 min-w-0 flex-1 flex-col");
-  const top = el("div", "flex flex-wrap items-center gap-x-3 gap-y-1 px-6 pt-4");
-  const title = a.step === COMMIT.id ? `${COMMIT.emoji} ${commitTitle(open.detail.attempts, a)}`
-    : `${nameOf(a.step).emoji} ${nameOf(a.step).label}, attempt ${a.n}`;
-  top.append(el("h3", "text-sm font-semibold", title), tag(st.label, { dotCls: st.dot, cls: st.text }));
-  const timing = a.state === "running" ? "still running" : a.ended_at && a.started_at ? `ran ${lasted(a)}` : "end not recorded";
-  if (["plan", "implement"].includes(a.step)) {
-    const live = a.state === "running" && !a.duration?.frozen;
-    top.append(elapsedSpan(a.duration, "text-xs text-slate-500 dark:text-slate-400", live ? "" : "ran ",
-      live ? " in step, still running" : ""));
-  } else if (a.step !== COMMIT.id) {
-    top.append(el("span", "text-xs text-slate-500 dark:text-slate-400",
-      `${a.started_at ? `started ${ago(a.started_at)}, ` : ""}${timing}`));
-  }
-  if (a.usage) top.append(usageNode(a.usage));
-  if (a.state === "running" && ["plan", "implement"].includes(a.step) && !a.duration?.frozen) {
-    const quiet = quietSpan(a.duration);
-    quiet.id = "quiet";
-    top.append(quiet);
-  }
-  wrap.append(top);
-  if (a.run) wrap.append(el("p", "px-6 pt-1 text-xs text-slate-500 dark:text-slate-400", [a.run.harness, a.run.provider, a.run.model, `${a.run.effort} effort`, a.run.access].join(" · ")));
-  if (a.after) top.append(began(a)); // the full reason is readable here after selecting the row or tag
+  const wrap = attemptPanel(a, open.detail.attempts, select);
   const content = tab === "lines" ? lines(a, (target) => activateCheck(a, target)) : bodyTab(a, tab);
   if (a.step === COMMIT.id) wrap.append(content);
   else {

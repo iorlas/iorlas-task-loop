@@ -133,7 +133,7 @@ export function toolRows() {
   const completed = { ...tool, state: "finished", duration_ms: 2000 };
   apply(item, completed); show(item, completed);
   assert(commandText("tool").textContent === tool.cmd, "replacement keeps relative argument");
-  assert(commandText("tool").closest(".event-row").lastElementChild.textContent === "2s", "tool completed timing");
+  assert(commandText("tool").closest(".event-row").lastElementChild.textContent === "2.0s", "tool completed timing");
 }
 
 function newestVisible(box) {

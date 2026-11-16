@@ -41,10 +41,12 @@ from taskloop.dash_model import (
     Run,
     State,
     TaskDetail,
+    TaskEventDetail,
     TrackerDetail,
     iso,
 )
 from taskloop.dash_operation import project as project_operations
+from taskloop.dash_task_event import contexts
 from taskloop.dash_usage import project, totals
 from taskloop.evidence_files import EvidenceError, EvidenceFiles
 from taskloop.harness_choice import HARNESS_WORDS, PROVIDER_WORDS
@@ -276,10 +278,12 @@ def history(ports: TaskPorts, rows: tuple[AttemptRow, ...]) -> tuple[AttemptDeta
     the latest abandoned attempt (the chain boundary) is `past`: a person gave that chain up, it is not the task's current steps."""
     cut = max((each.seq for each in rows if each.release is not None and each.release.abandoned), default=0)
     past = {each.key.attempt_id for each in rows if each.seq <= cut}
-    return tuple(replace(each, past=owner in past) for each, owner in _history(ports, rows, _chain(ports, rows)))
+    holds = HoldStore(ports.reads.store.connect, ports.reads.store.begin).of_attempts(tuple(row.key.attempt_id for row in rows))
+    return tuple(replace(each, past=owner in past) for each, owner in _history(ports, rows, _chain(ports, rows), contexts(holds)))
 
 
-def _history(ports: TaskPorts, rows: tuple[AttemptRow, ...], chain: tuple[Link, ...]) -> tuple[tuple[AttemptDetail, str], ...]:
+def _history(ports: TaskPorts, rows: tuple[AttemptRow, ...], chain: tuple[Link, ...],
+             events: dict[str, TaskEventDetail]) -> tuple[tuple[AttemptDetail, str], ...]:
     """Each entry with the agent attempt it belongs to (a checks attempt: the implement attempt it follows)."""
     store = CheckStore(ports.reads.store.connect, ports.reads.store.begin)
     numbers = tries(rows)
@@ -288,15 +292,16 @@ def _history(ports: TaskPorts, rows: tuple[AttemptRow, ...], chain: tuple[Link, 
     led: dict[str, int] = {}  # agent attempt id -> the try of its factory commit
     for link in chain:
         if link.checks is not None:
-            found.append((_checks(store, link.checks, link.number, earlier.get(link.checks.after)), link.checks.after))
+            detail = _checks(store, link.checks, link.number, earlier.get(link.checks.after))
+            found.append((replace(detail, context=events.get(link.checks.key.attempt_id)), link.checks.after))
             earlier[link.checks.after] = link.number
         elif link.commits and link.agent is not None:
             found.append((_factory_commit(link)[0], link.agent.key.attempt_id))
             led[link.agent.key.attempt_id] = link.number
         elif link.agent is not None and link.result is not None:
             previous = link.agent.previous_attempt_id or ""
-            found.append((_agent(ports, link.agent, link.number, link.result, numbers.get(previous), led.get(previous)),
-                          link.agent.key.attempt_id))
+            detail = _agent(ports, link.agent, link.number, link.result, numbers.get(previous), led.get(previous))
+            found.append((replace(detail, context=events.get(link.agent.key.attempt_id)), link.agent.key.attempt_id))
     return tuple(found)
 
 
@@ -336,16 +341,16 @@ def build_task(ports: TaskPorts, backlog: str, task_id: str) -> TaskDetail | Fai
     """A task with no attempt is a waiting card with none. StoreUnavailable becomes a Failed."""
     try:
         rows = ports.reads.store.attempts(backlog, task_id)
+        holds = HoldStore(ports.reads.store.connect, ports.reads.store.begin).of_attempts(tuple(row.key.attempt_id for row in rows))
         view = current_view(ports.reads, backlog, task_id)
         if view is not None:
-            holds = HoldStore(ports.reads.store.connect, ports.reads.store.begin).of_attempts((agent_attempt(view),))
             view = with_hold(view, holds.get(agent_attempt(view)))
             view = replace(view, stop=StopStore(ports.reads.store.connect).get(
                 view.attempt_id if view.hold is None else view.hold.cause_id))
         chain = _chain(ports, rows)
         cut = max((each.seq for each in rows if each.release is not None and each.release.abandoned), default=0)
         past = {each.key.attempt_id for each in rows if each.seq <= cut}
-        attempts = tuple(replace(each, past=owner in past) for each, owner in _history(ports, rows, chain))
+        attempts = tuple(replace(each, past=owner in past) for each, owner in _history(ports, rows, chain, contexts(holds)))
         checks = tuple((link.checks, link.number, link.checks.after in past)
                        for link in chain if link.checks is not None)
         operations = _operations(ports.files, chain, past)

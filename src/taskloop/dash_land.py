@@ -109,15 +109,19 @@ def _candidate(row: LandRow, checks: ChecksRow, number: int, past: bool, opened:
     if row.reason:
         explanation += f" {row.reason}"
     tried = LandEvent(id=event_id, kind=LandEventKind.TRIED, checks_id=checks.key.attempt_id, checks_n=number,
-                      candidate_id=row.key.attempt_id, candidate_n=row.number, at=None, past=past,
-                      explanation=explanation, waits=_waits(row, event_id, opened, observe))
+                      candidate_id=row.key.attempt_id, candidate_n=row.number, at=iso(row.admitted_at), past=past,
+                      explanation=explanation, waits=_waits(row, event_id, opened, observe), retry_cause=row.retry_cause,
+                      admitted_at=iso(row.admitted_at), validation_started_at=iso(row.validation_started_at),
+                      validated_at=iso(row.validated_at), release_started_at=iso(row.release_started_at),
+                      released_at=iso(row.released_at), delivery_started_at=iso(row.delivery_started_at),
+                      delivered_at=iso(row.delivered_at), close_started_at=iso(row.close_started_at), closed_at=iso(row.closed_at),
+                      superseded_at=iso(row.superseded_at))
     if row.delivery is None or row.close is None or row.holds_slot:
         return (tried,)
     at = _latest(row.delivered_at, row.closed_at, *(() if row.slot is None else (row.released_at,)))
-    return (tried, LandEvent(id=f"{row.key.attempt_id}/landed", kind=LandEventKind.LANDED,
-                            checks_id=checks.key.attempt_id, checks_n=number, candidate_id=row.key.attempt_id,
-                            candidate_n=row.number, at=iso(at), past=past,
-                            explanation="Integrated into main, task completion confirmed and any validation slot released."))
+    return (tried, tried.model_copy(update={"id": f"{row.key.attempt_id}/landed", "kind": LandEventKind.LANDED, "at": iso(at),
+                                          "waits": (), "explanation":
+                                          "Integrated into main, task completion confirmed and any validation slot released."}))
 
 
 def build_events(store: LandStore, checks: tuple[tuple[ChecksRow, int, bool], ...], observe: Observe) -> tuple[LandEvent, ...]:
