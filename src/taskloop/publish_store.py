@@ -15,13 +15,13 @@ from taskloop.factory_schema import LATER, PUBLISHED, marks
 from taskloop.factory_store import current
 
 ROW: Final = """SELECT p.task_id,p.repo_id,p.end_commit,s.path,v.verdict,v.reason,x.claim,b.commit_sha,b.remote_head,b.published_at
-FROM attempt p LEFT JOIN verification v ON v.attempt_id=p.attempt_id
+FROM attempt p LEFT JOIN factory_commit v ON v.attempt_id=p.attempt_id
 LEFT JOIN slot_release x ON x.attempt_id=p.attempt_id LEFT JOIN published_branch b ON b.attempt_id=p.attempt_id
 LEFT JOIN slot s ON s.repo_id=p.repo_id AND s.name=p.slot
 WHERE p.attempt_id=? AND p.dispatch_token=? AND p.generation=?"""
-# Inside the write transaction: still verified at X, not abandoned, still the task's current attempt.
-FENCE: Final = """SELECT 1 FROM attempt p JOIN verification v ON v.attempt_id=p.attempt_id
-WHERE p.attempt_id=? AND p.dispatch_token=? AND p.generation=? AND v.verdict='verified' AND p.end_commit=?
+# Inside the write transaction: still committed at X, not abandoned, still the task's current attempt.
+FENCE: Final = """SELECT 1 FROM attempt p JOIN factory_commit v ON v.attempt_id=p.attempt_id
+WHERE p.attempt_id=? AND p.dispatch_token=? AND p.generation=? AND v.verdict='committed' AND p.end_commit=?
 AND NOT EXISTS (SELECT 1 FROM slot_release x WHERE x.attempt_id=p.attempt_id AND x.claim<>'kept')
 AND NOT """ + LATER
 ABANDONED: Final = "SELECT 1 FROM slot_release WHERE attempt_id=? AND claim<>'kept'"

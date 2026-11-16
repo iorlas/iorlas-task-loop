@@ -77,7 +77,7 @@ def missing_x(bench: ChecksBench) -> None:
 @pytest.mark.parametrize(("arrange", "word"), [
     (lambda b: setattr(b, "now", 100), "expired"),
     (lambda b: b.con.execute("UPDATE slot_release SET claim='unclaiming'"), "not_advanceable"),  # the abandon's flip went first
-    (lambda b: b.con.execute("UPDATE verification SET verdict='rejected',reason='x'"), "not_advanceable"),
+    (lambda b: b.con.execute("UPDATE factory_commit SET verdict='rejected',reason='x'"), "not_advanceable"),
     (lambda b: b.con.execute("DELETE FROM published_branch"), "not_advanceable"),
     (lambda b: b.con.execute("UPDATE attempt SET step='plan',after_commit=NULL"), "not_advanceable"),  # an agent step follows
     (lambda b: b.repo.delete_branch("task/tl-1", expected=Sha(b.done.x)), "branch_moved"),

@@ -74,11 +74,11 @@ def _counts(row: tuple[object, ...]) -> tuple[int | None, int | None, int | None
 
 
 def verdict_of(row: tuple[object, ...]) -> Verdict | None:
-    """The stored verdict of a verification row; None for the all-NULL row of a LEFT JOIN without one."""
+    """The stored verdict of a factory_commit row; None for the all-NULL row of a LEFT JOIN without one."""
     kind, reason, blob, reused = row
     if kind is None:
         return None
-    if kind == "verified":
+    if kind == "committed":
         return Committed(as_nullable_text(blob), bool(as_int(reused)))  # a kind without an artifact stores no blob
     rule = next((rule for rule in RULES if rule == reason), None)
     if kind != "rejected" or rule is None:
@@ -129,7 +129,7 @@ class AttemptLoads(StoreConnection, ABC):
         """Never fall back past a newer unsuccessful plan; later implementation attempts do not hide this plan."""
         with self._connection() as con:
             row = self._plan_row(con, repo_id, backlog, task_id, tracker_root)
-        if row is None or row[6] != "verified" or row[4] is None or row[5] is None:
+        if row is None or row[6] != "committed" or row[4] is None or row[5] is None:
             return None
         return PlanEvidence(key=AttemptKey(as_text(row[0]), as_text(row[1]), as_int(row[2])), revision=as_int(row[3]),
                             end_commit=as_text(row[4]), blob=as_text(row[5]))

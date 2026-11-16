@@ -7,7 +7,7 @@ from test_attempt_store import FIRST, KEY, seed
 
 from taskloop.attempt_reads import StoreRefused, StoreUnavailable
 from taskloop.attempt_store import AttemptLoads, AttemptStore, retained_on
-from taskloop.attempt_types import AttemptKey, FileRef
+from taskloop.attempt_types import AttemptKey, Committed, FileRef, Rejected
 from taskloop.step import Step
 
 
@@ -101,12 +101,19 @@ def test_latest_plan_never_falls_back_to_an_older_success(con: sqlite3.Connectio
     execution = loads.collect(KEY)
     assert execution is not None and execution.facts.tokens == (8, None, 3) and execution.facts.turns == 2
     assert execution.facts.cumulative is None and execution.answer.kind == "validation_pending"
-    assert execution.verification is None and loads.callback(KEY) is None
-    con.execute("INSERT INTO verification (attempt_id,dispatch_token,generation,verdict,blob,observed_at) "
-                "VALUES ('attempt','dispatch',1,'verified','artifact',10)")
+    assert execution.verdict is None and loads.callback(KEY) is None
+    con.execute("INSERT INTO factory_commit (attempt_id,dispatch_token,generation,verdict,blob,observed_at) "
+                "VALUES ('attempt','dispatch',1,'committed','artifact',10)")
     plan = loads.latest_plan(*scope)
     assert plan is not None and plan.key == KEY and plan.end_commit == "e" * 40 and plan.blob == "artifact"
     assert plan.revision == 1
+    collected = loads.collect(KEY)
+    assert collected is not None and collected.verdict == Committed("artifact")
+    con.execute("UPDATE factory_commit SET verdict='rejected',reason='paths',blob=NULL")
+    collected = loads.collect(KEY)
+    assert collected is not None and collected.verdict == Rejected("paths") and loads.latest_plan(*scope) is None
+    con.execute("UPDATE factory_commit SET verdict='committed',reason=NULL,blob='artifact'")
+    assert loads.latest_plan(*scope) == plan
     # Copy only admission fields: a newer implementation must not hide the latest plan.
     con.execute("INSERT INTO attempt (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,"
                 "input_path,input_digest,schema_version,model,effort,access_policy,deadline,number,seq,slot_head,after_commit) "

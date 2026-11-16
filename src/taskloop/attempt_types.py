@@ -317,7 +317,7 @@ class StoredExecution:
     evidence: Evidence
     answer: AnswerState
     session_state: Literal["complete", "pending", "conflict", "fault"]  # the session ref's capture, never a git push
-    verification: Verdict | None = None
+    verdict: Verdict | None = None
 
 
 @dataclass(frozen=True)

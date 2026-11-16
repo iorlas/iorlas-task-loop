@@ -87,8 +87,8 @@ def _agent_cause(files: EvidenceFiles, reader: AttemptStore, agent: AttemptRow, 
                         stop=captured_stop(reader, view.attempt_id))
     if answer.kind != "valid":
         return AnswerCause(reason=AnswerReason(answer.kind), failure=answer.failure, explanation=told)
-    if isinstance(execution.verification, Rejected):
-        return RejectionCause(reason=RejectionReason(execution.verification.reason), explanation=told)
+    if isinstance(execution.verdict, Rejected):
+        return RejectionCause(reason=RejectionReason(execution.verdict.reason), explanation=told)
     if told is None:
         raise ValueError("A disposition requires the agent's explanation")
     return DispositionCause(reason=DispositionReason(answer.disposition), explanation=told)

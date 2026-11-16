@@ -49,7 +49,7 @@ class AttemptLoads(LoadDecoding):
                   tracker_root: str) -> tuple[object, ...] | None:
         return con.execute(
             "SELECT p.attempt_id,p.dispatch_token,p.generation,p.rev,p.end_commit,v.blob,v.verdict "
-            "FROM attempt p LEFT JOIN verification v ON v.attempt_id=p.attempt_id "
+            "FROM attempt p LEFT JOIN factory_commit v ON v.attempt_id=p.attempt_id "
             "AND v.dispatch_token=p.dispatch_token AND v.generation=p.generation "
             "WHERE p.repo_id=? AND p.adapter='beads' AND p.backlog=? AND p.task_id=? AND p.tracker_root=? "
             "AND p.step='plan' ORDER BY p.seq DESC LIMIT 1", (repo_id, backlog, task_id, tracker_root),
@@ -97,7 +97,7 @@ class AttemptLoads(LoadDecoding):
     def _execution_row(self, con: sqlite3.Connection, key: AttemptKey) -> tuple[object, ...] | None:
         return con.execute(
             f"""SELECT {prefixed("e", FACTS)},{prefixed("e", EVIDENCE)},{prefixed("e", ANSWER)},{prefixed("v", VERDICT)}
-            FROM execution e LEFT JOIN verification v
+            FROM execution e LEFT JOIN factory_commit v
             ON v.attempt_id=e.attempt_id AND v.dispatch_token=e.dispatch_token AND v.generation=e.generation
             WHERE e.attempt_id=? AND e.dispatch_token=? AND e.generation=?""",
             astuple(key),

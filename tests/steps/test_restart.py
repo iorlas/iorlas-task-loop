@@ -36,7 +36,7 @@ from taskloop.recovery.models import Intent
 from taskloop.round import run_round
 from taskloop.slot_lock import hold
 
-PROGRESS = ("attempt", "execution", "verification", "slot_release", "published_branch")
+PROGRESS = ("attempt", "execution", "factory_commit", "slot_release", "published_branch")
 surroundings = attempt_surroundings
 captured_work = captured_attempt
 

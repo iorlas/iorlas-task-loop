@@ -60,7 +60,7 @@ def _report(stored: StoredExecution) -> AttemptResult:
         return AttemptResult("conflict", "session", stored)
     if stored.session_state != "complete":
         return AttemptResult("pending", "session_" + stored.session_state, stored)
-    reason, verdict = end_word(stored), stored.verification
+    reason, verdict = end_word(stored), stored.verdict
     if not committing(stored):
         failure = stored.answer.failure
         explanation = failure.describe() if reason.startswith("answer:") and failure is not None else ""

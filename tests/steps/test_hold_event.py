@@ -69,7 +69,7 @@ def test_agent_decisions_use_structured_execution_and_causal_step(bench: Bench, 
         stored = replace(stored, answer=AnswerState("json_invalid", failure=rejected))
         expected = AnswerCause
     elif failure == "rejection":
-        stored = replace(stored, verification=Rejected("paths"))
+        stored = replace(stored, verdict=Rejected("paths"))
         expected = RejectionCause
     bench.con.execute("UPDATE attempt SET step=?,after_commit=?", (str(step), "d" * 40 if step is Step.IMPLEMENT else None))
     view = replace(VIEW, step=str(step), result=AttemptResult("collected", "display text is not a codec", stored))

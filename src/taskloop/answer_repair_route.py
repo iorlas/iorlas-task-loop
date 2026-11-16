@@ -70,7 +70,7 @@ class AnswerRepairRouting:
         execution = self.reader.collect(previous)
         if (execution is None or execution.answer.failure is None
                 or execution.facts.rc != 0 or execution.facts.timed_out or execution.facts.stop is not None
-                or execution.session_state != "complete" or execution.verification is not None):
+                or execution.session_state != "complete" or execution.verdict is not None):
             return None
         try:
             record = self.reader.load(previous)

@@ -53,8 +53,8 @@ def seed_chain(b: LandBench, number: int, x: str) -> None:
             """INSERT INTO execution (attempt_id,dispatch_token,generation,rc,timed_out,work,stands,stdout_path,stdout_digest,
             stderr_path,stderr_digest,answer_path,answer_digest,diagnostic_path,diagnostic_digest,answer_kind,effect,session_state)
             VALUES (?,?,1,0,0,1,1,'o','d','e','d','a','d','g','d','valid','commit','complete')""", (implement, f"{implement}-token"))
-        b.con.execute("INSERT INTO verification (attempt_id,dispatch_token,generation,verdict,observed_at) "
-                      "VALUES (?,?,1,'verified',5)", (implement, f"{implement}-token"))
+        b.con.execute("INSERT INTO factory_commit (attempt_id,dispatch_token,generation,verdict,observed_at) "
+                      "VALUES (?,?,1,'committed',5)", (implement, f"{implement}-token"))
         b.con.execute("INSERT INTO slot_release VALUES (?,?,1,?,4,'kept')", (implement, f"{implement}-token", b.d))
         b.con.execute("INSERT INTO published_branch VALUES (?,?,1,?,?,6)", (implement, f"{implement}-token", x, x))
         key = AttemptKey(checks, f"{checks}-token", 1)

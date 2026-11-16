@@ -11,7 +11,8 @@ from sqlite_store import Schema, SchemaError, Store
 from taskloop.factory_schema import SCHEMA
 from taskloop.factory_store import current, open_ro, refusal
 
-# Append a reviewed pin for each new version; never replace a version's existing digest.
+# Schema 32's pin includes the authorized factory-commit storage rename (tl-8bh9.14.159.2.3.1).
+# Append a reviewed pin and bump the version for subsequent DDL changes.
 DDL_DIGESTS = {
     26: "728ea63362ce086f01b39e967b837e6875854238f49c3b073fddcdcba1666787",
     27: "62ce0c0793427a8305ef420edd956d5adae7c832969b353265ad51d55a2ed2c0",
@@ -19,7 +20,7 @@ DDL_DIGESTS = {
     29: "0e6ec8a2ed329c07b67e95721833da0d974b9dc825f5e6702a36890743413a82",
     30: "020fa74580ac5d32910fb6b09b29bd00b2992d5dc3511d3808e4174d56ffd595",
     31: "2ca9b05fb3210127f561e74133cfcac7443d486c2e833eb4c2b427529ae1fe6d",
-    32: "ed79b2e9071c7f70676f27ce2bbfa887a2ff71babb4812913dfb3704d9a446dc",
+    32: "234a15273fc75a3cef589704dbf9a1c104154fb6fc57f15b1b7d9a86e7f8dfda",
 }
 
 
@@ -29,6 +30,45 @@ def assert_pinned_ddl(schema: Schema) -> None:
 
 def test_effective_ddl_matches_its_version_pin() -> None:
     assert_pinned_ddl(SCHEMA)
+
+
+@pytest.mark.parametrize(("kind", "reason", "reused", "valid"), [
+    ("committed", None, 0, True), ("committed", None, 1, True), ("rejected", "paths", 0, True),
+    ("invalid", None, 0, False), ("committed", "paths", 0, False), ("rejected", None, 0, False),
+    ("rejected", "paths", 1, False), ("committed", None, 2, False),
+])
+def test_factory_commit_verdict_constraints_at_schema_32(
+    registered: sqlite3.Connection, kind: str, reason: str | None, reused: int, valid: bool,
+) -> None:
+    assert SCHEMA.version == 32
+    registered.execute(
+        """INSERT INTO execution (attempt_id,dispatch_token,generation,timed_out,work,stands,stdout_path,stdout_digest,
+        stderr_path,stderr_digest,answer_path,answer_digest,diagnostic_path,diagnostic_digest,session_state)
+        SELECT attempt_id,dispatch_token,generation,0,1,1,'o','d','e','d','a','d','g','d','complete' FROM attempt""",
+    )
+    statement = """INSERT INTO factory_commit (attempt_id,dispatch_token,generation,verdict,reason,reused,observed_at)
+    SELECT attempt_id,dispatch_token,generation,?,?,?,10 FROM execution"""
+    if valid:
+        registered.execute(statement, (kind, reason, reused))
+        assert registered.execute("SELECT verdict,reason,reused FROM factory_commit").fetchall() == [(kind, reason, reused)]
+    else:
+        with pytest.raises(sqlite3.IntegrityError):
+            registered.execute(statement, (kind, reason, reused))
+
+
+def test_factory_commit_foreign_keys(registered: sqlite3.Connection) -> None:
+    for table, parent in (("factory_commit", "execution"), ("published_branch", "factory_commit")):
+        keys = registered.execute(f"PRAGMA foreign_key_list({table})").fetchall()
+        assert [(key[2], key[3], key[4]) for key in keys] == [(parent, "attempt_id", "attempt_id")]
+    with pytest.raises(sqlite3.IntegrityError):
+        registered.execute(
+            "INSERT INTO factory_commit (attempt_id,dispatch_token,generation,verdict,observed_at) "
+            "VALUES ('missing','dispatch',1,'committed',10)",
+        )
+    with pytest.raises(sqlite3.IntegrityError):
+        registered.execute(
+            "INSERT INTO published_branch VALUES ('attempt','dispatch',1,?,?,10)", ("e" * 40, "e" * 40),
+        )
 
 
 @pytest.mark.parametrize(("value", "valid"), [(None, True), (False, True), (True, True), (2, False), (-1, False), ("true", False)])

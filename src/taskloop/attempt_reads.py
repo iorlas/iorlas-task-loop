@@ -241,7 +241,7 @@ def _facts_values(facts: ExecutionFacts) -> tuple[object, ...]:
 
 def _verdict_values(result: Verdict) -> tuple[str, str | None, str | None, int]:
     if isinstance(result, Committed):
-        return "verified", None, result.blob, int(result.reused)
+        return "committed", None, result.blob, int(result.reused)
     return "rejected", str(result.reason), None, 0
 
 

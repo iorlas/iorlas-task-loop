@@ -143,7 +143,7 @@ def factory_commit(con: sqlite3.Connection, checkouts: Checkouts, files: FakeSlo
 
 
 def stored(con: sqlite3.Connection) -> list[tuple[object, ...]]:
-    return con.execute("SELECT verdict,reason,reused,observed_at FROM verification").fetchall()
+    return con.execute("SELECT verdict,reason,reused,observed_at FROM factory_commit").fetchall()
 
 
 def end_commit(con: sqlite3.Connection) -> object:
@@ -506,7 +506,7 @@ def test_a_stored_verdict_is_returned_again_without_any_git_read(
     slot.repo.drop_checkout(slot.path)
     counted = Counted(checkouts)
     assert factory_commit(registered, counted, slot_files).commit(KEY) == first and counted.opens == 0
-    assert stored(registered) == [("verified", None, 0, 20.0)]
+    assert stored(registered) == [("committed", None, 0, 20.0)]
 
 
 @pytest.mark.parametrize(
@@ -592,7 +592,7 @@ def test_another_verifier_storing_first_is_inconsistent(
     found = factory_commit(registered, checkouts, slot_files).commit(KEY)
     tree = slot.repo.tree(head(slot))
     assert tree is not None and found == Committed(tree.files[P][1])
-    registered.execute("DELETE FROM verification")
+    registered.execute("DELETE FROM factory_commit")
     assert store.verdict(record.admission, record.base_commit, head(slot), Rejected("paths"), 1) == Rejected("paths")
 
     class Racing(AttemptStore):
@@ -600,7 +600,7 @@ def test_another_verifier_storing_first_is_inconsistent(
 
         def collect(self, key: AttemptKey) -> StoredExecution | None:
             found = super().collect(key)
-            return None if found is None else dataclasses.replace(found, verification=None)
+            return None if found is None else dataclasses.replace(found, verdict=None)
 
     racing = FactoryCommit(Racing(lambda: registered), checkouts, slot_files, gone, lambda: 3, hold, ids=NativeIds())
     assert racing.commit(KEY) == CommitRefused("inconsistent")
@@ -666,10 +666,9 @@ def test_the_end_commit_and_verdict_fences_read_the_stored_effect(
     assert stored(registered) == []
 
 
-def test_a_verified_row_without_a_blob_reads_back(
+def test_a_committed_row_reads_back(
     registered: sqlite3.Connection, slot: FakeWorktree, tmp_path: Path, checkouts: Checkouts, slot_files: FakeSlotFiles
 ) -> None:
-    """A step kind without an artifact stores a verdict with no blob; the stored-verdict reader returns it as written."""
     captured(registered, tmp_path, slot, checkouts, slot_files, PLANNED)
     registered.execute("UPDATE execution SET effect='keep'")
     store = AttemptStore(lambda: registered)
@@ -678,9 +677,7 @@ def test_a_verified_row_without_a_blob_reads_back(
     assert store.end_commit(record.admission, record.base_commit) == record.base_commit
     verdict = Committed(None, reused=True)
     assert store.verdict(record.admission, record.base_commit, record.base_commit, verdict, 1) == verdict
-    assert registered.execute("SELECT verdict,blob FROM verification").fetchall() == [("verified", None)]
-    collected = store.collect(KEY)
-    assert collected is not None and collected.verification == verdict
+    assert (collected := store.collect(KEY)) is not None and collected.verdict == verdict
 
 
 def flip(slot: FakeWorktree, files: FakeSlotFiles) -> None:
@@ -745,7 +742,7 @@ def test_a_verifier_racing_another_adopts_its_commit_never_nothing_written(
     found = factory_commit(registered, checkouts, slot_files, unheld).commit(KEY)
     assert isinstance(found, Committed) and raced == [found]
     assert made(slot, base) == [("Plan tl-1", TRAILER)] and end_commit(registered) == head(slot)
-    assert stored(registered) == [("verified", None, 0, 20.0)]
+    assert stored(registered) == [("committed", None, 0, 20.0)]
 
 
 def test_no_end_commit_is_written_once_a_verdict_is_stored(

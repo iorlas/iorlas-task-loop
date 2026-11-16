@@ -260,7 +260,7 @@ class AttemptWrites(AttemptLoads):
                 AND EXISTS (SELECT 1 FROM execution e WHERE e.attempt_id=?2 AND e.answer_kind='valid' AND e.rc=0
                 AND e.timed_out=0 AND e.session_state='complete' AND ((e.effect='commit' AND ?1<>attempt.base_commit)
                 OR e.effect='keep'))
-                AND NOT EXISTS (SELECT 1 FROM verification v WHERE v.attempt_id=?2)""",
+                AND NOT EXISTS (SELECT 1 FROM factory_commit v WHERE v.attempt_id=?2)""",
                 (commit, admission.key.attempt_id),
             )
             row = con.execute("SELECT end_commit FROM attempt WHERE attempt_id=?", (admission.key.attempt_id,)).fetchone()
@@ -278,7 +278,7 @@ class AttemptWrites(AttemptLoads):
         with self._connection(write=True) as con:
             self._fence(con, admission)
             con.execute(
-                f"""INSERT INTO verification (attempt_id,dispatch_token,generation,{VERDICT},observed_at)
+                f"""INSERT INTO factory_commit (attempt_id,dispatch_token,generation,{VERDICT},observed_at)
                 SELECT ?,?,?,?,?,?,?,? FROM execution e JOIN attempt p ON p.attempt_id=e.attempt_id
                 WHERE e.attempt_id=? AND e.dispatch_token=? AND e.generation=? AND e.answer_kind='valid'
                 AND e.effect IN ('commit','keep') AND e.rc=0 AND e.timed_out=0 AND e.session_state='complete'
@@ -288,7 +288,7 @@ class AttemptWrites(AttemptLoads):
                 (*astuple(admission.key), *values, now, *astuple(admission.key), base, values[1], commit, values[3]),
             )
             row: tuple[object, ...] | None = con.execute(
-                f"SELECT {VERDICT} FROM verification WHERE attempt_id=? AND dispatch_token=? AND generation=?", astuple(admission.key)
+                f"SELECT {VERDICT} FROM factory_commit WHERE attempt_id=? AND dispatch_token=? AND generation=?", astuple(admission.key)
             ).fetchone()
         stored = None if row is None else verdict_of(row)
         if stored is None:
