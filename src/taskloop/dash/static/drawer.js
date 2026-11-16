@@ -286,25 +286,52 @@ function deliveryPane() {
 }
 
 // The Result and Prompt tabs read files, so they load when first shown (and again when the attempt has ended since).
-function bodyTab(a, tab) {
+function bodyEntry(a) {
   const key = `${a.step}/${a.n}`;
   const mine = open;
   const kept = mine.bodies.get(key);
-  if (kept?.body) return tab === "result" ? result(a, kept.body, {
+  if (kept) return kept;
+  const own = { state: a.state };
+  mine.bodies.set(key, own);
+  const current = () => mine.bodies.get(key) === own;
+  source.body(mine.id, a.step, a.n).then(
+    (body) => { if (current()) own.body = body; },
+    (error) => { if (current()) own.error = error.message ?? String(error); },
+  ).then(() => { if (current() && open === mine && `${open.step}/${open.n}` === key) render(); });
+  return own;
+}
+
+function bodyTab(a, tab) {
+  const mine = open, key = `${a.step}/${a.n}`, kept = bodyEntry(a);
+  if (kept.body) return tab === "result" ? result(a, kept.body, {
     key, opened: mine.opened, target: mine.target,
     revealed: (target) => { if (open === mine && mine.target === target) delete mine.target; },
   }) : prompt(a, kept.body);
-  if (kept?.error) return el("p", "px-6 py-4 text-sm text-rose-700 dark:text-rose-300", `This attempt cannot be read: ${kept.error}`);
-  if (!kept) {
-    const own = { state: a.state };
-    mine.bodies.set(key, own);
-    const current = () => mine.bodies.get(key) === own;
-    source.body(mine.id, a.step, a.n).then(
-      (body) => { if (current()) own.body = body; },
-      (error) => { if (current()) own.error = error.message ?? String(error); },
-    ).then(() => { if (current() && open === mine && attemptOf() === a) render(); });
-  }
+  if (kept.error) return el("p", "px-6 py-4 text-sm text-rose-700 dark:text-rose-300", `This attempt cannot be read: ${kept.error}`);
   return el("p", "px-6 py-4 text-sm text-slate-500", "Loading…");
+}
+
+function whatChanged(a) {
+  const box = el("div", "px-6 py-3 text-sm");
+  box.dataset.whatChanged = "";
+  box.append(el("h4", "font-medium", "What changed"));
+  const { body, error } = bodyEntry(a);
+  if (!body) {
+    box.append(el("p", "whitespace-pre-wrap break-words", error ? `Changes cannot be read: ${error}` : "Loading changes…"));
+  } else if (!body.change) box.append(el("p", "", "No previous attempt to compare."));
+  else {
+    const { base_before: before, base_after: after } = body.change;
+    const added = body.added.reduce((sum, [from, to]) => sum + to - from, 0);
+    box.append(el("p", "", `${added} prompt ${added === 1 ? "line" : "lines"} added`),
+      el("p", "whitespace-pre-wrap break-words font-mono",
+        `Base commit: ${before ?? "unavailable"} → ${after ?? "unavailable"}` +
+        (before !== null && before === after ? " (unchanged)" : "")));
+    const lines = body.input.split(/\r\n|[\n\r\v\f\x1c-\x1e\x85\u2028\u2029]/u);
+    for (const [from, to] of body.added) {
+      box.append(el("pre", "whitespace-pre-wrap break-words font-mono", lines.slice(from, to).join("\n")));
+    }
+  }
+  return box;
 }
 
 function activateCheck(a, target) {
@@ -320,6 +347,7 @@ function pane() {
   const a = attemptOf();
   const tab = open.tab;
   const wrap = attemptPanel(a, open.detail.attempts, select);
+  if (["plan", "implement"].includes(a.step)) wrap.append(whatChanged(a));
   const content = tab === "lines" ? lines(a, (target) => activateCheck(a, target)) : bodyTab(a, tab);
   if (a.step === COMMIT.id) wrap.append(content);
   else {

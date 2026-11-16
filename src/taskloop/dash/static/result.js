@@ -145,7 +145,9 @@ export function prompt(a, body) {
   if (!added) return box.append(pre(body.input, "max-h-none")), box;
   const marked = new Set(body.added.flatMap(([from, to]) => Array.from({ length: to - from }, (_, k) => from + k)));
   const text = el("div", "whitespace-pre-wrap break-words rounded border border-slate-200 bg-slate-50 py-2 font-mono text-[11.5px] leading-relaxed dark:border-slate-800 dark:bg-slate-950/60");
-  body.input.split("\n").forEach((line, at) => text.append(el("div", marked.has(at) ? "border-l-2 border-l-emerald-500 bg-emerald-50 px-3 dark:bg-emerald-950/40" : "px-3 border-l-2 border-l-transparent", line || " ")));
+  body.input.split(/\r\n|[\n\r\v\f\x1c-\x1e\x85\u2028\u2029]/u).forEach((line, at) => text.append(el("div", marked.has(at)
+    ? "border-l-2 border-l-emerald-500 bg-emerald-50 px-3 dark:bg-emerald-950/40"
+    : "px-3 border-l-2 border-l-transparent", line || " ")));
   box.append(text);
   return box;
 }
