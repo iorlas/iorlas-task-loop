@@ -147,7 +147,7 @@ def test_execute_and_independent_collection_preserve_facts_and_reservation(tmp_p
     con = database(surroundings)
     execution = fake(refs=("native-session",))
     result = app(con, surroundings, execution).execute(KEY, ENTRY)
-    assert result.reason == "verification"
+    assert result.reason == "commit"
     assert result.execution is not None
     assert result.execution.answer.kind == "valid"
     assert result.execution.facts.tokens == (8, None, 3)
@@ -226,7 +226,7 @@ def test_decoder_fault_leaves_captured_facts_and_can_resume_without_agent(
     captured = reader.collect(KEY)
     assert captured.status == "pending" and captured.execution is not None and captured.execution.answer.kind == "validation_pending"
     assert captured.execution.facts.rc == 0
-    assert reader.execute(KEY, ENTRY).reason == "verification"
+    assert reader.execute(KEY, ENTRY).reason == "commit"
     assert not resumed.calls and secrets == []
 
 
@@ -283,7 +283,7 @@ def test_live_ref_is_recorded_while_running_and_duplicates_are_idempotent(tmp_pa
     run = fake(refs=("s", "s"))
     result = owner(flaky, surroundings, registered_run(run, flaky, probe=probe)).execute(KEY, ENTRY)
     assert probe == [("s",), ("s",)]
-    assert result.reason == "verification" and result.execution is not None and result.execution.session_state == "complete"
+    assert result.reason == "commit" and result.execution is not None and result.execution.session_state == "complete"
 
 
 def test_absent_ref_stays_absent_and_late_reported_ref_is_recorded(tmp_path: Path, surroundings: AttemptSurroundings) -> None:
@@ -438,18 +438,18 @@ def test_projection_fault_keeps_evidence_and_capture_retries(
     assert (tmp_path / result.pending.evidence.answer.path).exists()
     attempts = app(con, surroundings, fake())
     assert attempts.capture(result.pending) == CaptureResult("accepted")
-    assert attempts.collect(KEY).reason == "verification"
+    assert attempts.collect(KEY).reason == "commit"
 
 
 def test_stored_pending_session_state_is_reconciled_by_execute(tmp_path: Path, surroundings: AttemptSurroundings) -> None:
     con = database(surroundings)
     late = FakeRun(RunOutcome(rc=0, worker=WORKER, summary=Summary(text=json.dumps(PLAN), res={"ref": "late"})))
-    assert app(con, surroundings, late).execute(KEY, ENTRY).reason == "verification"
+    assert app(con, surroundings, late).execute(KEY, ENTRY).reason == "commit"
     con.execute("UPDATE execution SET session_state='fault'")
     con.execute("UPDATE attempt SET session_ref=NULL")
     again = fake()
     result = app(con, surroundings, again).execute(KEY, ENTRY)
-    assert result.reason == "verification" and again.calls == []
+    assert result.reason == "commit" and again.calls == []
     assert con.execute("SELECT session_ref FROM attempt").fetchone() == ("late",)
 
 
@@ -529,7 +529,7 @@ class CountingHarness(CodexHarness):
         ("raced", "pending", "dispatching", "admitted"),
         ("store", "unavailable", "store", "admitted"),
         ("expired", "refused", "expired", "admitted"),  # crossed while resolving the launch: never dispatched
-        ("run", "pending", "verification", "captured"),
+        ("run", "pending", "commit", "captured"),
     ],
 )
 def test_the_harness_is_cleaned_up_once_on_every_exit(
@@ -565,7 +565,7 @@ def test_the_registration_write_goes_through_the_registration_store_only(tmp_pat
 
     registration_store = AttemptStore(lambda: con)
     attempts = surroundings.attempts(Main(lambda: con), fake(), registration_store=registration_store)
-    assert attempts.execute(KEY, ENTRY).reason == "verification"
+    assert attempts.execute(KEY, ENTRY).reason == "commit"
     assert con.execute("SELECT phase,worker_pid FROM attempt").fetchone() == ("captured", 42)
 
 
@@ -584,7 +584,7 @@ def test_the_registration_connection_is_opened_before_dispatch_and_its_fault_lea
         return con
 
     attempts = surroundings.attempts(Main(lambda: con), fake(), registration_store=AttemptStore(opened))
-    assert attempts.execute(KEY, ENTRY).reason == "verification"
+    assert attempts.execute(KEY, ENTRY).reason == "commit"
     assert events[:2] == ["registration_store", "dispatch"]
     con2, run = database(surroundings), fake()
     broken = surroundings.attempts(Main(lambda: con2), run, registration_store=AttemptStore(lambda: None))
@@ -673,7 +673,7 @@ def test_ref_callback_on_another_thread_uses_its_own_shared_writer_connection(tm
         return outcome
 
     attempts = surroundings.attempts(AttemptStore(lambda: store.shared_rw(path), store.begin_immediate), threaded)
-    assert attempts.execute(KEY, ENTRY).reason == "verification"
+    assert attempts.execute(KEY, ENTRY).reason == "commit"
     assert seen and seen != [threading.get_ident()]
     assert seeded.execute("SELECT session_ref FROM attempt").fetchone() == ("threaded",)
     store.close_shared()
@@ -704,7 +704,7 @@ def test_two_connections_contend_for_one_dispatch(tmp_path: Path, surroundings: 
 
 def test_stored_pending_session_state_is_not_promoted_without_evidence(tmp_path: Path, surroundings: AttemptSurroundings) -> None:
     con = database(surroundings)
-    assert app(con, surroundings, fake()).execute(KEY, ENTRY).reason == "verification"  # the summary reports no ref: facts.session is None
+    assert app(con, surroundings, fake()).execute(KEY, ENTRY).reason == "commit"  # the summary reports no ref: facts.session is None
     con.execute("UPDATE execution SET session_state='pending'")
     again = fake()
     attempts = app(con, surroundings, again)
@@ -713,7 +713,7 @@ def test_stored_pending_session_state_is_not_promoted_without_evidence(tmp_path:
         assert (result.status, result.reason) == ("pending", "session_pending") and again.calls == []
     assert con.execute("SELECT session_state FROM execution").fetchone() == ("pending",)
     con.execute("UPDATE attempt SET session_ref='accepted'")
-    assert attempts.execute(KEY, ENTRY).reason == "verification"
+    assert attempts.execute(KEY, ENTRY).reason == "commit"
     con.execute("UPDATE execution SET session_state='fault'")
     con.execute("DELETE FROM reservation")  # a released reservation: execute on a non-terminal stored state refuses, collect still reads
     assert (attempts.execute(KEY, ENTRY).status, attempts.execute(KEY, ENTRY).reason) == ("refused", "stale_reservation")
@@ -739,7 +739,7 @@ def test_registration_conflict_and_same_identity_are_distinguished(tmp_path: Pat
         hooks.started(WORKER)
         return inner(harness, spec, timeout, hooks)  # the same identity again: already_same, not an error
 
-    assert app(con, surroundings, twice).execute(KEY, ENTRY).reason == "verification"
+    assert app(con, surroundings, twice).execute(KEY, ENTRY).reason == "commit"
 
 
 def test_different_worker_identity_refuses_registration_before_exec(tmp_path: Path, surroundings: AttemptSurroundings) -> None:
@@ -778,7 +778,7 @@ def test_ref_callback_faults_are_retained_with_cause_and_never_raised(
 def test_report_never_presents_pending_state_as_collected(tmp_path: Path, surroundings: AttemptSurroundings) -> None:
     result = app(database(surroundings), surroundings, fake()).execute(KEY, ENTRY)
     stored = result.execution
-    assert stored is not None and report(stored).reason == "verification"
+    assert stored is not None and report(stored).reason == "commit"
     for session_state, status, reason in (
         ("pending", "pending", "session_pending"),
         ("fault", "pending", "session_fault"),

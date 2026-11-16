@@ -140,7 +140,7 @@ function row({ a, verification, gap }, selected, select, stepUsage) {
     : el("span", `ml-auto text-[11px] tabular-nums ${muted}`, lasted(a)));
   btn.append(top);
   btn.append(el("span", `block text-[11px] ${st.text}`, st.label));
-  const covered = verification && (a.summary === "verification" || a.summary === verification.summary);
+  const covered = verification && (a.summary === "commit" || a.summary === verification.summary);
   if (a.state === "failed" && !covered) btn.append(wordNode(el, a.summary, `mt-0.5 block truncate text-[11px] ${muted}`));
   btn.addEventListener("click", () => select(a.step, a.n));
   line.append(btn);

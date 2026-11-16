@@ -12,7 +12,7 @@ from stream_proc import OwnedProcess
 from taskloop.agents.stop_models import AgentStop
 from taskloop.agents.stop_store import StopStore
 from taskloop.attempt_reads import AttemptRow, PublishedRow, ReleaseRow, StoreUnavailable
-from taskloop.attempt_result import collect, succeeded
+from taskloop.attempt_result import PendingReason, collect, succeeded
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import ATTEMPTS, REPEATABLE, AttemptKey, AttemptResult, CommitRefused, EntryIdentity, Observe, Uncommitted
 from taskloop.check_repeat.status import CheckRepeatDecision, decision
@@ -152,7 +152,7 @@ def _stopped(phase: str, result: AttemptResult, expired: bool) -> Next:
         return "stuck:expired_admitted" if expired else "start"
     if phase in ("dispatching", "registered"):
         return "release"
-    return "verify" if result.reason == "verification" else "stuck:uncollected"
+    return "verify" if result.reason == PendingReason.COMMIT else "stuck:uncollected"
 
 
 def _observed(reads: StatusPorts, entry: EntryIdentity | None) -> EntryState:

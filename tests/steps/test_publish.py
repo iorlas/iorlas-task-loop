@@ -162,7 +162,7 @@ def run(con: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: 
         checkouts,
         files,
     )
-    assert attempts.execute(KEY, ENTRY).reason == "verification"
+    assert attempts.execute(KEY, ENTRY).reason == "commit"
     if verify:
         FactoryCommit(store, checkouts, files, lambda _w: True, lambda: 20, nowhere, ids=NativeIds()).commit(KEY)
     if release:

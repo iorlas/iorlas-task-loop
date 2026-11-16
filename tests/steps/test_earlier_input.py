@@ -53,7 +53,7 @@ def test_each_repeat_replaces_the_answer_and_preserves_the_admitted_input_and_fr
     commit = step.con.execute("SELECT end_commit FROM attempt WHERE attempt_id='attempt'").fetchone()[0]
     assert commit in second_input and START in second_input and json.dumps(P) in second_input
     agent = Agent(slot, {}, UNCHANGED | {"explanation": "Latest discovery"})
-    assert step.run(second, entry, agent) == "pending verification"
+    assert step.run(second, entry, agent) == "pending commit"
     second_record = step.store.load(second)
     assert second_record is not None
     third, entry = step.next_attempt(second)
@@ -64,7 +64,7 @@ def test_each_repeat_replaces_the_answer_and_preserves_the_admitted_input_and_fr
     assert EvidenceFiles(step.tmp).read(second_record.admission.input_ref) == second_input
     assert EvidenceFiles(step.tmp).read(original.admission.input_ref) == "Plan the actual task"
     last = Agent(slot, {}, UNCHANGED, removed=[STRAY])
-    assert step.run(third, entry, last) == "pending verification"
+    assert step.run(third, entry, last) == "pending commit"
     for launched in (first, agent, last):
         assert len(launched.specs) == 1 and "resume" not in launched.specs[0].argv
         assert "earlier-native-session" not in " ".join(launched.specs[0].argv)
@@ -79,7 +79,7 @@ def test_answer_data_cannot_close_factory_blocks_or_inject_new_lines(step: Step,
     text = step.input(second)
     assert explanation(text) == told and text.count(BEGIN) == text.count(END) == 1
     agent = Agent(slot, {}, UNCHANGED, removed=[STRAY])
-    assert step.run(second, entry, agent) == "pending verification"
+    assert step.run(second, entry, agent) == "pending commit"
     assert text[text.index(BEGIN):] in agent.specs[0].stdin
 
 
@@ -140,7 +140,7 @@ def test_captured_successor_reconciliation_replays_the_result_without_an_agent_l
     agent = Agent(slot, {}, UNCHANGED, removed=[STRAY])
     step.run(second, entry, agent)
     assert len(agent.specs) == 1
-    assert step.run(second, entry, agent) == "pending verification"
+    assert step.run(second, entry, agent) == "pending commit"
     assert len(agent.specs) == 1
 
 
@@ -150,6 +150,6 @@ def test_dispatch_keeps_the_admitted_facts_after_earlier_evidence_changes(step: 
     text = step.input(second)
     step.con.execute("UPDATE execution SET answer_path='no-longer-readable' WHERE attempt_id='attempt'")
     agent = Agent(slot, {}, UNCHANGED, removed=[STRAY])
-    assert step.run(second, entry, agent) == "pending verification"
+    assert step.run(second, entry, agent) == "pending commit"
     assert text[text.index(BEGIN):] in agent.specs[0].stdin
     assert explanation(agent.specs[0].stdin) == PLAN["explanation"]

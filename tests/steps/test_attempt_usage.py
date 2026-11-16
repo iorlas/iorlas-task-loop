@@ -19,7 +19,7 @@ surroundings = attempt_surroundings
     (-9, False, None, "", "run:killed"),
     (-9, True, "timeout", "", "run:timeout"),
     (-15, False, "answer", json.dumps(PLAN), "run:killed"),
-    (0, False, "answer", json.dumps(PLAN), "verification"),
+    (0, False, "answer", json.dumps(PLAN), "commit"),
     (0, False, None, "not json", "answer:json_invalid"),
 ])
 @pytest.mark.parametrize("incomplete", [True, False, None, "invalid", 1])

@@ -27,7 +27,7 @@ def test_normal_work_needs_no_skill_or_managed_hook_installation(
     assert AttemptStore(lambda: factory).register_entry(admitted.key, ENTRY, 10) == "accepted"
     run = FakeRun(RunOutcome(rc=0, worker=WORKER, summary=Summary(text=json.dumps(PLAN), rc=0, stands=True)))
     result = attempts(factory, tmp_path, run, checkouts, slot_files).execute(admitted.key, ENTRY)
-    assert (result.status, result.reason) == ("pending", "verification")
+    assert (result.status, result.reason) == ("pending", "commit")
     assert len(run.calls) == 1
     assert not list(tmp_path.rglob(".agents")) and not list(tmp_path.rglob(".claude"))
     assert not list(tmp_path.rglob("hooks"))

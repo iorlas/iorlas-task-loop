@@ -94,7 +94,7 @@ def test_a_repeat_commits_x2_on_x1_from_the_dirty_worktree_and_the_chain_verifie
         )
 
     factory_commit = FactoryCommit(store, VIEWS.checkouts, files, lambda _worker: True, lambda: 20, hold, ids=NativeIds())
-    assert attempts(agent(slot, {P: PLAN_TEXT, "scratch.txt": "s"}, (), [P])).execute(KEY, ENTRY).reason == "verification"
+    assert attempts(agent(slot, {P: PLAN_TEXT, "scratch.txt": "s"}, (), [P])).execute(KEY, ENTRY).reason == "commit"
     assert factory_commit.commit(KEY) == Uncommitted("uncommitted", ("?? scratch.txt",))
     x1 = git(slot, "rev-parse", "HEAD").strip()
     admission = ChainAdmission(lambda: factory, begin_immediate, EvidenceFiles(art), lambda: 10, VIEWS.checkouts, files, ids=NativeIds())
@@ -106,7 +106,7 @@ def test_a_repeat_commits_x2_on_x1_from_the_dirty_worktree_and_the_chain_verifie
     found = store.attempt_of("tasks", "tl-1")
     assert found is not None
     second = agent(slot, {P: PLAN_V2}, ("scratch.txt",), [P])
-    assert attempts(second).execute(found[0], SECOND).reason == "verification"
+    assert attempts(second).execute(found[0], SECOND).reason == "commit"
     verdict = factory_commit.commit(found[0])
     assert isinstance(verdict, Committed) and not verdict.reused
     assert git(slot, "rev-parse", "HEAD^").strip() == x1 and git(slot, "rev-parse", "HEAD^^").strip() == base

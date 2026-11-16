@@ -46,7 +46,7 @@ def test_multi_request_stream_is_persisted_and_collected_once(surroundings: Atte
     con = database(surroundings)
     stream = RequestStream(outcome(3), refs=("native-session",))
     result = app(con, surroundings, stream).execute(KEY, ENTRY)
-    assert result.reason == "verification" and result.execution is not None
+    assert result.reason == "commit" and result.execution is not None
     assert result.execution.answer.kind == "valid" and result.execution.session_state == "complete"
     facts = result.execution.facts
     assert facts.turns == 3 and facts.rc == 0 and facts.answered is True

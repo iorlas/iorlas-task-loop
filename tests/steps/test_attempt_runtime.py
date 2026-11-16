@@ -61,7 +61,7 @@ def test_epoch_jumps_during_handoff_and_registration_preserve_allowance(
     monkeypatch.setattr(store, "warm", handoff)
     attempts = surroundings.attempts(store, run, clock=clock.time, monotonic=clock.monotonic)
     result = attempts.execute(KEY, ENTRY)
-    assert result.reason == "verification"
+    assert result.reason == "commit"
     assert result.execution is not None and result.execution.answer.kind == "valid"
     assert con.execute("SELECT deadline,worker_pid,session_ref FROM attempt").fetchone() == (100, WORKER.pid, "session")
     assert con.execute("SELECT timed_out FROM execution").fetchone() == (0,)
@@ -183,7 +183,7 @@ def test_active_jumps_survive_lost_activity_and_clock_evidence_without_changing_
     monkeypatch.setattr(EvidenceFiles, "open_events", lost_activity)
     attempts = surroundings.attempts(AttemptStore(lambda: con), run, clock=clock.time, monotonic=clock.monotonic)
     result = attempts.execute(KEY, ENTRY)
-    assert result.reason == "verification"
+    assert result.reason == "commit"
     assert attempts.collect(KEY) == result and attempts.execute(KEY, ENTRY) == result
     assert len(execution.calls) == 1 and cleanups == [1]
     assert con.execute("SELECT timed_out FROM execution").fetchone() == (0,)
@@ -255,7 +255,7 @@ def test_duration_evidence_failures_preserve_result_registration_and_cleanup(
         monkeypatch.setattr(EvidenceFiles, "write_duration", write)
     attempts = surroundings.attempts(AttemptStore(lambda: con), run, clock=clock.time, monotonic=monotonic)
     result = attempts.execute(KEY, ENTRY)
-    assert result.reason == "verification" and attempts.collect(KEY) == result
+    assert result.reason == "commit" and attempts.collect(KEY) == result
     assert cleanups == [1] and len(execution.calls) == 1
     assert con.execute("SELECT timed_out FROM execution").fetchone() == (0,)
     assert con.execute("SELECT worker_pid FROM attempt").fetchone() == (WORKER.pid,)

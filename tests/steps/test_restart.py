@@ -132,7 +132,7 @@ def complete_round(
 
     def checked(key: AttemptKey) -> CommitResult:
         result = attempts.collect(key)
-        assert result.status == "pending" and result.reason == "verification"
+        assert result.status == "pending" and result.reason == "commit"
         if index == 1:
             assert events == ["complete"]
         events.append("verify")
@@ -171,7 +171,7 @@ def test_reopened_round_finishes_captured_work_before_verifying(
     con = captured_work.store.connect()
     assert con is not None
     if pending != "answer":
-        assert captured_work.execute(KEY, (7, "entry", "boot")).reason == "verification"
+        assert captured_work.execute(KEY, (7, "entry", "boot")).reason == "commit"
         con.execute("UPDATE execution SET session_state=?", (pending,))
         con.execute("UPDATE attempt SET session_ref=NULL")
     reservations = con.execute("SELECT * FROM reservation").fetchall()

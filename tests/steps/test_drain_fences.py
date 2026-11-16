@@ -256,7 +256,7 @@ def test_an_authorized_agent_body_can_capture_and_finalize_after_drain(
         return body(harness, spec, timeout, hooks)
 
     result = attempts(registered, tmp_path, checkouts, slot_files, running).execute(KEY, entry)
-    assert result.status == "pending" and result.reason == "verification"
+    assert result.status == "pending" and result.reason == "commit"
     assert registered.execute("SELECT phase FROM attempt").fetchone() == ("captured",)
     assert isinstance(factory_commit(registered, checkouts, slot_files).commit(KEY), Committed)
     assert registered.execute("SELECT count(*) FROM attempt").fetchone() == (1,)

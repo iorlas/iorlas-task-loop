@@ -32,7 +32,7 @@ from taskloop.admit import AdmitRefused, AdmitUnavailable, checkout_repo
 from taskloop.agents.settings import Overrides, StepSettings
 from taskloop.answer_repair_route import repair_move
 from taskloop.attempt_reads import StoreUnavailable
-from taskloop.attempt_result import succeeded
+from taskloop.attempt_result import PendingReason, succeeded
 from taskloop.attempt_status import AttemptView, Listed, StatusPorts, list_attempts
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import AttemptKey, AttemptResult, Checkouts
@@ -346,10 +346,10 @@ def _detail(result: Started | Failed) -> str:
 
 def _committed(ports: RoundPorts, backlog: str, each: AttemptView) -> Move:
     """`tl step commit` as built: the verdict, then the settled release and the publication of a verified result."""
-    if each.checks is None and each.result.status == "pending" and each.result.reason != "verification":
+    if each.checks is None and each.result.status == "pending" and each.result.reason != PendingReason.COMMIT:
         completed = (AttemptResult("unavailable", "store") if ports.completion is None
                      else ports.completion(backlog, each.task_id, each.attempt_id))
-        if completed.status != "pending" or completed.reason != "verification":
+        if completed.status != "pending" or completed.reason != PendingReason.COMMIT:
             return Move(each.task_id, "verify", f"{completed.status}:{completed.reason}", each.attempt_id,
                         completed.explanation, each.step)
     verified = commit_task(ports.reads.store, ports.factory_commit, ports.releaser, ports.publisher, backlog, each.task_id)

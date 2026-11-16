@@ -12,7 +12,7 @@ REQUIRED = (
     "needs_owner", "failed:needs_owner", "answer:schema_invalid", "failed:answer:schema_invalid", "failed:test:failed", "held:slot_dirty",
     "verified", "reused", "unsettled:branch", "uncommitted:unsafe", "uncommitted:ignored", "uncommitted:uncommitted",
     "uncommitted:staged", "uncommitted:dirty", "unsettled:rejected",
-    "pending", "registered", "passed", "verification", "unsafe", "uncommitted", "ignored", "branch", "rejected", "repeat", "failed_check",
+    "pending", "registered", "passed", "commit", "unsafe", "uncommitted", "ignored", "branch", "rejected", "repeat", "failed_check",
 )
 
 
@@ -41,7 +41,7 @@ def test_the_page_prints_its_codes_through_the_table() -> None:
     ("needs_owner", "The agent needs your decision"),
     ("failed:test:failed", "Checks failed: test"),
     ("answer:schema_invalid", "The agent's answer was in the wrong format"),
-    ("verification", "The factory's check of the answer failed"),
+    ("commit", "The factory's check of the answer failed"),
     ("unsafe", "A listed path is unsafe"),
     ("uncommitted:unsafe", "Not committed: a listed path is unsafe"),
     ("unsettled:rejected", "Not committed: the commit broke a rule"),

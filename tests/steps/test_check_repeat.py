@@ -176,7 +176,7 @@ def test_start_dispatches_failed_check_output_at_x_and_fresh_checks_can_pass(rig
     assert (row.number, row.previous_attempt_id, row.source_checks_id) == (2, previous.attempt_id, source.attempt_id)
     assert row.label == "auto" and row.run is not None and row.run.model == "m"
     assert rig.con.execute("SELECT base_commit,after_commit FROM attempt WHERE attempt_id=?", (row.key.attempt_id,)).fetchone() == (x, x)
-    assert rig.ran[-1] == "pending:verification"
+    assert rig.ran[-1] == "pending:commit"
     setup = SetupStore(lambda: rig.con).latest(row.key)
     assert setup is not None and setup.commit == x and setup.conclusion == CommandConclusion.PASSED
     assert rig.round() == [("tl-1", "implement", "verify", "verified release=released branch=published")]

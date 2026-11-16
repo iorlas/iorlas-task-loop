@@ -213,7 +213,7 @@ def test_collected_always_names_its_outcome_and_only_a_verified_plan_succeeds(
 @pytest.mark.parametrize(
     ("verdict", "status", "reason", "success"),
     [
-        (None, "pending", "verification", False),
+        (None, "pending", "commit", False),
         (Committed("c" * 40), "collected", "verified", True),
         (Committed("c" * 40, reused=True), "collected", "reused", True),
         (Rejected("paths"), "collected", "rejected:paths", False),

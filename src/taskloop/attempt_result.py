@@ -1,10 +1,15 @@
 """Collect a stored attempt: its end word, verdict words and whether it succeeded. Read-only; no IO of its own."""
 
 from dataclasses import replace
+from enum import StrEnum
 
 from taskloop.attempt_reads import StoreUnavailable
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import AttemptKey, AttemptResult, ExecutionFacts, Rejected, StoredExecution, Verdict
+
+
+class PendingReason(StrEnum):
+    COMMIT = "commit"
 
 
 def end_word(stored: StoredExecution) -> str:
@@ -66,7 +71,7 @@ def _report(stored: StoredExecution) -> AttemptResult:
         explanation = failure.describe() if reason.startswith("answer:") and failure is not None else ""
         return AttemptResult("collected", reason, stored, explanation=explanation)
     if verdict is None:
-        return AttemptResult("pending", "verification", stored)
+        return AttemptResult("pending", PendingReason.COMMIT, stored)
     return AttemptResult("collected", judged(verdict), stored)
 
 

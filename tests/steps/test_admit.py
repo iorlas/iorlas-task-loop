@@ -257,7 +257,7 @@ def test_admit_then_register_entry_then_execute_by_that_entry_is_collected(
     other = attempts(factory, tmp_path, run, checkouts, slot_files).execute(result.key, (8, "entry-start", "boot"))
     assert (other.status, other.reason) == ("refused", "not_entry") and run.calls == []
     collected = attempts(factory, tmp_path, run, checkouts, slot_files).execute(result.key, ENTRY)
-    assert (collected.status, collected.reason) == ("pending", "verification") and len(run.calls) == 1
+    assert (collected.status, collected.reason) == ("pending", "commit") and len(run.calls) == 1
     _harness, spec, _timeout, _hooks = run.calls[0]
     assert spec.cwd == str(root.resolve() / folder_name(repo.identity()) / "s1")
     assert spec.stdin.startswith(PLAN_WARNING + "\n\n")

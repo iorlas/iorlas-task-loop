@@ -70,7 +70,7 @@ def test_captured_completion_finishes_answer_and_session(captured_work: Attempts
     before = con.execute("SELECT * FROM reservation").fetchall()
     app = CapturedCompletion(captured_work, HoldStore(store.connect), hold, lambda _entry: "gone")
     result = app("tasks", "tl-1", KEY.attempt_id)
-    assert result.status == "pending" and result.reason == "verification"
+    assert result.status == "pending" and result.reason == "commit"
     assert result.execution is not None and result.execution.answer.kind == "valid" and result.execution.session_state == "complete"
     assert app("tasks", "tl-1", KEY.attempt_id) == result
     assert con.execute("SELECT * FROM reservation").fetchall() == before
@@ -123,7 +123,7 @@ def test_captured_completion_retries_custody_and_evidence(captured_work: Attempt
         patch.setattr(captured_work.files, "read", unreadable)
         assert app("tasks", "tl-1", KEY.attempt_id).reason == "evidence"
     assert store.collect(KEY) == before
-    assert app("tasks", "tl-1", KEY.attempt_id).reason == "verification"
+    assert app("tasks", "tl-1", KEY.attempt_id).reason == "commit"
 
 
 @pytest.mark.parametrize("phase", ["admitted", "registered"])

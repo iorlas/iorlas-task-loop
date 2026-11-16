@@ -118,7 +118,7 @@ def test_real_completion_finishes_captured_work_after_reopen(
     con = captured_work.store.connect()
     assert con is not None
     if pending != "answer":
-        assert captured_work.execute(KEY, (7, "entry", "boot")).reason == "verification"
+        assert captured_work.execute(KEY, (7, "entry", "boot")).reason == "commit"
         con.execute("UPDATE execution SET session_state=?", (pending,))
         con.execute("UPDATE attempt SET session_ref=NULL")
     record = captured_work.store.load(KEY)
@@ -148,7 +148,7 @@ def test_real_completion_finishes_captured_work_after_reopen(
         else:
             assert before.answer.kind == "valid" and before.session_state == pending
         result = app("tasks", "tl-1", KEY.attempt_id)
-        assert result.status == "pending" and result.reason == "verification"
+        assert result.status == "pending" and result.reason == "commit"
         assert result.execution is not None
         assert result.execution.answer.kind == "valid" and result.execution.session_state == "complete"
         assert app("tasks", "tl-1", KEY.attempt_id) == result

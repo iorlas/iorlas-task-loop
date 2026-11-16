@@ -24,7 +24,7 @@ export const WORDS = {
   "held:slot_branch": "Slot is on another branch",
   "held:slot_redirected": "Slot pointer was rewritten",
   failed_check: "The checks failed",
-  verification: "The factory's check of the answer failed",
+  commit: "The factory's check of the answer failed",
   unsafe: "A listed path is unsafe",
   uncommitted: "Files were left uncommitted",
   ignored: "A listed path is ignored by Git",

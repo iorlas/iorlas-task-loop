@@ -170,7 +170,7 @@ def captured(con: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checko
         checkouts,
         files,
     )
-    assert attempts.execute(KEY, ENTRY).reason == "verification"
+    assert attempts.execute(KEY, ENTRY).reason == "commit"
 
 
 def unsafe(con: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, files: FakeSlotFiles) -> None:
@@ -292,7 +292,7 @@ def test_a_repeated_plan_launch_starts_with_the_warning_and_preserves_the_origin
     run = FakeRun(RunOutcome(rc=0, worker=WORKER, summary=Summary(text=json.dumps(PLAN), rc=0, stands=True)))
     attempts = Attempts(store, files, AgentLaunch(lambda _kind: ("/bin/codex", {}), ids=NativeIds()), run,
                         lambda: 10, checkouts, slot_files)
-    assert attempts.execute(new, SECOND).reason == "verification"
+    assert attempts.execute(new, SECOND).reason == "commit"
     harness, spec, _, _ = run.calls[0]
     assert "resume" not in spec.argv and saved_session not in spec.argv
     assert harness.evidence.ref is None

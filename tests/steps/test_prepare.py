@@ -155,7 +155,7 @@ def test_attempt_one_takes_its_branch_and_starts_from_what_it_holds(
     assert repo.fetch().ok
     tip = existing or moved
     status, reason, agent = execute(con, tmp_path, checkouts, slot_files)
-    assert (status, reason, len(agent.calls)) == ("pending", "verification", 1)
+    assert (status, reason, len(agent.calls)) == ("pending", "commit", 1)
     assert slot.branch() == BRANCH and con.execute("SELECT base_commit FROM attempt").fetchone() == (tip,)
     assert dict(repo.branches("task/"))[BRANCH] == head(repo, slot.path)
 
@@ -184,7 +184,7 @@ def test_a_slot_already_on_its_branch_takes_nothing(
         raise AssertionError("no Git write")
 
     monkeypatch.setattr(FakeWorktree, "take_branch", take)
-    assert execute(con, tmp_path, checkouts, slot_files)[:2] == ("pending", "verification") and taken == []
+    assert execute(con, tmp_path, checkouts, slot_files)[:2] == ("pending", "commit") and taken == []
 
 
 @pytest.mark.parametrize("where", ["local", "remote"])
@@ -413,7 +413,7 @@ def test_owned_remote_work_without_rows_survives_restart_and_reevaluation(
             key = result.key
             assert AttemptStore(lambda: reopened).register_entry(key, ENTRY, 10) == "accepted"
             status, reason, agent = execute(reopened, tmp_path / "artifacts", PinnedViews(repo), FakeSlotFiles(repo), key)
-            assert (status, reason, len(agent.calls)) == ("pending", "verification", 1)
+            assert (status, reason, len(agent.calls)) == ("pending", "commit", 1)
             assert slot.branch() == BRANCH and head(repo, slot.path) == tip
             assert reopened.execute("SELECT base_commit FROM attempt").fetchall() == [(tip,)]
             assert reopened.execute("SELECT attempt_id,generation FROM reservation").fetchall() == [
@@ -421,7 +421,7 @@ def test_owned_remote_work_without_rows_survives_restart_and_reevaluation(
             again, repeated = admitted(reopened, repo, root, tmp_path)
             assert isinstance(again, AdmitRefused) and again.reason == "task_attempted" and repeated.calls == []
             status, reason, agent = execute(reopened, tmp_path / "artifacts", PinnedViews(repo), FakeSlotFiles(repo), key)
-            assert (status, reason, agent.calls) == ("pending", "verification", [])
+            assert (status, reason, agent.calls) == ("pending", "commit", [])
         else:
             for refused, refused_claims in ((result, claims), admitted(reopened, repo, root, tmp_path)):
                 assert isinstance(refused, AdmitRefused) and refused.reason == "branch_diverged"

@@ -156,12 +156,12 @@ def test_the_next_attempt_dispatches_at_e_with_the_leftovers_as_a_fresh_session_
     step: Step, slot: FakeWorktree
 ) -> None:
     base = head(slot)
-    assert step.run(KEY, ENTRY, Agent(slot, {P: PLAN_TEXT, STRAY: "s"}, PLAN)) == "pending verification"
+    assert step.run(KEY, ENTRY, Agent(slot, {P: PLAN_TEXT, STRAY: "s"}, PLAN)) == "pending commit"
     assert shown(step.factory_commit.commit(KEY)) == "uncommitted:uncommitted"
     x1 = head(slot)
     key, entry = step.next_attempt(KEY)
     second = Agent(slot, {}, UNCHANGED, removed=[STRAY])
-    assert step.run(key, entry, second) == "pending verification"
+    assert step.run(key, entry, second) == "pending commit"
     record = step.store.load(key)
     assert record is not None and record.base_commit == x1 == record.start  # dispatched from the dirty slot at E
     (spec,) = second.specs
