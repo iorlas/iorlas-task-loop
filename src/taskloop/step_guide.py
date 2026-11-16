@@ -9,9 +9,11 @@ from taskloop.step_refusal_guide import REFUSALS
 
 STEP_ONLY = ("Steps built: plan, implement and check. Committed results are published on the task branch. "
              "The profile selects automatic land during a round or manual land by the owner.")
-PUBLISH = ("The step's result is verified but has not been published to origin. Publication must finish before the next step. "
+PUBLISH = ("The step's result is accepted by factory commit but has not been published to origin. "
+           "Publication must finish before the next step. "
            "An unreachable remote may need network or credential repair. If the remote branch moved, diverged or advanced, "
-           "compare it with the verified commit and decide how to reconcile the histories; the factory never forces a push.")
+           "compare it with the commit accepted by factory commit and decide how to reconcile the histories; "
+           "the factory never forces a push.")
 HELD = ("The tracker claim stays held; the slot stays reserved until the step ends and its work is settled. "
         "Abandoning also returns the claim. While a step runs, its entry renews the tracker lease every 100 seconds. "
         "Between steps the lease is not renewed, so tracker maintenance can reclaim it after the lease and grace period "
@@ -31,28 +33,28 @@ GUIDE = {
     "its configured deadline renewed once per reboot. If the tracker claim was lost, relaunching cannot help: nothing "
     "retakes the claim. Inspect its ownership, then decide whether to abandon the retained attempt and approve a fresh one.",
     "wait": "Its entry is running. Wait for its result before deciding the next step.",
-    "verify": "The result is captured and awaits verification before it can be accepted.",
+    "commit": "The result is captured and awaits factory commit before it can be accepted.",
     "repeat": "Uncommitted work remains. Decide whether to repeat the step with this listing as feedback or settle the files "
-    "and verify the result.",
-    "repeats_exhausted": "The step repeated twice and leaves uncommitted work. Inspect and settle the slot for verification and "
+    "and complete factory commit.",
+    "repeats_exhausted": "The step repeated twice and leaves uncommitted work. Inspect and settle the slot for factory commit and "
     "release, or decide to abandon the attempt.",
     "release": "The step ended but its slot is still held. Inspect and settle any listed files before release. Abandoning "
     "also returns the claim, unless a land may already have delivered to origin's main; then that land must finish first.",
     "abandoned": "The slot is free and the claim was returned unless the claim result says otherwise. A round starts a "
     "fresh attempt once the task carries the approval label.",
     "publish": PUBLISH,
-    "advance": "The step is verified and published to origin. When a slot is free, rounds advance the oldest completed "
+    "advance": "The step is accepted by factory commit and published to origin. When a slot is free, rounds advance the oldest completed "
     "claimed task before starting new work. The tracker must still confirm the factory's claim; removing approval alone "
     "does not stop advancement, but abandoning does. The next step starts at the published commit. Checks use a detached "
     "checkout and the required names from local main.",
-    "done": "The result was collected; its success status says whether verification passed. For checks, every check "
+    "done": "The result was collected; its success status says whether factory commit accepted it. For checks, every check "
     "required by main must pass. Failed checks keep the claim and are not retried automatically. Inspect their results and "
     "logs, then decide whether to retry checks on the same commit or abandon and start the task afresh.",
     "unknown": "The entry or store could not be read. Wait for reliable observations before deciding how to continue.",
     "stuck:expired_admitted": "Nothing ran; rounds only report it. Its deadline passed with no relaunchable entry from "
     "before a reboot: none was registered, the entry is from this boot, or the boot is unknown. A confirmed pre-reboot "
     f"entry would instead get one renewed deadline. {ABANDON} A fresh attempt requires a new admission.",
-    "failed": "The step ended without a verified result. A manually started step keeps its claim and is not held or "
+    "failed": "The step ended without a result accepted by factory commit. A manually started step keeps its claim and is not held or "
     "retried by rounds. Inspect its evidence before deciding whether to abandon and admit a fresh attempt.",
     "running": "Its entry runs; the round leaves it alone.",
     "attempted": "The task is open in the tracker while factory.db retains its attempt: the claim was returned or lapsed. "
@@ -77,7 +79,7 @@ GUIDE = {
     "stuck:hung": "The entry or worker runs past its deadline. Before stopping anything, verify the worker's recorded "
     "identity, process group and slot working directory, and verify the entry's identity. Stop only confirmed owned "
     f"processes, the worker first and then the entry. {ABANDON}",
-    "stuck:uncollected": "The result was captured but its answer or session remains pending or faulted, so verification "
+    "stuck:uncollected": "The result was captured but its answer or session remains pending or faulted, so factory commit "
     f"cannot judge it. Inspect entry.log and preserve the evidence before deciding to abandon. {ABANDON}",
     "stuck:conflict": f"The retained attempt conflicts with current authority. Inspect the evidence before deciding to abandon. {ABANDON}",
     "stuck:setup_failed": "Setup failed twice before an agent ran. Rounds no longer relaunch it. Inspect the setup log "
@@ -90,13 +92,13 @@ GUIDE = {
     "task": "The task cannot be read from the attempt's bound tracker root. Inspect that tracker and the task's identity; "
     "rounds skip it until it is readable or its retained attempt is abandoned.",
     "changed": "Another attempt became current during the round. The next round follows the current attempt.",
-    "unsettled": "Files, the slot pointer or HEAD remain unsettled. Inspect and preserve needed work before verification "
+    "unsettled": "Files, the slot pointer or HEAD remain unsettled. Inspect and preserve needed work before factory commit "
     "or a repeat. A redirected pointer needs inspection first. For `head_moved`, inspect listed refs and remove only refs "
     "created by this agent; a repeat is refused, so abandon before admitting a fresh attempt. A live worker must be proven "
     "stopped first. Staged paths need settlement. An unexpected branch needs restoration to the attempt's expected branch "
     "with its work preserved, or deliberate abandonment.",
     "registration_conflict": "Another start registered its entry first. Follow the existing attempt before allowing another launch.",
-    "slot_busy": "Another entry or verification holds the slot. Wait for it; if it runs past its deadline, verify process "
+    "slot_busy": "Another entry or factory commit holds the slot. Wait for it; if it runs past its deadline, verify process "
     "identities before deciding whether to stop it.",
     "lock": "The slot lock cannot be created under the slots root. Restore that folder's permissions before continuing.",
     "not_terminal": "The step has not ended. Wait for completion or decide whether to repeat or abandon the attempt.",
@@ -110,12 +112,12 @@ GUIDE = {
     "Git diagnostic and noninteractive access before continuing.",
     "repository": "The slot's Git pointer or repository differs from the attempt's binding. Inspect and restore the "
     "expected repository before publication; nothing was pushed.",
-    "not_committed": "The step has no verified result to publish. Verification must accept it first; a rejected result "
+    "not_committed": "The step has no result accepted by factory commit to publish. Factory commit must accept it first; a rejected result "
     "cannot be published.",
-    "remote_ahead": "The remote task branch contains the verified commit plus later commits. Compare the histories "
+    "remote_ahead": "The remote task branch contains the commit accepted by factory commit plus later commits. Compare the histories "
     "and decide how to reconcile them; the factory neither records this as its publication nor forces a push.",
     "no_remote": "The repository has no origin remote. The owner must configure the intended remote before publication.",
-    "not_advanceable": "Only the current verified, released and published attempt can advance to a following step, with "
+    "not_advanceable": "Only the current attempt accepted by factory commit, released and published can advance to a following step, with "
     "its claim kept. Inspect its status; an unfinished abandon must return the claim before new checks are admitted.",
     "claim_lost": "The tracker no longer confirms the factory's claim: it was reverted, taken by another actor or the "
     "task closed. Nothing retakes it. Inspect ownership before abandoning the retained attempt and deciding on fresh admission.",
@@ -143,14 +145,14 @@ GUIDE = {
     "decide to abandon and admit the task afresh at plan.",
     "main_moved": "Main moved during checks, so the required check names may be stale. Rounds recheck their tasks "
     "against current main and hold after three consecutive changes. A manually started task needs a manual recheck decision.",
-    "branch_moved": "The local task branch no longer contains the verified commit. Restore that history before "
+    "branch_moved": "The local task branch no longer contains the commit accepted by factory commit. Restore that history before "
     "publication or decide to abandon the attempt.",
-    "remote_moved": "The remote task branch moved during publication. Compare its current history with the verified "
+    "remote_moved": "The remote task branch moved during publication. Compare its current history with the accepted "
     "commit and reconcile it before deciding to retry publication.",
-    "diverged": "The remote task branch does not contain the verified commit. Compare and reconcile the histories "
+    "diverged": "The remote task branch does not contain the commit accepted by factory commit. Compare and reconcile the histories "
     "before publication; the factory never forces a push.",
     "remote_rejected": "The remote's policy rejected publication. Inspect that policy and the supplied diagnostic "
-    "before deciding how to publish the verified commit; the factory never forces a push.",
+    "before deciding how to publish the commit accepted by factory commit; the factory never forces a push.",
     "land": LAND_NEXT["land"],
     "landed": LAND_NEXT["landed"],
     "landing": LAND_GUIDE["landing"],
@@ -183,7 +185,7 @@ NEEDS_OWNER = (
 )
 
 # Commit rules and classified execution failures already have an owning explanation.
-GUIDE.update({word: f"Verification refused: {what}. Inspect the retained evidence and resolve this before continuing."
+GUIDE.update({word: f"Factory commit refused: {what}. Inspect the retained evidence and resolve this before continuing."
               for word, (what, _fix) in RULES.items()})
 GUIDE.update({f"run:{word}": f"{what} The owner must resolve this before new work is approved."
               for word, (what, _fix) in RUN.items()})

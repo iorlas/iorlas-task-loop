@@ -64,7 +64,7 @@ REQUEST = NextRequest(
     "tasks", "/tracker", Path("/checkout"), "auto", StepSettings(), Overrides(model="model-m", effort="high"), 30, max_running=10
 )
 STAMP = r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ tasks "
-STEPPED = r"\S+ plan (start|relaunch|repeat|verify|publish|report|skip)( \S+)+"  # every attempt-bearing move names its step
+STEPPED = r"\S+ plan (start|relaunch|repeat|commit|publish|report|skip)( \S+)+"  # every attempt-bearing move names its step
 LINE = re.compile(STAMP + rf"({STEPPED}|\S+ (start|report) (refused|unavailable|claim_leaked)\S*|round( \S+)+)")
 
 
@@ -133,7 +133,7 @@ class Recorded:
         self.released = release
 
     def commit(self, key: AttemptKey) -> CommitResult:
-        self.calls.append("verify")
+        self.calls.append("commit")
         return Committed("blob")
 
     def release(self, key: AttemptKey, abandon: bool, me: EntryIdentity | None = None) -> ReleaseResult:
@@ -288,7 +288,7 @@ def captured(con: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checko
 
 
 @pytest.mark.parametrize("case, expected, calls", [
-    ("verify", ("verify", "committed release=released branch=published"), ["verify", "release", "publish"]),
+    ("commit", ("commit", "committed release=released branch=published"), ["commit", "release", "publish"]),
     ("repeat", ("repeat", "repeated"), []),
     ("repeats_exhausted", ("report", "repeats_exhausted"), []),
     ("failed", ("report", "failed:run:worker_failed"), []),
@@ -311,7 +311,7 @@ def test_a_step_that_ran_is_verified_repeated_or_reported_every_round(
     if case == "failed":
         registered.execute("DELETE FROM reservation")
         released(registered, "attempt", "kept")
-    rounds = [bench.round() for _ in range(1 if case == "verify" else 2)]
+    rounds = [bench.round() for _ in range(1 if case == "commit" else 2)]
     assert all(moves(each) == [("tl-1", *expected)] for each in rounds)  # a failure is reported every round, never retried
     assert bench.recorded.calls == calls
     assert bench.repeats.calls == (["tl-1", "tl-1"] if case == "repeat" else [])

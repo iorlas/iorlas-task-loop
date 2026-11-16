@@ -214,7 +214,7 @@ def test_show_prints_the_hold_lines_and_the_answer_with_the_stored_label(factory
     assert "Hold: branch_moved at 1970-01-01 00:00:10 UTC (cause a)" in text
     assert "Hold tracker: `auto` removed, `held` added, commented" in text and "Hold claim: returned" in text
     assert "Next: on_hold\nHeld: the factory abandoned" in text and "restore its approval label `auto`" in text
-    assert "First restore task/tl-1 to contain the verified commit" in text and "--abandon` again" not in text
+    assert "First restore task/tl-1 to contain the commit accepted by factory commit" in text and "--abandon` again" not in text
     data = as_data(shown)
     assert data["label"] == "auto" and data["hold_due"] is None
     assert data["hold"] == {"reason": "branch_moved", "cause": "a", "label": "auto", "held_at": 10.0, "labels": "moved",
@@ -311,10 +311,10 @@ def test_a_moved_head_shows_the_refs_the_agent_made_but_stays_next_verify_not_a_
     ports = replace(reads(factory), leftovers=lambda _key: CommitRefused("head_moved", ("refs/tags/task/evil",)))
     found = list_attempts(ports)
     assert isinstance(found, Listed) and [(each.next, each.leftovers) for each in found.attempts] == [
-        ("verify", ("head_moved", "refs/tags/task/evil"))]
+        ("commit", ("head_moved", "refs/tags/task/evil"))]
     for reason in ("branch", "unborn"):  # no listing: the reason alone, which the `unsettled` guide's `branch` text answers
         found = list_attempts(replace(ports, leftovers=lambda _key, why=reason: CommitRefused(why)))
-        assert isinstance(found, Listed) and [(each.next, each.leftovers) for each in found.attempts] == [("verify", (reason,))]
+        assert isinstance(found, Listed) and [(each.next, each.leftovers) for each in found.attempts] == [("commit", (reason,))]
     found = list_attempts(replace(ports, leftovers=lambda _key: Uncommitted("dirty", ("a",))))  # not shown: only the three
     assert isinstance(found, Listed) and [each.leftovers for each in found.attempts] == [()]
 

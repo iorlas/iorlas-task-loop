@@ -295,7 +295,7 @@ NEXT: list[tuple[str, EntryState, AttemptResult, bool, Next]] = [
     ("registered", "running", AttemptResult("pending", "registered"), True, "stuck:hung"),
     ("dispatching", "gone", AttemptResult("pending", "dispatching"), False, "release"),
     ("registered", "different_process", AttemptResult("pending", "registered"), True, "release"),
-    ("captured", "gone", AttemptResult("pending", "commit"), True, "verify"),
+    ("captured", "gone", AttemptResult("pending", "commit"), True, "commit"),
     ("captured", "gone", AttemptResult("pending", "session_pending"), False, "stuck:uncollected"),
     ("captured", "gone", AttemptResult("pending", "validation_pending"), False, "stuck:uncollected"),
     ("captured", "gone", AttemptResult("conflict", "session"), False, "stuck:conflict"),
@@ -490,7 +490,7 @@ def test_show_reads_leftovers_fresh_and_names_the_repeat(
     factory_commit = FactoryCommit(store, checkouts, slot_files, gone, lambda: 20, hold, ids=NativeIds())
     reads = StatusPorts(store, observe("gone", []), lambda: 10, factory_commit.leftovers, lambda: "boot")
     before = show_attempt(reads, tmp_path / "art", "tasks", "tl-1")
-    assert isinstance(before, Shown) and (before.view.next, before.view.leftovers) == ("verify", ())  # nothing committed yet
+    assert isinstance(before, Shown) and (before.view.next, before.view.leftovers) == ("commit", ())  # nothing committed yet
     left = Failed("uncommitted", "uncommitted", f"?? {stray}")  # as show lists it
     assert commit_task(store, factory_commit, Releases(), Publishes(), "tasks", "tl-1") == left
     shown = show_attempt(reads, tmp_path / "art", "tasks", "tl-1")
@@ -509,7 +509,7 @@ def test_show_reads_leftovers_fresh_and_names_the_repeat(
     assert isinstance(listed, Listed) and [each.next for each in listed.attempts] == ["repeat"] and probed == [KEY]
     slot.remove_file(stray)
     tidied = show_attempt(reads, tmp_path / "art", "tasks", "tl-1")
-    assert isinstance(tidied, Shown) and (tidied.view.next, tidied.view.leftovers) == ("verify", ())
+    assert isinstance(tidied, Shown) and (tidied.view.next, tidied.view.leftovers) == ("commit", ())
 
 
 def test_show_and_verify_agree_on_a_slot_moved_off_its_task_branch(
@@ -541,7 +541,7 @@ def test_show_and_verify_agree_on_a_slot_moved_off_its_task_branch(
     slot.checkout_new("other")
     assert factory_commit.leftovers(KEY) == CommitRefused("branch")
     off = show_attempt(reads, tmp_path / "art", "tasks", "tl-1")
-    assert isinstance(off, Shown) and (off.view.next, off.view.leftovers) == ("verify", ("branch",))
+    assert isinstance(off, Shown) and (off.view.next, off.view.leftovers) == ("commit", ("branch",))
     assert commit_task(store, factory_commit, Releases(), Publishes(), "tasks", "tl-1") == Failed("refused", "branch")
 
 
@@ -597,16 +597,16 @@ def test_adopt_refuses_another_schema_and_otherwise_creates_the_database(
 
 
 # the entry's longest line: a retried publication, its collected outcome, the verify, claim and release words
-LONGEST = ("unavailable evidence publish=accepted then=collected:committed verify=unavailable:git claim=unrenewed release=held:slot_dirty "
+LONGEST = ("unavailable evidence publish=accepted then=collected:committed commit=unavailable:git claim=unrenewed release=held:slot_dirty "
            "branch=unavailable:remote")
 
 
 @pytest.mark.parametrize(("tail", "expected"), [
     (None, None),
     ("", None),
-    ("refused slot_staged verify=refused:not_captured\n", "refused slot_staged verify=refused:not_captured"),
-    ("unavailable credentials:auth verify=refused:not_captured\nnoise\n", "unavailable credentials:auth verify=refused:not_captured"),
-    ("collected committed verify=committed\nrefused \x1b]0;owned\x07\n", "collected committed verify=committed"),
+    ("refused slot_staged commit=refused:not_captured\n", "refused slot_staged commit=refused:not_captured"),
+    ("unavailable credentials:auth commit=refused:not_captured\nnoise\n", "unavailable credentials:auth commit=refused:not_captured"),
+    ("collected committed commit=committed\nrefused \x1b]0;owned\x07\n", "collected committed commit=committed"),
     ("refused slot_staged\x9b31m\n", None),
     ("Traceback (most recent call last):\n", None),
     ("failed TypeError\n", "failed TypeError"),

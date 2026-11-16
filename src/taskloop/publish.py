@@ -1,8 +1,8 @@
-"""Publish a verified plan: push the attempt's verified commit X to origin's `task/<id>`, never forced, and record the
+"""Publish an accepted plan: push the attempt's commit X accepted by factory commit to origin's `task/<id>`, never forced; record the
 published fact through PublishStore. Its one Git write is `push`.
 
 Before any network call, in order (section 3 of tl-8bh9.4.3.1.12): the attempt exists, is not abandoned, is not already
-published (then no Git at all), has a stored `verified` verdict with X; the slot's pointer names the attempt's repository
+published (then no Git at all), has a stored `committed` verdict with X; the slot's pointer names the attempt's repository
 (file reads first); `origin` exists; the local `task/<id>` contains X. Then one non-force push of the pinned X from the
 person's checkout (never the slot, which another attempt may hold: no reservation, slot lock or stop proof is needed, as
 the push touches no worktree, index or HEAD). Only a `Pushed` result is recorded, in one fenced transaction (Git itself
@@ -126,7 +126,7 @@ class BranchPublish:
             return _unavailable("store", "The factory database is unavailable.")
 
     def _publish(self, key: AttemptKey) -> PublishResult:
-        """Publish the attempt's verified commit once: every precondition first, then one push, then the record."""
+        """Publish the attempt's commit accepted by factory commit once: every precondition, then one push, then the record."""
         try:
             row = self._read(key)
         except (sqlite3.Error, StoreUnavailable) as error:
@@ -141,7 +141,7 @@ class BranchPublish:
         return found if isinstance(found, NotPublished) else self._pushed(key, row.task_id, *found, x)
 
     def _read(self, key: AttemptKey) -> PublishRow | PublishResult:
-        """Its own fenced read, in order: the attempt, not abandoned, not yet published (then no Git), verified."""
+        """Its own fenced read, in order: the attempt, not abandoned, not yet published (then no Git), accepted by factory commit."""
         row = PublishStore(self.store).read(key)
         if row is None:
             return _refused("absent", "No such attempt.")
@@ -159,7 +159,7 @@ class BranchPublish:
         if row.verdict == "rejected":
             return _refused(PublishRefusalReason.NOT_COMMITTED, f"The step's result was rejected ({row.reason}).")
         return _refused(PublishRefusalReason.NOT_COMMITTED,
-                        "The step's result is not verified yet. Verification must accept it before publication.")
+                        "The step's result is not accepted by factory commit yet. Factory commit must accept it before publication.")
 
     def _repository(self, row: PublishRow, x: str) -> tuple[Repo, Path] | NotPublished:
         """The person's checkout through the slot's verified pointer (file reads first), `origin`, then the local branch

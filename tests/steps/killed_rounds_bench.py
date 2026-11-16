@@ -148,7 +148,7 @@ class RestartFactory(Factory):
 
         def verified(app: FactoryCommit, key: AttemptKey) -> CommitResult:
             result = commit(app, key)
-            self.effects.after("verify")
+            self.effects.after("commit")
             return result
 
         def released(app: SlotRelease, key: AttemptKey, abandon: bool, me: tuple[int, str, str] | None = None) -> ReleaseResult:

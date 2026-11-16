@@ -52,7 +52,7 @@ def resumable(
     factory.agents["tl-1", "implement"] = scripted(
         slot.repo, {"disposition": "needs_owner", "message": None, "explanation": "Choose a shape"}, {})
     assert factory.round() == [("tl-1", "plan", "start", "started")]
-    assert factory.round() == [("tl-1", "plan", "verify", "committed release=released branch=published")]
+    assert factory.round() == [("tl-1", "plan", "commit", "committed release=released branch=published")]
     assert factory.round() == [("tl-1", "implement", "advance", "started")]
     assert factory.round() == [("tl-1", "implement", "hold", "held failed:needs_owner")]
     yield factory

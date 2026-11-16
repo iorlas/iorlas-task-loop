@@ -106,7 +106,7 @@ def test_valid_repair_follows_normal_verification(factory: Factory) -> None:
     factory.round()
     scripts(factory, factory.slot, "tl-1")
     assert factory.round()[0][2] == "repeat"
-    assert factory.round()[0][2] == "verify"
+    assert factory.round()[0][2] == "commit"
     assert len(factory.ran) == 2 and not factory.tracker.comments
 
 

@@ -21,7 +21,7 @@ from process_lock import LockHeldError, ProcessLock
 from taskloop.attempt_types import Admission
 
 LABEL: Final = "taskloop-slot"
-type Role = Literal["entry", "verify", "release", "repeat", "probe", "land"]
+type Role = Literal["entry", "commit", "release", "repeat", "probe", "land"]
 
 
 class SlotBusy(Exception):
@@ -65,7 +65,7 @@ def _held(slot_path: str, attempt_id: str, role: Role) -> Generator[None]:
 
 def hold(admission: Admission) -> AbstractContextManager[None]:
     """A factory commit's Git writes for `admission`, under its slot's lock; released when the block ends, raised or not."""
-    return _held(admission.slot_path, admission.key.attempt_id, "verify")
+    return _held(admission.slot_path, admission.key.attempt_id, "commit")
 
 
 def custody(slot_path: str, attempt_id: str) -> AbstractContextManager[None]:
@@ -86,7 +86,7 @@ def repeating(slot_path: str, attempt_id: str) -> AbstractContextManager[None]:
 
 def probe(slot_path: str) -> bool | None:
     """Admission's free rule: True when the slot's lock is free now (taken and released at once), False when another
-    holder (an entry, a verify, a release still parking) owns it, None when the lock file cannot be opened."""
+    holder (an entry, a factory commit, a release still parking) owns it, None when the lock file cannot be opened."""
     try:
         acquire(slot_path, "", "probe").release()
     except SlotBusy:

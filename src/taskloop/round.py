@@ -1,12 +1,12 @@
 """`tl step next`: one scheduling round over the existing operations, stateless and idempotent.
 
 Settle each existing attempt of the backlog by its `Next` word (relaunch an admitted attempt whose entry is not running,
-a checks attempt with the checks launcher; verify, repeat; hold a round-taken task that stopped (`Next: hold`, through
+a checks attempt with the checks launcher; commit, repeat; hold a round-taken task that stopped (`Next: hold`, through
 `hold.hold_task`; an `on_hold` one costs nothing); report the rest: a failed checks attempt is never re-run), advance each
 claimed task whose step is done (`Next: advance`) to its next step, oldest release first (a round-taken task whose advance
 is refused `claim_lost` or `branch_moved` is held), then admit eligible ready tasks in priority order into the slots left
 free, storing the round's label on each fresh attempt (an `on_hold` task whose hold removed this very label is eligible
-again: `hold_status.reingests`), then publish the verified, released, unpublished results read at the start (a
+again: `hold_status.reingests`), then publish the released, unpublished results accepted by factory commit read at the start (a
 round-taken `branch_moved` is held), then remove `held` from held tasks taken again (`hold.clear_holds`). Under the profile's
 `land: auto` it first lands the oldest passed task in the repository (`round_land`: the shared `land.land`). It adds no
 state, lock, Git write, tracker write or process of its own beyond the hold's and the land's: its only other output is one
@@ -33,7 +33,7 @@ from taskloop.agents.settings import Overrides, StepSettings
 from taskloop.answer_repair_route import repair_move
 from taskloop.attempt_reads import StoreUnavailable
 from taskloop.attempt_result import PendingReason, succeeded
-from taskloop.attempt_status import AttemptView, Listed, StatusPorts, list_attempts
+from taskloop.attempt_status import COMMIT, AttemptView, Listed, StatusPorts, list_attempts
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import AttemptKey, AttemptResult, Checkouts
 from taskloop.drain.actions import Fenced, Unobservable, operation
@@ -250,7 +250,7 @@ def _settle_attempt(ports: RoundPorts, request: NextRequest, each: AttemptView, 
                 action = "relaunch" if each.next == "start" else "repeat"
                 found = result.attempt_id if isinstance(result, Started) else attempt
                 trail.add(Move(task, action, _word(result), found, _detail(result), step))  # a repeat stays in its step
-        case "verify":
+        case "commit":
             trail.add(_committed(ports, request.backlog, each))
         case "hold":
             trail.add(_held(ports.holding, each))
@@ -345,18 +345,18 @@ def _detail(result: Started | Failed) -> str:
 
 
 def _committed(ports: RoundPorts, backlog: str, each: AttemptView) -> Move:
-    """`tl step commit` as built: the verdict, then the settled release and the publication of a verified result."""
+    """`tl step commit`: the verdict, then the settled release and publication of a result accepted by factory commit."""
     if each.checks is None and each.result.status == "pending" and each.result.reason != PendingReason.COMMIT:
         completed = (AttemptResult("unavailable", "store") if ports.completion is None
                      else ports.completion(backlog, each.task_id, each.attempt_id))
         if completed.status != "pending" or completed.reason != PendingReason.COMMIT:
-            return Move(each.task_id, "verify", f"{completed.status}:{completed.reason}", each.attempt_id,
+            return Move(each.task_id, COMMIT, f"{completed.status}:{completed.reason}", each.attempt_id,
                         completed.explanation, each.step)
     committed = commit_task(ports.reads.store, ports.factory_commit, ports.releaser, ports.publisher, backlog, each.task_id)
     if isinstance(committed, CommittedTask):
         word = f"{committed.status} release={committed.release} branch={committed.published}"
-        return Move(each.task_id, "verify", word, each.attempt_id, step=each.step)
-    return Move(each.task_id, "verify", committed.word, each.attempt_id, committed.detail, each.step)
+        return Move(each.task_id, COMMIT, word, each.attempt_id, step=each.step)
+    return Move(each.task_id, COMMIT, committed.word, each.attempt_id, committed.detail, each.step)
 
 
 def _full(store: AttemptStore, reserve: int = 0) -> str:
@@ -467,7 +467,7 @@ def _start_each(ports: RoundPorts, request: NextRequest, ordered: tuple[TaskRow,
 
 
 def _publish(ports: RoundPorts, backlog: str, committed: Iterable[AttemptView], trail: Trail) -> str:
-    """The verified, released, unpublished results read before settling: pushed again every round until one succeeds. One
+    """The released, unpublished results accepted by factory commit read before settling: pushed each round until success. One
     whose entry still runs is left to that entry, which publishes right after its release; `interrupted` on a stop. A
     round-taken task refused `branch_moved` is held instead of being pushed again every round."""
     for each in committed:

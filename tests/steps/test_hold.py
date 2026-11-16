@@ -587,7 +587,7 @@ def test_the_cause_is_fenced_on_the_status_read_now(bench: Bench, fresh: Attempt
 
 def test_a_round_passed_cause_stands_while_the_view_still_waits_for_its_advance_or_publication(bench: Bench) -> None:
     HoldStore(lambda: bench.con).insert(HoldInsert(event=event(RoundCause(reason=RoundReason.BRANCH_MOVED)), now=5.0))
-    bench.fresh = replace(VIEW, next="verify")
+    bench.fresh = replace(VIEW, next="commit")
     assert bench.hold().refusal == "refused:retired"
     bench.fresh = replace(VIEW, next="publish")
     assert bench.hold(reason="branch_moved").word == "held"

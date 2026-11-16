@@ -37,7 +37,7 @@ LAND_GUIDE: Final = {
     INTERRUPTED: "The land was interrupted and stopped where it was; a running check was stopped with it. Retrying marks "
     "that check interrupted and repeats its whole block.",
     "push_barred": "This agent session is barred from pushing. A person must decide whether to land from their own session.",
-    "not_done": "The implementation has not completed verification, release with its claim kept, and publication. "
+    "not_done": "The implementation has not been accepted by factory commit, released with its claim kept, and published. "
     "Review the task's next step and finish that work before deciding to land.",
     "not_checked": "The task's checks have not passed and been released. Decide whether to finish or retry the checks, "
     "abandon the attempt, or confirm that the change is already integrated after the checks have concluded.",

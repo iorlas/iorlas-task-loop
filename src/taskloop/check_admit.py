@@ -3,7 +3,7 @@ or again on the same X after its latest checks attempt concluded `failed` and wa
 claims nothing, writes no input file and runs nothing; the checks entry (`check_entry`) does the rest.
 
 Every read before any effect, in order: the deadline; the implement attempt still the task's current one and done
-(verified, released with its claim kept, published at X; else `not_advanceable`, also while the task's abandon is half
+(accepted by factory commit, released with its claim kept, published at X; else `not_advanceable`, also while the task's abandon is half
 done) and the number its checks attempts give; the checkout's repository is the attempt's; X readable (`commit_missing`)
 and still on the task's branch, the local `task/<id>` else the remote-tracking one (`branch_moved`); the required names
 from the profile at the person's local `refs/heads/main` (O1: `target`, `target_profile`, `no_required`), each with the
@@ -93,8 +93,8 @@ def next_number(con: sqlite3.Connection, previous: AttemptKey) -> int | AdmitRef
     found = task_of(con, previous)
     row = None if found is None else current(con, found.backlog, found.task_id)
     if row is None or row.key != previous or not row.done or following(row.step) != CHECK:
-        return AdmitRefused("not_advanceable", detail="The implement attempt is not the task's current, done (verified, released "
-                            "with its claim kept, published) attempt")
+        return AdmitRefused("not_advanceable", detail="The implement attempt is not the task's current, done "
+                            "(accepted by factory commit, released with its claim kept, published) attempt")
     checks = latest(con, previous)
     if checks is None:
         return 1

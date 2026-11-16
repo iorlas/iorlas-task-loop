@@ -11,7 +11,7 @@ REFUSALS = {
     "authority and requires reconciliation before continuing.",
     "ineligible": "The saved attempt is no longer eligible for recovery. The factory preserves its work and waits "
     "for the current attempt's state to be resolved.",
-    "captured": "The execution is already captured. The factory retains it for trusted completion before verification.",
+    "captured": "The execution is already captured. The factory retains it for trusted completion before factory commit.",
     "unresolved": "The saved execution cannot be confirmed stopped. The factory keeps its authority and waits "
     "for reliable process observations before recovery.",
     "occupied": "A prior recovery owner still runs or lacks stop proof. The factory retains that owner's authority "
@@ -26,7 +26,7 @@ REFUSALS = {
     "and preserves the current execution and evidence.",
     "recovery_unregistered": "Recovery owns the attempt but its replacement worker is not registered. The factory "
     "refuses callbacks until that execution has a durable worker identity.",
-    "dirty": "The slot has retained changes. Inspect and settle them before verification; preserve needed work.",
+    "dirty": "The slot has retained changes. Inspect and settle them before factory commit; preserve needed work.",
     "slot_head_moved": "The slot HEAD moved from its expected commit. Inspect and restore the expected commit before continuing.",
     "ref_moved": "The task branch moved while work was being saved. Preserve the slot and reconcile its branch before release.",
     "repo": "The slot belongs to another repository. Restore the expected repository binding before continuing.",
@@ -95,31 +95,31 @@ REFUSALS = {
     "slot_staged": "The slot has staged changes. Inspect and settle those changes before continuing; the factory "
     "will not discard them.",
     "slot_detached": "The task slot is unexpectedly detached. Restore the task branch containing the attempt's "
-    "work before verification.",
+    "work before factory commit.",
     "not_captured": "No agent result has been captured. Wait for the entry, then inspect its evidence if it has stopped.",
     "no_base": "The attempt has no retained admission base. Preserve its evidence and ask the owner to resolve "
     "the inconsistent state.",
     "session": "The recorded session conflicts with the answer. Preserve the transcript and ask the owner to resolve it.",
-    "session_pending": "The session is not complete yet. Wait for collection before verification.",
+    "session_pending": "The session is not complete yet. Wait for collection before factory commit.",
     "session_fault": "The session could not be collected. Preserve its evidence and inspect the supplied "
     "diagnostic before proceeding.",
     "validation_pending": "Answer validation has not completed. Wait for the owning entry to finish collection.",
     "inconsistent": "The retained facts do not produce a consistent verdict. Preserve all evidence and ask the owner to investigate.",
-    "read_only": "Verification requires writes but this reader is read-only. Use the owning step verification "
+    "read_only": "Factory commit requires writes but this reader is read-only. Use the owning step commit "
     "operation after inspecting status.",
     "released": "The attempt has already released its slot. Inspect the current task status before starting its next step.",
-    "uncommitted": "The attempt left uncommitted work. Inspect and settle the listed files before verification or release.",
+    "uncommitted": "The attempt left uncommitted work. Inspect and settle the listed files before factory commit or release.",
     "unsafe": "The attempt left paths the factory cannot safely settle. Inspect the listing and preserve needed "
     "work before resolving it.",
     "ignored": "Ignored files remain in the slot. Inspect them and preserve needed data before clearing the slot.",
     "head_moved": "The slot HEAD moved away from the attempt's commit. Inspect and restore the expected commit before continuing.",
-    "branch": "The slot is on an unexpected branch. Restore the attempt's expected branch before verification.",
-    "unborn": "The slot has no commit. Restore the attempt's expected commit before verification.",
+    "branch": "The slot is on an unexpected branch. Restore the attempt's expected branch before factory commit.",
+    "unborn": "The slot has no commit. Restore the attempt's expected commit before factory commit.",
     "redirected": "The slot points at another Git directory. Restore its verified pointer before continuing.",
     "staged": "Staged changes prevent settlement. Inspect the staged files and settle them before continuing.",
     "superseded": "A newer attempt superseded this work. Inspect the current attempt; this one cannot be settled again.",
     "changed_admission": "Admission changed during this operation. Inspect the winning attempt before continuing.",
-    "changed_answer": "The captured answer changed during verification. Preserve the evidence and inspect the current result.",
+    "changed_answer": "The captured answer changed during factory commit. Preserve the evidence and inspect the current result.",
     "check_changed": "Another process recorded the check result first. Inspect the current check result before continuing.",
     "setup_changed": "Another process recorded the setup result first. Inspect the current setup result before continuing.",
     "land_changed": "Another process changed the land candidate. Inspect the current candidate before continuing.",

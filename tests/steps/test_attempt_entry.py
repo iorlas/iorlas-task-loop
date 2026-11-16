@@ -185,10 +185,10 @@ NOTE = "docs/design/tl-1/note.md"
 @pytest.mark.parametrize(
     ("files", "line", "code", "opens"),
     [
-            ({P: PLAN_TEXT}, "collected committed verify=committed claim=held release=released branch=published", 0, 17),
-            ({P: " \n"}, "collected rejected:plan_empty verify=rejected:plan_empty claim=held release=released", 1, 17),
-        ({P: PLAN_TEXT, NOTE: "n"}, "pending commit verify=uncommitted:uncommitted claim=held", 1, 13),
-        ({}, "pending commit verify=uncommitted:unsafe claim=held", 1, 9),
+            ({P: PLAN_TEXT}, "collected committed commit=committed claim=held release=released branch=published", 0, 17),
+            ({P: " \n"}, "collected rejected:plan_empty commit=rejected:plan_empty claim=held release=released", 1, 17),
+        ({P: PLAN_TEXT, NOTE: "n"}, "pending commit commit=uncommitted:uncommitted claim=held", 1, 13),
+        ({}, "pending commit commit=uncommitted:unsafe claim=held", 1, 9),
     ],
     ids=["committed", "rejected", "uncommitted", "unsafe"],
 )
@@ -211,16 +211,16 @@ def test_the_registered_entry_executes_verifies_once_and_exits_0_only_when_verif
     assert (entry.remote_opens > 0) == (code == 0)  # only a verified plan is published; its Git views are the publication's
 
 
-INCOMPLETE = "collected incomplete verify=not_applicable claim=held release=released"
+INCOMPLETE = "collected incomplete commit=not_applicable claim=held release=released"
 
 
 @pytest.mark.parametrize(
     ("rc", "text", "line"),
     [
-        (1, "", "collected run:vendor_blip verify=not_applicable claim=held release=released"),
-        (1, json.dumps(PLAN), "collected run:vendor_blip verify=not_applicable claim=held release=released"),
+        (1, "", "collected run:vendor_blip commit=not_applicable claim=held release=released"),
+        (1, json.dumps(PLAN), "collected run:vendor_blip commit=not_applicable claim=held release=released"),
         (0, "not json", "collected answer:json_invalid: json: Answer must be one complete strict JSON value: "
-         "Expecting value: line 1 column 1 (char 0) verify=not_applicable claim=held release=released"),
+         "Expecting value: line 1 column 1 (char 0) commit=not_applicable claim=held release=released"),
         (0, json.dumps(PLAN | {"disposition": "incomplete", "plan_path": None, "paths": [], "message": None}), INCOMPLETE),
     ],
     ids=["failed_run_no_answer", "failed_run_valid_answer", "clean_run_bad_answer", "incomplete"],
@@ -262,11 +262,11 @@ def test_an_absent_task_or_a_missing_database_runs_nothing(
 @pytest.mark.parametrize(
     ("failures", "wait_to", "line", "waits", "captures"),
     [
-        (1, 10, "unavailable evidence publish=accepted then=collected:committed verify=committed claim=held release=released "
+        (1, 10, "unavailable evidence publish=accepted then=collected:committed commit=committed claim=held release=released "
          "branch=published", 1, 2),
-        (4, 10, "unavailable evidence publish=accepted then=collected:committed verify=committed claim=held release=released "
+        (4, 10, "unavailable evidence publish=accepted then=collected:committed commit=committed claim=held release=released "
          "branch=published", 4, 5),
-        (9, 100, "unavailable evidence verify=refused:not_captured claim=held", 1, 1),
+        (9, 100, "unavailable evidence commit=refused:not_captured claim=held", 1, 1),
     ],
     ids=["second_try_captures", "retries_until_it_captures", "never_past_the_deadline"],
 )
@@ -330,19 +330,19 @@ def test_the_entry_holds_the_slot_while_it_runs_and_frees_it_when_it_ends_or_rai
     entry.heartbeat_for = broken
     with pytest.raises(RuntimeError):
         entry()
-    acquire(str(slot.path), "after", "verify").release()
+    acquire(str(slot.path), "after", "commit").release()
     entry.heartbeat_for = heartbeat_for
 
     def observed(worker: Worker) -> bool:
         with pytest.raises(SlotBusy):
-            acquire(str(slot.path), "other", "verify")
+            acquire(str(slot.path), "other", "commit")
         seen.append(True)
         return gone(worker)
 
     entry.gone = observed
-    assert entry() == 0 and entry.lines == ["collected committed verify=committed claim=held release=released branch=published"]
+    assert entry() == 0 and entry.lines == ["collected committed commit=committed claim=held release=released branch=published"]
     assert seen == [True] * 3
-    acquire(str(slot.path), "after", "verify").release()
+    acquire(str(slot.path), "after", "commit").release()
 
 
 def test_a_verified_plan_is_published_after_the_lock_is_released_and_the_keep_alive_stopped(
@@ -353,7 +353,7 @@ def test_a_verified_plan_is_published_after_the_lock_is_released_and_the_keep_al
     seen: list[int] = []
 
     def free() -> None:
-        acquire(str(slot.path), "other", "verify").release()
+        acquire(str(slot.path), "other", "commit").release()
         seen.append(entry.stop.set_calls)
 
     entry.pushing = free
@@ -372,7 +372,7 @@ def test_a_publication_that_raises_keeps_the_log_line_and_the_verified_exit_0(
 
     entry.pushing = broken
     assert entry() == 0
-    assert entry.lines == ["collected committed verify=committed claim=held release=released branch=unavailable:git"]
+    assert entry.lines == ["collected committed commit=committed claim=held release=released branch=unavailable:git"]
 
 
 def test_an_unreachable_origin_is_only_the_branch_word_and_the_verified_plan_still_exits_0(
@@ -381,7 +381,7 @@ def test_an_unreachable_origin_is_only_the_branch_word_and_the_verified_plan_sti
     entry = Entry(admitted, checkouts, slot_files, me(), written=(slot, {P: PLAN_TEXT}, [P]))
     repo.set_remote_url("origin", "https://example.invalid/moved.git")
     assert entry() == 0
-    assert entry.lines == ["collected committed verify=committed claim=held release=released branch=unavailable:remote"]
+    assert entry.lines == ["collected committed commit=committed claim=held release=released branch=unavailable:remote"]
 
 
 @pytest.mark.parametrize(
@@ -401,7 +401,7 @@ def test_a_claim_lost_or_faulted_while_the_step_runs_is_only_recorded(
 ) -> None:
     entry = Entry(admitted, checkouts, slot_files, me(), written=(slot, {P: PLAN_TEXT}, [P]), beats=beats, rounds=rounds)
     assert entry() == 0  # the step completes, publishes and verifies; nothing is released or re-claimed
-    assert entry.lines == [f"collected committed verify=committed claim={word} release=released branch=published"]
+    assert entry.lines == [f"collected committed commit=committed claim={word} release=released branch=published"]
     assert len(entry.run.calls) == 1
     assert entry.renewed == [("/tracker", "tl-1")] * renewals and entry.stop.set_calls == 1
 
@@ -412,7 +412,7 @@ def test_a_failed_run_that_left_files_keeps_its_slot_held_and_the_claim(
     """Release never resets work: the run's leftovers keep the slot reserved (`Next: release` once the person tidies)."""
     entry = Entry(admitted, checkouts, slot_files, me(), rc=1, written=(slot, {P: PLAN_TEXT}, [P]))
     assert entry() == 1
-    assert entry.lines == ["collected run:vendor_blip verify=not_applicable claim=held release=held:slot_dirty"]
+    assert entry.lines == ["collected run:vendor_blip commit=not_applicable claim=held release=held:slot_dirty"]
     con = Store(SCHEMA).open_ro(admitted)
     assert con is not None
     assert con.execute("SELECT attempt_id FROM reservation").fetchall() == [("attempt",)]

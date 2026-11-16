@@ -150,7 +150,7 @@ def nowhere(*_args: object) -> AbstractContextManager[None]:
 
 
 def run(con: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, files: SlotFiles,
-        written: dict[str, str], disposition: str = "planned", *, verify: bool = True, release: bool = True) -> str:
+        written: dict[str, str], disposition: str = "planned", *, commit: bool = True, release: bool = True) -> str:
     """The registered attempt run once on `task/tl-1`, verified and released (settled): the branch tip."""
     store = AttemptStore(lambda: con)
     attempts = Attempts(
@@ -163,7 +163,7 @@ def run(con: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: 
         files,
     )
     assert attempts.execute(KEY, ENTRY).reason == "commit"
-    if verify:
+    if commit:
         FactoryCommit(store, checkouts, files, lambda _w: True, lambda: 20, nowhere, ids=NativeIds()).commit(KEY)
     if release:
         releaser = SlotRelease(store, checkouts, files, lambda _e: "gone", lambda _w: True, nowhere, lambda _r, _t: True, lambda: 30,
@@ -188,7 +188,7 @@ def rows(con: sqlite3.Connection) -> list[tuple[object, ...]]:
 def test_verifier_binds_commit_evidence_and_suppresses_stored_verdict(
     registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles,
 ) -> None:
-    run(registered, tmp_path, slot, checkouts, slot_files, {P: PLAN_TEXT}, verify=False, release=False)
+    run(registered, tmp_path, slot, checkouts, slot_files, {P: PLAN_TEXT}, commit=False, release=False)
     files = EvidenceFiles(tmp_path)
     timing = partial(files.observe_operation, clock=lambda: 10.0, wall=lambda: 100.0, ids=NativeIds())
     factory_commit = FactoryCommit(AttemptStore(lambda: registered), checkouts, slot_files, lambda _w: True,
@@ -275,7 +275,7 @@ def test_each_precondition_refuses_before_any_push(
     assert isinstance(found, NotPublished) and (found.kind, found.reason, publish_word(found)) == ("refused", reason, f"refused:{reason}")
     assert all(recipe not in found.detail for recipe in ("tl step ", "git remote add", "git push"))
     if reason == "not_committed":
-        assert "Verification must accept it before publication" in found.detail
+        assert "Factory commit must accept it before publication" in found.detail
     assert (pushes, rows(registered), "task/tl-1" in remote.branches(), len(git.opened)) == ([], [], False, opened)
 
 

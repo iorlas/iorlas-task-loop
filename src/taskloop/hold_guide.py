@@ -97,7 +97,8 @@ def hold_guide(view: AttemptView) -> str:
                         f"current main. Once that choice is settled, {back}.")
     answer = f"{LEAD}{what} {recovery} To give up, close the task."
     if row.reason == "branch_moved":
-        answer += (f" First restore task/{task} to contain the verified commit, or rename it aside (`old/<id>-` and the first 12 "
+        answer += (f" First restore task/{task} to contain the commit accepted by factory commit, "
+                   "or rename it aside (`old/<id>-` and the first 12 "
                    "characters of its tip).")
     if row.reason == "claim_lost":
         answer += " Someone else changed this task's claim while the factory worked on it."

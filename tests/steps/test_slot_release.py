@@ -326,7 +326,7 @@ def test_a_held_slot_lock_is_slot_busy(
     before, ports = stored(registered), Ports(registered, checkouts, slot_files)
     with occupy(lock_path(str(slot.path))):
         found = ports.releaser().release(KEY, True)
-    assert found == NotReleased("unavailable", "slot_busy", "Another entry, verify or release holds the slot. Nothing changed.")
+    assert found == NotReleased("unavailable", "slot_busy", "Another entry, factory commit or release holds the slot. Nothing changed.")
     assert (stored(registered), ports.opens, ports.unclaimed) == (before, 0, [])
 
 

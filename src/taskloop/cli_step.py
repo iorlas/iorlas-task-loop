@@ -81,8 +81,8 @@ def register(commands: Parsers) -> None:
     timing = _add(step, "setup-times", "Recent persisted implement setup times (read-only; no decision)")
     timing.add_argument("--backlog", metavar="KEY", required=True)
     _common(timing, "--db")
-    commit = _add(step, "commit", "Commit the step's listed files and verify them, then release a clean slot and publish a verified "
-                  "result; an agent step's only, never the checks")
+    commit = _add(step, "commit", "Complete factory commit: obtain the result commit and judge the step's rules, "
+                  "then release a clean slot and publish an accepted result; an agent step's only, never the checks")
     commit.add_argument("task_id", metavar="TASK")
     commit.add_argument("--backlog", required=True)
     _common(commit, "--db")
@@ -96,7 +96,8 @@ def register(commands: Parsers) -> None:
     _common(release, "--db")
     _round_flags(_add(step, "next", "Run one scheduling round: settle existing attempts, advance claimed tasks whose "
                       "step is done to the next step (no label check), start approved ready tasks in the free slots left, publish "
-                      "verified results, hold each task a round took that stopped (its label removed, `held` added, the claim "
+                      "results accepted by factory commit, hold each task a round took that stopped "
+                      "(its label removed, `held` added, the claim "
                       "returned, one comment: `bd list --label held`; adding the label back takes it again at plan) and remove "
                       "`held` once a held task is taken again"))
     rounds = _add(step, "rounds", ROUNDS)
@@ -110,7 +111,8 @@ def register(commands: Parsers) -> None:
     _round_flags(rounds)
     rounds.epilog = ("--json prints JSON Lines: one start record and one end record on a graceful stop; "
                      "refusals and abrupt end results go to stderr. Dashboard notices go to stderr with --json.")
-    publish = _add(step, "publish", "Push the step's verified commit to origin's task/<id> as you, never forced; nothing merges or lands")
+    publish = _add(step, "publish", "Push the step's commit accepted by factory commit to origin's task/<id> as you, "
+                   "never forced; nothing merges or lands")
     publish.add_argument("task_id", metavar="TASK")
     publish.add_argument("--backlog", required=True)
     _common(publish, "--db")
