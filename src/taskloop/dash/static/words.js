@@ -1,4 +1,4 @@
-// The one table of the page's words for the factory's typed codes (a summary, a hold cause, a verification result, an answer
+// The one table of the page's words for the factory's typed codes (a summary, a hold cause, a factory commit result, an answer
 // disposition). A code in the table shows its words and keeps the raw code as hover text; a code not in the table shows raw, so a new
 // backend code is never hidden or guessed. Display only: nothing here decides anything.
 
@@ -24,23 +24,22 @@ export const WORDS = {
   "held:slot_branch": "Slot is on another branch",
   "held:slot_redirected": "Slot pointer was rewritten",
   failed_check: "The checks failed",
-  commit: "The factory's check of the answer failed",
+  commit: "Factory commit has no successful verdict",
   unsafe: "A listed path is unsafe",
   uncommitted: "Files were left uncommitted",
   ignored: "A listed path is ignored by Git",
   branch: "The slot was not on the task branch",
   rejected: "The commit broke a rule",
   repeat: "Reason not recorded",
-  committed: "Checked and committed",
+  committed: "Factory commit completed",
   reused: "Nothing new; earlier commit kept",
-  "unsettled:branch": "Not committed: the slot was not on the task branch",
+  "refused:branch": "Not committed: the slot was not on the task branch",
   "uncommitted:unsafe": "Not committed: a listed path is unsafe",
   "uncommitted:ignored": "Not committed: a listed path is ignored by Git",
   "uncommitted:uncommitted": "Not committed: files were left uncommitted",
   "uncommitted:staged": "Not committed: staged files need attention",
   "uncommitted:dirty": "Not committed: files have retained changes",
-  "unsettled:rejected": "Not committed: the commit broke a rule",
-  pending: "Not checked yet",
+  pending: "Factory commit pending",
   registered: "Starting",
   passed: "All checks passed",
 };

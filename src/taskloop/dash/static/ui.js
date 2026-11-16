@@ -15,9 +15,9 @@ export const COLUMNS = [
   { id: "landed", label: "Landed", emoji: "✅", help: "Landed on main and closed." },
 ];
 export const STEPS = COLUMNS.slice(1, 5);
-// The factory's verification is a mark on its agent attempt's rail row; it has its own Result, but no column.
-export const VERIFY = { id: "verification", label: "Verification", emoji: "🔎" };
-export const stepInfo = (id) => (id === VERIFY.id ? VERIFY : STEPS.find((s) => s.id === id));
+// Factory commit is a mark on its agent attempt's rail row; it has its own Result, but no column.
+export const COMMIT = { id: "commit", label: "Factory commit", emoji: "🔎" };
+export const stepInfo = (id) => (id === COMMIT.id ? COMMIT : STEPS.find((s) => s.id === id));
 export const STATE = {
   running: { label: "Running", dot: "bg-sky-500 animate-pulse-dot", text: "text-sky-700 dark:text-sky-300" },
   succeeded: { label: "Success", dot: "bg-emerald-500", text: "text-emerald-700 dark:text-emerald-300" },

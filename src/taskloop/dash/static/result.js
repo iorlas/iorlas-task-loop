@@ -86,12 +86,12 @@ const MARK = {
   not_run: ["not reached", "text-slate-400 dark:text-slate-500"],
 };
 
-// The factory's verification of an agent attempt: what it checked, in its order, which check failed, the typed result and what the
+// The factory commit of an agent attempt: what it checked, in its order, which check failed, the typed result and what the
 // failed check listed (a path it will not commit, the leftovers beside it, ignored paths). Display only, from the stored facts.
-function verification(v) {
+function factoryCommit(v) {
   const box = el("div", "flex flex-col gap-5");
   const what = el("div");
-  what.append(label(`Checked after ${stepInfo(v.of_step).label}, attempt ${v.of}`
+  what.append(label(`Factory commit of ${stepInfo(v.of_step).label}, attempt ${v.of}`
     + ` · the agent listed ${v.listed.length} ${v.listed.length === 1 ? "path" : "paths"}`));
   const list = el("ol", "list-decimal pl-5 text-sm");
   for (const c of v.checks) {
@@ -116,7 +116,7 @@ export function result(a, body, shown) {
   const summary = el("div");
   summary.append(label("Conclusion"), callout(a.state === "failed" ? "border-rose-500" : a.state === "running" ? "border-sky-500" : "border-emerald-500", null, body.result.summary));
   box.append(summary);
-  if (body.result.verification) box.append(verification(body.result.verification));
+  if (body.result.factory_commit) box.append(factoryCommit(body.result.factory_commit));
   if (body.result.answer) box.append(answer(body.result.answer));
   if (body.result.checks.length) {
     const wrap = el("div");

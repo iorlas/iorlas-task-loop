@@ -22,6 +22,8 @@ from taskloop.check_feed import CheckLog, CheckState
 from taskloop.check_store import ChecksRow, CheckStore, ResultRow
 from taskloop.command_conclusion import CommandConclusion
 from taskloop.dash_board import admission_of, card_of, duration_of, queued_card, tries
+from taskloop.dash_commit import STEP as COMMIT
+from taskloop.dash_commit import applies, factory_commit
 from taskloop.dash_duration import Duration
 from taskloop.dash_duration import read as read_duration
 from taskloop.dash_land import build_events
@@ -31,6 +33,7 @@ from taskloop.dash_model import (
     AttemptDetail,
     CheckLine,
     DashTracker,
+    FactoryCommit,
     FeedEvent,
     FeedPage,
     OperationDetail,
@@ -39,13 +42,10 @@ from taskloop.dash_model import (
     State,
     TaskDetail,
     TrackerDetail,
-    Verification,
     iso,
 )
 from taskloop.dash_operation import project as project_operations
 from taskloop.dash_usage import project, totals
-from taskloop.dash_verify import STEP as VERIFICATION
-from taskloop.dash_verify import applies, verification
 from taskloop.evidence_files import EvidenceError, EvidenceFiles
 from taskloop.harness_choice import HARNESS_WORDS, PROVIDER_WORDS
 from taskloop.hold_store import HoldStore
@@ -227,25 +227,25 @@ def _checks_body(ports: TaskPorts, store: CheckStore, row: ChecksRow) -> Attempt
 
 @dataclass(frozen=True)
 class Link:
-    """One entry of the task's chain: an agent attempt, the verification of one, or a checks attempt, with its try."""
+    """One entry of the task's chain: an agent attempt, the factory commit of one, or a checks attempt, with its try."""
 
     number: int
     agent: AttemptRow | None = None
     checks: ChecksRow | None = None
-    result: AttemptResult | None = None  # the agent attempt's stored result, for it and for its verification
-    verifies: bool = False
-    of: int = 0  # a verification's: the try of the agent attempt it verifies
-    successor: AttemptRow | None = None  # the repeat of the verified attempt, which records what a failed verification listed
+    result: AttemptResult | None = None  # the agent attempt's stored result, for it and for its factory commit
+    commits: bool = False
+    of: int = 0  # a factory commit's: the try of the agent attempt it commits
+    successor: AttemptRow | None = None  # the repeat of the committed attempt, which records what a failed factory commit listed
 
 
 def _chain(ports: TaskPorts, rows: tuple[AttemptRow, ...]) -> tuple[Link, ...]:
     """The task's attempts oldest first: each agent attempt (numbered within its step across the whole task, `tries`, so a restart at
-    plan never repeats a number), its verification when the factory verified it (numbered across the task, between it and what follows),
+    plan never repeats a number), its factory commit when the factory committed it (numbered across the task, between it and what follows),
     and the checks attempts after an implement attempt (numbered across the task: a checks try is the check step's, not the implement's)."""
     store = CheckStore(ports.reads.store.connect, ports.reads.store.begin)
     found: list[Link] = []
     numbers = tries(rows)
-    committed = checked = 0
+    commits = checked = 0
     for row in reversed(rows):
         result = collect(ports.reads.store, row.key)
         if row.phase == "admitted" and row.release is None:
@@ -253,26 +253,26 @@ def _chain(ports: TaskPorts, rows: tuple[AttemptRow, ...]) -> tuple[Link, ...]:
                                   ports.reads.clock()) or result
         found.append(Link(numbers[row.key.attempt_id], agent=row, result=result))
         if applies(result):
-            committed += 1
+            commits += 1
             successor = next((each for each in rows if each.previous_attempt_id == row.key.attempt_id), None)
-            found.append(Link(committed, agent=row, result=result, verifies=True, of=numbers[row.key.attempt_id], successor=successor))
+            found.append(Link(commits, agent=row, result=result, commits=True, of=numbers[row.key.attempt_id], successor=successor))
         for checks in store.of_attempt(row.key.attempt_id) if row.step == Step.IMPLEMENT else ():
             checked += 1
             found.append(Link(checked, checks=checks))
     return tuple(found)
 
 
-def _verification(link: Link) -> tuple[AttemptDetail, Verification]:
-    """The verification row: no start or end of its own is stored, so it has none; its result is the typed words."""
+def _factory_commit(link: Link) -> tuple[AttemptDetail, FactoryCommit]:
+    """The factory commit row: no start or end of its own is stored, so it has none; its result is the typed words."""
     row, result = link.agent, link.result
     if row is None or result is None:
-        raise ValueError("A verification belongs to an agent attempt")
-    found, state = verification(row, link.of, result, link.successor)
-    return AttemptDetail(VERIFICATION, link.number, state, None, None, found.result, None, None, None, ()), found
+        raise ValueError("A factory commit belongs to an agent attempt")
+    found, state = factory_commit(row, link.of, result, link.successor)
+    return AttemptDetail(COMMIT, link.number, state, None, None, found.result, None, None, None, ()), found
 
 
 def history(ports: TaskPorts, rows: tuple[AttemptRow, ...]) -> tuple[AttemptDetail, ...]:
-    """Oldest first: each agent attempt, its verification, then the checks attempts after an implement attempt. Every entry up to
+    """Oldest first: each agent attempt, its factory commit, then the checks attempts after an implement attempt. Every entry up to
     the latest abandoned attempt (the chain boundary) is `past`: a person gave that chain up, it is not the task's current steps."""
     cut = max((each.seq for each in rows if each.release is not None and each.release.abandoned), default=0)
     past = {each.key.attempt_id for each in rows if each.seq <= cut}
@@ -285,13 +285,13 @@ def _history(ports: TaskPorts, rows: tuple[AttemptRow, ...], chain: tuple[Link, 
     numbers = tries(rows)
     found: list[tuple[AttemptDetail, str]] = []
     earlier: dict[str, int] = {}
-    led: dict[str, int] = {}  # agent attempt id -> the try of its verification
+    led: dict[str, int] = {}  # agent attempt id -> the try of its factory commit
     for link in chain:
         if link.checks is not None:
             found.append((_checks(store, link.checks, link.number, earlier.get(link.checks.after)), link.checks.after))
             earlier[link.checks.after] = link.number
-        elif link.verifies and link.agent is not None:
-            found.append((_verification(link)[0], link.agent.key.attempt_id))
+        elif link.commits and link.agent is not None:
+            found.append((_factory_commit(link)[0], link.agent.key.attempt_id))
             led[link.agent.key.attempt_id] = link.number
         elif link.agent is not None and link.result is not None:
             previous = link.agent.previous_attempt_id or ""
@@ -306,7 +306,7 @@ def _operations(files: EvidenceFiles, chain: tuple[Link, ...], past: set[str]) -
         if link.checks is not None:
             found.extend(project_operations(files.operations(link.checks.key), STEP_CHECKS, link.number,
                                             past=link.checks.after in past))
-        elif link.agent is not None and not link.verifies:
+        elif link.agent is not None and not link.commits:
             found.extend(project_operations(files.operations(link.agent.key), link.agent.step, link.number,
                                             past=link.agent.key.attempt_id in past))
     return tuple(found)
@@ -322,10 +322,10 @@ def build_body(ports: TaskPorts, backlog: str, task_id: str, step: str, number: 
                 return _checks_body(ports, store, link.checks)
             if link.agent is None or link.result is None or link.number != number:
                 continue
-            if link.verifies and step == VERIFICATION:
-                found = _verification(link)[1]
+            if link.commits and step == COMMIT:
+                found = _factory_commit(link)[1]
                 return AttemptBody(None, Outcome(found.result, None, (), None, found))
-            if not link.verifies and link.agent.step == step:
+            if not link.commits and link.agent.step == step:
                 return _agent_body(ports, link.agent, link.result, rows)
     except StoreUnavailable as error:
         return Failed("unavailable", "store", str(error))

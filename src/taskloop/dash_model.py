@@ -96,23 +96,23 @@ class Answer:
 
 
 @dataclass(frozen=True)
-class VerifyCheck:
-    """One check of a verification: the factory's wording of it, and whether it passed, failed or was not reached."""
+class CommitCheck:
+    """One check of a factory commit: the factory's wording of it, and whether it passed, failed or was not reached."""
 
     name: str
     state: Literal["passed", "failed", "not_run"]
 
 
 @dataclass(frozen=True)
-class Verification:
+class FactoryCommit:
     """What the factory checked after an agent attempt's committing answer: `of_step`/`of` name that attempt, `listed` is what the
-    agent asked to commit, `result` the typed words (`verified`, `reused`, `rejected:<rule>`, `uncommitted:<reason>`, `pending`) and
+    agent asked to commit, `result` the typed words (`committed`, `reused`, `rejected:<rule>`, `uncommitted:<reason>`, `pending`) and
     `listing` what the failed check named (the unsafe path and the leftovers beside it, the ignored paths)."""
 
     of_step: str
     of: int
     listed: tuple[str, ...]
-    checks: tuple[VerifyCheck, ...]
+    checks: tuple[CommitCheck, ...]
     result: str
     listing: tuple[str, ...]
 
@@ -123,7 +123,7 @@ class Outcome:
     answer: Answer | None
     checks: tuple[CheckLine, ...]
     output: str | None
-    verification: Verification | None = None
+    factory_commit: FactoryCommit | None = None
 
 
 @dataclass(frozen=True)
@@ -182,10 +182,10 @@ class AttemptDetail:
     repeat_of: int | None  # the try of this step that a `repeat` repeats
     feed: tuple[FeedEvent, ...]
     feed_cursor: str | None = None  # follow the agent's lines from here (`FeedPage`); None for checks and before any line
-    led_by: int | None = None  # a repeat of an agent attempt: the try of the `verification` step whose failure led to it
+    led_by: int | None = None  # a repeat of an agent attempt: the factory commit projection number whose failure led to it
     past: bool = False  # belongs to a chain a person abandoned: history, not the task's current steps
-    run: Run | None = None  # an agent attempt's: what ran it; None for a check or a verification
-    usage: Usage | None = None  # None for checks/verification; an agent with no report has empty counts
+    run: Run | None = None  # an agent attempt's: what ran it; None for a check or a factory commit
+    usage: Usage | None = None  # None for checks/factory commit; an agent with no report has empty counts
     duration: Duration | None = None
 
 

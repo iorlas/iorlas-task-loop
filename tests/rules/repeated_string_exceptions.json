@@ -199,7 +199,7 @@
     "tool": 3,
     "unavailable": 4
   },
-  "src/taskloop/dash_verify.py": {
+  "src/taskloop/dash_commit.py": {
     "failed": 3
   },
   "src/taskloop/discussion.py": {

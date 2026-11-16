@@ -660,6 +660,7 @@ source_modules =
     taskloop.commit
     taskloop.composition
     taskloop.dash_board
+    taskloop.dash_commit
     taskloop.dash_composition
     taskloop.dash_duration
     taskloop.dash_land
@@ -669,7 +670,6 @@ source_modules =
     taskloop.dash_task
     taskloop.dash_tracker
     taskloop.dash_usage
-    taskloop.dash_verify
     taskloop.discussion
     taskloop.drain
     taskloop.drain.actions

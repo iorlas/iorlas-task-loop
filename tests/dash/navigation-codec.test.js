@@ -5,7 +5,7 @@ import { decode, encode, initNavigation, resolveSelection, selectionRoute, ROUTE
 
 const detail = { attempts: [
   { step: "plan", n: 1, state: "succeeded", past: true },
-  { step: "verification", n: 31, state: "succeeded", past: true },
+  { step: "commit", n: 31, state: "succeeded", past: true },
   { step: "checks", n: 1, state: "succeeded" },
   { step: "implement", n: 2, state: "running" },
 ] };
@@ -16,7 +16,7 @@ const resolve = (hash, value = detail) => {
 
 test("fragments preserve encoded IDs and every drawer selection", () => {
   for (const hash of ["#id", "#id/task", "#id/steps", "#id/land", "#id/land/task", "#a%2Fb%20%23/plan/1/lines",
-    "#id/implement/2/prompt", "#id/checks/1/result", "#id/verification/31/result", "#id/plan/1/task"]) {
+    "#id/implement/2/prompt", "#id/checks/1/result", "#id/commit/31/result", "#id/plan/1/task"]) {
     assert.equal(encode(decode(hash)), hash);
   }
   assert.deepEqual(decode("#a%2Fb%20%23/plan/1/lines"), { kind: ROUTE.attempt, id: "a/b #", step: "plan", n: 1, tab: "lines" });
@@ -30,14 +30,14 @@ test("malformed fragments close safely", () => {
   }
 });
 
-test("defaults, historical attempts, verification and absent attempts resolve canonically", () => {
+test("defaults, historical attempts, factory commit and absent attempts resolve canonically", () => {
   for (const [input, output] of [
     ["#id", "#id/implement/2/lines"],
     ["#id/task", "#id/implement/2/task"],
     ["#id/plan/1/prompt", "#id/plan/1/prompt"],
     ["#id/plan/1/task", "#id/plan/1/task"],
     ["#id/checks/1/result", "#id/checks/1/result"],
-    ["#id/verification/31/lines", "#id/verification/31/result"],
+    ["#id/commit/31/lines", "#id/commit/31/result"],
     ["#id/implement/99/result", "#id/implement/2/lines"],
     ["#id/plan/99/prompt", "#id/implement/2/lines"],
     ["#id/land", "#id/land"], ["#id/land/task", "#id/land/task"],

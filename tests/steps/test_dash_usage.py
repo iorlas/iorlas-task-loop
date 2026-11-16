@@ -82,14 +82,14 @@ def test_step_and_task_totals_include_abandoned_history(registered: sqlite3.Conn
     assert found.usage == Usage(85, 75, 15, 4, 3, 3)
 
 
-def test_retries_count_once_and_checks_and_verifications_do_not_contribute(checking: sqlite3.Connection, tmp_path: Path) -> None:
+def test_retries_count_once_and_checks_and_factory_commits_do_not_contribute(checking: sqlite3.Connection, tmp_path: Path) -> None:
     unsafe_repeat(checking)
     report(checking, "implement", (100, 60, 10), 1)
     report(checking, "again", (20, 5, 2), 3)
     found = detail(checking, tmp_path)
     assert [(each.step, each.n) for each in found.attempts] == [
-        ("implement", 1), ("verification", 1), ("checks", 1), ("implement", 2)]
-    assert all(each.usage is None for each in found.attempts if each.step in ("checks", "verification"))
+        ("implement", 1), ("commit", 1), ("checks", 1), ("implement", 2)]
+    assert all(each.usage is None for each in found.attempts if each.step in ("checks", "commit"))
     assert found.step_usage == {"implement": Usage(55, 65, 12, 4, 2, 2)}
     assert found.usage == Usage(55, 65, 12, 4, 2, 2)
 

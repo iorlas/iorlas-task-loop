@@ -1,5 +1,5 @@
 // The fragment owns drawer selection. Drawer caches and disclosure stay local.
-import { STEPS, VERIFY } from "./ui.js";
+import { STEPS, COMMIT } from "./ui.js";
 
 export const TABS = [["lines", "Lines"], ["result", "Result"], ["prompt", "Prompt"]];
 export const VIEWS = [["attempts", "Steps"], ["task", "Task"]];
@@ -25,7 +25,7 @@ export function decode(hash) {
     return { kind: ROUTE.land, id, tab: number };
   }
   const n = Number(number);
-  const validStep = [...STEPS.slice(0, -1), VERIFY].some((s) => s.id === step);
+  const validStep = [...STEPS.slice(0, -1), COMMIT].some((s) => s.id === step);
   const validTab = TABS.some(([value]) => value === tab) || tab === "task";
   if (parts.length !== 4 || !validStep || !/^[1-9]\d*$/.test(number) || !Number.isSafeInteger(n) || !validTab) return closed();
   return { kind: ROUTE.attempt, id, step, n, tab };
@@ -47,7 +47,7 @@ export function resolveSelection(detail, request = {}) {
   if (request.kind === ROUTE.land) return { step: "land", n: null, tab: null, view: request.tab === "task" ? "task" : "attempts" };
   const requested = list.find((x) => x.step === request.step && x.n === request.n);
   const a = requested ?? list.at(-1);
-  const tab = a?.step === VERIFY.id ? "result"
+  const tab = a?.step === COMMIT.id ? "result"
     : requested && TABS.some(([id]) => id === request.tab) ? request.tab : a?.state === "running" ? "lines" : "result";
   return { step: a?.step, n: a?.n, tab, view };
 }

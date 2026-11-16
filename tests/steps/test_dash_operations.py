@@ -65,7 +65,7 @@ def test_invalid_timestamps_omit_only_affected_samples_and_retries_sort_stably()
     assert project((), "plan", 1, past=False) == ()
 
 
-def test_checks_and_verification_keep_their_existing_owners_and_read_once(checking: sqlite3.Connection, tmp_path: Path) -> None:
+def test_checks_and_factory_commit_keep_their_existing_owners_and_read_once(checking: sqlite3.Connection, tmp_path: Path) -> None:
     unsafe_repeat(checking)
     second_checks = AttemptKey("checks-again", "checks-again-token", 1)
     checking.execute("UPDATE checks_attempt SET phase='concluded',conclusion='passed',concluded_at=5 WHERE attempt_id='checks'")
