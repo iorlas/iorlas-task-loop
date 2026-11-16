@@ -5,13 +5,13 @@ from pathlib import Path
 
 import pytest
 
-from taskloop.dash_verify import CHECKS
+from taskloop.dash_commit import CHECKS
 
 PAGE = Path(__file__).resolve().parents[2] / "src/taskloop/dash/static"
 REQUIRED = (
     "needs_owner", "failed:needs_owner", "answer:schema_invalid", "failed:answer:schema_invalid", "failed:test:failed", "held:slot_dirty",
-    "committed", "reused", "unsettled:branch", "uncommitted:unsafe", "uncommitted:ignored", "uncommitted:uncommitted",
-    "uncommitted:staged", "uncommitted:dirty", "unsettled:rejected",
+    "committed", "reused", "refused:branch", "uncommitted:unsafe", "uncommitted:ignored", "uncommitted:uncommitted",
+    "uncommitted:staged", "uncommitted:dirty",
     "pending", "registered", "passed", "commit", "unsafe", "uncommitted", "ignored", "branch", "rejected", "repeat", "failed_check",
 )
 
@@ -27,9 +27,9 @@ def test_a_typed_code_of_the_data_shapes_has_words(code: str) -> None:
     assert table().get(code), code
 
 
-def test_the_verification_reasons_the_backend_names_are_all_worded() -> None:
-    assert {("uncommitted:" if reason in {"unsafe", "ignored", "uncommitted"} else "unsettled:") + reason
-            for _text, reason in CHECKS} <= set(table())
+def test_the_factory_commit_reasons_the_backend_names_are_all_worded() -> None:
+    assert {("uncommitted:" if reason in {"unsafe", "ignored", "uncommitted"} else "refused:") + reason
+            for _text, reason in CHECKS if reason != "rejected"} <= set(table())
 
 
 def test_the_page_prints_its_codes_through_the_table() -> None:
@@ -41,12 +41,12 @@ def test_the_page_prints_its_codes_through_the_table() -> None:
     ("needs_owner", "The agent needs your decision"),
     ("failed:test:failed", "Checks failed: test"),
     ("answer:schema_invalid", "The agent's answer was in the wrong format"),
-    ("commit", "The factory's check of the answer failed"),
+    ("commit", "Factory commit has no successful verdict"),
     ("unsafe", "A listed path is unsafe"),
     ("uncommitted:unsafe", "Not committed: a listed path is unsafe"),
-    ("unsettled:rejected", "Not committed: the commit broke a rule"),
+    ("rejected", "The commit broke a rule"),
 ])
-def test_outcomes_repeat_causes_and_verification_failures_have_readable_words(code: str, expected: str) -> None:
+def test_outcomes_repeat_causes_and_factory_commit_failures_have_readable_words(code: str, expected: str) -> None:
     assert table()[code] == expected
 
 

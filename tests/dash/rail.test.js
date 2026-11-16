@@ -1,5 +1,5 @@
 // Load rail.html from a static server or Chromium with --allow-file-access-from-files. No dependencies needed.
-import { rail, changeReason, lasted, verifyTitle } from "../../src/taskloop/dash/static/rail.js";
+import { rail, changeReason, lasted, commitTitle } from "../../src/taskloop/dash/static/rail.js";
 import { say, wordNode } from "../../src/taskloop/dash/static/words.js";
 import { COLUMNS, STATE, el, position, quietSpan, tick as updateTime } from "../../src/taskloop/dash/static/ui.js";
 import { result } from "../../src/taskloop/dash/static/result.js";
@@ -20,13 +20,13 @@ const fixture = document.getElementById("fixture");
 const results = document.getElementById("results");
 const assert = (condition, message) => { if (!condition) throw new Error(message); };
 const attempt = (step, n = 1, extra = {}) => ({ step, n, state: "succeeded", summary: "collected", started_at: null, ended_at: null, feed: [], ...extra });
-const verify = (n = 37, extra = {}) => attempt("verification", n, { summary: "committed", ...extra });
+const commit = (n = 37, extra = {}) => attempt("commit", n, { summary: "committed", ...extra });
 const task = { id: "tl-test", title: "Compact rail fixture", column: "landed", attempt: 1 };
 const tracked = { fields: {
   description: "Fixture task", labels: [], depends_on: [],
   created_at: "2026-11-14T10:00:00Z", updated_at: "2026-11-14T10:00:00Z",
 }, comments: [] };
-const healthy = () => [attempt("plan"), verify(), attempt("implement"), verify(38), attempt("checks", 1, { summary: "passed" })];
+const healthy = () => [attempt("plan"), commit(), attempt("implement"), commit(38), attempt("checks", 1, { summary: "passed" })];
 const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
 const button = (root, text) => [...root.querySelectorAll("button")].find((b) => b.textContent === text);
 const marks = (root) => [...root.querySelectorAll("button[aria-label]")];
@@ -39,18 +39,18 @@ function mount(list, t = task, selected = {}, select = () => {}, events = []) {
 
 function healthyRows() {
   const clicks = [];
-  const node = mount(healthy(), task, { step: "verification", n: 38 }, (...args) => clicks.push(args));
+  const node = mount(healthy(), task, { step: "commit", n: 38 }, (...args) => clicks.push(args));
   assert(primary(node).length === 4 && button(node, "Check—Success"), "healthy task: Plan, Implement, Check, Land");
-  assert(marks(node).length === 2 && marks(node).every((b) => b.textContent === "✓ Checked and committed"),
+  assert(marks(node).length === 2 && marks(node).every((b) => b.textContent === "✓ Factory commit completed"),
     "success marks have visible verdict words attached to agents");
-  assert(!node.textContent.includes("attempt 1") && !node.textContent.includes("Factory checked"), "no routine attempt/verification text");
+  assert(!node.textContent.includes("attempt 1") && !node.textContent.includes("Factory checked"), "no routine attempt/factory commit text");
   assert(!node.querySelector("button button"), "no nested buttons");
-  assert(marks(node)[1].getAttribute("aria-pressed") === "true", "selected verification has an indication");
+  assert(marks(node)[1].getAttribute("aria-pressed") === "true", "selected factory commit has an indication");
   assert(marks(node)[1].getAttribute("aria-label").includes("Implement"), "accessible name identifies its agent step");
   marks(node)[1].focus();
   assert(document.activeElement === marks(node)[1], "mark independently focusable");
   marks(node)[1].click();
-  assert(clicks[0].join("/") === "verification/38", "verification number need not match agent attempt");
+  assert(clicks[0].join("/") === "commit/38", "factory commit number need not match agent attempt");
   button(node, "PlanUnknown durationSuccess").click();
   assert(clicks[1].join("/") === "plan/1", "step button selects its own result");
   for (const [state, label] of Object.entries(STATE)) {
@@ -61,11 +61,11 @@ function healthyRows() {
   }
 }
 
-function verificationStates() {
+function factoryCommitStates() {
   for (const code of ["committed", "reused", "uncommitted:unsafe", "rejected:paths", "rejected:plan_rule"]) {
     const failed = !["committed", "reused"].includes(code);
     const selected = [];
-    const node = mount([attempt("plan", 1, { state: failed ? "failed" : "succeeded", summary: failed ? "commit" : "committed" }), verify(42, { summary: code, state: failed ? "failed" : "succeeded" })], task, {}, (...args) => selected.push(args));
+    const node = mount([attempt("plan", 1, { state: failed ? "failed" : "succeeded", summary: failed ? "commit" : "committed" }), commit(42, { summary: code, state: failed ? "failed" : "succeeded" })], task, {}, (...args) => selected.push(args));
     const label = failed && !say(code).startsWith("Not committed:") ? `Not committed: ${say(code)}` : say(code);
     assert(marks(node)[0].textContent === `${failed ? "✗" : "✓"} ${label}`, `${code} mark has visible verdict words`);
     marks(node)[0].click();
@@ -73,20 +73,20 @@ function verificationStates() {
       const why = [...node.querySelectorAll("button")].find((b) => b.textContent.startsWith("✗ Not committed:"));
       assert(why && !why.textContent.includes("Not committed: Not committed:"), "one rejection prefix");
       assert(why.title.includes(code), "raw failure code in hover");
-      assert(!node.textContent.includes("The factory's check of the answer failed"), "verification failure not duplicated on agent row");
+      assert(!node.textContent.includes("Factory commit has no successful verdict"), "factory commit failure not duplicated on agent row");
       why.click();
     }
-    assert(selected.every((args) => args.join("/") === "verification/42"), "all failure controls select Result");
+    assert(selected.every((args) => args.join("/") === "commit/42"), "all failure controls select Result");
   }
-  let node = mount([attempt("plan", 1, { state: "failed", summary: "commit" }), verify(4, { state: "running", summary: "pending" })]);
+  let node = mount([attempt("plan", 1, { state: "failed", summary: "commit" }), commit(4, { state: "running", summary: "pending" })]);
   assert(!node.textContent.includes(say("commit")), "attached pending result covers the agent's commit summary");
-  assert(marks(node)[0].textContent === "… Not checked yet" && !node.textContent.includes("Not committed:"), "pending neutral with words");
-  node = mount([attempt("plan"), verify(4, { state: "failed", summary: "pending" })]);
-  assert(node.textContent.includes("verification outcome was not recorded"), "terminal missing outcome truthful");
+  assert(marks(node)[0].textContent === "… Factory commit pending" && !node.textContent.includes("Not committed:"), "pending neutral with words");
+  node = mount([attempt("plan"), commit(4, { state: "failed", summary: "pending" })]);
+  assert(node.textContent.includes("factory commit outcome was not recorded"), "terminal missing outcome truthful");
   node = mount([attempt("plan")]);
-  assert(!marks(node).length, "absent verification has no invented mark");
-  node = mount([attempt("checks"), verify()]);
-  assert(!marks(node).length, "verification never attached to Checks");
+  assert(!marks(node).length, "absent factory commit has no invented mark");
+  node = mount([attempt("checks"), commit()]);
+  assert(!marks(node).length, "factory commit never attached to Checks");
   node = mount([attempt("checks", 2, { state: "failed", summary: "failed:test:lint" })]);
   assert(node.textContent.includes("Checks failed: lint"), "other step failures stay readable");
 }
@@ -94,7 +94,7 @@ function verificationStates() {
 function gaps() {
   const end = "2026-11-14T10:00:00Z";
   for (const seconds of [119, 120]) {
-    const list = [attempt("plan", 1, { ended_at: end }), verify(), attempt("implement", 1, { started_at: new Date(Date.parse(end) + seconds * 1000).toISOString() })];
+    const list = [attempt("plan", 1, { ended_at: end }), commit(), attempt("implement", 1, { started_at: new Date(Date.parse(end) + seconds * 1000).toISOString() })];
     const node = mount(list);
     assert(node.textContent.includes("Approximate gap") === (seconds === 120), `gap boundary ${seconds}`);
     assert(node.querySelectorAll("li[title]")[1].title.includes("Approximate elapsed gap"), "short gaps stay in hover");
@@ -153,63 +153,63 @@ function restartsAndRepeats() {
     assert(!node.querySelector("details"), "repeat never starts another group");
   }
   const clicks = [];
-  node = mount([attempt("implement"), verify(), attempt("checks", 1, { state: "failed", summary: "failed:test:lint" }),
+  node = mount([attempt("implement"), commit(), attempt("checks", 1, { state: "failed", summary: "failed:test:lint" }),
     repeat("implement", 2, { reason: "failed_check" })], task, {}, (...args) => clicks.push(args));
   const tag = [...node.querySelectorAll("span")].find((s) => s.textContent === "Repeat");
-  assert(tag.title.includes("The checks failed") && marks(node).length === 1, "check-driven repeat invents no verification cause");
+  assert(tag.title.includes("The checks failed") && marks(node).length === 1, "check-driven repeat invents no factory commit cause");
   [...node.querySelectorAll("button")].find((b) => b.textContent.includes("Checks failed: lint")).click();
   assert(clicks[0].join("/") === "checks/1", "failed Check result remains reachable");
 }
 
 function reviewed() {
   const past = healthy().map((a) => ({ ...a, past: true }));
-  return [...past, restart(2), verify(39), attempt("implement", 2, { state: "failed", summary: "commit" }), verify(40, { state: "failed", summary: "uncommitted:unsafe" }),
-    repeat("implement", 3, { led_by: 40 }), verify(41), attempt("checks", 2, { summary: "passed" })];
+  return [...past, restart(2), commit(39), attempt("implement", 2, { state: "failed", summary: "commit" }), commit(40, { state: "failed", summary: "uncommitted:unsafe" }),
+    repeat("implement", 3, { led_by: 40 }), commit(41), attempt("checks", 2, { summary: "passed" })];
 }
 async function pastRuns() {
   const selected = { step: "checks", n: 2 };
   let node = mount(reviewed(), task, selected);
   assert(node.querySelector("summary").textContent ===
-    "History 1 · Plan ✓ Checked and committed · Implement ✓ Checked and committed · Check ✓ Success",
+    "History 1 · Plan ✓ Factory commit completed · Implement ✓ Factory commit completed · Check ✓ Success",
     "past status from actual results");
-  assert(node.querySelector("summary").title.includes("every attempt and verification result"), "history tooltip uses attempt");
+  assert(node.querySelector("summary").title.includes("every attempt and factory commit result"), "history tooltip uses attempt");
   assert(!node.querySelector("details").open && primary(node).length === 6, "reviewed shape folds past, about eight lines including failure");
   node.querySelector("details").open = true;
   await tick();
   node = mount(reviewed(), task, selected);
   assert(node.querySelector("details").open, "expanded group survives redraw");
-  selected.step = "verification"; selected.n = 37;
+  selected.step = "commit"; selected.n = 37;
   node = mount(reviewed(), task, selected);
-  assert(node.querySelector("details").open && node.querySelector("[aria-pressed=true]"), "selected verification revealed");
+  assert(node.querySelector("details").open && node.querySelector("[aria-pressed=true]"), "selected factory commit revealed");
   await tick();
   node.querySelector("details").open = false;
   await tick();
   node = mount(reviewed(), task, selected);
   assert(!node.querySelector("details").open, "person may close selected group until selection changes");
-  const history = [attempt("plan", 1, { past: true }), verify(1, { state: "failed", summary: "uncommitted:unsafe", past: true }),
-    repeat("plan", 2, { past: true }), verify(2, { past: true }), restart(3, { past: true }), verify(3, { past: true }), restart(4)];
+  const history = [attempt("plan", 1, { past: true }), commit(1, { state: "failed", summary: "uncommitted:unsafe", past: true }),
+    repeat("plan", 2, { past: true }), commit(2, { past: true }), restart(3, { past: true }), commit(3, { past: true }), restart(4)];
   node = mount(history);
   const summaries = [...node.querySelectorAll("summary")];
   assert(summaries.length === 2 && summaries[1].textContent.startsWith("History 2"), "restart boundaries split past history");
-  assert(summaries[0].textContent.includes("Plan ✓ Checked and committed (earlier failure)"), "success never hides earlier failures");
+  assert(summaries[0].textContent.includes("Plan ✓ Factory commit completed (earlier failure)"), "success never hides earlier failures");
   node = mount([attempt("plan", 1, { past: true })], { ...task, column: "waiting" });
   assert(!node.textContent.includes("pending") && !primary(node).length, "entirely past waiting task invents no steps");
-  assert(node.querySelector("summary").textContent.includes("Plan … Success; Not checked yet"),
-    "unverified answer never marked committed and has visible outcome words");
+  assert(node.querySelector("summary").textContent.includes("Plan … Success; Factory commit pending"),
+    "answer without a factory commit never marked committed and has visible outcome words");
   for (const state of ["running", "failed"]) {
     node = mount([attempt("checks", 1, { past: true, state })]);
     assert(node.querySelector("summary").textContent.includes(STATE[state].label), `folded ${state} check has words`);
   }
-  node = mount([attempt("plan", 1, { past: true }), verify(1, { past: true, state: "failed", summary: "uncommitted:unsafe" })]);
+  node = mount([attempt("plan", 1, { past: true }), commit(1, { past: true, state: "failed", summary: "uncommitted:unsafe" })]);
   assert(node.querySelector("summary").textContent.includes("✗ Not committed: a listed path is unsafe"),
-    "folded verification failure explains its mark");
+    "folded factory commit failure explains its mark");
 }
 
 async function drawerSelection() {
   fixture.replaceChildren();
   const list = reviewed();
   const requested = [];
-  const verification = { of_step: "implement", of: 2, listed: ["src/link.py"], listing: ["src/link.py"], result: "uncommitted:unsafe", checks: [{ name: "Path must be a plain file", state: "failed" }] };
+  const factoryCommit = { of_step: "implement", of: 2, listed: ["src/link.py"], listing: ["src/link.py"], result: "uncommitted:unsafe", checks: [{ name: "Path must be a plain file", state: "failed" }] };
   const source = {
     detail: async () => ({ task, attempts: list, operations: [
       { operation: "drawer-commit", step: "implement", n: 3, kind: "commit", state: "completed", elapsed_ms: 1250,
@@ -218,7 +218,7 @@ async function drawerSelection() {
     tracker: async () => tracked,
     body: async (id, step, n) => {
       requested.push(`${step}/${n}`);
-      return { input: "Implement the task", added: [], result: { summary: step === "verification" ? "uncommitted:unsafe" : "passed", checks: [], verification: step === "verification" ? verification : null } };
+      return { input: "Implement the task", added: [], result: { summary: step === "commit" ? "uncommitted:unsafe" : "passed", checks: [], factory_commit: step === "commit" ? factoryCommit : null } };
     },
   };
   initDrawer(source, new Map([[task.id, task]]));
@@ -239,13 +239,13 @@ async function drawerSelection() {
     assert(drawer.textContent.includes("Began after a repeat of Implement, attempt 2"), "agent repeat wording preserved");
     const mark = marks(drawer).find((b) => b.textContent.startsWith("✗ "));
     mark.click(); await tick();
-    assert(drawer.querySelector("section h3").textContent.includes("Check of Implement attempt 2"), "verification title");
+    assert(drawer.querySelector("section h3").textContent.includes("Factory commit of Implement attempt 2"), "factory commit title");
     assert(drawer.querySelector("section").textContent.includes("Failure"), "failed attempt and validation badges");
-    assert(mark.getAttribute("aria-label").includes("Implement attempt 2"), "accessible verification reference");
-    assert(drawer.textContent.includes("Named by the failed check") && drawer.textContent.includes("src/link.py") && drawer.textContent.includes("Path must be a plain file"), `${tab} → verification Result includes rule and listing`);
-    assert(drawer.querySelector("#rail [aria-pressed=true]"), "verification selection survives body redraw");
+    assert(mark.getAttribute("aria-label").includes("Implement attempt 2"), "accessible factory commit reference");
+    assert(drawer.textContent.includes("Named by the failed check") && drawer.textContent.includes("src/link.py") && drawer.textContent.includes("Path must be a plain file"), `${tab} → factory commit Result includes rule and listing`);
+    assert(drawer.querySelector("#rail [aria-pressed=true]"), "factory commit selection survives body redraw");
   }
-  assert(requested.includes("verification/40"), "real verification endpoint selected");
+  assert(requested.includes("commit/40"), "real factory commit endpoint selected");
   closeDrawer();
 }
 
@@ -390,7 +390,7 @@ function words() {
   fixture.replaceChildren(view);
   const disposition = view.querySelector('span[title="needs_owner"]');
   assert(disposition?.textContent === "The agent needs your decision", "answer badge label and raw-code hover");
-  for (const code of ["verification", "unsafe", "ignored", "uncommitted", "failed_check", "test:lint"]) assert(say(code) !== code, `${code} readable`);
+  for (const code of ["commit", "unsafe", "ignored", "uncommitted", "failed_check", "test:lint"]) assert(say(code) !== code, `${code} readable`);
   assert(say("unknown:new") === "unknown:new" && say("Owner changed scope") === "Owner changed scope", "unknown codes/prose preserved");
   assert(wordNode(el, "unsafe").title === "unsafe", "raw code hover retained");
   assert(say("run:unknown") === "The agent attempt failed: unknown", "agent failure family keeps its tail");
@@ -437,8 +437,8 @@ function vocabulary() {
   assert(STATE.succeeded.label === "Success" && STATE.failed.label === "Failure", "outcome labels");
   assert(position({ column: "implement", attempt: 3 }) === "step 2 of 4 · attempt 3", "board attempt position");
   assert(position({ column: "land", attempt: 3 }) === "step 4 of 4", "land adds no numbered attempt");
-  const list = [attempt("implement", 2), verify(88)];
-  assert(verifyTitle(list, list[1]) === "Check of Implement attempt 2", "verification names the agent attempt");
+  const list = [attempt("implement", 2), commit(88)];
+  assert(commitTitle(list, list[1]) === "Factory commit of Implement attempt 2", "factory commit names the agent attempt");
   const item = attempt("checks", 2, { feed: [
     { type: "step", step: "checks", attempt: 2, at: "2026-11-14T10:00:00Z" },
     { type: "check", name: "try external command", passed: true, duration_ms: 1000, at: "2026-11-14T10:00:01Z" },
@@ -770,7 +770,7 @@ try {
   for (const dark of [false, true]) {
     document.documentElement.classList.toggle("dark", dark);
     document.documentElement.classList.toggle("light", !dark);
-  for (const test of [healthyRows, verificationStates, gaps, restartsAndRepeats, pastRuns,
+  for (const test of [healthyRows, factoryCommitStates, gaps, restartsAndRepeats, pastRuns,
     drawerSelection, checksRestartDetail, landSelection, landStaleReplies, words, eventIndicators, vocabulary,
     landEvents, waitingRows, usage, feedDisplay, liveFeedDisplay, liveDurations, operationRail,
     commandExpansion, toolRows, messageFolding, jumpToLatest, checkFollowing, checkActivation, checkStaleFeed]) {

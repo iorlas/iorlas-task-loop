@@ -21,10 +21,10 @@ const hidden = () => drawer.classList.contains("translate-x-full");
 const attempt = (step, n, extra = {}) => ({ step, n, state: "succeeded", summary: "passed", feed: [], ...extra });
 const card = (id) => ({ id, title: `Title ${id}`, column: "implement", attempt: 2 });
 const rows = () => [
-  attempt("plan", 1, { past: true }), attempt("verification", 31, { past: true }),
-  attempt("implement", 1, { past: true }), attempt("verification", 32, { past: true }),
+  attempt("plan", 1, { past: true }), attempt("commit", 31, { past: true }),
+  attempt("implement", 1, { past: true }), attempt("commit", 32, { past: true }),
   attempt("checks", 1, { past: true }),
-  attempt("plan", 2, { after: "restart_at_plan" }), attempt("verification", 33),
+  attempt("plan", 2, { after: "restart_at_plan" }), attempt("commit", 33),
   attempt("implement", 2, { after: "repeat", repeat_of: 1, led_by: 32, state: "running" }),
 ];
 let detailCalls = 0;
@@ -61,7 +61,7 @@ async function travel(direction, hash) {
 
 function codec() {
   for (const hash of ["#tl-a/plan/1/lines", "#a%2Fb%20%23/implement/2/prompt", "#a/checks/3/result",
-    "#a/verification/32/result", "#a/implement/2/task", "#a/task", "#a/land", "#a/land/task", "#a"]) {
+    "#a/commit/32/result", "#a/implement/2/task", "#a/task", "#a/land", "#a/land/task", "#a"]) {
     assert(encode(decode(hash)) === hash, `Roundtrip ${hash}`);
   }
   for (const hash of ["", "#", "#%zz", "#/plan/1/result", "#a/nonsense/1/result", "#a/plan/0/result",
@@ -99,10 +99,10 @@ async function openingAndTabs() {
   const rail = drawer.querySelector("#rail");
   [...rail.querySelectorAll("button")].find((b) => b.textContent.includes("Implementattempt 2")).click();
   assert(location.hash === "#from-log/implement/2/prompt", "Rail selection updates attempt identity");
-  [...drawer.querySelectorAll("button")].find((b) => b.textContent.startsWith("because the factory")).click();
+  [...drawer.querySelectorAll("button")].find((b) => b.textContent.startsWith("because factory commit")).click();
   await tick();
-  assert(location.hash === "#from-log/verification/32/result", "Cause link selects verification Result");
-  assert(!tab("attempt-body-tab-prompt"), "Verification has no output tabs");
+  assert(location.hash === "#from-log/commit/32/result", "Cause link selects factory commit Result");
+  assert(!tab("attempt-body-tab-prompt"), "Factory commit has no output tabs");
 }
 
 async function restorationAndClosure() {
@@ -148,8 +148,8 @@ async function defaultsAndRepairs() {
   assert(location.hash === "#direct/land/task", "Task view retains delivery selection");
   await travel("back", "#direct/land");
   assert(drawer.textContent.includes("Finish delivery"), "Back restores delivery");
-  await visit("#direct/verification/32/lines");
-  assert(location.hash === "#direct/verification/32/result", "Verification URL repairs to Result");
+  await visit("#direct/commit/32/lines");
+  assert(location.hash === "#direct/commit/32/result", "Factory commit URL repairs to Result");
   await visit("#direct/implement/999/result");
   assert(location.hash === "#direct/implement/2/lines", "Missing attempt falls back to task default");
   await visit("#defaults");

@@ -1,6 +1,6 @@
-// One row per step attempt, with the factory's verification attached to its agent answer.
+// One row per step attempt, with its factory commit attached to its agent answer.
 // Past history is folded for display only; selection still uses the original (step, n).
-import { JUMP, LAND, STATE, STEPS, VERIFY, dot, el, elapsedSpan, fmtDur, isWaiting, since, stepInfo, tick, waitingNote } from "./ui.js";
+import { JUMP, LAND, STATE, STEPS, COMMIT, dot, el, elapsedSpan, fmtDur, isWaiting, since, stepInfo, tick, waitingNote } from "./ui.js";
 import { elapsedDuration } from "./duration.js";
 import { say, wordNode } from "./words.js";
 import { usageNode, usageText } from "./usage.js";
@@ -15,15 +15,15 @@ export function lasted(a) {
     const ms = a.duration ? elapsedDuration(a.duration.execution) : null;
     return ms === null ? "Unknown duration" : fmtDur(ms);
   }
-  if (a.step === VERIFY.id || !a.started_at) return "—";
+  if (a.step === COMMIT.id || !a.started_at) return "—";
   const end = a.ended_at ? Date.parse(a.ended_at) : a.state === "running" ? Date.now() : NaN;
   const ms = end - Date.parse(a.started_at);
   return Number.isFinite(ms) && ms >= 0 ? (a.ended_at ? fmtDur(ms) : since(a.started_at)) : "—";
 }
 
-export function verifyTitle(list, a) {
+export function commitTitle(list, a) {
   const of = list[list.indexOf(a) - 1];
-  return `Check of ${stepInfo(of?.step ?? a.step).label}${of?.n > 1 ? ` attempt ${of.n}` : ""}`;
+  return `Factory commit of ${stepInfo(of?.step ?? a.step).label}${of?.n > 1 ? ` attempt ${of.n}` : ""}`;
 }
 
 // Explicitly normalize the old presentation placeholder; it is not a recorded cause.
@@ -42,18 +42,18 @@ function gapWords(ms) {
   return ms === null ? "" : `Approximate elapsed gap: ${fmtDur(ms)} between recorded step times; not a measurement of individual factory operations.`;
 }
 
-// The ordering contract puts verification immediately after its agent, with its own task-wide number.
+// The ordering contract puts factory commit immediately after its agent, with its own task-wide number.
 function project(list, operations) {
   const groups = [];
   let previous = null;
   for (const a of list) {
-    if (a.step === VERIFY.id) {
+    if (a.step === COMMIT.id) {
       const entry = groups.at(-1)?.at(-1);
-      if (entry && ["plan", "implement"].includes(entry.a.step) && !entry.verification) entry.verification = a;
+      if (entry && ["plan", "implement"].includes(entry.a.step) && !entry.factoryCommit) entry.factoryCommit = a;
       continue;
     }
     if (!groups.length || a.after === "restart_at_plan") groups.push([]);
-    groups.at(-1).push({ a, verification: null, gap: gapBetween(previous, a),
+    groups.at(-1).push({ a, factoryCommit: null, gap: gapBetween(previous, a),
       operations: operations.filter((o) => o.step === a.step && o.n === a.n) });
     previous = a;
   }
@@ -63,15 +63,15 @@ function project(list, operations) {
 function verdict(a) {
   if (["committed", "reused"].includes(a.summary)) return { mark: "✓", label: say(a.summary), failed: false, text: STATE.succeeded.text };
   if (a.state === "running" && (!a.summary || ["pending", "registered"].includes(a.summary))) {
-    return { mark: "…", label: "Not checked yet", failed: false, text: muted };
+    return { mark: "…", label: "Factory commit pending", failed: false, text: muted };
   }
   const missing = !a.summary || ["pending", "registered"].includes(a.summary);
-  const why = missing ? "verification outcome was not recorded" : say(a.summary);
+  const why = missing ? "factory commit outcome was not recorded" : say(a.summary);
   const label = why.startsWith("Not committed:") ? why : `Not committed: ${why}`;
   return { mark: "✗", label, failed: true, text: STATE.failed.text };
 }
 
-function verificationButton(a, selected, select, agent) {
+function commitButton(a, selected, select, agent) {
   const v = verdict(a);
   const selectedClass = chosen(a, selected) ? "bg-slate-100 dark:bg-slate-800"
     : "hover:bg-slate-50 dark:hover:bg-slate-800/60";
@@ -80,7 +80,7 @@ function verificationButton(a, selected, select, agent) {
   mark.type = "button";
   const of = `${stepInfo(agent.step).label}${agent.n > 1 ? ` attempt ${agent.n}` : ""}`;
   mark.title = `${of}: ${v.label}${a.summary ? ` (${a.summary})` : ""}`;
-  mark.setAttribute("aria-label", `Verification of ${of}: ${v.label}. Open Result`);
+  mark.setAttribute("aria-label", `Factory commit of ${of}: ${v.label}. Open Result`);
   mark.setAttribute("aria-pressed", String(!!chosen(a, selected)));
   if (chosen(a, selected)) mark.dataset.selected = "1";
   mark.addEventListener("click", () => select(a.step, a.n));
@@ -109,13 +109,13 @@ function restart({ a, gap }, select) {
 
 // Cause navigation remains in the selected attempt detail, never an extra rail row.
 export function causeLink(a, select) {
-  const btn = el("button", "block text-left text-[11px] underline decoration-dotted underline-offset-2 hover:decoration-solid", "because the factory's check of the answer failed →");
+  const btn = el("button", "block text-left text-[11px] underline decoration-dotted underline-offset-2 hover:decoration-solid", "because factory commit has no successful verdict →");
   btn.type = "button";
-  btn.addEventListener("click", () => select(VERIFY.id, a.led_by));
+  btn.addEventListener("click", () => select(COMMIT.id, a.led_by));
   return btn;
 }
 
-function row({ a, verification, gap }, selected, select, stepUsage) {
+function row({ a, factoryCommit, gap }, selected, select, stepUsage) {
   const st = STATE[a.state];
   const li = el("li", `relative pl-3 ${a.past ? "opacity-60" : ""}`);
   if (!a.after) li.title = gapWords(gap);
@@ -140,7 +140,7 @@ function row({ a, verification, gap }, selected, select, stepUsage) {
     : el("span", `ml-auto text-[11px] tabular-nums ${muted}`, lasted(a)));
   btn.append(top);
   btn.append(el("span", `block text-[11px] ${st.text}`, st.label));
-  const covered = verification && (a.summary === "commit" || a.summary === verification.summary);
+  const covered = factoryCommit && (a.summary === "commit" || a.summary === factoryCommit.summary);
   if (a.state === "failed" && !covered) btn.append(wordNode(el, a.summary, `mt-0.5 block truncate text-[11px] ${muted}`));
   btn.addEventListener("click", () => select(a.step, a.n));
   line.append(btn);
@@ -151,8 +151,8 @@ function row({ a, verification, gap }, selected, select, stepUsage) {
     total.append(usageNode(stepUsage, "Step total", true));
     li.append(total);
   }
-  if (verification) {
-    line.append(verificationButton(verification, selected, select, a));
+  if (factoryCommit) {
+    line.append(commitButton(factoryCommit, selected, select, a));
   }
   return li;
 }
@@ -163,11 +163,11 @@ function summary(entries, n) {
     const tries = entries.filter(({ a }) => a.step === step.id);
     if (!tries.length) continue;
     const last = tries.at(-1);
-    const status = ({ a, verification }) => {
-      if (verification) return verdict(verification);
+    const status = ({ a, factoryCommit }) => {
+      if (factoryCommit) return verdict(factoryCommit);
       const failed = a.state === "failed", checked = step.id === "checks";
       const mark = failed ? "✗" : checked && a.state === "succeeded" ? "✓" : "…";
-      const label = `${STATE[a.state].label}${!failed && !checked ? "; Not checked yet" : ""}`;
+      const label = `${STATE[a.state].label}${!failed && !checked ? "; Factory commit pending" : ""}`;
       return { mark, label, failed };
     };
     const earlierFailure = tries.slice(0, -1).some((entry) => status(entry).failed);
@@ -220,12 +220,12 @@ function pastGroup(entries, n, selected, select, stepUsage, events) {
   const details = el("details", "mb-2");
   details.dataset.run = key;
   const selectedKey = `${selected.step}/${selected.n}`;
-  const containsSelection = entries.some(({ a, verification }) => chosen(a, selected) || chosen(verification, selected));
+  const containsSelection = entries.some(({ a, factoryCommit }) => chosen(a, selected) || chosen(factoryCommit, selected));
   // A newly selected result opens its group; redraws preserve the person's disclosure choice.
   if (containsSelection && selected.railSelection !== selectedKey) selected.runs.set(key, true);
   details.open = selected.runs.get(key) ?? false;
   const heading = el("summary", `cursor-pointer text-[11px] ${muted}`, summary(entries, n));
-  heading.title = "Expand to inspect every attempt and verification result, including earlier failures";
+  heading.title = "Expand to inspect every attempt and factory commit result, including earlier failures";
   details.append(heading, groupRows(entries, selected, select, stepUsage, events));
   details.addEventListener("toggle", () => { if (details.isConnected) selected.runs.set(key, details.open); });
   return details;
@@ -295,7 +295,7 @@ export function rail(list, t, selected, select, stepUsage = {}, events = [], ope
   selected.railSelection = `${selected.step}/${selected.n}`;
   if (t.column === "waiting") return wrap;
   if (!current) { current = el("ol", "ml-1 border-l border-slate-200 dark:border-slate-700"); wrap.append(current); }
-  const last = list.findLast((a) => a.step !== VERIFY.id && !a.past);
+  const last = list.findLast((a) => a.step !== COMMIT.id && !a.past);
   const reached = STEPS.findIndex((s) => s.id === last?.step);
   for (const s of STEPS.slice(reached + 1, -1)) {
     const li = el("li", "relative py-1.5 pl-4 text-[13px] text-slate-400 dark:text-slate-600");

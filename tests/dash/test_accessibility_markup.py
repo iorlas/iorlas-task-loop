@@ -127,7 +127,7 @@ def test_dynamic_tabs_cover_tracker_empty_and_result_only_views() -> None:
     assert '"Not started: no attempt yet."), "drawer-view", view)' in rendering
     assert 'tabPanel(body, "drawer-view", view)' in rendering
     pane = function(drawer, "pane")
-    assert 'if (a.step === VERIFY.id) wrap.append(content);\n  else {' in pane
+    assert 'if (a.step === COMMIT.id) wrap.append(content);\n  else {' in pane
     assert 'tabBar("attempt-body", "Attempt output"' in pane
     assert 'tabPanel(content, "attempt-body", tab)' in pane
     bar, panel = function(accessibility, "tabBar"), function(accessibility, "tabPanel")
@@ -160,14 +160,14 @@ def test_rail_indicators_include_visible_state_and_verdict_words() -> None:
     row = function(rail, "row")
     assert "dot(st.dot)" in row
     assert 'btn.append(el("span", `block text-[11px] ${st.text}`, st.label))' in row
-    assert "verificationButton(verification, selected, select, a)" in row
-    verification = function(rail, "verificationButton")
-    assert '`${v.mark} ${v.label}`' in verification
-    assert "truncate" not in verification and "sr-only" not in verification
+    assert "commitButton(factoryCommit, selected, select, a)" in row
+    factory_commit = function(rail, "commitButton")
+    assert '`${v.mark} ${v.label}`' in factory_commit
+    assert "truncate" not in factory_commit and "sr-only" not in factory_commit
     history = function(rail, "summary")
-    assert "verdict(verification)" in history and "STATE[a.state].label" in history
+    assert "verdict(factoryCommit)" in history and "STATE[a.state].label" in history
     assert "${lastStatus.mark} ${lastStatus.label}" in history
-    assert '"; Not checked yet"' in history
+    assert '"; Factory commit pending"' in history
 
 
 def test_all_event_kind_glyphs_have_visible_words_after_insert_or_replace() -> None:

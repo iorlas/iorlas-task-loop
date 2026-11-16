@@ -3,12 +3,12 @@
 // fields (`bd` calls) load second and fill the Task view in. Shapes: docs/design/dashboard-ui.md.
 
 import {
-  $, COLUMNS, JUMP, LAND, STATE, VERIFY, ago, callout, el, elapsedSpan, holdCallout, isWaiting, position, quietSpan, stepInfo,
+  $, COLUMNS, JUMP, LAND, STATE, COMMIT, ago, callout, el, elapsedSpan, holdCallout, isWaiting, position, quietSpan, stepInfo,
   tag, tick, waitingNote,
 } from "./ui.js";
 import { atBottom, lines } from "./lines.js";
 import { followFeed } from "./feed.js";
-import { causeLink, changeReason, lasted, rail, verifyTitle } from "./rail.js";
+import { causeLink, changeReason, lasted, rail, commitTitle } from "./rail.js";
 import { prompt, result } from "./result.js";
 import { taskView } from "./taskview.js";
 import { usageNode } from "./usage.js";
@@ -111,7 +111,7 @@ function follow() {
   follower?.();
   const mine = open;
   const a = mine && attemptOf();
-  if (!a || a.step === VERIFY.id || (a.step !== "checks" && a.state !== "running")) return;
+  if (!a || a.step === COMMIT.id || (a.step !== "checks" && a.state !== "running")) return;
   follower = followFeed(source, mine.id, a, {
     current: () => open === mine && attemptOf() === a,
     render, activate: (target) => activateCheck(a, target),
@@ -212,7 +212,7 @@ function renderContent() {
   if (!detail) return drawer.append(el("p", "px-6 py-5 text-sm text-slate-500", "Loading the task's steps…"));
 
   const view = open.view ?? (detail.attempts.length ? "attempts" : "task");
-  const count = detail.attempts.filter((a) => a.step !== VERIFY.id).length;
+  const count = detail.attempts.filter((a) => a.step !== COMMIT.id).length;
   const views = VIEWS.map(([id, label]) => [id, id === "attempts" && count ? `${label} ${count}` : label]);
   drawer.append(tabBar("drawer-view", "Task views", views, view, (id) => {
     open.view = id; changed(selectionRoute(open)); render();
@@ -310,10 +310,10 @@ function activateCheck(a, target) {
 
 const nameOf = stepInfo;
 
-// The selected attempt explains its restart/repeat, including navigation to a failed verification.
+// The selected attempt explains its restart/repeat, including navigation to a failed factory commit.
 function began(a) {
   const list = open.detail.attempts;
-  const prev = a.after === "repeat" ? list.find((x) => x.step === a.step && x.n === a.repeat_of) : list.slice(0, list.indexOf(a)).findLast((x) => x.step !== VERIFY.id);
+  const prev = a.after === "repeat" ? list.find((x) => x.step === a.step && x.n === a.repeat_of) : list.slice(0, list.indexOf(a)).findLast((x) => x.step !== COMMIT.id);
   const at = `${nameOf(prev?.step ?? a.step).label}${prev ? `, attempt ${prev.n}` : ""}`;
   const what = a.after === "repeat" ? `a repeat of ${at}` : `a restart at plan (after ${at})`;
   const description = a.after === "repeat" && a.step === "checks" ? `Re-run after restart of ${at}` : `Began after ${what}`;
@@ -331,7 +331,7 @@ function pane() {
   const tab = open.tab;
   const wrap = el("section", "attempt-pane flex min-h-0 min-w-0 flex-1 flex-col");
   const top = el("div", "flex flex-wrap items-center gap-x-3 gap-y-1 px-6 pt-4");
-  const title = a.step === VERIFY.id ? `${VERIFY.emoji} ${verifyTitle(open.detail.attempts, a)}`
+  const title = a.step === COMMIT.id ? `${COMMIT.emoji} ${commitTitle(open.detail.attempts, a)}`
     : `${nameOf(a.step).emoji} ${nameOf(a.step).label}, attempt ${a.n}`;
   top.append(el("h3", "text-sm font-semibold", title), tag(st.label, { dotCls: st.dot, cls: st.text }));
   const timing = a.state === "running" ? "still running" : a.ended_at && a.started_at ? `ran ${lasted(a)}` : "end not recorded";
@@ -339,7 +339,7 @@ function pane() {
     const live = a.state === "running" && !a.duration?.frozen;
     top.append(elapsedSpan(a.duration, "text-xs text-slate-500 dark:text-slate-400", live ? "" : "ran ",
       live ? " in step, still running" : ""));
-  } else if (a.step !== VERIFY.id) {
+  } else if (a.step !== COMMIT.id) {
     top.append(el("span", "text-xs text-slate-500 dark:text-slate-400",
       `${a.started_at ? `started ${ago(a.started_at)}, ` : ""}${timing}`));
   }
@@ -353,7 +353,7 @@ function pane() {
   if (a.run) wrap.append(el("p", "px-6 pt-1 text-xs text-slate-500 dark:text-slate-400", [a.run.harness, a.run.provider, a.run.model, `${a.run.effort} effort`, a.run.access].join(" · ")));
   if (a.after) top.append(began(a)); // the full reason is readable here after selecting the row or tag
   const content = tab === "lines" ? lines(a, (target) => activateCheck(a, target)) : bodyTab(a, tab);
-  if (a.step === VERIFY.id) wrap.append(content);
+  if (a.step === COMMIT.id) wrap.append(content);
   else {
     wrap.append(tabBar("attempt-body", "Attempt output", TABS, tab, (id) => {
       open.tab = id; changed(selectionRoute(open)); render();
