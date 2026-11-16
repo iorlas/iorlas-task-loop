@@ -166,7 +166,7 @@ def test_no_change_closes_with_the_disposition_s_reason(b: LandBench) -> None:
 def test_a_closed_task_whose_candidate_is_on_origin_records_already_closed(b: LandBench) -> None:
     b.closing = [CloseAnswer("unavailable")]
     assert word(b.land()) == ("unavailable", "tracker")
-    b.con.execute("UPDATE land_candidate SET delivery=NULL,delivered_at=NULL,remote_head=NULL")  # the delivery record lost too
+    b.con.execute("UPDATE land_candidate SET delivery=NULL,delivered_at=NULL,remote_head=NULL,close_started_at=NULL")
     b.status = "closed"
     found = b.land()
     assert isinstance(found, Landed) and found.how == "already_pushed" and found.row.close == "already_closed"
@@ -183,7 +183,7 @@ def test_withdraw_of_a_delivered_unclosed_candidate_never_closes(b: LandBench) -
 def test_withdraw_finding_the_candidate_on_origin_never_closes(b: LandBench) -> None:
     b.closing = [CloseAnswer("unavailable")]
     assert word(b.land()) == ("unavailable", "tracker")
-    b.con.execute("UPDATE land_candidate SET delivery=NULL,delivered_at=NULL,remote_head=NULL")
+    b.con.execute("UPDATE land_candidate SET delivery=NULL,delivered_at=NULL,remote_head=NULL,close_started_at=NULL")
     found = b.land("withdraw")
     assert isinstance(found, Landed) and found.how == "already_pushed" and found.row.close is None and len(b.tracker) == 1
     again = b.land()

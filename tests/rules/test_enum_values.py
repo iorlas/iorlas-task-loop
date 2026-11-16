@@ -13,7 +13,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 ENUM_BASES = {"enum.Enum", "enum.IntEnum", "enum.StrEnum", "enum.Flag", "enum.IntFlag"}
-CODECS = {"src/taskloop/step.py", "src/taskloop/claim.py"}
+CODECS = {"src/taskloop/step.py", "src/taskloop/claim.py", "src/taskloop/land_timing.py"}
 # Initial census at da7309d0. Remove resolved sites; never add entries to pass.
 # Keys are path | enclosing symbol | normalized receiver | occurrence (not line).
 KNOWN_EXCEPTIONS: frozenset[str] = frozenset({

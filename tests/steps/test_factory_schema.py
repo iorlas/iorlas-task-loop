@@ -11,8 +11,8 @@ from sqlite_store import Schema, SchemaError, Store
 from taskloop.factory_schema import SCHEMA
 from taskloop.factory_store import current, open_ro, refusal
 
-# Schema 32's pin includes the authorized factory-commit storage rename (tl-8bh9.14.159.2.3.1).
-# Append a reviewed pin and bump the version for subsequent DDL changes.
+# Schema 32 bundles the factory-commit storage rename and land retry causes/phase times after a drain.
+# Amend this bundled version and pin together; unrelated future changes require a new version.
 DDL_DIGESTS = {
     26: "728ea63362ce086f01b39e967b837e6875854238f49c3b073fddcdcba1666787",
     27: "62ce0c0793427a8305ef420edd956d5adae7c832969b353265ad51d55a2ed2c0",
@@ -20,7 +20,7 @@ DDL_DIGESTS = {
     29: "0e6ec8a2ed329c07b67e95721833da0d974b9dc825f5e6702a36890743413a82",
     30: "020fa74580ac5d32910fb6b09b29bd00b2992d5dc3511d3808e4174d56ffd595",
     31: "2ca9b05fb3210127f561e74133cfcac7443d486c2e833eb4c2b427529ae1fe6d",
-    32: "234a15273fc75a3cef589704dbf9a1c104154fb6fc57f15b1b7d9a86e7f8dfda",
+    32: "513064c28d280980f0b6353bbf5988b51947155cf9e693df5e4f570d88ebb928",
 }
 
 

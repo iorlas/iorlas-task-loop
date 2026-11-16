@@ -733,6 +733,7 @@ source_modules =
     taskloop.land_store
     taskloop.land_summary
     taskloop.land_target
+    taskloop.land_timing
     taskloop.launch
     taskloop.machine_config
     taskloop.merge

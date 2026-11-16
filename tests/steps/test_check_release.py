@@ -280,7 +280,8 @@ def test_an_abandon_of_released_checks_with_a_pushable_or_delivered_land_candida
     bench.concluded()
     assert release_word(bench.release()) == "released"
     bench.con.execute("""INSERT INTO land_candidate (candidate_id,dispatch_token,generation,checks_attempt_id,number,origin_commit,
-    commit_sha,tree_same,required,validation,validated_at) VALUES ('candidate','candidate-token',1,'checks',1,?,?,1,'[]','same_tree',3)""",
+    commit_sha,tree_same,required,validation,validated_at,admitted_at)
+    VALUES ('candidate','candidate-token',1,'checks',1,?,?,1,'[]','same_tree',3,2)""",
                       (bench.d, bench.x))
     bench.con.execute(f"UPDATE land_candidate SET validated_at=3{delivery}")
     found = bench.release(abandon=True)

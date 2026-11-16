@@ -169,8 +169,8 @@ def test_a_re_run_is_refused_while_a_land_candidate_of_the_task_is_delivered_or_
     first = bench.admit()
     assert isinstance(first, Admitted)
     bench.concluded("failed")
-    bench.con.execute(f"""INSERT INTO land_candidate ({CANDIDATE_COLUMNS},slot,slot_head,deadline) VALUES
-    ('candidate','candidate-token',1,?,1,?,?,1,'[]','s9',?,300)""", (first.key.attempt_id, bench.done.target, bench.done.x, bench.done.d))
+    bench.con.execute(f"""INSERT INTO land_candidate ({CANDIDATE_COLUMNS},slot,slot_head,deadline,admitted_at) VALUES
+    ('candidate','candidate-token',1,?,1,?,?,1,'[]','s9',?,300,2)""", (first.key.attempt_id, bench.done.target, bench.done.x, bench.done.d))
     bench.con.execute(f"UPDATE land_candidate SET slot=NULL,slot_head=NULL,deadline=NULL,{change}")
     before = bench.stored()
     found = bench.admit(2)
@@ -200,8 +200,8 @@ def test_latest_number_keeps_earlier_land_facts_and_abandon_refusal_precedence(b
     bench.concluded("failed")
     assert isinstance(bench.admit(2), Admitted)
     bench.concluded("failed", abandoned=abandoned)
-    bench.con.execute(f"""INSERT INTO land_candidate ({CANDIDATE_COLUMNS},validation,validated_at,delivery,delivered_at)
-    VALUES ('candidate','candidate-token',1,?,1,?,?,1,'[]','no_change',3,'no_change',3)""",
+    bench.con.execute(f"""INSERT INTO land_candidate ({CANDIDATE_COLUMNS},validation,validated_at,delivery,delivered_at,admitted_at)
+    VALUES ('candidate','candidate-token',1,?,1,?,?,1,'[]','no_change',3,'no_change',3,2)""",
                       (first.key.attempt_id, bench.done.target, bench.done.x))
     before = bench.stored()
     found = bench.admit(3)
