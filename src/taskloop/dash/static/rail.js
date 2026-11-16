@@ -39,7 +39,8 @@ function gapBetween(prev, next) {
 }
 
 function gapWords(ms) {
-  return ms === null ? "" : `Approximate elapsed gap: ${fmtDur(ms)} between recorded step times; not a measurement of individual factory operations.`;
+  return ms === null ? "" : `Approximate elapsed gap: ${fmtDur(ms)} between recorded step times; `
+    + "not a measurement of individual factory operations.";
 }
 
 // The ordering contract puts factory commit immediately after its agent, with its own task-wide number.
@@ -109,10 +110,21 @@ function restart({ a, gap }, select) {
 
 // Cause navigation remains in the selected attempt detail, never an extra rail row.
 export function causeLink(a, select) {
-  const btn = el("button", "block text-left text-[11px] underline decoration-dotted underline-offset-2 hover:decoration-solid", "because factory commit has no successful verdict →");
+  const btn = el("button", "block text-left text-[11px] underline decoration-dotted underline-offset-2 hover:decoration-solid",
+    "because factory commit has no successful verdict →");
   btn.type = "button";
   btn.addEventListener("click", () => select(COMMIT.id, a.led_by));
   return btn;
+}
+
+export function causeWords(context) {
+  const cause = context.event.cause;
+  const words = (value) => String(value).replaceAll("_", " ");
+  if (cause.explanation) return cause.explanation;
+  if (cause.check) return `Check ${cause.check.name}: ${words(cause.check.conclusion)}`;
+  if (cause.leftovers) return `Repeats exhausted: ${words(say(cause.leftovers.reason))}`;
+  if (cause.reason) return words(say(`${cause.family}:${cause.reason}`));
+  return cause.setup ? `Setup: ${words(cause.setup)}` : cause.profile ? `Profile: ${words(cause.profile)}` : "Reason not recorded";
 }
 
 function row({ a, factoryCommit, gap }, selected, select, stepUsage) {
@@ -122,7 +134,8 @@ function row({ a, factoryCommit, gap }, selected, select, stepUsage) {
   const dotEl = dot(st.dot);
   dotEl.classList.add("absolute", "-left-[3px]", "top-[0.95rem]");
   const line = el("div", "flex min-w-0 flex-col items-stretch");
-  const btn = el("button", `block min-w-0 flex-1 rounded px-2 py-1.5 text-left ${chosen(a, selected) ? "bg-slate-100 dark:bg-slate-800" : "hover:bg-slate-50 dark:hover:bg-slate-800/60"}`);
+  const selectedStyle = chosen(a, selected) ? "bg-slate-100 dark:bg-slate-800" : "hover:bg-slate-50 dark:hover:bg-slate-800/60";
+  const btn = el("button", `block min-w-0 flex-1 rounded px-2 py-1.5 text-left ${selectedStyle}`);
   btn.type = "button";
   if (chosen(a, selected)) btn.dataset.selected = "1";
   const top = el("span", "flex flex-wrap items-baseline gap-1");
@@ -144,6 +157,14 @@ function row({ a, factoryCommit, gap }, selected, select, stepUsage) {
   if (a.state === "failed" && !covered) btn.append(wordNode(el, a.summary, `mt-0.5 block truncate text-[11px] ${muted}`));
   btn.addEventListener("click", () => select(a.step, a.n));
   line.append(btn);
+  if (a.context) {
+    const notice = el("button", `block px-2 pb-1 text-left text-[11px] truncate ${muted}`, `Held · ${causeWords(a.context)}`);
+    notice.title = causeWords(a.context);
+    notice.type = "button";
+    notice.dataset.taskEvent = a.context.event.cause_id;
+    notice.addEventListener("click", () => select(a.step, a.n));
+    line.append(notice);
+  }
   li.append(dotEl, line);
   if (a.usage) {
     li.title = [li.title, usageText(a.usage), usageText(stepUsage, "Step total", true)].filter(Boolean).join(" · ");
@@ -219,8 +240,9 @@ function pastGroup(entries, n, selected, select, stepUsage, events) {
   const key = `${entries[0].a.step}/${entries[0].a.n}`;
   const details = el("details", "mb-2");
   details.dataset.run = key;
-  const selectedKey = `${selected.step}/${selected.n}`;
-  const containsSelection = entries.some(({ a, factoryCommit }) => chosen(a, selected) || chosen(factoryCommit, selected));
+  const selectedKey = `${selected.step}/${selected.n}/${selected.landEvent ?? ""}`;
+  const containsSelection = entries.some(({ a, factoryCommit }) => chosen(a, selected) || chosen(factoryCommit, selected)
+    || events.some((event) => event.id === selected.landEvent && a.step === "checks" && event.checks_n === a.n));
   // A newly selected result opens its group; redraws preserve the person's disclosure choice.
   if (containsSelection && selected.railSelection !== selectedKey) selected.runs.set(key, true);
   details.open = selected.runs.get(key) ?? false;
@@ -251,15 +273,19 @@ function landEvent(event, selected, select) {
   const li = el("li", "relative py-1.5 pl-4");
   li.dataset.landEvent = event.id;
   const label = { ready: "Land ready", tried: "Land tried", landed: "Landed" }[event.kind];
-  const on = selected.step === "land";
-  const button = el("button", `w-full rounded px-2 py-1 text-left text-[13px] ${on ? "bg-slate-100 dark:bg-slate-800" : "hover:bg-slate-50 dark:hover:bg-slate-800/60"}`,
+  const on = selected.step === "land" && selected.landEvent === event.id;
+  const style = on ? "bg-slate-100 dark:bg-slate-800" : "hover:bg-slate-50 dark:hover:bg-slate-800/60";
+  const button = el("button", `w-full rounded px-2 py-1 text-left text-[13px] ${style}`,
     `${label}${event.candidate_n == null ? "" : ` · candidate ${event.candidate_n}`}`);
   button.type = "button";
   button.setAttribute("aria-pressed", String(on));
-  button.addEventListener("click", () => select("land"));
+  if (on) button.dataset.selected = "1";
+  button.addEventListener("click", () => select("land", null, event.id));
   const stamp = el("span", `block px-2 text-[11px] ${muted}`, event.at ?? "Time not recorded");
   li.append(marker(event.kind === "landed" ? "border-emerald-500 bg-emerald-500" : "border-amber-500"), button, stamp,
     el("span", `block px-2 text-[11px] ${muted}`, `${event.past ? "Historical · " : ""}${event.explanation}`));
+  if (event.retry_cause) li.append(el("span", `block px-2 text-[11px] ${muted}`,
+    `Retry cause: ${event.retry_cause.replaceAll("_", " ")}`));
   for (const wait of event.waits) li.append(landWait(wait));
   return li;
 }
@@ -269,12 +295,16 @@ function landRow(t, selected, select, events) {
   const word = t.column === "landed" ? LAND.done : here ? LAND[t.land ?? "unknown"] : null;
   const li = el("li", `relative py-1.5 pl-4 ${here ? "" : "text-slate-400 dark:text-slate-600"}`);
   const on = selected.step === "land";
-  const button = el("button", `w-full rounded px-2 py-1 text-left text-[13px] ${on ? "bg-slate-100 dark:bg-slate-800" : "hover:bg-slate-50 dark:hover:bg-slate-800/60"} ${here ? "font-medium" : ""}`, `${STEPS.at(-1).emoji} ${STEPS.at(-1).label}`);
+  const style = on ? "bg-slate-100 dark:bg-slate-800" : "hover:bg-slate-50 dark:hover:bg-slate-800/60";
+  const button = el("button", `w-full rounded px-2 py-1 text-left text-[13px] ${style} ${here ? "font-medium" : ""}`,
+    `${STEPS.at(-1).emoji} ${STEPS.at(-1).label}`);
   button.type = "button";
   button.setAttribute("aria-pressed", String(on));
   if (on) button.dataset.selected = "1";
   button.addEventListener("click", () => select("land"));
-  li.append(marker(t.column === "landed" ? "border-emerald-500 bg-emerald-500" : here ? "border-amber-500" : "border-slate-300 dark:border-slate-600"), button);
+  const color = t.column === "landed" ? "border-emerald-500 bg-emerald-500"
+    : here ? "border-amber-500" : "border-slate-300 dark:border-slate-600";
+  li.append(marker(color), button);
   if (here && isWaiting(t) && !events.length) li.append(waitingNote(t));
   else if (word) li.append(el("span", `block text-[11px] ${word.text}`, t.status_note ?? word.row));
   else li.append(el("span", "ml-2 text-[11px]", "pending"));
@@ -292,7 +322,7 @@ export function rail(list, t, selected, select, stepUsage = {}, events = [], ope
     if (entries.every(({ a }) => a.past)) wrap.append(pastGroup(entries, i + 1, selected, select, stepUsage, events));
     else { current = groupRows(entries, selected, select, stepUsage, events); wrap.append(current); }
   });
-  selected.railSelection = `${selected.step}/${selected.n}`;
+  selected.railSelection = `${selected.step}/${selected.n}/${selected.landEvent ?? ""}`;
   if (t.column === "waiting") return wrap;
   if (!current) { current = el("ol", "ml-1 border-l border-slate-200 dark:border-slate-700"); wrap.append(current); }
   const last = list.findLast((a) => a.step !== COMMIT.id && !a.past);

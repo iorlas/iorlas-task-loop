@@ -47,10 +47,11 @@ initDrawer(source, tasks, (...args) => navigation.changed(...args));
 initLogs(openDrawer);
 activateCard(document.getElementById("card"), () => openDrawer("from-card"));
 
-async function visit(hash) {
+async function visit(hash, expected = hash) {
   if (location.hash === hash) return;
   location.hash = hash;
-  await until(() => location.hash === hash && !drawer.textContent.includes("Loading the task's steps"), `Visit ${hash}`);
+  await until(() => [hash, expected].includes(location.hash) && !drawer.textContent.includes("Loading the task's steps"),
+    `Visit ${hash}`);
   await tick(); await tick();
 }
 async function travel(direction, hash) {
@@ -148,16 +149,16 @@ async function defaultsAndRepairs() {
   assert(location.hash === "#direct/land/task", "Task view retains delivery selection");
   await travel("back", "#direct/land");
   assert(drawer.textContent.includes("Finish delivery"), "Back restores delivery");
-  await visit("#direct/commit/32/lines");
+  await visit("#direct/commit/32/lines", "#direct/commit/32/result");
   assert(location.hash === "#direct/commit/32/result", "Factory commit URL repairs to Result");
-  await visit("#direct/implement/999/result");
+  await visit("#direct/implement/999/result", "#direct/implement/2/lines");
   assert(location.hash === "#direct/implement/2/lines", "Missing attempt falls back to task default");
-  await visit("#defaults");
+  await visit("#defaults", "#defaults/implement/2/lines");
   assert(location.hash === "#defaults/implement/2/lines", "Bare task resolves default");
   await visit("#missing");
   assert(drawer.textContent.includes("No such task") && !hidden(), "Missing task retains error drawer");
   closeDrawer();
-  await visit("#bad/plan/0/result");
+  await visit("#bad/plan/0/result", "");
   assert(!location.hash && hidden(), "Malformed URL repairs to closure");
 }
 
@@ -182,14 +183,14 @@ async function staleReadsAndRefresh() {
   await openDrawer("new");
   oldFinish(await original("old")); await old;
   assert(location.hash.startsWith("#new/") && drawer.textContent.includes("Title new"), "Older task cannot overwrite newer task");
-  const before = history.length;
   let refreshFinish;
   detailRead = () => new Promise((resolve) => { refreshFinish = resolve; });
   const refresh = onTaskMoved({ ...card("new"), attempt: 3 });
   await visit("#new/plan/1/prompt");
+  const before = history.length;
   refreshFinish(await original("new")); await refresh;
   assert(location.hash === "#new/plan/1/prompt", "Refresh preserves newer explicit selection");
-  assert(history.length === before + 1, "Refresh and body redraws add no history");
+  assert(history.length === before, "Refresh and body redraws add no history");
   detailRead = async (id) => ({ task: card(id), attempts: [attempt("implement", 3)] });
   const currentLength = history.length;
   await onTaskMoved({ ...card("new"), attempt: 4 }); await tick();

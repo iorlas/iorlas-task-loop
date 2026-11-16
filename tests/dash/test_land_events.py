@@ -12,6 +12,7 @@ from taskloop.check_store import ChecksRow, CheckStore
 from taskloop.dash_land import build_events
 from taskloop.dash_model import LandEventKind, iso
 from taskloop.land_store import LandRow, LandStore
+from taskloop.land_timing import RetryCause
 
 
 @pytest.fixture
@@ -35,6 +36,25 @@ class Candidates(LandStore):
 
     def of_checks(self, checks: str) -> tuple[LandRow, ...]:
         return tuple(row for row in self.rows if row.checks == checks)
+
+
+def test_candidate_context_preserves_retry_and_each_recorded_time(world: LandBench) -> None:
+    world.land()
+    original, = world.rows()
+    times = {"admitted_at": 19.0, "validation_started_at": 20.0, "validated_at": 18.0,
+             "release_started_at": 21.0, "released_at": 22.0, "delivery_started_at": None,
+             "delivered_at": 23.0, "close_started_at": 24.0, "closed_at": 25.0, "superseded_at": None}
+    row = replace(original, retry_cause=RetryCause.MOVED, **times)
+    before = (tuple(world.tracker), world.repo.pushes, world.reservations())
+    ready, tried, landed = build_events(Candidates((row,)), ((checked(world), 1, False),), lambda _entry: "matching")
+    assert tried.at == iso(19) and landed.at == iso(25)
+    for event in (tried, landed):
+        payload = event.model_dump(mode="json")
+        assert payload["retry_cause"] == "moved"
+        assert {key: payload[key] for key in times} == {key: iso(value) for key, value in times.items()}
+    assert ready.retry_cause is None and all(ready.model_dump()[key] is None for key in times)
+    assert world.rows() == (original,)
+    assert (tuple(world.tracker), world.repo.pushes, world.reservations()) == before
 
 
 def test_readiness_needs_passed_released_checks_and_never_creates_a_candidate(world: LandBench) -> None:
@@ -64,7 +84,7 @@ def test_every_candidate_stays_in_checks_chain_order_with_unknown_try_times(worl
         (LandEventKind.LANDED, 1, 2), (LandEventKind.READY, 2, None), (LandEventKind.TRIED, 2, 1)]
     assert all(event.past for event in events[:4]) and not any(event.past for event in events[4:])
     assert len({event.id for event in events}) == len(events)
-    assert all(event.at is None for event in events if event.kind is LandEventKind.TRIED)
+    assert all(event.at == iso(original.admitted_at) for event in events if event.kind is LandEventKind.TRIED)
     assert all(not wait.open for event in events[:4] for wait in event.waits)
     assert events[0].waits[0].ended_at is None and not events[0].waits[0].open
 

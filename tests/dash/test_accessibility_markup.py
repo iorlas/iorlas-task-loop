@@ -178,7 +178,7 @@ def test_all_event_kind_glyphs_have_visible_words_after_insert_or_replace() -> N
     assert "sr-only" not in row
     assert "list.append(line(e, a," in function(script, "lines")
     update = function(script, "show")
-    assert "const row = line(e, attempt, attempt.feed[index - 1], true)" in update
+    assert "const row = line(e, attempt, attempt.feed[index - 1], true, activate)" in update
     assert "old.replaceWith(row)" in update and "list.append(row)" in update
 
 
@@ -194,6 +194,6 @@ def test_existing_board_badges_quiet_age_and_check_indicators_keep_visible_words
     assert 'dot(level === "long" ? "bg-rose-500" : "bg-amber-500")' in quiet
     assert "Last activity ${fmtDur(s * 1000)} ago" in quiet
     assert "node.append(text)" in function(ui, "tag")
-    assert "tag(st.label, { dotCls: st.dot, cls: st.text })" in function(source("drawer.js"), "pane")
+    assert "tag(st.label, { dotCls: st.dot, cls: st.text })" in function(source("event-detail.js"), "attemptPanel")
     assert "c.passed ? STATE.succeeded.label : STATE.failed.label" in function(source("result.js"), "check")
-    assert "e.passed ? STATE.succeeded.label : STATE.failed.label" in function(source("lines.js"), "fill")
+    assert "e.passed ? STATE.succeeded.label : STATE.failed.label" in function(source("lines.js"), "checkLine")

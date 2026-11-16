@@ -668,6 +668,7 @@ source_modules =
     taskloop.dash_operation
     taskloop.dash_server
     taskloop.dash_task
+    taskloop.dash_task_event
     taskloop.dash_tracker
     taskloop.dash_usage
     taskloop.discussion

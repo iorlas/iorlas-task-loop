@@ -10,7 +10,9 @@ from pydantic import BaseModel, ConfigDict
 
 from taskloop.dash_duration import Duration
 from taskloop.land_status import LandState
+from taskloop.land_timing import RetryCause
 from taskloop.operation_evidence import OperationKind, OperationState
+from taskloop.task_event import TaskEvent
 
 type Column = Literal["waiting", "plan", "implement", "checks", "land", "held", "landed"]
 type State = Literal["running", "succeeded", "failed"]
@@ -169,6 +171,15 @@ class Usage:
     complete: int = 0
 
 
+class TaskEventDetail(BaseModel):
+    """A recorded decision with the time its hold was stored, including cleared holds."""
+
+    model_config = ConfigDict(frozen=True)
+
+    event: TaskEvent
+    held_at: str
+
+
 @dataclass(frozen=True)
 class AttemptDetail:
     step: str
@@ -187,6 +198,7 @@ class AttemptDetail:
     run: Run | None = None  # an agent attempt's: what ran it; None for a check or a factory commit
     usage: Usage | None = None  # None for checks/factory commit; an agent with no report has empty counts
     duration: Duration | None = None
+    context: TaskEventDetail | None = None
 
 
 @dataclass(frozen=True)
@@ -277,6 +289,17 @@ class LandEvent(BaseModel):
     past: bool
     explanation: str
     waits: tuple[LandWait, ...] = ()
+    retry_cause: RetryCause | None = None
+    admitted_at: str | None = None
+    validation_started_at: str | None = None
+    validated_at: str | None = None
+    release_started_at: str | None = None
+    released_at: str | None = None
+    delivery_started_at: str | None = None
+    delivered_at: str | None = None
+    close_started_at: str | None = None
+    closed_at: str | None = None
+    superseded_at: str | None = None
 
 
 class LandDetail(BaseModel):
