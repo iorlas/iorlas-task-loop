@@ -57,8 +57,8 @@ def applicable(stored: StoredExecution | None) -> StoredExecution | CommitResult
         return CommitRefused("not_captured")
     if stored.answer.kind == "validation_pending":
         return CommitWaiting(CommitWaitingReason.VALIDATION_PENDING)
-    if stored.verification is not None:
-        return stored.verification
+    if stored.verdict is not None:
+        return stored.verdict
     if not committing(stored):
         return NotApplicable(end_word(stored))
     if stored.session_state != "complete":  # the verdict's writer requires a complete session state too

@@ -183,7 +183,7 @@ def test_a_second_commit_on_the_first_is_verified_with_each_held_to_its_own_path
     assert made(slot, base) == ["Plan tl-1", "Plan tl-1"]
     rows = step.con.execute("SELECT number,base_commit,end_commit FROM attempt ORDER BY number").fetchall()
     assert rows[0][1] == base and rows[1][1] == rows[0][2] and rows[1][2] == head(slot)
-    assert step.con.execute("SELECT attempt_id,verdict FROM verification").fetchall() == [(key.attempt_id, "verified")]
+    assert step.con.execute("SELECT attempt_id,verdict FROM factory_commit").fetchall() == [(key.attempt_id, "committed")]
 
 
 def test_planned_with_nothing_new_in_a_later_attempt_is_rejected_for_good(step: Step, slot: FakeWorktree) -> None:
@@ -267,7 +267,7 @@ def test_a_takeover_during_the_verify_is_superseded_before_any_git_write(
     assert step.factory_commit.commit(KEY) == CommitRefused("superseded")
     assert slot.state().index == index and made(slot, base) == []
     assert step.con.execute("SELECT end_commit FROM attempt WHERE attempt_id='attempt'").fetchone() == (None,)
-    assert step.con.execute("SELECT count(*) FROM verification").fetchone() == (0,)
+    assert step.con.execute("SELECT count(*) FROM factory_commit").fetchone() == (0,)
 
 
 @pytest.mark.parametrize(("before", "written", "expected"), [
@@ -422,7 +422,7 @@ def test_a_path_staged_beside_the_listed_ones_is_never_committed(
 
     monkeypatch.setattr(FakeWorktree, "stage", staging)
     assert step.factory_commit.commit(KEY) == Uncommitted("staged", (STRAY,)) and made(slot, base) == []
-    assert step.con.execute("SELECT count(*) FROM verification").fetchone() == (0,)
+    assert step.con.execute("SELECT count(*) FROM factory_commit").fetchone() == (0,)
 
 
 def test_a_start_that_lost_the_takeover_launches_the_winner(step: Step, slot: FakeWorktree) -> None:

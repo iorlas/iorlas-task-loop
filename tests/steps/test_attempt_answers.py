@@ -108,7 +108,7 @@ def test_failure_survives_reopening_and_missing_raw_answer(
     execution = fake(text)
     owner = app(con, surroundings, execution)
     result = owner.execute(KEY, ENTRY)
-    assert result.execution is not None and result.execution.verification is None
+    assert result.execution is not None and result.execution.verdict is None
     failure = result.execution.answer.failure
     assert failure is not None and failure.rule is rule and detail in failure.explanation
     assert failure.describe() in result.explanation and result.execution.answer.effect is None

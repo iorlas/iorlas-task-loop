@@ -72,7 +72,7 @@ class AnswerRepairStore(AttemptStore):
         if admission.repair is not None:
             return "An answer repair cannot itself be repaired."
         if (record.phase != "captured" or execution.answer.failure is None or facts.rc != 0 or facts.timed_out
-                or facts.stop is not None or execution.verification is not None):
+                or facts.stop is not None or execution.verdict is not None):
             return "A completed execution with a rejected answer and no verdict is required."
         if (not record.session_ref or record.session_conflict or execution.session_state != "complete"
                 or (facts.session is not None and facts.session != record.session_ref) or record.base_commit is None):

@@ -28,7 +28,7 @@ def applies(result: AttemptResult) -> bool:
 
 def _failed(result: AttemptResult, successor: AttemptRow | None) -> str | None:
     """The reason or `rejected` of the check that failed; None when the verification passed or has no result yet."""
-    verdict = None if result.execution is None else result.execution.verification
+    verdict = None if result.execution is None else result.execution.verdict
     if isinstance(verdict, Rejected):
         return "rejected"
     if verdict is None and successor is not None:
@@ -40,7 +40,7 @@ def verification(row: AttemptRow, number: int, result: AttemptResult, successor:
     """Where `row` (agent attempt `number` of its step) was verified: each check passed, failed or not reached, the typed result and the
     listing the failed check gave (only a repeat stores it). State: passed, failed, or running while it still holds its slot unsettled."""
     stored = result.execution
-    verdict = None if stored is None else stored.verification
+    verdict = None if stored is None else stored.verdict
     failed = _failed(result, successor)
     names = [reason for _text, reason in CHECKS]
     at = names.index(failed) if failed in names else len(names) if verdict is not None else -1

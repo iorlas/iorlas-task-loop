@@ -89,7 +89,7 @@ WRITERS = {
     ("CREATE TABLE", "reservation"): "factory_schema.py",
     ("CREATE TABLE", "attempt"): "factory_schema.py",
     ("CREATE TABLE", "execution"): "factory_schema.py",
-    ("CREATE TABLE", "verification"): "factory_schema.py",
+    ("CREATE TABLE", "factory_commit"): "factory_schema.py",
     ("CREATE TABLE", "slot_release"): "factory_schema.py",
     ("CREATE TABLE", "published_branch"): "factory_schema.py",
     ("CREATE TABLE", "setup_run"): "factory_schema.py",
@@ -120,7 +120,7 @@ WRITERS = {
     ("DELETE FROM", "reservation"): "slot_release_store.py",
     ("INSERT", "published_branch"): "publish_store.py",
     ("INSERT", "execution"): "attempt_write_store.py",
-    ("INSERT", "verification"): "attempt_write_store.py",
+    ("INSERT", "factory_commit"): "attempt_write_store.py",
     ("UPDATE", "attempt"): "attempt_write_store.py",  # also deadline renewal after a reboot in the entry registration's write
     ("UPDATE", "execution"): "attempt_write_store.py",
 }

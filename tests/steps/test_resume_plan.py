@@ -134,9 +134,9 @@ def test_changed_plan_evidence_during_claim_cannot_commit_stale_selection(resuma
             # Production evidence is immutable; even an external corruption must not admit a stale digest.
             factory.con.execute("UPDATE task_content SET digest=?", ("0" * 64,))
         elif change == "blob":
-            factory.con.execute("UPDATE verification SET blob=?", ("0" * 40,))
+            factory.con.execute("UPDATE factory_commit SET blob=?", ("0" * 40,))
         elif change == "verification":
-            factory.con.execute("UPDATE verification SET verdict='rejected',reason='paths',blob=NULL,reused=0")
+            factory.con.execute("UPDATE factory_commit SET verdict='rejected',reason='paths',blob=NULL,reused=0")
         elif change == "revision":
             factory.con.execute("UPDATE attempt SET rev=rev+1 WHERE step='plan'")
         else:
@@ -172,7 +172,7 @@ def test_entry_rechecks_after_database_reopen_before_setup_and_dispatch(
         factory.slot.write_file("unrelated", "new tip")
         assert isinstance(factory.slot.record("new tip", paths="all"), Recorded)
     elif change == "eligibility":
-        reopened.execute("UPDATE verification SET verdict='rejected',reason='paths',blob=NULL,reused=0")
+        reopened.execute("UPDATE factory_commit SET verdict='rejected',reason='paths',blob=NULL,reused=0")
     elif change == "tracker_down":
         factory.tracker.beads.clear()
     elif change == "git_down":

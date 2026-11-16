@@ -146,10 +146,10 @@ class BranchPublish:
 
     @staticmethod
     def _refusal(row: PublishRow) -> NotPublished | None:
-        """Read before any Git call: not abandoned, a stored `verified` verdict with its commit."""
+        """Read before any Git call: not abandoned, a stored `committed` verdict with its commit."""
         if row.abandoned:
             return _refused("abandoned", "The attempt was abandoned; a fresh start publishes its own result.")
-        if row.verdict == "verified" and row.commit is not None:
+        if row.verdict == "committed" and row.commit is not None:
             return None
         if row.verdict == "rejected":
             return _refused("not_verified", f"The step's result was rejected ({row.reason}).")

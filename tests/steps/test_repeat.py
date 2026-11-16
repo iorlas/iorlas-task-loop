@@ -331,7 +331,7 @@ def test_a_superseded_attempt_shows_repeated_and_the_current_one_is_followed(
 
 
 GATES: list[tuple[str, str, float, str]] = [
-    ("verdict", "INSERT INTO verification (attempt_id,dispatch_token,generation,verdict,reason,observed_at) "
+    ("verdict", "INSERT INTO factory_commit (attempt_id,dispatch_token,generation,verdict,reason,observed_at) "
      "VALUES ('attempt','dispatch',1,'rejected','paths',1)", 1000, "not_repeatable"),
     ("invalid_answer", "UPDATE execution SET answer_kind='schema_invalid',disposition=NULL,effect=NULL,commit_paths=NULL,"
      f"commit_message=NULL,answer_failure='{encode(AnswerFailureData(rule=AnswerRule.SHAPE, explanation='Object required'))}'",

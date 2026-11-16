@@ -228,7 +228,7 @@ def abandoned(con: sqlite3.Connection, _slot: FakeWorktree, _repo: ScriptedPushR
 
 
 def unverified(con: sqlite3.Connection, _slot: FakeWorktree, _repo: ScriptedPushRepo, _files: FakeSlotFiles) -> None:
-    con.execute("DELETE FROM verification")
+    con.execute("DELETE FROM factory_commit")
 
 
 def redirected(_con: sqlite3.Connection, slot: FakeWorktree, _repo: ScriptedPushRepo, files: FakeSlotFiles) -> None:

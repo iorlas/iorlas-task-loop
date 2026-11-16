@@ -21,12 +21,12 @@ p.phase='captured' AND EXISTS (SELECT 1 FROM reservation r WHERE r.repo_id=p.rep
  AND r.generation=p.generation)
 AND EXISTS (SELECT 1 FROM execution e WHERE e.attempt_id=p.attempt_id AND e.answer_kind='valid' AND e.rc=0 AND e.timed_out=0
  AND e.effect IN ('commit','keep') AND e.session_state='complete')
-AND NOT EXISTS (SELECT 1 FROM verification v WHERE v.attempt_id=p.attempt_id),
+AND NOT EXISTS (SELECT 1 FROM factory_commit v WHERE v.attempt_id=p.attempt_id),
 p.tracker_root,p.seq,p.slot_head,p.step,p.label,p.harness,p.provider,p.compaction_token_limit
 FROM attempt p WHERE p.attempt_id=? AND p.dispatch_token=? AND p.generation=?"""
 
 _CURRENT = """SELECT p.attempt_id,p.dispatch_token,p.generation,
-EXISTS (SELECT 1 FROM verification v WHERE v.attempt_id=p.attempt_id AND v.verdict='verified')
+EXISTS (SELECT 1 FROM factory_commit v WHERE v.attempt_id=p.attempt_id AND v.verdict='committed')
 AND EXISTS (SELECT 1 FROM slot_release x WHERE x.attempt_id=p.attempt_id AND x.claim='kept')
 AND EXISTS (SELECT 1 FROM published_branch b WHERE b.attempt_id=p.attempt_id AND b.commit_sha=p.end_commit),
 p.step,p.end_commit,p.tracker_root,p.seq,p.label

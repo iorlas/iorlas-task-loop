@@ -206,8 +206,8 @@ DONE = (  # the implement attempt's capture, verdict, settled release and public
     """INSERT INTO execution (attempt_id,dispatch_token,generation,rc,timed_out,work,stands,stdout_path,stdout_digest,stderr_path,
     stderr_digest,answer_path,answer_digest,diagnostic_path,diagnostic_digest,answer_kind,effect,session_state) VALUES
     ('implement','implement-token',1,0,0,1,1,'o','d','e','d','a','d','g','d','valid','commit','complete')""",
-    """INSERT INTO verification (attempt_id,dispatch_token,generation,verdict,observed_at)
-    VALUES ('implement','implement-token',1,'verified',5)""",
+    """INSERT INTO factory_commit (attempt_id,dispatch_token,generation,verdict,observed_at)
+    VALUES ('implement','implement-token',1,'committed',5)""",
 )
 
 

@@ -155,11 +155,11 @@ CREATE TABLE execution (
  CHECK ((answer_kind IN ('missing','json_invalid','schema_invalid') AND answer_failure IS NOT NULL)
      OR (answer_kind IN ('valid','validation_pending') AND answer_failure IS NULL))
 );
-CREATE TABLE verification (
+CREATE TABLE factory_commit (
  attempt_id TEXT PRIMARY KEY REFERENCES execution(attempt_id), dispatch_token TEXT NOT NULL, generation INTEGER NOT NULL,
- verdict TEXT NOT NULL CHECK(verdict IN ('verified','rejected')), reason TEXT, blob TEXT, observed_at REAL NOT NULL,
- reused INTEGER NOT NULL DEFAULT 0 CHECK(reused IN (0,1)), CHECK(reused=0 OR verdict='verified'),
- CHECK((verdict='verified') = (reason IS NULL))
+ verdict TEXT NOT NULL CHECK(verdict IN ('committed','rejected')), reason TEXT, blob TEXT, observed_at REAL NOT NULL,
+ reused INTEGER NOT NULL DEFAULT 0 CHECK(reused IN (0,1)), CHECK(reused=0 OR verdict='committed'),
+ CHECK((verdict='committed') = (reason IS NULL))
 );
 CREATE TABLE slot_release (
  attempt_id TEXT PRIMARY KEY REFERENCES attempt(attempt_id), dispatch_token TEXT NOT NULL, generation INTEGER NOT NULL,
@@ -167,7 +167,7 @@ CREATE TABLE slot_release (
  claim TEXT NOT NULL CHECK(claim IN ('kept','unclaiming','unclaimed','not_held'))
 );
 CREATE TABLE published_branch (
- attempt_id TEXT PRIMARY KEY REFERENCES verification(attempt_id), dispatch_token TEXT NOT NULL, generation INTEGER NOT NULL,
+ attempt_id TEXT PRIMARY KEY REFERENCES factory_commit(attempt_id), dispatch_token TEXT NOT NULL, generation INTEGER NOT NULL,
  commit_sha TEXT NOT NULL CHECK(length(commit_sha) IN (40,64)),
  remote_head TEXT NOT NULL CHECK(length(remote_head) IN (40,64)),
  published_at REAL NOT NULL
