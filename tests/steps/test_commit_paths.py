@@ -147,7 +147,7 @@ def test_changed_or_added_credential_fixture_names_the_real_predicate_without_st
     admission: Admission, slot: FakeWorktree, slot_files: FakeSlotFiles, checkouts: PinnedViews,
     stages: list[tuple[str, ...]], existing: bool,
 ) -> None:
-    path = "tests/steps/test_verifier.py"
+    path = "tests/steps/test_commit.py"
     slot.write_file(path, "ordinary old source" if existing else b"")
     if not existing:
         slot.remove_file(path)

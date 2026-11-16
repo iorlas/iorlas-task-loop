@@ -1,5 +1,5 @@
 """The entry process body on a real factory.db file, its own real process identity, the owning agent fake, the fake slot and
-the fake clone's `origin` (the publication after a verified step)."""
+the fake clone's `origin` (the publication after a step accepted by factory commit)."""
 
 import dataclasses
 import json
@@ -192,7 +192,7 @@ NOTE = "docs/design/tl-1/note.md"
     ],
     ids=["committed", "rejected", "uncommitted", "unsafe"],
 )
-def test_the_registered_entry_executes_verifies_once_and_exits_0_only_when_verified(
+def test_the_registered_entry_executes_commits_once_and_exits_0_only_when_committed(
     admitted: Path, checkouts: Checkouts, slot_files: SlotFiles, slot: FakeWorktree, files: dict[str, str], line: str, code: int, opens: int
 ) -> None:
     entry = Entry(admitted, checkouts, slot_files, me(), written=(slot, files, [P]))
@@ -201,14 +201,14 @@ def test_the_registered_entry_executes_verifies_once_and_exits_0_only_when_verif
     assert entry.opened == [(admitted, admitted.parent)]
     # Five context reads (profile, glossary, paths, digest and manifest) plus six Git opens before dispatch (slot: root, slot;
     # branch rule: root;
-    # take_branch: slot; slot read again: root, slot); the one verification: four to commit (the staged set read before the
+    # take_branch: slot; slot read again: root, slot); the one factory commit: four to commit (the staged set read before the
     # record), two for the clean check, one
     # to judge or list; a collected step's release: the slot read (root, slot) and the park (slot). The worker is observed
     # right before each Git write (stage, record), never when the paths are unsafe, and once more by the release's stop proof
     collected = line.startswith("collected")
     assert entry.waits == [] and entry.git_opens == opens + 5 and entry.observed == [WORKER] * (0 if files == {} else 3 if collected else 2)
     assert (slot.branch(), entry.unclaimed) == (None if collected else "task/tl-1", [])  # parked at D; the claim kept
-    assert (entry.remote_opens > 0) == (code == 0)  # only a verified plan is published; its Git views are the publication's
+    assert (entry.remote_opens > 0) == (code == 0)  # publish only after factory commit; these are publication views
 
 
 INCOMPLETE = "collected incomplete commit=not_applicable claim=held release=released"
@@ -303,7 +303,7 @@ def test_a_held_or_unlockable_slot_refuses_the_entry_before_anything_is_read_or_
     admitted: Path, checkouts: Checkouts, slot_files: SlotFiles, slot: FakeWorktree,
     occupy: Callable[[Path], AbstractContextManager[None]], held: bool,
 ) -> None:
-    """Held by another entry or verify: `refused slot_busy`. A lock file that cannot be made (here `.locks` is a file):
+    """Held by another entry or commit: `refused slot_busy`. A lock file that cannot be made (here `.locks` is a file):
     `refused lock`."""
     entry = Entry(admitted, checkouts, slot_files, me(), written=(slot, {P: PLAN_TEXT}, [P]))
     path = lock_path(str(slot.path))
@@ -319,7 +319,7 @@ def test_a_held_or_unlockable_slot_refuses_the_entry_before_anything_is_read_or_
 def test_the_entry_holds_the_slot_while_it_runs_and_frees_it_when_it_ends_or_raises(
     admitted: Path, checkouts: Checkouts, slot_files: SlotFiles, slot: FakeWorktree
 ) -> None:
-    """The verify and the release inside the entry run under the lock the entry holds (their holds are no-ops)."""
+    """The commit and the release inside the entry run under the lock the entry holds (their holds are no-ops)."""
     seen: list[bool] = []
     entry = Entry(admitted, checkouts, slot_files, me(), written=(slot, {P: PLAN_TEXT}, [P]))
     gone, heartbeat_for = entry.gone, entry.heartbeat_for
@@ -345,10 +345,10 @@ def test_the_entry_holds_the_slot_while_it_runs_and_frees_it_when_it_ends_or_rai
     acquire(str(slot.path), "after", "commit").release()
 
 
-def test_a_verified_plan_is_published_after_the_lock_is_released_and_the_keep_alive_stopped(
+def test_a_committed_plan_is_published_after_the_lock_is_released_and_the_keep_alive_stopped(
     admitted: Path, checkouts: Checkouts, slot_files: SlotFiles, slot: FakeWorktree
 ) -> None:
-    """Another entry, verify or release may take the slot while the push runs: the publication pins no slot."""
+    """Another entry, commit or release may take the slot while the push runs: the publication pins no slot."""
     entry = Entry(admitted, checkouts, slot_files, me(), written=(slot, {P: PLAN_TEXT}, [P]))
     seen: list[int] = []
 
@@ -362,7 +362,7 @@ def test_a_verified_plan_is_published_after_the_lock_is_released_and_the_keep_al
     assert slot.repo.ls_remote("origin", ["refs/heads/task/tl-1"])[0].oid == x
 
 
-def test_a_publication_that_raises_keeps_the_log_line_and_the_verified_exit_0(
+def test_a_publication_that_raises_keeps_the_log_line_and_the_committed_exit_0(
     admitted: Path, checkouts: Checkouts, slot_files: SlotFiles, slot: FakeWorktree
 ) -> None:
     entry = Entry(admitted, checkouts, slot_files, me(), written=(slot, {P: PLAN_TEXT}, [P]))
@@ -375,7 +375,7 @@ def test_a_publication_that_raises_keeps_the_log_line_and_the_verified_exit_0(
     assert entry.lines == ["collected committed commit=committed claim=held release=released branch=unavailable:git"]
 
 
-def test_an_unreachable_origin_is_only_the_branch_word_and_the_verified_plan_still_exits_0(
+def test_an_unreachable_origin_is_only_the_branch_word_and_the_committed_plan_still_exits_0(
     admitted: Path, checkouts: Checkouts, slot_files: SlotFiles, slot: FakeWorktree, repo: FakeRepo
 ) -> None:
     entry = Entry(admitted, checkouts, slot_files, me(), written=(slot, {P: PLAN_TEXT}, [P]))
@@ -400,7 +400,7 @@ def test_a_claim_lost_or_faulted_while_the_step_runs_is_only_recorded(
     beats: tuple[Beat | Exception, ...], rounds: int, word: str, renewals: int,
 ) -> None:
     entry = Entry(admitted, checkouts, slot_files, me(), written=(slot, {P: PLAN_TEXT}, [P]), beats=beats, rounds=rounds)
-    assert entry() == 0  # the step completes, publishes and verifies; nothing is released or re-claimed
+    assert entry() == 0  # the step completes, publishes and commits; nothing is released or re-claimed
     assert entry.lines == [f"collected committed commit=committed claim={word} release=released branch=published"]
     assert len(entry.run.calls) == 1
     assert entry.renewed == [("/tracker", "tl-1")] * renewals and entry.stop.set_calls == 1
@@ -524,7 +524,7 @@ def test_resuming_a_pending_result_is_bounded_by_a_cap_and_the_deadline(now: flo
     assert resumed(lambda: PENDING, stuck.resume, lambda: now, stuck.wait, 100.0) == PENDING and stuck.waits == waits
 
 
-def test_the_normal_wait_for_verification_is_not_resumed() -> None:
+def test_the_normal_wait_for_commit_is_not_resumed() -> None:
     waiting = Resuming(AttemptResult("pending", "commit"))
     assert resumed(waiting.resume, waiting.resume, lambda: 10.0, waiting.wait, 100.0).reason == "commit"
     assert waiting.waits == 0

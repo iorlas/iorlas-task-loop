@@ -146,7 +146,7 @@ class RestartFactory(Factory):
     def install_hooks(self) -> None:
         commit, release, publish = FactoryCommit.commit, SlotRelease.release, BranchPublish.publish
 
-        def verified(app: FactoryCommit, key: AttemptKey) -> CommitResult:
+        def committed(app: FactoryCommit, key: AttemptKey) -> CommitResult:
             result = commit(app, key)
             self.effects.after("commit")
             return result
@@ -161,7 +161,7 @@ class RestartFactory(Factory):
             self.effects.after("publish")
             return result
 
-        self.patch.setattr(FactoryCommit, "commit", verified)
+        self.patch.setattr(FactoryCommit, "commit", committed)
         self.patch.setattr(SlotRelease, "release", released)
         self.patch.setattr(BranchPublish, "publish", published)
 

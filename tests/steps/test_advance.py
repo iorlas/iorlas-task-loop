@@ -1,4 +1,4 @@
-"""The round advances a claimed task from plan to implement (S5c), end to end over real SQLite, real admission, verify,
+"""The round advances a claimed task from plan to implement (S5c), end to end over real SQLite, real admission, commit,
 release and publish, the semantic Git fake with its fake remote, a scripted agent run at once by the launch port (as the
 registered entry would run it), the fake slot setup and a tracker double (`round_bench`): plan, advance, implement,
 `Next: advance` (to the check step, whose admission is a double here)."""

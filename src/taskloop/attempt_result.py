@@ -19,7 +19,7 @@ class CommittedStatus(StrEnum):
 
 def end_word(stored: StoredExecution) -> str:
     """The run's own end word, fixed words only: `run:<classified reason>` for a failed or timed-out run, else `answer:<kind>`
-    for an unusable answer, else the valid answer's disposition (`planned` and `unchanged` go on to verification)."""
+    for an unusable answer, else the valid answer's disposition (`planned` and `unchanged` go on to factory commit)."""
     facts, answer = stored.facts, stored.answer
     if facts.timed_out or facts.rc != 0:
         return "run:" + (facts.reason or ("timeout" if facts.timed_out else "exit"))
@@ -30,7 +30,7 @@ def end_word(stored: StoredExecution) -> str:
 
 def committing(stored: StoredExecution) -> bool:
     """A clean run's valid answer whose effect the factory commits (`commit`) or keeps (`keep`): only such a result goes
-    on to verification; its end word is its disposition."""
+    on to factory commit; its end word is its disposition."""
     facts, answer = stored.facts, stored.answer
     return not facts.timed_out and facts.rc == 0 and answer.kind == "valid" and answer.effect in ("commit", "keep")
 
@@ -61,9 +61,9 @@ def report(stored: StoredExecution) -> AttemptResult:
 
 
 def _report(stored: StoredExecution) -> AttemptResult:
-    """Stored terminal data is collected with its end word; a pending validation, session state or verification is
+    """Stored terminal data is collected with its end word; a pending validation, session state or factory commit is
     never complete. An answer of effect `commit` or `keep` (`planned`, `unchanged`) is collected only with its verdict:
-    `verified`, `reused` or `rejected:<rule>`."""
+    `committed`, `reused` or `rejected:<rule>`."""
     if stored.answer.kind == "validation_pending":
         return AttemptResult("pending", "validation_pending", stored)
     if stored.session_state == "conflict":
@@ -81,14 +81,14 @@ def _report(stored: StoredExecution) -> AttemptResult:
 
 
 def judged(verdict: Verdict) -> str:
-    """A verdict in fixed words: `verified` (new work), `reused` (an existing plan) or `rejected:<rule>`."""
+    """A verdict in fixed words: `committed` (new work), `reused` (an existing plan) or `rejected:<rule>`."""
     if isinstance(verdict, Rejected):
         return "rejected:" + verdict.reason
     return CommittedStatus.REUSED if verdict.reused else CommittedStatus.COMMITTED
 
 
 def succeeded(result: AttemptResult) -> bool:
-    """`collected` means terminal, never success: success is a verified step result, new (`verified`) or existing
+    """`collected` means terminal, never success: success is a step result accepted by factory commit, new (`committed`) or existing
     (`reused`), or a checks attempt concluded `passed` (`check_status.checks_result`)."""
     return result.status == "collected" and result.reason in (*CommittedStatus, "passed")
 

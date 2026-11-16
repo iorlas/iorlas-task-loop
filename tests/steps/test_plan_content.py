@@ -8,7 +8,7 @@ from doubles import FakeSlotFiles, origin_main_at
 from git_porcelain import Sha, Tree
 from git_porcelain.testing import FakeWorktree
 from plan_fixtures import CHANGE_MAP, HEADER, PLAN_TEXT
-from test_verifier import KEY, PLAN, UNCHANGED, P, captured, commit, factory_commit, stored
+from test_commit import KEY, PLAN, UNCHANGED, P, captured, commit, factory_commit, stored
 
 from taskloop.attempt_loads import verdict_of
 from taskloop.attempt_types import Checkouts, Committed, PlanContentRule, Rejected, Rule, StepRules

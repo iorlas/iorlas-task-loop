@@ -3,7 +3,7 @@
 It runs only as the identity the launcher registered: its own boot-aware identity is read and compared with the stored
 entry before the attempt key is used or any credential is read. It then holds its slot's custody lock (`slot_lock`)
 until it exits; a held lock refuses (`refused slot_busy`) with nothing read or written. It never creates factory.db,
-runs the agent at most once (through `Attempts.execute`), retries only an unavailable capture, then verifies
+runs the agent at most once (through `Attempts.execute`), retries only an unavailable capture, then completes factory commit
 once (`FactoryCommit.commit`: commit the listed paths, check the tree is clean, judge; never retried), and writes one log
 line of fixed words: status and reason, read back after a stored verdict (an accepted capture retry instead keeps the run's
 own words and adds `publish=` and the collected `then=`), always `commit=`, then `claim=` (the tracker claim's lease,

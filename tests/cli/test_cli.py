@@ -56,7 +56,7 @@ def test_commit_help_describes_judgment_release_and_publication(capsys: pytest.C
     assert "verify" not in text and "verification" not in text
 
 
-def test_verify_is_not_a_command_alias(capsys: pytest.CaptureFixture[str]) -> None:
+def test_legacy_step_command_is_not_an_alias(capsys: pytest.CaptureFixture[str]) -> None:
     with pytest.raises(SystemExit) as result:
         main(["step", "verify"])
     assert result.value.code == 2

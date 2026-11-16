@@ -213,7 +213,7 @@ DONE = (  # the implement attempt's capture, verdict, settled release and public
 
 @pytest.fixture
 def done(tmp_path: Path, repo: FakeRepo, slot: FakeWorktree) -> Done:
-    """`<tmp>/factory.db`: tl-1's done implement attempt `implement` (verified, released `kept` from slot s0, published at X)
+    """`<tmp>/factory.db`: tl-1's done implement attempt `implement` (committed, released `kept` from slot s0, published at X)
     and the adopted, free slot s1 (the Git fake's, detached at D). The person's `main` holds `MAIN_PROFILE` (the target);
     `task/tl-1` holds X on it. No checks attempt yet."""
     root, d = repo.worktree(repo.identity().root), head(slot)

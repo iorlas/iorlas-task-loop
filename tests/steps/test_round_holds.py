@@ -1,5 +1,5 @@
 """The round applies holds (tl-8bh9.14.9 section 9, H3) over the rounds bench (`round_bench`: real factory.db,
-admission, verify, release, publish and the hold operation; the Git fake; scripted agents; a semantic tracker with the
+admission, commit, release, publish and the hold operation; the Git fake; scripted agents; a semantic tracker with the
 hold's label, comment and clear writes): a round-taken task that stopped is held once and then costs nothing, a pending
 hold is written once per refusal, a hold never stops another task or ingestion, the person's answer (the label back)
 takes the task again at plan on its branch only under the label it was taken under, `held` is removed after that, and a

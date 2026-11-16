@@ -165,7 +165,7 @@ def complete_round(
 
 
 @pytest.mark.parametrize("pending", ["answer", "pending", "fault"])
-def test_reopened_round_finishes_captured_work_before_verifying(
+def test_reopened_round_finishes_captured_work_before_committing(
     tmp_path: Path, surroundings: AttemptSurroundings, captured_work: Attempts, pending: str, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     con = captured_work.store.connect()

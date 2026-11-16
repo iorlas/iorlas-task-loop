@@ -249,7 +249,7 @@ def test_one_land_per_round_the_oldest_passed_task_first(rig: Checking, label: s
     rig.adopt("s2")
     rig.tracker.beads["tl-2"] = task("tl-2")
     rig.bodies = ["passed"]
-    for _ in range(5):  # tl-2: plan, verify, advance, verify, checks, then it waits at land too
+    for _ in range(5):  # tl-2: plan, commit, advance, commit, checks, then it waits at land too
         rig.round(rig.last.written)
     assert rig.next_words() == {"tl-1": ("check", "land"), "tl-2": ("check", "land")}
     lands = Lands(LandMode.AUTO, "pushed")

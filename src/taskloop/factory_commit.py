@@ -174,7 +174,7 @@ def _blocked(quiet: GitQuiet, files: SlotFiles, admission: Admission, state: Slo
 
 def _foreign(checkouts: Checkouts, admission: Admission, paths: tuple[str, ...], gitdir: Path) -> Uncommitted | None:
     """`record` commits the whole index: any staged path the review did not select (a person's, or an earlier attempt's
-    left staged by a superseded verify) is `staged`, nothing committed."""
+    left staged by a superseded factory commit) is `staged`, nothing committed."""
     path = Path(admission.slot_path)
     extra = sorted(set(staged(checkouts(path, git_dir=gitdir), path)) - set(paths))
     return Uncommitted("staged", bounded(extra)) if extra else None
@@ -378,7 +378,7 @@ def clean_at(checkouts: Checkouts, files: SlotFiles, admission: Admission, commi
 def leftovers(
     checkouts: Checkouts, files: SlotFiles, admission: Admission, base: str, answer: AnswerState, end_commit: str | None
 ) -> Uncommitted | CommitRefused | None:
-    """Read-only, for a person (`tl step show`): what a verify would report as a step to repeat, read now. Before the
+    """Read-only, for a person (`tl step show`): what a factory commit would report as a step to repeat, read now. Before the
     factory's commit the same `refusal` as `settle` (`unsafe`, `ignored`); after it, or for effect `keep`, the clean-tree
     check."""
     if answer.effect == "commit" and end_commit is None:

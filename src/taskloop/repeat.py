@@ -77,7 +77,7 @@ class StepRepeat:
 
     def repeat(self, backlog: str, task_id: str, current: AttemptKey, entry: EntryIdentity | None, minutes: int) -> Started | Failed:
         """For the task's captured current attempt C: the stop proof (C's entry, then its worker and group) before any Git
-        read; C's own verify (it may finish a crash or settle); only REPEATABLE leftovers below the cap are repeated."""
+        read; C's own factory commit (it may finish a crash or settle); only REPEATABLE leftovers below the cap are repeated."""
         stopped = self._stopped(backlog, task_id, current, entry, minutes)
         if not isinstance(stopped, AttemptRecord):
             return stopped
@@ -100,7 +100,7 @@ class StepRepeat:
     def _leftovers(
         self, backlog: str, task_id: str, current: AttemptKey, minutes: int
     ) -> tuple[Uncommitted, RepeatReason] | Started | Failed:
-        """C's own verify: a stored or new verdict, or no step to verify, is `already_dispatched` with that result; any
+        """C's own factory commit: a stored or new verdict, or no step to commit, is `already_dispatched` with that result; any
         other unsettled reason or unknown is that failure, never a repeat."""
         found = self.factory_commit.commit(current)
         if isinstance(found, (Committed, Rejected, NotApplicable)):
@@ -123,7 +123,7 @@ class StepRepeat:
     def _input(self, current: AttemptKey, found: Uncommitted, record: AttemptRecord) -> tuple[str, TaskContentDigest | None] | Failed:
         """The feedback over attempt 1's input, read through its digest."""
         try:
-            steps = self.store.chain(current)  # read after the verify: C's commit, if it made one, is stored now
+            steps = self.store.chain(current)  # read after factory commit: C's commit, if it made one, is stored now
             task = without(self.files.read(steps[0].input_ref))
             evidence = None
             if record.admission.step == Step.PLAN and self.discussion is None:

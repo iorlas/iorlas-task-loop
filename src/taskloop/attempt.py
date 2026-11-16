@@ -1,4 +1,4 @@
-"""Execute, capture, collect and verify one already admitted agent attempt; it grants no admission and releases nothing."""
+"""Execute, capture, collect and commit one already admitted agent attempt; it grants no admission and releases nothing."""
 
 from collections.abc import Callable
 from contextlib import suppress

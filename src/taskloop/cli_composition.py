@@ -119,7 +119,7 @@ def open_reads(database: Path, artifacts: Path, views: GitViews) -> Generator[St
         else:
             reader = _reader(con)
             factory_commit = FactoryCommit(reader, views.checkouts, RealSlotFiles(), worker_gone, time.time, refused,
-                ids=NativeIds())  # never verifies
+                ids=NativeIds())  # never commits
             seen = EvidenceFiles(artifacts).last_command
             yield StatusPorts(reader, entry_seen, time.time, factory_commit.leftovers, current_boot, setup_seen, seen,
                               recovery=recovery_reader(reader, time.time),
@@ -162,7 +162,7 @@ def _starting(reader: AttemptStore, database: Path, artifacts: Path, store: Stor
 def open_next(database: Path, artifacts: Path, views: GitViews, tracker_root: str,
               store: Store | None = None, registration: Store | None = None) -> Generator[RoundPorts | Failed]:
     """`tl step next`: the database guard first, then the tracker's read port at the explicit root (an unusable root
-    refuses `tracker_root`), the start, verify, release, publish and hold ports on one shared writer (closed here; the
+    refuses `tracker_root`), the start, commit, release, publish and hold ports on one shared writer (closed here; the
     hold's abandon uses the release ports `tl step release --abandon` uses, its tracker writes `tracker_holds`), the reads
     the round log appended under the artifacts root, and the land's ports and profile reader (`land: auto`, `round_land`)."""
     owned = store is None
@@ -320,7 +320,7 @@ def open_rounds(database: Path, artifacts: Path, views: GitViews, request: NextR
 @contextmanager
 def open_commit(database: Path, views: GitViews, artifacts: Path
                 ) -> Generator[tuple[AttemptStore, FactoryCommit, SlotRelease, BranchPublish] | Failed]:
-    """Open guarded verification, release and publication over one shared writer."""
+    """Open guarded factory commit, release and publication over one shared writer."""
     store = Store(SCHEMA)
     with _read_only(database) as con:
         try:

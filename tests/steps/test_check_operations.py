@@ -1,7 +1,7 @@
 """The step operations on a task in its check step (S6d, tl-8bh9.14.6 sections 5, 9, 10) over a factory.db file (the
 `done` implement attempt), the real checks admission (`ChecksBench`) and a checks launcher that reads the store as the
 real one does: `tl step start` advances, relaunches, answers, re-runs and refuses the half-done abandon; the racing
-winner goes to the checks launcher; release and abandon go checks first; verify stays on the agent attempt."""
+winner goes to the checks launcher; release and abandon go checks first; commit stays on the agent attempt."""
 
 import dataclasses
 from collections.abc import Generator
@@ -237,7 +237,7 @@ def test_without_a_checks_attempt_the_release_is_the_implement_attempt_s(rig: Ri
 
 @dataclasses.dataclass
 class Recorded:
-    """Verify and publish ports that record the attempt they were asked about: a stored verdict, an earlier publication."""
+    """Commit and publish ports that record the attempt they were asked about: a stored verdict, an earlier publication."""
 
     sha: str
     keys: list[str] = dataclasses.field(default_factory=list)
@@ -251,7 +251,7 @@ class Recorded:
         return PublishedRow(self.sha, self.sha, 6)
 
 
-def test_verify_on_a_task_in_check_acts_on_its_implement_attempt_only(rig: Rig) -> None:
+def test_commit_on_a_task_in_check_acts_on_its_implement_attempt_only(rig: Rig) -> None:
     rig.start()
     seen, implement = Recorded(rig.bench.done.x), Releases(results=[AlreadyReleased("s0", "kept", False)])
     found = commit_task(AttemptStore(lambda: rig.bench.con), seen, implement, seen, "tasks", "tl-1")

@@ -59,7 +59,7 @@ def agent(slot: Path, written: Mapping[str, str], removed: Sequence[str], paths:
     return call
 
 
-def test_a_repeat_commits_x2_on_x1_from_the_dirty_worktree_and_the_chain_verifies(
+def test_a_repeat_commits_x2_on_x1_from_the_dirty_worktree_and_the_chain_commits(
     tmp_path: Path, factory: sqlite3.Connection, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     root = tmp_path.resolve()

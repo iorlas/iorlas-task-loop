@@ -159,7 +159,7 @@ def test_unchanged_changes_nothing_and_names_no_other_plan(change: dict[str, obj
         decode(UNCHANGED | change, RULES)
 
 
-def test_an_unchanged_answer_without_a_plan_is_a_valid_answer_that_verification_rejects_as_plan_missing() -> None:
+def test_an_unchanged_answer_without_a_plan_is_a_valid_answer_that_commit_rejects_as_plan_missing() -> None:
     found = decode(UNCHANGED | {"plan_path": None}, RULES)  # not `schema_invalid`: the answer fits the contract
     assert (found.disposition, found.effect) == ("unchanged", "keep")
 
@@ -202,7 +202,7 @@ REUSE = AnswerState("valid", "unchanged", "keep")
         (0, False, None, AnswerState("schema_invalid"), "answer:schema_invalid"),
     ],
 )
-def test_collected_always_names_its_outcome_and_only_a_verified_plan_succeeds(
+def test_collected_always_names_its_outcome_and_only_a_committed_plan_succeeds(
     rc: int | None, timed_out: bool, reason: str | None, answer: AnswerState, expected: str
 ) -> None:
     result = report(stored(rc, timed_out, reason, answer))

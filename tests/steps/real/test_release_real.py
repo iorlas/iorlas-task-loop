@@ -1,5 +1,5 @@
 """Real layer, the release's wiring on the real Git adapter under the real slot lock: a person's `--detach` slot is adopted,
-the task admitted, run with a `FakeRun` agent and verified (X on `task/tl-1`); the release parks the slot back at D with
+the task admitted, run with a `FakeRun` agent and committed (X on `task/tl-1`); the release parks the slot back at D with
 real `checkout --detach`, the branch keeps X and the slot is free again. Abandoned instead, the task is admitted afresh and
 its entry resumes `task/tl-1` at X through the real branch rule and `take_branch`. Set-up runs through
 `git_porcelain.testing`'s runner under tmp_path."""
@@ -145,7 +145,7 @@ def real(tmp_path: Path, factory: sqlite3.Connection, monkeypatch: pytest.Monkey
     return Repository(tmp_path.resolve(), factory)
 
 
-def test_a_verified_slot_is_parked_at_d_detached_and_clean_and_is_free_again(real: Repository) -> None:
+def test_a_committed_slot_is_parked_at_d_detached_and_clean_and_is_free_again(real: Repository) -> None:
     key, x = real.planned()
     assert real.releaser.release(key, False) == Released("s1", real.d, True, "kept", False)
     assert git(real.slot, "rev-parse", "--abbrev-ref", "HEAD").strip() == "HEAD"  # detached

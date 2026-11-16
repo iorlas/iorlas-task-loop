@@ -115,7 +115,7 @@ def test_only_a_removed_reservation_row_wakes_the_next_round(use: Callable[[floa
 
 
 def test_a_slot_released_during_the_round_wakes_the_next_round_at_the_first_check() -> None:
-    bench = Bench([CLEAN, CLEAN], lambda t: SlotUse(0, HELD if t < 0.5 else frozenset()))  # the round's own verify released it
+    bench = Bench([CLEAN, CLEAN], lambda t: SlotUse(0, HELD if t < 0.5 else frozenset()))  # the round's own commit released it
     bench.cost = 1
     bench.run()
     assert bench.times() == [0, 3]

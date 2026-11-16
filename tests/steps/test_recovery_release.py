@@ -11,7 +11,7 @@ from git_porcelain.testing import FakeWorktree
 from stream_proc import OwnedProcess
 from test_recovery_registration import WORKER
 from test_recovery_store import OWNER
-from test_slot_release import ENTRY, KEY, Ports, head, stored, tip, verified
+from test_slot_release import ENTRY, KEY, Ports, committed, head, stored, tip
 
 from taskloop.attempt_reads import StoreUnavailable
 from taskloop.attempt_types import Checkouts, SlotFiles
@@ -46,7 +46,7 @@ def test_recovery_process_or_group_blocks_every_initial_release(
     if mode == "reconcile":
         registered.execute("UPDATE attempt SET phase='dispatching',base_commit=slot_head")
     else:
-        verified(registered, tmp_path, slot, checkouts, slot_files)
+        committed(registered, tmp_path, slot, checkouts, slot_files)
     saved_recovery(registered)
     before, branch, commit = stored(registered), slot.branch(), head(slot)
     ports = Ports(registered, checkouts, slot_files)
@@ -80,7 +80,7 @@ def test_callers_recovery_group_blocks_release_even_when_liveness_changes_under_
     registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles,
     during_custody: bool, seen: ProcessSeen,
 ) -> None:
-    verified(registered, tmp_path, slot, checkouts, slot_files)
+    committed(registered, tmp_path, slot, checkouts, slot_files)
     owner = Identity(pid=ENTRY[0], pgid=17, start=ENTRY[1], boot=ENTRY[2])
     saved_recovery(registered, owner)
     ports = Ports(registered, checkouts, slot_files, seen="matching")
@@ -117,7 +117,7 @@ def test_recovery_drift_retains_reservation_and_reports_completed_park(
     registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles,
     monkeypatch: pytest.MonkeyPatch, moment: str,
 ) -> None:
-    x = verified(registered, tmp_path, slot, checkouts, slot_files)
+    x = committed(registered, tmp_path, slot, checkouts, slot_files)
     value = saved_recovery(registered)
     ports = Ports(registered, checkouts, slot_files)
 
@@ -155,7 +155,7 @@ def test_completed_recovery_release_reopens_and_preserves_work_evidence_and_reus
     registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles,
     monkeypatch: pytest.MonkeyPatch, interruption: str,
 ) -> None:
-    x = verified(registered, tmp_path, slot, checkouts, slot_files)
+    x = committed(registered, tmp_path, slot, checkouts, slot_files)
     value = saved_recovery(registered)
     registered.execute("UPDATE attempt SET session_ref='saved'")
     path = tmp_path / "reopened.db"

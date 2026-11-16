@@ -151,7 +151,7 @@ def nowhere(*_args: object) -> AbstractContextManager[None]:
 
 def run(con: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, files: SlotFiles,
         written: dict[str, str], disposition: str = "planned", *, commit: bool = True, release: bool = True) -> str:
-    """The registered attempt run once on `task/tl-1`, verified and released (settled): the branch tip."""
+    """The registered attempt run once on `task/tl-1`, committed and released (settled): the branch tip."""
     store = AttemptStore(lambda: con)
     attempts = Attempts(
         store,
@@ -185,7 +185,7 @@ def rows(con: sqlite3.Connection) -> list[tuple[object, ...]]:
     return con.execute("SELECT attempt_id,commit_sha,remote_head,published_at FROM published_branch").fetchall()
 
 
-def test_verifier_binds_commit_evidence_and_suppresses_stored_verdict(
+def test_commit_binds_commit_evidence_and_suppresses_stored_verdict(
     registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles,
 ) -> None:
     run(registered, tmp_path, slot, checkouts, slot_files, {P: PLAN_TEXT}, commit=False, release=False)
@@ -199,7 +199,7 @@ def test_verifier_binds_commit_evidence_and_suppresses_stored_verdict(
     assert sample.kind is OperationKind.COMMIT and sample.state is OperationState.COMPLETED
 
 
-def test_a_verified_released_plan_is_pushed_from_the_checkout_and_recorded_once(
+def test_a_committed_released_plan_is_pushed_from_the_checkout_and_recorded_once(
     registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, repo: ScriptedPushRepo, remote: FakeRemote, checkouts: Checkouts,
     slot_files: SlotFiles,
 ) -> None:
@@ -227,7 +227,7 @@ def abandoned(con: sqlite3.Connection, _slot: FakeWorktree, _repo: ScriptedPushR
     con.execute("UPDATE slot_release SET claim='unclaimed'")
 
 
-def unverified(con: sqlite3.Connection, _slot: FakeWorktree, _repo: ScriptedPushRepo, _files: FakeSlotFiles) -> None:
+def uncommitted(con: sqlite3.Connection, _slot: FakeWorktree, _repo: ScriptedPushRepo, _files: FakeSlotFiles) -> None:
     con.execute("DELETE FROM factory_commit")
 
 
@@ -255,7 +255,7 @@ def branch_rewritten(con: sqlite3.Connection, slot: FakeWorktree, _repo: Scripte
 @pytest.mark.parametrize(
     ("change", "reason", "opened"),
     [
-        (abandoned, "abandoned", 0), (unverified, "not_committed", 0), (redirected, "repository", 0),
+        (abandoned, "abandoned", 0), (uncommitted, "not_committed", 0), (redirected, "repository", 0),
         (other_repository, "repository", 1), (no_origin, "no_remote", 2), (branch_missing, "branch_moved", 2),
         (branch_rewritten, "branch_moved", 2),
     ],
@@ -279,7 +279,7 @@ def test_each_precondition_refuses_before_any_push(
     assert (pushes, rows(registered), "task/tl-1" in remote.branches(), len(git.opened)) == ([], [], False, opened)
 
 
-def test_absent_rejected_and_not_yet_verified_are_refused(
+def test_absent_rejected_and_not_yet_committed_are_refused(
     registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles
 ) -> None:
     git = Observed(checkouts)

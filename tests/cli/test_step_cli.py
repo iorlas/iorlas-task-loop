@@ -301,7 +301,7 @@ def test_result_exit_code_text_and_json_keys(
     ("already_released", "already_published", False), ("released", "published", False),
     ("held:slot_dirty", "unavailable:remote", True),
 ])
-def test_verify_prints_the_release_and_publish_guides_only_when_not_done(
+def test_commit_prints_the_release_and_publish_guides_only_when_not_done(
     release: str, published: str, guided: bool, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str],
 ) -> None:
     result = CommittedTask(

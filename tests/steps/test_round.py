@@ -1,5 +1,5 @@
 """One scheduling round (`round.run_round`) over a real in-memory factory.db: recording admission, launch, repeat,
-verify, release and publish ports where the round itself is under test (the real ones where a row needs a stored verdict),
+commit, release and publish ports where the round itself is under test (the real ones where a row needs a stored verdict),
 beads-client's seeded ready set, a fake clock and entry observation, and a list as the round log. No process starts."""
 
 import json
@@ -126,7 +126,7 @@ PARKED = Released("s1", HEAD, True, "kept", False)
 
 
 class Recorded:
-    """The verify, release and publish ports, each recording the attempt it was called for."""
+    """The commit, release and publish ports, each recording the attempt it was called for."""
 
     def __init__(self, release: ReleaseResult = PARKED) -> None:
         self.calls: list[str] = []
@@ -294,7 +294,7 @@ def captured(con: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checko
     ("failed", ("report", "failed:run:worker_failed"), []),
     ("held", ("release", "released"), ["release", "release"]),
 ])
-def test_a_step_that_ran_is_verified_repeated_or_reported_every_round(
+def test_a_step_that_ran_is_committed_repeated_or_reported_every_round(
     registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles,
     case: str, expected: tuple[str, str], calls: list[str],
 ) -> None:
@@ -318,10 +318,10 @@ def test_a_step_that_ran_is_verified_repeated_or_reported_every_round(
     assert bench.launcher.calls == bench.admission.requests == []
 
 
-def verified_released(
+def committed_released(
     registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles
 ) -> AttemptStore:
-    """The registered attempt verified (its own publication stubbed), then released: `Next: publish`."""
+    """The registered attempt committed (its own publication stubbed), then released: `Next: publish`."""
     captured(registered, tmp_path, slot, checkouts, slot_files)
     store = AttemptStore(lambda: registered)
     factory_commit = FactoryCommit(store, checkouts, slot_files, lambda _worker: True, lambda: 20, hold, ids=NativeIds())
@@ -334,10 +334,10 @@ def verified_released(
     return store
 
 
-def test_a_verified_released_plan_is_published_once_then_advanced_never_before(
+def test_a_committed_released_plan_is_published_once_then_advanced_never_before(
     registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles
 ) -> None:
-    store = verified_released(registered, tmp_path, slot, checkouts, slot_files)
+    store = committed_released(registered, tmp_path, slot, checkouts, slot_files)
     bench = Bench(registered)
     bench.publisher = BranchPublish(store, checkouts, slot_files, lambda: 40, ids=NativeIds())
     assert bench.round().moves == (Move("tl-1", "publish", "published", "attempt", step="plan"),)  # unpublished: no advance
@@ -365,7 +365,7 @@ def test_an_advance_refusal_is_a_skip_of_the_done_step_and_a_stop_word_ends_admi
     """The advance carries the round's checkout and choices and no label; a refusal about the task, also one from its
     stored facts (`task`, `checkout`, `input`, `constraint`), skips it and admission goes on to the ready task; a round-wide
     word (`no_free_slot`, `deadline`, an unknown) ends the advance and admission (no ready read)."""
-    store = verified_released(registered, tmp_path, slot, checkouts, slot_files)
+    store = committed_released(registered, tmp_path, slot, checkouts, slot_files)
     assert isinstance(BranchPublish(store, checkouts, slot_files, lambda: 40, ids=NativeIds()).publish(KEY), BranchPublished)
     ready = ReadyTracker([bead("t-9")], ready=["t-9"])
     bench = Bench(registered, ready)
@@ -390,7 +390,7 @@ def test_an_advance_refusal_is_a_skip_of_the_done_step_and_a_stop_word_ends_admi
 def test_with_every_slot_reserved_a_done_step_waits_without_a_tracker_read(
     registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles
 ) -> None:
-    store = verified_released(registered, tmp_path, slot, checkouts, slot_files)
+    store = committed_released(registered, tmp_path, slot, checkouts, slot_files)
     assert isinstance(BranchPublish(store, checkouts, slot_files, lambda: 40, ids=NativeIds()).publish(KEY), BranchPublished)
     seed(registered, "tl-2", "other", entry=ENTRY)
     registered.execute("INSERT INTO reservation VALUES ('s1',?,2,'other')", (slot.repo.identity().key,))
@@ -403,7 +403,7 @@ def test_with_every_slot_reserved_a_done_step_waits_without_a_tracker_read(
 def test_a_failed_publication_is_retried_every_round(
     registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles
 ) -> None:
-    verified_released(registered, tmp_path, slot, checkouts, slot_files)
+    committed_released(registered, tmp_path, slot, checkouts, slot_files)
     bench = Bench(registered)
     bench.publisher = Failing()
     rounds = [bench.round(), bench.round()]
@@ -453,7 +453,7 @@ def test_a_refusal_naming_a_slot_on_the_task_branch_is_also_reported_unusable_in
 def test_an_advance_refused_branch_held_reports_the_slot_unusable_too(
     registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles
 ) -> None:
-    store = verified_released(registered, tmp_path, slot, checkouts, slot_files)
+    store = committed_released(registered, tmp_path, slot, checkouts, slot_files)
     assert isinstance(BranchPublish(store, checkouts, slot_files, lambda: 40, ids=NativeIds()).publish(KEY), BranchPublished)
     held = SlotView("s1", Path("/slots/s1"), "unknown", "attached")
     bench = Bench(registered, ReadyTracker())
@@ -687,10 +687,10 @@ def test_after_a_failed_log_write_the_next_round_writes_the_state_again(factory:
     assert len(bench.lines) == 2  # once written, identical rounds stay silent
 
 
-def test_a_verified_plan_whose_entry_still_runs_is_left_to_that_entry(
+def test_a_committed_plan_whose_entry_still_runs_is_left_to_that_entry(
     registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles
 ) -> None:
-    verified_released(registered, tmp_path, slot, checkouts, slot_files)
+    committed_released(registered, tmp_path, slot, checkouts, slot_files)
     bench = Bench(registered)
     bench.seen = "matching"  # the entry publishes right after its release
     assert bench.round().moves == () and bench.recorded.calls == []
@@ -760,7 +760,7 @@ def test_a_slot_no_attempt_holds_but_nothing_can_use_is_named_in_the_log_not_cal
 def test_an_advance_with_every_free_slot_unusable_names_it_and_the_next_renders_its_path(
     registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles
 ) -> None:
-    store = verified_released(registered, tmp_path, slot, checkouts, slot_files)
+    store = committed_released(registered, tmp_path, slot, checkouts, slot_files)
     assert isinstance(BranchPublish(store, checkouts, slot_files, lambda: 40, ids=NativeIds()).publish(KEY), BranchPublished)
     gone = SlotView("s4", Path("/slots/s4"), "unknown", "not_listed")
     bench = Bench(registered, ReadyTracker())

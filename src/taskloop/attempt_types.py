@@ -131,7 +131,7 @@ class Admission:
     setting: AgentSetting
     deadline: float
     entry: EntryIdentity
-    number: int  # the step's verification-repeat number (1, 2, 3), retained by an answer repair
+    number: int  # the step's repeat number after factory commit (1, 2, 3), retained by an answer repair
     step: Step  # the agent step the attempt belongs to, admitted with it
     after_commit: str | None = None  # attempt 1 of a later step: the previous step's published X, which it starts from
     source_checks_id: str | None = None  # a clean-slot repeat after failed checks; never a dirty-slot takeover
@@ -266,7 +266,7 @@ class Uncommitted:
 
 @dataclass(frozen=True)
 class NotApplicable:
-    """No valid `planned` or `unchanged` answer of a clean run to verify; `what` is the stored outcome."""
+    """No valid `planned` or `unchanged` answer of a clean run for factory commit; `what` is the stored outcome."""
 
     what: str
 

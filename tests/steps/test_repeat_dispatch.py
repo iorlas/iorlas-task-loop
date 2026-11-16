@@ -1,6 +1,6 @@
 """What a repeat runs and how the step is judged: the next attempt dispatches from a dirty slot at E (where the previous
-attempt ended) as a fresh session, is verified by the same operation, and the verdict covers the whole chain from
-attempt 1's B, each commit held to its own attempt's paths; a verify of a superseded attempt never writes Git. Real
+attempt ended) as a fresh session, is committed by the same operation, and the verdict covers the whole chain from
+attempt 1's B, each commit held to its own attempt's paths; a commit of a superseded attempt never writes Git. Real
 SQLite, the owning agent fake (one per attempt), the semantic Git fake and the fake slot file port."""
 
 import json
@@ -100,7 +100,7 @@ class Agent:
 
 
 class Step:
-    """One task's step over the in-memory factory.db: run an attempt, verify it, repeat it."""
+    """One task's step over the in-memory factory.db: run an attempt, commit it, repeat it."""
 
     def __init__(self, con: sqlite3.Connection, tmp: Path, slot: FakeWorktree, checkouts: Checkouts, files: SlotFiles) -> None:
         self.con, self.tmp, self.slot, self.checkouts, self.files = con, tmp, slot, checkouts, files
@@ -152,7 +152,7 @@ def made(slot: FakeWorktree, base: str) -> list[str]:
     return [entry.subject for entry in slot.repo.history([head(slot)], not_on=[base])]
 
 
-def test_the_next_attempt_dispatches_at_e_with_the_leftovers_as_a_fresh_session_and_verifies_the_chain(
+def test_the_next_attempt_dispatches_at_e_with_the_leftovers_as_a_fresh_session_and_commits_the_chain(
     step: Step, slot: FakeWorktree
 ) -> None:
     base = head(slot)
@@ -168,11 +168,11 @@ def test_the_next_attempt_dispatches_at_e_with_the_leftovers_as_a_fresh_session_
     assert "resume" not in spec.argv and spec.argv[1] == "exec"  # a fresh session, never a resumed one
     assert f"?? {STRAY}" in spec.stdin + " ".join(spec.argv) and TASK in spec.stdin + " ".join(spec.argv)
     found = step.factory_commit.commit(key)
-    assert isinstance(found, Committed) and not found.reused  # X1, then `unchanged`: verified, not reused
+    assert isinstance(found, Committed) and not found.reused  # X1, then `unchanged`: committed, not reused
     assert made(slot, base) == ["Plan tl-1"] and slot.dirty().raw is False
 
 
-def test_a_second_commit_on_the_first_is_verified_with_each_held_to_its_own_paths(step: Step, slot: FakeWorktree) -> None:
+def test_a_second_commit_on_the_first_is_committed_with_each_held_to_its_own_paths(step: Step, slot: FakeWorktree) -> None:
     base = head(slot)
     step.run(KEY, ENTRY, Agent(slot, {P: PLAN_TEXT, NOTE: "n"}, PLAN))
     assert shown(step.factory_commit.commit(KEY)) == "uncommitted:uncommitted"
@@ -239,10 +239,10 @@ def test_three_attempts_then_the_owner(step: Step, slot: FakeWorktree, tmp_path:
     assert step.repeat(third) == Failed("refused", "repeats_exhausted")
     assert step.con.execute("SELECT count(*) FROM attempt").fetchone() == (3,)
     slot.remove_file(STRAY)
-    assert isinstance(step.factory_commit.commit(third), Committed)  # the owner tidies the slot; attempt 3 can still verify
+    assert isinstance(step.factory_commit.commit(third), Committed)  # the owner tidies the slot; attempt 3 can still commit
 
 
-def test_a_late_verify_of_a_superseded_attempt_writes_no_git(step: Step, slot: FakeWorktree) -> None:
+def test_a_late_commit_of_a_superseded_attempt_writes_no_git(step: Step, slot: FakeWorktree) -> None:
     base = head(slot)
     step.run(KEY, ENTRY, Agent(slot, {P: PLAN_TEXT}, PLAN))
     taken = step.admission().admit_repeat(REPEAT)
@@ -250,7 +250,7 @@ def test_a_late_verify_of_a_superseded_attempt_writes_no_git(step: Step, slot: F
     assert step.factory_commit.commit(KEY) == CommitRefused("stale_reservation") and made(slot, base) == []
 
 
-def test_a_takeover_during_the_verify_is_superseded_before_any_git_write(
+def test_a_takeover_during_the_commit_is_superseded_before_any_git_write(
     step: Step, slot: FakeWorktree, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """P was loaded before the handoff; the takeover lands during its pre-commit status read: nothing is staged."""
@@ -274,7 +274,7 @@ def test_a_takeover_during_the_verify_is_superseded_before_any_git_write(
     (None, {P: PLAN_TEXT, ".gitattributes": "* filter=x\n"}, Uncommitted("unsafe", (".gitattributes",))),
     ({".gitignore": "*.log\n"}, {P: PLAN_TEXT, D + "x.log": "x"}, Uncommitted("ignored", (D + "x.log",))),
 ], ids=["git_file", "ignored"])
-def test_show_judges_leftovers_before_the_commit_as_the_verify_does(
+def test_show_judges_leftovers_before_the_commit_as_the_commit_does(
     step: Step, slot: FakeWorktree, before: Files | None, written: Files, expected: Uncommitted
 ) -> None:
     if before is not None:
@@ -321,11 +321,11 @@ def test_judge_refuses_a_foreign_commit_inside_the_chain(repo: FakeRepo, slot: F
 
 
 @pytest.mark.parametrize("reason", ["unsafe", "ignored"])
-def test_after_an_attempt_that_committed_nothing_the_repeat_lists_every_file_again_and_verifies(
+def test_after_an_attempt_that_committed_nothing_the_repeat_lists_every_file_again_and_commits(
     step: Step, slot: FakeWorktree, slot_files: FakeSlotFiles, reason: str
 ) -> None:
     """Nothing of attempt 1 was committed (E is B): its feedback asks for `planned` with every file again, and an
-    attempt that does so verifies; an `unchanged` would only leave the plan uncommitted."""
+    attempt that does so commits; an `unchanged` would only leave the plan uncommitted."""
     stray = D + "x.log"
     if reason == "ignored":
         commit(slot, {".gitignore": "*.log\n"})
@@ -389,10 +389,10 @@ def test_a_staged_index_at_e_never_dispatches(step: Step, slot: FakeWorktree) ->
     assert step.run(key, entry, agent) == "refused slot_staged" and agent.specs == []
 
 
-def test_a_superseded_verify_that_staged_leaves_the_next_attempt_undispatched(
+def test_a_superseded_commit_that_staged_leaves_the_next_attempt_undispatched(
     step: Step, slot: FakeWorktree, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """The takeover lands after P's verify staged its paths (the second fence then stops it): N refuses to dispatch on
+    """The takeover lands after P's commit staged its paths (the second fence then stops it): N refuses to dispatch on
     that index rather than commit P's staged plan as its own."""
     base = head(slot)
     step.run(KEY, ENTRY, Agent(slot, {P: PLAN_TEXT}, PLAN))
@@ -436,7 +436,7 @@ def test_a_start_that_lost_the_takeover_launches_the_winner(step: Step, slot: Fa
     assert step.con.execute("SELECT count(*) FROM attempt").fetchone() == (2,)
 
 
-def test_a_takeover_during_the_repeats_verify_launches_the_winner(step: Step, slot: FakeWorktree) -> None:
+def test_a_takeover_during_the_repeats_commit_launches_the_winner(step: Step, slot: FakeWorktree) -> None:
     step.run(KEY, ENTRY, Agent(slot, {P: PLAN_TEXT, STRAY: "s"}, PLAN))
     taken: list[AttemptKey] = []
 

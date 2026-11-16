@@ -299,7 +299,7 @@ def test_one_factory_commit_with_the_agents_message_and_the_trailer_is_recorded_
     assert slot.dirty().raw is False
 
 
-def test_leftovers_are_listed_fresh_and_a_tidied_slot_then_verifies(
+def test_leftovers_are_listed_fresh_and_a_tidied_slot_then_commits(
     registered: sqlite3.Connection, slot: FakeWorktree, tmp_path: Path, checkouts: Checkouts, slot_files: FakeSlotFiles
 ) -> None:
     captured(registered, tmp_path, slot, checkouts, slot_files, PLANNED | {NOTE: "n", "scratch.txt": "s"})
@@ -338,7 +338,7 @@ def test_unchanged_over_saved_work_ends_at_its_own_commit_of_the_same_tree(
     registered: sqlite3.Connection, slot: FakeWorktree, tmp_path: Path, checkouts: Checkouts, slot_files: FakeSlotFiles
 ) -> None:
     """B is a hold's saved commit (its typed trailer): preservation is never a result, so `unchanged` ends at a new commit
-    of the same tree on B, with this attempt's trailer and no other change, and the chain verifies it as one link."""
+    of the same tree on B, with this attempt's trailer and no other change, and the chain commits it as one link."""
     base = commit(slot, PLANNED, f"Save unfinished work\n\nTask-Loop-Attempt: old\n{WIP}: old")
     origin_main_at(slot)
     captured(registered, tmp_path, slot, checkouts, slot_files, {}, UNCHANGED)
@@ -448,7 +448,7 @@ def one(base: str, paths: tuple[str, ...]) -> tuple[ChainLink, ...]:
     ids=["chain_length", "unlisted_change", "outside_root", "file_size", "at_cap"],
 )
 @pytest.mark.parametrize("step", ["plan", "implement"])
-def test_judge_rules_the_verify_path_cannot_reach(
+def test_judge_rules_the_commit_path_cannot_reach(
     repo: FakeRepo, slot: FakeWorktree, changes: list[Files], paths: tuple[str, ...], cap: int,
     expected: Rejected | None, step: str,
 ) -> None:
@@ -556,7 +556,7 @@ def test_refusals_and_unknowns_before_any_git_read(
     ("pending", CommitWaiting(CommitWaitingReason.SESSION_PENDING)),
     ("conflict", CommitRefused("session")), ("fault", CommitRefused("session_fault")),
 ])
-def test_an_unfinished_session_state_is_never_verified(
+def test_an_unfinished_session_state_is_never_committed(
     registered: sqlite3.Connection, slot: FakeWorktree, tmp_path: Path, checkouts: Checkouts, slot_files: FakeSlotFiles,
     session_state: str, expected: object,
 ) -> None:
@@ -582,7 +582,7 @@ def test_a_stale_reservation_refuses_and_stores_nothing(
     assert stored(registered) == [] and made(slot, head(slot)) == []
 
 
-def test_another_verifier_storing_first_is_inconsistent(
+def test_another_factory_commit_storing_first_is_inconsistent(
     registered: sqlite3.Connection, slot: FakeWorktree, tmp_path: Path, checkouts: Checkouts, slot_files: FakeSlotFiles
 ) -> None:
     captured(registered, tmp_path, slot, checkouts, slot_files, PLANNED)
@@ -720,14 +720,14 @@ def test_a_pointer_rewritten_during_stage_stops_before_record(
     assert made(slot, base) == [] and end_commit(registered) is None and stored(registered) == []
 
 
-def test_a_verifier_racing_another_adopts_its_commit_never_nothing_written(
+def test_a_factory_commit_racing_another_adopts_its_commit_never_nothing_written(
     registered: sqlite3.Connection, slot: FakeWorktree, tmp_path: Path, checkouts: Checkouts, slot_files: FakeSlotFiles,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """The other factory commit commits, records X and stores its verdict between this one's `stage` and `record`, so this
     `record` finds nothing to commit: HEAD is no longer B, and the trailer commit is adopted, not `nothing_written`.
     The slot lock refuses that second factory_commit (`slot_busy`); this keeps the adopt rule for a race the lock does not see
-    (a deleted lock file), so both verifiers here hold nothing."""
+    (a deleted lock file), so both factory commit operations here hold nothing."""
     base = head(slot)
     captured(registered, tmp_path, slot, checkouts, slot_files, PLANNED)
     recorded, raced = FakeWorktree.record, list[CommitResult]()
