@@ -16,11 +16,13 @@ from typing import Final
 
 from taskloop.attempt_reads import StoreRefused, StoreUnavailable
 from taskloop.land_store import Close, LandRow, LandStore
+from taskloop.land_timing import Phase
 from taskloop.operations import Failed
 from taskloop.printable import one_line
 from taskloop.tracker_client import CloseAnswer
 
 NOT_SYNCED: Final = "Tracker: closed locally, not synced (bd dolt push shares it)"
+UNAVAILABLE: Final = "unavailable"
 
 
 def reason(row: LandRow) -> str:
@@ -44,7 +46,7 @@ def _recorded(lands: LandStore, now: float, row: LandRow, close: Close) -> LandR
         again = lands.row(row.key)
         if again is not None and again.close is not None:
             return again
-        return Failed("unavailable", "changed", f"{_on_main(row)} and the task is closed; the candidate changed meanwhile: rerun "
+        return Failed(UNAVAILABLE, "changed", f"{_on_main(row)} and the task is closed; the candidate changed meanwhile: rerun "
                       "to record it.")
     except StoreUnavailable:
         return Failed("unavailable", "store", f"{_on_main(row)} and the task is closed; nothing was recorded: rerun to record it.")
@@ -83,6 +85,14 @@ def _refused(row: LandRow, answer: CloseAnswer) -> Failed:
 def closed(lands: LandStore, close: Callable[[str, str, str], CloseAnswer], now: Callable[[], float], row: LandRow) -> LandRow | Failed:
     """The delivered candidate's task closed in the tracker and the close recorded (a close recorded by a concurrent land
     is that answer)."""
+    try:
+        lands.start_phase(row.key, Phase.CLOSE, now())
+    except StoreRefused:
+        found = lands.row(row.key)
+        return found if found is not None and found.close is not None else Failed(
+            UNAVAILABLE, "changed", "The candidate changed before task completion: rerun.")
+    except StoreUnavailable:
+        return Failed(UNAVAILABLE, "store", "Task completion could not be recorded: rerun.")
     answer = close(row.tracker_root, row.task_id, reason(row))
     match answer.word:
         case "closed" | "already_closed" as word:

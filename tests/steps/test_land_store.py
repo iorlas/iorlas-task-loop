@@ -21,6 +21,7 @@ from taskloop.check_store import Outcome, Recorded, required_json
 from taskloop.land_conflict.admit import admit as admit_conflict
 from taskloop.land_conflict.models import Outcome as ConflictOutcome
 from taskloop.land_store import LandAdmitted, LandRow, LandStore, Settled, Validation
+from taskloop.land_timing import Phase, RetryCause
 
 ENTRY = (7, "land-start", "boot")
 DIGEST = "a" * 64
@@ -36,6 +37,7 @@ def rows(con: sqlite3.Connection) -> list[tuple[object, ...]]:
 
 
 def put(con: sqlite3.Connection, row: dict[str, object]) -> None:
+    row = {"retry_cause": RetryCause.WITHDRAWN.value if row.get("number") != 1 else None} | row
     con.execute(f"INSERT INTO land_candidate ({','.join(row)}) VALUES ({','.join('?' * len(row))})", tuple(row.values()))
 
 
@@ -43,7 +45,7 @@ def put(con: sqlite3.Connection, row: dict[str, object]) -> None:
 PENDING: dict[str, object] = {
     "candidate_id": "c1", "dispatch_token": "c1-token", "generation": 1, "checks_attempt_id": "checks", "number": 1,
     "origin_commit": ORIGIN, "commit_sha": SQUASH, "tree_same": 0, "required": required_json(REQUIRED), "slot": "s1", "slot_head": D,
-    "deadline": 300,
+    "deadline": 300, "admitted_at": 1.0,
 }
 SAME = PENDING | {"tree_same": 1, "slot": None, "slot_head": None, "deadline": None, "validation": "same_tree", "validated_at": 1}
 NO_CHANGE = SAME | {"validation": "no_change", "delivery": "no_change", "delivered_at": 1}
@@ -190,6 +192,76 @@ def test_a_candidate_without_a_slot_is_inserted_validated_and_a_no_change_one_de
     assert found is not None and (found.slot, found.validation, found.validated_at) == (None, validation, 9.0)
     assert (found.delivery, found.delivered_at) == (("no_change", 9.0) if validation == "no_change" else (None, None))
     assert found.pushable == (validation == "same_tree")
+    assert found.admitted_at == found.validation_started_at == 9.0 and found.retry_cause is None
+    assert found.release_started_at is None
+    assert found.delivery_started_at == (9.0 if validation == "no_change" else None)
+
+
+@pytest.mark.parametrize("cause", list(RetryCause))
+def test_replacement_cause_comes_from_its_own_latest_predecessor(checking: sqlite3.Connection, cause: RetryCause) -> None:
+    checked(checking)
+    previous = FAILED | {"released_at": 3, "parked": D}
+    if cause is not RetryCause.FAILED:
+        previous |= {"superseded": cause.value, "superseded_at": 4}
+    put(checking, previous)
+    before = rows(checking)[0]
+    insert(checking, admitted(2))
+    found = store(checking).latest("checks")
+    assert found is not None and found.retry_cause is cause and found.admitted_at == 9.0
+    assert rows(checking)[0] == before
+
+
+@pytest.mark.parametrize(("change", "check"), [
+    ({"retry_cause": "unknown"}, "retry_cause IS NULL OR retry_cause IN"),
+    ({"retry_cause": "failed"}, "(number = 1) = (retry_cause IS NULL)"),
+    ({"release_started_at": 2}, "release_started_at IS NULL OR slot IS NOT NULL"),
+    ({"close_started_at": 2}, "close_started_at IS NULL OR delivery IS NOT NULL"),
+])
+def test_timing_and_cause_constraints(checking: sqlite3.Connection, change: dict[str, object], check: str) -> None:
+    with pytest.raises(sqlite3.IntegrityError, match=re.escape(check)):
+        put(checking, SAME | change)
+
+
+def test_delivery_cannot_start_before_successful_validation(checking: sqlite3.Connection) -> None:
+    with pytest.raises(sqlite3.IntegrityError, match="delivery_started_at IS NULL OR validation"):
+        put(checking, PENDING | {"delivery_started_at": 2})
+
+
+def test_phase_starts_preserve_the_first_time_and_release_proof_revision(landing: sqlite3.Connection) -> None:
+    lands = store(landing)
+    lands.start_phase(CANDIDATE, Phase.VALIDATION, 20)
+    lands.start_phase(CANDIDATE, Phase.VALIDATION, 30)
+    lands.conclude(CANDIDATE, "passed", None, 10)  # clocks can jump backwards
+    row = latest(landing)
+    proof = row.rev, row.validation
+    lands.start_phase(CANDIDATE, Phase.RELEASE, 40, proof)
+    lands.start_phase(CANDIDATE, Phase.RELEASE, 50, proof)
+    assert latest(landing).rev == proof[0]
+    with begin_immediate(landing):
+        assert land_store.record_release(landing, CANDIDATE, proof, D, 25, False) == "released"
+    assert (latest(landing).validation_started_at, latest(landing).release_started_at) == (20, 40)
+    with pytest.raises(StoreRefused):
+        lands.start_phase(CANDIDATE, Phase.RELEASE, 60, proof)
+
+
+@pytest.mark.parametrize("phase", list(Phase))
+def test_stale_keys_and_ineligible_phases_never_write(landing: sqlite3.Connection, phase: Phase) -> None:
+    lands = store(landing)
+    before = rows(landing)
+    with pytest.raises(StoreRefused):
+        lands.start_phase(AttemptKey("candidate", "stale", 1), phase, 20, (0, None), abandon=True)
+    if phase is not Phase.VALIDATION:
+        with pytest.raises(StoreRefused):
+            lands.start_phase(CANDIDATE, phase, 20, (0, None))
+    assert rows(landing) == before
+
+
+@pytest.mark.parametrize("now", [float("inf"), float("nan"), -float("inf")])
+def test_nonfinite_times_never_enter_storage(landing: sqlite3.Connection, now: float) -> None:
+    before = rows(landing)
+    with pytest.raises(ValueError):
+        store(landing).start_phase(CANDIDATE, Phase.VALIDATION, now)
+    assert rows(landing) == before
 
 
 @pytest.mark.parametrize(("change", "validation", "word"), [
@@ -274,6 +346,7 @@ def test_conflict_reservation_excludes_later_checks_candidates_only_of_its_sourc
 
 def validation_writes(lands: LandStore, key: AttemptKey) -> dict[str, Callable[[], object]]:
     return {"renew": lambda: lands.renew(key, 900), "profiled": lambda: lands.profiled(key, DIGEST),
+            "start": lambda: lands.start_phase(key, Phase.VALIDATION, 10),
             "conclude": lambda: lands.conclude(key, "passed", None, 20)}
 
 
@@ -467,7 +540,8 @@ def test_a_close_is_recorded_once_for_a_delivered_candidate(checking: sqlite3.Co
     assert (lands.of_checks("checks")[0].close, lands.of_checks("checks")[0].closed_at) == ("already_closed", 8.0)
 
 
-@pytest.mark.parametrize("column", ["validation='ok'", "superseded='ok'", "entry_pid=8", "required='[]'"])
+@pytest.mark.parametrize("column", ["validation='ok'", "superseded='ok'", "entry_pid=8", "required='[]'",
+                                    "retry_cause='other'", "admitted_at='bad'", "validation_started_at=1e999"])
 def test_a_malformed_stored_candidate_is_unavailable(landing: sqlite3.Connection, column: str) -> None:
     landing.execute("PRAGMA ignore_check_constraints=ON")
     landing.execute(f"UPDATE land_candidate SET {column}")
@@ -481,6 +555,17 @@ def rerun(con: sqlite3.Connection) -> None:
     con.execute("""INSERT INTO checks_attempt (attempt_id,dispatch_token,generation,after_attempt_id,number,slot,slot_head,target_commit,
     required,deadline,phase,conclusion,concluded_at,released_at,parked) VALUES ('rerun','rerun-token',1,'implement',2,'s2',?,?,?,100,
     'concluded','passed',7,8,?)""", (D, ORIGIN, required_json(REQUIRED), D))
+
+
+def test_new_checks_attempt_does_not_inherit_another_attempts_retry_cause(checking: sqlite3.Connection) -> None:
+    checked(checking)
+    put(checking, FAILED | {"released_at": 3, "parked": D})
+    before = rows(checking)[0]
+    rerun(checking)
+    insert(checking, dataclasses.replace(admitted(), checks="rerun"))
+    found = store(checking).latest("rerun")
+    assert found is not None and found.number == 1 and found.retry_cause is None
+    assert rows(checking)[0] == before
 
 
 def test_one_delivery_per_task_across_a_checks_re_run(checking: sqlite3.Connection) -> None:

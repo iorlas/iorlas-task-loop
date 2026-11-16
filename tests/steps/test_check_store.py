@@ -513,7 +513,8 @@ def candidate(con: sqlite3.Connection, number: int, **columns: object) -> None:
     """A candidate of `CHECKS` put directly (no store fence), with its columns."""
     row: dict[str, object] = {"candidate_id": f"c{number}", "dispatch_token": f"c{number}-token", "generation": 1,
                               "checks_attempt_id": "checks", "number": number, "origin_commit": ORIGIN, "commit_sha": SQUASH,
-                              "tree_same": 1, "required": "[]", "validation": "same_tree", "validated_at": 1}
+                              "tree_same": 1, "required": "[]", "validation": "same_tree", "validated_at": 1, "admitted_at": 1,
+                              "retry_cause": None if number == 1 else "withdrawn"}
     put(con, "land_candidate", row | columns)
 
 

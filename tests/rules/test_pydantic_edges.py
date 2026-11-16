@@ -14,6 +14,7 @@ EDGE_MODULES = frozenset({
     "src/taskloop/answer_failures.py",
     "src/taskloop/dash_model.py",
     "src/taskloop/operation_evidence.py",  # validated operation artifact interchange
+    "src/taskloop/land_timing.py",  # validated stored land times and retry causes
 })
 # Initial census at 5aba3eb7. Remove resolved sites; never add entries to pass.
 # Keys are path | enclosing symbol | canonical import | occurrence (not line).

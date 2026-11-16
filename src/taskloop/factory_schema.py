@@ -41,7 +41,8 @@ _COMMAND_CONCLUSIONS = ",".join(repr(encode(each)) for each in CommandConclusion
 _SETUP_CONCLUSIONS = ",".join(repr(encode(each)) for each in SETUP_CONCLUSIONS)
 _UNDEFINED = encode(CommandConclusion.UNDEFINED)
 
-# Every DDL change requires a version bump, pinned by tests/steps/test_factory_schema.py.
+# Schema 32 is the drain/discard bundle, including land retry causes and phase times; its reviewed pin changes in place.
+# Subsequent DDL changes require a version bump, pinned by tests/steps/test_factory_schema.py.
 # This is also the runtime's persisted-state compatibility version: increment it for incompatible changes to the
 # interpretation of execution state, even without a DDL change. Compatible code changes keep it and resume normally.
 SCHEMA = Schema(
@@ -239,7 +240,14 @@ CREATE TABLE land_candidate (
  delivery TEXT CHECK(delivery IS NULL OR delivery IN ('pushed','no_change')), delivered_at REAL,
  remote_head TEXT CHECK(remote_head IS NULL OR length(remote_head) IN (40,64)),
  close TEXT CHECK(close IS NULL OR close IN ('closed','already_closed')), closed_at REAL,
+ admitted_at REAL NOT NULL,
+ retry_cause TEXT CHECK(retry_cause IS NULL OR retry_cause IN ('failed','moved','gone','withdrawn','abandoned')),
+ validation_started_at REAL, release_started_at REAL, delivery_started_at REAL, close_started_at REAL,
  rev INTEGER NOT NULL DEFAULT 0,
+ CHECK((number = 1) = (retry_cause IS NULL)),
+ CHECK(release_started_at IS NULL OR slot IS NOT NULL),
+ CHECK(delivery_started_at IS NULL OR validation IN ('same_tree','no_change','passed') AND validation IS NOT NULL),
+ CHECK(close_started_at IS NULL OR delivery IS NOT NULL),
  CHECK((slot IS NULL) = (slot_head IS NULL) AND (slot IS NULL) = (deadline IS NULL)),
  CHECK((slot IS NULL) = (validation IS NOT NULL AND validation IN ('same_tree','no_change'))),
  CHECK((validation IS 'no_change') = (delivery IS 'no_change')),
@@ -301,12 +309,13 @@ CHECKS_LOADED = (
 )
 LAND_ADMITTED = (
     "candidate_id,dispatch_token,generation,checks_attempt_id,number,origin_commit,commit_sha,tree_same,required,slot,slot_head,"
-    "deadline,validation,validated_at,delivery,delivered_at"
+    "deadline,validation,validated_at,delivery,delivered_at,admitted_at,retry_cause,validation_started_at,delivery_started_at"
 )
 LAND_LOADED = (
     "candidate_id,dispatch_token,generation,checks_attempt_id,number,origin_commit,commit_sha,tree_same,required,slot,slot_head,"
     "deadline,profile_digest,entry_pid,entry_start,entry_boot,validation,reason,validated_at,released_at,parked,superseded,"
-    "superseded_at,delivery,delivered_at,remote_head,close,closed_at,rev"
+    "superseded_at,delivery,delivered_at,remote_head,close,closed_at,rev,admitted_at,retry_cause,validation_started_at,"
+    "release_started_at,delivery_started_at,close_started_at"
 )
 HOLD = "attempt_id,event,held_at,labels,labelled_at,commenting_at,commented_at,cleared_at,rev"
 CHECK_RESULT = "block,position,name,argv_digest,timeout,pid,pgid,proc_start,boot,started_at,ended_at,rc,conclusion"

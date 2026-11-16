@@ -19,6 +19,7 @@ from collections.abc import Callable, Mapping
 from contextlib import AbstractContextManager, nullcontext
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Final
 
 from git_porcelain import Repo
 
@@ -35,6 +36,7 @@ from taskloop.composition import Checking
 from taskloop.ids import Ids
 from taskloop.land_conflict.handoff import Handoff
 from taskloop.land_store import LandAdmitted, LandRow, LandStore, Settled, admission_raced, insert
+from taskloop.land_timing import Phase
 from taskloop.operations import Failed
 from taskloop.profile import ProfileFiles
 from taskloop.repo import RepoId
@@ -45,6 +47,7 @@ from taskloop.tracker_client import Close
 from taskloop.validate import Ended, Target, Verdict, concluded, reconcile, validate
 
 NO_SLOT = "No slot is free: rerun when one is, or stop rounds."
+UNAVAILABLE: Final = "unavailable"
 RACED = "Another land of the task, or a change of its attempts, came first: `tl step show TASK`."
 type Squash = tuple[int, str, str, bool, Required]  # number, O, S, S's tree is X's, the required names at O
 
@@ -110,7 +113,7 @@ def _settled(ports: LandPorts, checks: ChecksRow, squash: Squash, validation: Se
     with ports.lands.begin(con):
         insert(con, LandAdmitted(key, checks.key.attempt_id, number, o, s, same, required, None, None, None, validation,
                                  ports.work.clock()))
-    return ports.lands.row(key) or Failed("unavailable", "changed")
+    return ports.lands.row(key) or Failed(UNAVAILABLE, "changed")
 
 
 def _reserved(ports: LandPorts, repo: Repo, checks: ChecksRow, squash: Squash, deadline: float) -> LandRow | Failed:
@@ -196,6 +199,10 @@ def _custody(ports: LandPorts, row: LandRow, slot_path: str, me: EntryIdentity) 
     if refused is not None:
         return refused
     lands, key = ports.lands, row.key
+    try:
+        lands.start_phase(key, Phase.VALIDATION, ports.work.clock())
+    except StoreRefused as refused_by:
+        return Failed(UNAVAILABLE, refused_by.reason, "The candidate changed before validation: rerun.")
     target = Target(key, row.repo_id, slot_path, row.commit, row.required, row.deadline or 0.0, None,
                     lambda digest: lands.profiled(key, digest))
     ended = _ended(ports, row, target)

@@ -21,7 +21,12 @@ def census() -> tuple[set[tuple[str, str]], set[tuple[str, str, str]]]:
     literals: set[tuple[str, str]] = set()
     dynamic: set[tuple[str, str, str]] = set()
     for path in ROOT.rglob("*.py"):
-        for node in ast.walk(ast.parse(path.read_text())):
+        tree = ast.parse(path.read_text())
+        constants = {node.target.id: node.value for node in tree.body
+                     if isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name)
+                     and isinstance(node.annotation, ast.Name) and node.annotation.id == "Final"
+                     and isinstance(node.value, ast.Constant) and isinstance(node.value.value, str)}
+        for node in ast.walk(tree):
             if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Name):
                 continue
             index = 0 if path.name == "wip.py" and node.func.id == "Refused" else PRODUCERS.get(node.func.id)
@@ -31,6 +36,8 @@ def census() -> tuple[set[tuple[str, str]], set[tuple[str, str, str]]]:
                       next((keyword.value for keyword in node.keywords if keyword.arg == "reason"), None))
             if reason is None:
                 continue
+            if isinstance(reason, ast.Name) and reason.id in constants:
+                reason = constants[reason.id]
             if isinstance(reason, ast.Constant) and isinstance(reason.value, str):
                 context = "land" if path.name.startswith("land_") or path.name == "land.py" or "land_conflict" in path.parts else "step"
                 literals.add((context, reason.value))

@@ -45,7 +45,7 @@ def land_row() -> LandRow:
     return LandRow(
         KEY, "checks", 1, "origin", "commit", False, (("test", "argv-digest"),), "s1", "head", 100.0, "digest", ENTRY,
         "passed", None, 10.0, 11.0, "parked", None, None, "pushed", 12.0, "remote", "closed", 13.0, 1,
-        "tasks", "tl-1", "repo", "/tracker", "checked", False,
+        "tasks", "tl-1", "repo", "/tracker", "checked", False, 8.0, None, 9.0, 10.0, 11.0, 12.0,
     )
 
 

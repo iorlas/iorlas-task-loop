@@ -89,3 +89,15 @@ def test_a_new_literal_producer_fails_until_it_has_a_guide(tmp_path: Path, monke
     for _context, reason in cases:
         with pytest.raises(KeyError):
             human("tl step start", Failed("refused", reason), None)
+
+
+def test_final_string_reasons_have_literal_coverage_and_other_names_stay_dynamic(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = tmp_path / "operation.py"
+    source.write_text('from typing import Final\nREASON: Final = "changed"\n'
+                      'def operation(reason):\n    Failed("unavailable", REASON)\n    Failed("unavailable", reason)\n')
+    monkeypatch.setattr(refusal_inventory, "ROOT", tmp_path)
+    literals, dynamic = refusal_inventory.census()
+    assert literals == {("step", "changed")}
+    assert dynamic == {("operation.py", "Failed", "reason")}

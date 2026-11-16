@@ -30,9 +30,13 @@ from git_porcelain import GitUnavailable, HookRejected, MissingRevision, Pushed,
 from taskloop.attempt_reads import StoreRefused, StoreUnavailable
 from taskloop.git_views import PUSH_TIMEOUT
 from taskloop.land_store import LandRow, LandStore
+from taskloop.land_timing import Phase
 from taskloop.operations import Failed
 
 REMOTE: Final = "origin"
+CHANGED: Final = "changed"
+UNAVAILABLE: Final = "unavailable"
+ALREADY_PUSHED: Final = "already_pushed"
 MAIN: Final = "refs/heads/main"
 TRACKING: Final = "refs/remotes/origin/main"
 FETCHED: Final = f"+{MAIN}:{TRACKING}"  # origin's `main` into its remote-tracking ref, never a local branch
@@ -116,9 +120,9 @@ def _recorded(lands: LandStore, now: float, row: LandRow, head: str, how: Litera
         again = lands.row(row.key)
         if again is not None and again.delivery is not None and again.remote_head is not None:
             return Delivered(again, again.remote_head, "already_pushed")
-        return Failed("unavailable", "changed", f"{on_main}; the candidate changed meanwhile: rerun to record it.")
+        return Failed("unavailable", CHANGED, f"{on_main}; the candidate changed meanwhile: rerun to record it.")
     except StoreUnavailable:
-        return Failed("unavailable", "store", f"{on_main}; nothing was recorded: rerun to record it.")
+        return Failed(UNAVAILABLE, "store", f"{on_main}; nothing was recorded: rerun to record it.")
     found = lands.row(row.key)
     return Delivered(row if found is None else found, head, how)
 
@@ -144,6 +148,20 @@ def _refusal(result: object, s: str) -> Failed:
                   "nothing was pushed and the candidate stays validated.")
 
 
+def _started(lands: LandStore, clock: Callable[[], float], row: LandRow) -> Delivered | Failed | None:
+    """Entry is durable before delivery effects, or another writer's delivery is adopted."""
+    try:
+        lands.start_phase(row.key, Phase.DELIVERY, clock())
+    except StoreRefused:
+        found = lands.row(row.key)
+        if found is not None and found.delivery is not None and found.remote_head is not None:
+            return Delivered(found, found.remote_head, ALREADY_PUSHED)
+        return Failed(UNAVAILABLE, CHANGED, "The candidate changed before delivery: rerun.")
+    except StoreUnavailable:
+        return Failed(UNAVAILABLE, "store", "Delivery could not be recorded: rerun.")
+    return None
+
+
 def _step(lands: LandStore, clock: Callable[[], float], origin: Origin, row: LandRow) -> Delivered | Failed | str:
     """One pass of the rule: delivered, a refusal, `rejected` (read origin again), `moved` or `gone` (superseded). Origin
     is read first: an S pruned here after it reached origin is still delivered."""
@@ -151,7 +169,7 @@ def _step(lands: LandStore, clock: Callable[[], float], origin: Origin, row: Lan
     if isinstance(seen, Failed):
         return seen
     if seen[0] == "delivered":
-        return _recorded(lands, clock(), row, seen[1], "already_pushed")
+        return _recorded(lands, clock(), row, seen[1], ALREADY_PUSHED)
     try:
         gone = origin.repo.tree(f"{row.commit}^{{commit}}") is None
     except GitUnavailable as error:
@@ -173,6 +191,9 @@ def _raced(origin: Origin, row: LandRow) -> bool:
 def deliver(lands: LandStore, clock: Callable[[], float], origin: Origin, row: LandRow, again: Again | None) -> Delivered | Failed:
     """The pushable candidate `row` delivered by the rule; `again` makes candidate N+1 (None: this invocation made one)."""
     for _ in range(ROUNDS):
+        started = _started(lands, clock, row)
+        if started is not None:
+            return started
         step = _step(lands, clock, origin, row)
         if isinstance(step, (Delivered, Failed)):
             return step
@@ -212,7 +233,7 @@ def withdraw(lands: LandStore, clock: Callable[[], float], origin: Origin, row: 
     if isinstance(found, (Delivered, Failed)):
         return found
     if not lands.supersede(row.key, "withdrawn", clock()):
-        return Failed("unavailable", "changed", "The land candidate changed meanwhile: rerun.")
+        return Failed("unavailable", CHANGED, "The land candidate changed meanwhile: rerun.")
     again = lands.row(row.key)
     return Withdrawn(row if again is None else again)
 
