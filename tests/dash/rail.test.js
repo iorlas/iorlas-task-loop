@@ -20,7 +20,7 @@ const fixture = document.getElementById("fixture");
 const results = document.getElementById("results");
 const assert = (condition, message) => { if (!condition) throw new Error(message); };
 const attempt = (step, n = 1, extra = {}) => ({ step, n, state: "succeeded", summary: "collected", started_at: null, ended_at: null, feed: [], ...extra });
-const verify = (n = 37, extra = {}) => attempt("verification", n, { summary: "verified", ...extra });
+const verify = (n = 37, extra = {}) => attempt("verification", n, { summary: "committed", ...extra });
 const task = { id: "tl-test", title: "Compact rail fixture", column: "landed", attempt: 1 };
 const tracked = { fields: {
   description: "Fixture task", labels: [], depends_on: [],
@@ -62,10 +62,10 @@ function healthyRows() {
 }
 
 function verificationStates() {
-  for (const code of ["verified", "reused", "uncommitted:unsafe", "rejected:paths", "rejected:plan_rule"]) {
-    const failed = !["verified", "reused"].includes(code);
+  for (const code of ["committed", "reused", "uncommitted:unsafe", "rejected:paths", "rejected:plan_rule"]) {
+    const failed = !["committed", "reused"].includes(code);
     const selected = [];
-    const node = mount([attempt("plan", 1, { state: failed ? "failed" : "succeeded", summary: failed ? "commit" : "verified" }), verify(42, { summary: code, state: failed ? "failed" : "succeeded" })], task, {}, (...args) => selected.push(args));
+    const node = mount([attempt("plan", 1, { state: failed ? "failed" : "succeeded", summary: failed ? "commit" : "committed" }), verify(42, { summary: code, state: failed ? "failed" : "succeeded" })], task, {}, (...args) => selected.push(args));
     const label = failed && !say(code).startsWith("Not committed:") ? `Not committed: ${say(code)}` : say(code);
     assert(marks(node)[0].textContent === `${failed ? "✗" : "✓"} ${label}`, `${code} mark has visible verdict words`);
     marks(node)[0].click();

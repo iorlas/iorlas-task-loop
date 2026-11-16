@@ -24,7 +24,7 @@ from taskloop.earlier_input import BEGIN, END, START
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.hold_store import HoldStore
 from taskloop.launch import LaunchUnavailable
-from taskloop.operations import Failed, Round, Started, StartRequest, VerifiedTask, commit_task, start
+from taskloop.operations import CommittedTask, Failed, Round, Started, StartRequest, commit_task, start
 from taskloop.round import NextRequest, run_round
 from taskloop.step_render import human
 from taskloop.step_text import SAVED_WORK
@@ -75,7 +75,7 @@ def held_plan(factory: Factory) -> str:
 
 def test_a_missing_shelf_capability_is_reconstructed_from_evidence_and_held(factory: Factory) -> None:
     assert factory.round() == [("tl-1", "plan", "start", "started")]
-    assert factory.round() == [("tl-1", "plan", "verify", "verified release=released branch=published")]
+    assert factory.round() == [("tl-1", "plan", "verify", "committed release=released branch=published")]
     before = factory.tip("tl-1")
     factory.agents["tl-1", "implement"] = scripted(
         factory.slot.repo,
@@ -116,7 +116,7 @@ def test_a_failed_task_is_held_once_then_costs_no_tracker_call_or_line(factory: 
 def test_a_size_refusal_holds_the_parent_once_and_keeps_any_coherent_part_unfinished(factory: Factory, step: str) -> None:
     if step == "implement":
         assert factory.round() == [("tl-1", "plan", "start", "started")]
-        assert factory.round() == [("tl-1", "plan", "verify", "verified release=released branch=published")]
+        assert factory.round() == [("tl-1", "plan", "verify", "committed release=released branch=published")]
     explanation = (
         "Scope exceeds 3 independent behaviours and needs about 80 implement model calls. "
         "Hold the parent for the owner or orchestrator to create these parts: "
@@ -169,9 +169,9 @@ def test_a_held_task_never_stops_another_task_or_ingestion_through_one_slot(fact
     assert factory.round() == [("tl-1", "plan", "start", "started")] and factory.last.stopped == "no_free_slot"
     assert factory.round() == [("tl-1", "plan", "hold", "held failed:needs_owner"), ("tl-2", "plan", "start", "started")]
     ready(factory, "tl-3")
-    assert factory.round() == [("tl-2", "plan", "verify", "verified release=released branch=published"),
+    assert factory.round() == [("tl-2", "plan", "verify", "committed release=released branch=published"),
                                ("tl-3", "plan", "start", "started")]
-    assert factory.round() == [("tl-3", "plan", "verify", "verified release=released branch=published"),
+    assert factory.round() == [("tl-3", "plan", "verify", "committed release=released branch=published"),
                                ("tl-2", "implement", "advance", "started")]  # claimed work before new work, as built
     assert factory.next_words() == {"tl-1": ("plan", "on_hold"), "tl-2": ("implement", "verify"), "tl-3": ("plan", "advance")}
     assert factory.tracker.claims == ["tl-1", "tl-2", "tl-3"] and factory.tracker.holds == ["labels tl-1 auto", "comment tl-1"]
@@ -183,7 +183,7 @@ def test_the_round_s_label_is_stored_on_its_admissions_and_advances_and_none_on_
     assert factory.round(label="night") == [("tl-1", "plan", "start", "started")]  # tl-2 is not ready yet
     ready(factory, "tl-2")
     factory.by_hand("tl-2")
-    assert factory.round(label="night") == [("tl-1", "plan", "verify", "verified release=released branch=published"),
+    assert factory.round(label="night") == [("tl-1", "plan", "verify", "committed release=released branch=published"),
                                             ("tl-2", "implement", "advance", "started")]
     assert factory.round(label="night")[1] == ("tl-1", "implement", "advance", "started")
     assert labels(factory, "tl-1") == ["night", "night"] and labels(factory, "tl-2") == [None, None]
@@ -314,7 +314,7 @@ def test_unfinished_answers_hold_save_and_resume_the_whole_slot(
 ) -> None:
     if step == "implement":
         assert factory.round() == [("tl-1", "plan", "start", "started")]
-        assert factory.round() == [("tl-1", "plan", "verify", "verified release=released branch=published")]
+        assert factory.round() == [("tl-1", "plan", "verify", "committed release=released branch=published")]
     plan = {"plan_path": None, "paths": ["README", "../unused"]} if step == "plan" else {}
     factory.agents["tl-1", step] = scripted(
         factory.slot.repo,
@@ -414,7 +414,7 @@ def test_first_attempts_of_other_tasks_receive_no_earlier_facts(factory: Factory
 
 def test_an_advance_refused_claim_lost_holds_a_round_taken_task_without_touching_another_actor_s_labels(factory: Factory) -> None:
     assert factory.round() == [("tl-1", "plan", "start", "started")]
-    assert factory.round() == [("tl-1", "plan", "verify", "verified release=released branch=published")]
+    assert factory.round() == [("tl-1", "plan", "verify", "committed release=released branch=published")]
     factory.tracker.beads["tl-1"] = replace(factory.tracker.beads["tl-1"], assignee="someone")
     assert factory.round() == [("tl-1", "plan", "hold", "held claim_lost")]
     bead = factory.tracker.beads["tl-1"]
@@ -427,7 +427,7 @@ def test_the_person_s_answer_takes_the_task_again_at_plan_on_its_branch_and_held
     """A failed implement is held; the person adds `auto` back: the next round admits a fresh plan attempt (next seq,
     label stored) on task/tl-1 as it is (the plan commit kept) and removes `held` (`hold cleared`), once."""
     assert factory.round() == [("tl-1", "plan", "start", "started")]
-    assert factory.round() == [("tl-1", "plan", "verify", "verified release=released branch=published")]
+    assert factory.round() == [("tl-1", "plan", "verify", "committed release=released branch=published")]
     planned = factory.tip("tl-1")
     asks(factory, "tl-1", "implement")
     assert factory.round() == [("tl-1", "implement", "advance", "started")]
@@ -485,7 +485,7 @@ def test_a_task_whose_label_was_already_gone_is_held_absent_and_taken_again_when
 
 def test_an_advance_refused_branch_moved_is_held_once_instead_of_retried(factory: Factory) -> None:
     assert factory.round() == [("tl-1", "plan", "start", "started")]
-    assert factory.round() == [("tl-1", "plan", "verify", "verified release=released branch=published")]
+    assert factory.round() == [("tl-1", "plan", "verify", "committed release=released branch=published")]
     moved(factory)
     assert factory.round() == [("tl-1", "plan", "hold", "held branch_moved")] and factory.round() == []
     assert "Restore task/tl-1 to contain" in factory.tracker.comments[0][1]
@@ -528,7 +528,7 @@ def test_a_person_s_own_abandon_is_restarted_by_the_round_under_the_label_and_ho
 def test_a_publication_refused_branch_moved_is_held_once_instead_of_pushed_every_round(factory: Factory) -> None:
     assert factory.round() == [("tl-1", "plan", "start", "started")]
     factory.slot.repo.set_remote_url("origin", "/nowhere")
-    assert factory.round() == [("tl-1", "plan", "verify", "verified release=released branch=unavailable:remote")]
+    assert factory.round() == [("tl-1", "plan", "verify", "committed release=released branch=unavailable:remote")]
     assert factory.next_words() == {"tl-1": ("plan", "publish")}
     moved(factory)
     assert factory.round() == [("tl-1", "plan", "hold", "held branch_moved")] and factory.round() == []
@@ -568,8 +568,8 @@ def test_a_hand_started_publication_refused_branch_moved_is_reported_never_held(
     factory.slot.repo.set_remote_url("origin", "/nowhere")
     factory.now += 1
     ports = factory.ports()
-    verified = commit_task(factory.store, ports.factory_commit, ports.releaser, ports.publisher, "tasks", "tl-1")
-    assert isinstance(verified, VerifiedTask) and factory.next_words() == {"tl-1": ("plan", "publish")}
+    committed = commit_task(factory.store, ports.factory_commit, ports.releaser, ports.publisher, "tasks", "tl-1")
+    assert isinstance(committed, CommittedTask) and factory.next_words() == {"tl-1": ("plan", "publish")}
     moved(factory)
     assert factory.round(frozenset()) == [("tl-1", "plan", "publish", "refused:branch_moved")]
     assert factory.tracker.holds == [] and any(line.endswith(" publish refused:branch_moved " + factory.current("tl-1"))

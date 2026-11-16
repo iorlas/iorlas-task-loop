@@ -204,9 +204,9 @@ def rig(tmp_path: Path, slot: FakeWorktree, checkouts: PinnedViews, slot_files: 
 def implemented(rig: Checking) -> None:
     """tl-1 planned, advanced, implemented and verified by four rounds; its check advance is next."""
     assert rig.round() == [("tl-1", "plan", "start", "started")]
-    assert rig.round() == [("tl-1", "plan", "verify", "verified release=released branch=published")]
+    assert rig.round() == [("tl-1", "plan", "verify", "committed release=released branch=published")]
     assert rig.round() == [("tl-1", "implement", "advance", "started")]
-    assert rig.round() == [("tl-1", "implement", "verify", "verified release=released branch=published")]
+    assert rig.round() == [("tl-1", "implement", "verify", "committed release=released branch=published")]
     assert rig.next_words() == {"tl-1": ("implement", "advance")}
 
 
@@ -238,7 +238,7 @@ def test_a_failed_check_is_held_once_never_re_run_and_new_work_still_starts(rig:
     implement = rig.current("tl-1")
     ready(rig, "tl-2")
     assert rig.round(rig.last.written) == [("tl-1", "check", "hold", "held failed:test:failed"), ("tl-2", "plan", "start", "started")]
-    assert rig.round(rig.last.written) == [("tl-2", "plan", "verify", "verified release=released branch=published")]
+    assert rig.round(rig.last.written) == [("tl-2", "plan", "verify", "committed release=released branch=published")]
     assert rig.logged("tl-1", "check", "hold", "held", "failed:test:failed", implement) == 1
     assert rig.rows() == [("tl-1", 1, "concluded", "failed")] and rig.starts == 1  # no re-run, no relaunch
     assert rig.next_words()["tl-1"] == ("implement", "on_hold") and rig.tracker.claims == ["tl-1", "tl-2"]
@@ -345,7 +345,7 @@ def test_two_done_tasks_and_one_slot_check_in_release_order_and_the_freed_slot_w
     assert rig.next_words() == {"tl-1": ("implement", "advance"), "tl-2": ("implement", "verify")}
     rig.bodies = ["running", "passed"]
     ready(rig, "tl-3")
-    assert rig.round() == [("tl-2", "implement", "verify", "verified release=released branch=published"),
+    assert rig.round() == [("tl-2", "implement", "verify", "committed release=released branch=published"),
                            ("tl-1", "check", "advance", "started")]
     reads = rig.tracker.ready_reads
     assert rig.round() == [("tl-1", "check", "report", "running")] and rig.last.stopped == "no_free_slot"

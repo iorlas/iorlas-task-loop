@@ -25,9 +25,9 @@ def written(*moves: Move, stopped: str = "") -> list[str]:
 
 
 def test_a_task_line_splits_into_step_move_words_and_attempt() -> None:
-    lines = written(Move("tl-1", "verify", "verified kept", ATTEMPT, step="implement"), Move("tl-2", "skip", "blocked"))
+    lines = written(Move("tl-1", "verify", "committed kept", ATTEMPT, step="implement"), Move("tl-2", "skip", "blocked"))
     assert [parse_round_line(each) for each in lines] == [
-        LogRow(AT, "main", "tl-1", "implement", "verify", ("verified", "kept"), ATTEMPT),
+        LogRow(AT, "main", "tl-1", "implement", "verify", ("committed", "kept"), ATTEMPT),
         LogRow(AT, "main", "tl-2", None, "skip", ("blocked",), None),
         LogRow(AT, "main", None, None, "round", ("moves=2",), None),
     ]

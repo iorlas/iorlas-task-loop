@@ -19,6 +19,7 @@ from taskloop.machine_config import Loaded
 from taskloop.operations import (
     UNCLAIMING,
     Adoption,
+    CommittedTask,
     Ended,
     Failed,
     Move,
@@ -26,7 +27,6 @@ from taskloop.operations import (
     ReleasedTask,
     Round,
     Started,
-    VerifiedTask,
 )
 from taskloop.printable import block
 from taskloop.publish import is_published, publish_word
@@ -85,7 +85,7 @@ def _step_lines(command: str, result: StepResult, db: Path | None) -> list[str]:
             return [*show_lines(result), *paths, *last, *left, f"Status: {status_words(task_status(each))}", f"Next: {each.next}", *steps]
         case Listed() | Round() | Ended() | SetupTimingReport():
             return _rows_lines(command, result, stuck)
-        case VerifiedTask() | ReleasedTask() | PublishedTask():
+        case CommittedTask() | ReleasedTask() | PublishedTask():
             return _released_lines(result)
         case Adoption() | Loaded():
             return _setup_lines(result)
@@ -144,7 +144,7 @@ def _rows_lines(command: str, result: Listed | Round | Ended | SetupTimingReport
     return lines + [f"{key}: {automatic_guide(key)}" for key in keys] + [f"hold: {each}" for each in pending]
 
 
-def _released_lines(result: VerifiedTask | ReleasedTask | PublishedTask) -> list[str]:
+def _released_lines(result: CommittedTask | ReleasedTask | PublishedTask) -> list[str]:
     """A verdict with the release and the publication that followed it; a release with each change on its own line (an
     abandon's land candidate first, then its checks attempt); a publication."""
     if isinstance(result, PublishedTask):
@@ -152,7 +152,7 @@ def _released_lines(result: VerifiedTask | ReleasedTask | PublishedTask) -> list
         done = publish_word(found)
         return [f"{done}: task/{result.task_id} at {found.commit} on origin (attempt {result.attempt_id}, backlog {result.backlog})",
                 *(["Nothing changed: it was published before."] if done == "already_published" else [])]
-    if isinstance(result, VerifiedTask):
+    if isinstance(result, CommittedTask):
         held = [f"Release: {result.release}"] + ([] if is_released(result.release) else [refusal_guide(result.release.split(":", 1)[1])])
         held += [f"Publish: {result.published}"] + ([] if is_published(result.published) else [
             refusal_guide(result.published.split(":", 1)[1])])

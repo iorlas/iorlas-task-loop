@@ -18,6 +18,7 @@ from taskloop import cli_composition, cli_step, rounds_lock, step_guide
 from taskloop.admit import AdmitRequest, AdmitResult, Admitted
 from taskloop.agents.settings import Overrides, StepSettings
 from taskloop.attempt_reads import PublishedRow, ReleaseRow
+from taskloop.attempt_result import CommittedStatus
 from taskloop.attempt_status import AttemptView, EntryState, Listed, Next, SetupShown, Shown
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import DEFAULT_GIT_READ_SECONDS, AttemptKey, AttemptResult, EntryIdentity
@@ -29,6 +30,7 @@ from taskloop.inspection_guide import CONFIG
 from taskloop.launch import Launched, LaunchResult
 from taskloop.operations import (
     Adoption,
+    CommittedTask,
     Ended,
     Failed,
     FailureKind,
@@ -38,7 +40,6 @@ from taskloop.operations import (
     Round,
     Started,
     StartPorts,
-    VerifiedTask,
 )
 from taskloop.publish import BranchPublished, PublishResult
 from taskloop.result_data import Result
@@ -90,7 +91,7 @@ ROUND = {"status", "backlog", "moves", "stopped", "logged"}
 MOVES = (Move("tl-3", "start", "started", "a3"), Move("tl-2", "report", "stuck:hung", "a2"), Move("tl-10", "skip", "abandoned"),
          Move("tl-4", "report", "failed:rejected:paths", "a4", "never shown"), Move("tl-5", "report", "claim_leaked"))
 DONE = AttemptView(
-    "tasks", "tl-1", "plan", "attempt", "s1", "captured", "gone", AttemptResult("collected", "verified"), False, "done",
+    "tasks", "tl-1", "plan", "attempt", "s1", "captured", "gone", AttemptResult("collected", "committed"), False, "done",
     release=ReleaseRow(D, 30.0, "kept"), published=PublishedRow(X, X, 40.0),
 )
 
@@ -208,13 +209,16 @@ CASES: list[tuple[list[str], Result, int, list[str], set[str]]] = [
      ["task\tbacklog\tstep\tattempt\tslot", "pending commit\tsettling\tverify"], {"attempts"}),
     (["step", "show", "tl-1", "--backlog", "tasks"], Shown(STATUS, Path("/a/d"), Path("/a/d/entry.log"), EVENTS), 0,
      ["Attempt: attempt (1 of at most 3)\nSlot: s1"], STATUS_KEYS | {"directory", "entry_log", "events_path", "setup", "failed_checks"}),
-    (["step", "commit", "tl-1", "--backlog", "tasks"], VerifiedTask("reused", "tasks", "tl-1", "attempt", "released", "published"), 0,
+    (["step", "commit", "tl-1", "--backlog", "tasks"], CommittedTask(
+        CommittedStatus.REUSED, "tasks", "tl-1", "attempt", "released", "published"), 0,
      ["reused: attempt attempt", "Release: released\nPublish: published"], CHECKED),
     (["step", "commit", "tl-1", "--backlog", "tasks"],
-     VerifiedTask("verified", "tasks", "tl-1", "attempt", "held:slot_dirty", "unavailable:remote"), 0,
+     CommittedTask(
+         CommittedStatus.COMMITTED, "tasks", "tl-1", "attempt", "held:slot_dirty", "unavailable:remote"), 0,
      ["Release: held:slot_dirty", step_guide.GUIDE["slot_dirty"], f"Publish: unavailable:remote\n{step_guide.GUIDE['remote']}"], CHECKED),
     (["step", "commit", "tl-1", "--backlog", "tasks"],
-     VerifiedTask("verified", "tasks", "tl-1", "attempt", "already_released", "already_published"), 0,
+     CommittedTask(
+         CommittedStatus.COMMITTED, "tasks", "tl-1", "attempt", "already_released", "already_published"), 0,
      ["Release: already_released\nPublish: already_published\n"], CHECKED),
     (PUBLISH, PublishedTask("tasks", "tl-1", "attempt", BranchPublished(X, X)), 0,
      [f"published: task/tl-1 at {X} on origin (attempt attempt, backlog tasks)\n"], PUBLISHED),
@@ -226,7 +230,7 @@ CASES: list[tuple[list[str], Result, int, list[str], set[str]]] = [
     (PUBLISH, Failed("refused", "remote_ahead"), 1, [step_guide.GUIDE["remote_ahead"]], ERROR),
     (PUBLISH, Failed("refused", "no_remote"), 1, [step_guide.GUIDE["no_remote"]], ERROR),
     (PUBLISH, Failed("refused", "repository"), 1, [step_guide.GUIDE["repository"]], ERROR),
-    (PUBLISH, Failed("refused", "not_verified"), 1, [step_guide.GUIDE["not_verified"]], ERROR),
+    (PUBLISH, Failed("refused", "not_committed"), 1, [step_guide.GUIDE["not_committed"]], ERROR),
     (PUBLISH, Failed("unavailable", "git"), 3, [step_guide.GUIDE["git"]], ERROR),
     (PUBLISH, Failed("unavailable", "remote"), 3, ["tl step publish: unavailable:remote", step_guide.GUIDE["remote"]], ERROR),
     (["step", "show", "tl-1", "--backlog", "tasks"], Shown(DONE, Path("/a/d"), Path("/a/d/entry.log"), EVENTS), 0,
@@ -300,7 +304,8 @@ def test_result_exit_code_text_and_json_keys(
 def test_verify_prints_the_release_and_publish_guides_only_when_not_done(
     release: str, published: str, guided: bool, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str],
 ) -> None:
-    result = VerifiedTask("verified", "tasks", "tl-1", "attempt", release, published)
+    result = CommittedTask(
+        CommittedStatus.COMMITTED, "tasks", "tl-1", "attempt", release, published)
     monkeypatch.setitem(cli_step.OPERATIONS, ("step", "commit"), lambda _arguments, _loaded: result)
     assert main(["step", "commit", "tl-1", "--backlog", "tasks"]) == 0
     out = capsys.readouterr().out

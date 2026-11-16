@@ -39,7 +39,7 @@ ROW = hold_row()
     (replace(VIEW, next="release", result=AttemptResult("collected", "run:timeout")), "failed:run:timeout"),
     (replace(VIEW, step="check", result=AttemptResult("collected", "failed:test:failed")), "failed:test:failed"),
     (replace(VIEW, result=AttemptResult("collected", "rejected:paths")), "failed:rejected:paths"),
-    (replace(VIEW, result=AttemptResult("collected", "verified")), None),
+    (replace(VIEW, result=AttemptResult("collected", "committed")), None),
     (replace(VIEW, result=AttemptResult("collected", "passed")), None),
     (replace(VIEW, result=AttemptResult("pending", "commit")), None),
     (replace(VIEW, next="repeats_exhausted", leftovers=("uncommitted", "a.py")), "repeats_exhausted:uncommitted"),

@@ -185,12 +185,12 @@ NOTE = "docs/design/tl-1/note.md"
 @pytest.mark.parametrize(
     ("files", "line", "code", "opens"),
     [
-            ({P: PLAN_TEXT}, "collected verified verify=verified claim=held release=released branch=published", 0, 17),
+            ({P: PLAN_TEXT}, "collected committed verify=committed claim=held release=released branch=published", 0, 17),
             ({P: " \n"}, "collected rejected:plan_empty verify=rejected:plan_empty claim=held release=released", 1, 17),
         ({P: PLAN_TEXT, NOTE: "n"}, "pending commit verify=uncommitted:uncommitted claim=held", 1, 13),
         ({}, "pending commit verify=uncommitted:unsafe claim=held", 1, 9),
     ],
-    ids=["verified", "rejected", "uncommitted", "unsafe"],
+    ids=["committed", "rejected", "uncommitted", "unsafe"],
 )
 def test_the_registered_entry_executes_verifies_once_and_exits_0_only_when_verified(
     admitted: Path, checkouts: Checkouts, slot_files: SlotFiles, slot: FakeWorktree, files: dict[str, str], line: str, code: int, opens: int
@@ -262,9 +262,9 @@ def test_an_absent_task_or_a_missing_database_runs_nothing(
 @pytest.mark.parametrize(
     ("failures", "wait_to", "line", "waits", "captures"),
     [
-        (1, 10, "unavailable evidence publish=accepted then=collected:verified verify=verified claim=held release=released "
+        (1, 10, "unavailable evidence publish=accepted then=collected:committed verify=committed claim=held release=released "
          "branch=published", 1, 2),
-        (4, 10, "unavailable evidence publish=accepted then=collected:verified verify=verified claim=held release=released "
+        (4, 10, "unavailable evidence publish=accepted then=collected:committed verify=committed claim=held release=released "
          "branch=published", 4, 5),
         (9, 100, "unavailable evidence verify=refused:not_captured claim=held", 1, 1),
     ],
@@ -340,7 +340,7 @@ def test_the_entry_holds_the_slot_while_it_runs_and_frees_it_when_it_ends_or_rai
         return gone(worker)
 
     entry.gone = observed
-    assert entry() == 0 and entry.lines == ["collected verified verify=verified claim=held release=released branch=published"]
+    assert entry() == 0 and entry.lines == ["collected committed verify=committed claim=held release=released branch=published"]
     assert seen == [True] * 3
     acquire(str(slot.path), "after", "verify").release()
 
@@ -372,7 +372,7 @@ def test_a_publication_that_raises_keeps_the_log_line_and_the_verified_exit_0(
 
     entry.pushing = broken
     assert entry() == 0
-    assert entry.lines == ["collected verified verify=verified claim=held release=released branch=unavailable:git"]
+    assert entry.lines == ["collected committed verify=committed claim=held release=released branch=unavailable:git"]
 
 
 def test_an_unreachable_origin_is_only_the_branch_word_and_the_verified_plan_still_exits_0(
@@ -381,7 +381,7 @@ def test_an_unreachable_origin_is_only_the_branch_word_and_the_verified_plan_sti
     entry = Entry(admitted, checkouts, slot_files, me(), written=(slot, {P: PLAN_TEXT}, [P]))
     repo.set_remote_url("origin", "https://example.invalid/moved.git")
     assert entry() == 0
-    assert entry.lines == ["collected verified verify=verified claim=held release=released branch=unavailable:remote"]
+    assert entry.lines == ["collected committed verify=committed claim=held release=released branch=unavailable:remote"]
 
 
 @pytest.mark.parametrize(
@@ -401,7 +401,7 @@ def test_a_claim_lost_or_faulted_while_the_step_runs_is_only_recorded(
 ) -> None:
     entry = Entry(admitted, checkouts, slot_files, me(), written=(slot, {P: PLAN_TEXT}, [P]), beats=beats, rounds=rounds)
     assert entry() == 0  # the step completes, publishes and verifies; nothing is released or re-claimed
-    assert entry.lines == [f"collected verified verify=verified claim={word} release=released branch=published"]
+    assert entry.lines == [f"collected committed verify=committed claim={word} release=released branch=published"]
     assert len(entry.run.calls) == 1
     assert entry.renewed == [("/tracker", "tl-1")] * renewals and entry.stop.set_calls == 1
 
@@ -509,7 +509,7 @@ class Resuming:
 
 
 PENDING = AttemptResult("pending", "session_pending")
-COLLECTED = AttemptResult("collected", "verified")
+COLLECTED = AttemptResult("collected", "committed")
 
 
 def test_a_captured_step_whose_store_write_is_busy_is_finished_not_left_pending() -> None:

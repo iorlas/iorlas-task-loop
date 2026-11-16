@@ -22,6 +22,7 @@ from taskloop.agents.launch import AgentLaunch
 from taskloop.agents.settings import Overrides, StepSettings
 from taskloop.attempt import Attempts
 from taskloop.attempt_reads import PublishedRow, StoreUnavailable
+from taskloop.attempt_result import CommittedStatus
 from taskloop.attempt_status import AttemptView, EntryState, Listed, Next, Shown, StatusPorts, list_attempts, next_action, show_attempt
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import (
@@ -54,6 +55,7 @@ from taskloop.operations import (
     MAX_MINUTES,
     UNCLAIMING,
     Adoption,
+    CommittedTask,
     Ended,
     Failed,
     Move,
@@ -62,7 +64,6 @@ from taskloop.operations import (
     Started,
     StartPorts,
     StartRequest,
-    VerifiedTask,
     commit_task,
     publish_task,
     start,
@@ -299,7 +300,7 @@ NEXT: list[tuple[str, EntryState, AttemptResult, bool, Next]] = [
     ("captured", "gone", AttemptResult("pending", "validation_pending"), False, "stuck:uncollected"),
     ("captured", "gone", AttemptResult("conflict", "session"), False, "stuck:conflict"),
     ("registered", "gone", AttemptResult("conflict", "session"), False, "stuck:conflict"),
-    ("captured", "gone", AttemptResult("collected", "verified"), True, "done"),
+    ("captured", "gone", AttemptResult("collected", "committed"), True, "done"),
     ("captured", "running", AttemptResult("collected", "rejected:paths"), False, "done"),
     ("admitted", "unknown", AttemptResult("pending", "admitted"), False, "unknown"),
     ("captured", "gone", AttemptResult("unavailable", "collect"), False, "unknown"),
@@ -403,8 +404,10 @@ def test_list_keeps_only_stuck_or_unknown_when_asked(reader: AttemptStore, now: 
 
 
 @pytest.mark.parametrize("verdict, expected", [
-    (Committed("blob"), VerifiedTask("verified", "tasks", "tl-1", "attempt", "released", "published")),
-    (Committed("blob", reused=True), VerifiedTask("reused", "tasks", "tl-1", "attempt", "released", "published")),
+    (Committed("blob"), CommittedTask(
+        CommittedStatus.COMMITTED, "tasks", "tl-1", "attempt", "released", "published")),
+    (Committed("blob", reused=True), CommittedTask(
+        CommittedStatus.REUSED, "tasks", "tl-1", "attempt", "released", "published")),
     (Rejected("paths"), Failed("rejected", "paths", "Release: released")),
     (NotApplicable("incomplete"), Failed("not_applicable", "incomplete")),
     (CommitRefused("session"), Failed("refused", "session")),
@@ -415,7 +418,7 @@ def test_list_keeps_only_stuck_or_unknown_when_asked(reader: AttemptStore, now: 
     *[(CommitWaiting(reason), Failed("waiting", str(reason))) for reason in CommitWaitingReason],
     (CommitRefused("inconsistent"), Failed("refused", "inconsistent", "Contradictory retained facts: inconsistent verdict or end commit.")),
 ])
-def test_verify_maps_every_verdict(reader: AttemptStore, verdict: CommitResult, expected: VerifiedTask | Failed) -> None:
+def test_verify_maps_every_verdict(reader: AttemptStore, verdict: CommitResult, expected: CommittedTask | Failed) -> None:
     factory_commit, releases, publishes = FakeFactoryCommit(verdict), Releases(), Publishes()
     assert commit_task(reader, factory_commit, releases, publishes, "tasks", "tl-1") == expected
     assert factory_commit.keys == [KEY]
@@ -447,7 +450,8 @@ def test_verify_returns_a_stored_verdict_with_no_git_read(
     releasing, publishing = releaser(store, checkouts, slot_files), BranchPublish(store, checkouts, slot_files, lambda: 40, ids=NativeIds())
     first = commit_task(store, FactoryCommit(store, checkouts, slot_files, gone, lambda: 20, hold,
         ids=NativeIds()), releasing, publishing, "tasks", "tl-1")
-    assert first == VerifiedTask("verified", "tasks", "tl-1", "attempt", "released", "published") and slot.branch() is None
+    assert first == CommittedTask(
+        CommittedStatus.COMMITTED, "tasks", "tl-1", "attempt", "released", "published") and slot.branch() is None
     slot.repo.drop_checkout(slot.path)
     opened: list[Path] = []
 
@@ -460,7 +464,8 @@ def test_verify_returns_a_stored_verdict_with_no_git_read(
     second = commit_task(store, factory_commit, again, BranchPublish(store, counted, slot_files, lambda: 50, ids=NativeIds()),
                          "tasks", "tl-1")
     # the fresh call said released/published; the same verdict again says the already-done words
-    assert second == VerifiedTask("verified", "tasks", "tl-1", "attempt", "already_released", "already_published")
+    assert second == CommittedTask(
+        CommittedStatus.COMMITTED, "tasks", "tl-1", "attempt", "already_released", "already_published")
     assert opened == []
 
 
@@ -592,7 +597,7 @@ def test_adopt_refuses_another_schema_and_otherwise_creates_the_database(
 
 
 # the entry's longest line: a retried publication, its collected outcome, the verify, claim and release words
-LONGEST = ("unavailable evidence publish=accepted then=collected:verified verify=unavailable:git claim=unrenewed release=held:slot_dirty "
+LONGEST = ("unavailable evidence publish=accepted then=collected:committed verify=unavailable:git claim=unrenewed release=held:slot_dirty "
            "branch=unavailable:remote")
 
 
@@ -601,7 +606,7 @@ LONGEST = ("unavailable evidence publish=accepted then=collected:verified verify
     ("", None),
     ("refused slot_staged verify=refused:not_captured\n", "refused slot_staged verify=refused:not_captured"),
     ("unavailable credentials:auth verify=refused:not_captured\nnoise\n", "unavailable credentials:auth verify=refused:not_captured"),
-    ("collected verified verify=verified\nrefused \x1b]0;owned\x07\n", "collected verified verify=verified"),
+    ("collected committed verify=committed\nrefused \x1b]0;owned\x07\n", "collected committed verify=committed"),
     ("refused slot_staged\x9b31m\n", None),
     ("Traceback (most recent call last):\n", None),
     ("failed TypeError\n", "failed TypeError"),
@@ -706,7 +711,8 @@ def test_an_abandon_whose_claim_is_still_unclaiming_says_release_and_start_refus
 def test_verify_reports_a_failed_publication_without_changing_its_result(reader: AttemptStore) -> None:
     publishes = Publishes(NotPublished("unavailable", "remote"))
     checked = commit_task(reader, FakeFactoryCommit(Committed("blob")), Releases(), publishes, "tasks", "tl-1")
-    assert checked == VerifiedTask("verified", "tasks", "tl-1", "attempt", "released", "unavailable:remote") and exit_code(checked) == 0
+    assert checked == CommittedTask(
+        CommittedStatus.COMMITTED, "tasks", "tl-1", "attempt", "released", "unavailable:remote") and exit_code(checked) == 0
 
 
 @pytest.mark.parametrize("result, expected, code", [
@@ -749,8 +755,8 @@ def test_a_verified_plan_is_release_first_then_publish_then_advance(
         return found.view
 
     held = NotReleased("unavailable", "slot_busy")
-    assert commit_task(store, factory_commit, Releases(held), Publishes(), "tasks", "tl-1") == VerifiedTask(
-        "verified", "tasks", "tl-1", "attempt", "unavailable:slot_busy", "published")  # the stub publishes nothing
+    assert commit_task(store, factory_commit, Releases(held), Publishes(), "tasks", "tl-1") == CommittedTask(
+        CommittedStatus.COMMITTED, "tasks", "tl-1", "attempt", "unavailable:slot_busy", "published")  # the stub publishes nothing
     assert shown().next == "release"  # freeing the slot comes first
     assert isinstance(releaser(store, checkouts, slot_files).release(KEY, False), Released)
     assert (shown().next, shown().published) == ("publish", None)
@@ -763,8 +769,8 @@ def test_a_verified_plan_is_release_first_then_publish_then_advance(
 @pytest.mark.parametrize("stopped, word, code", [
     ("", "started", 0),
     ("no_free_slot", "refused:claimed_elsewhere", 0),
-    ("", "verified release=unavailable:slot_busy branch=published", 0),  # a held release: as verify's own exit
-    ("", "verified release=released branch=unavailable:remote", 3),  # as a publish move's
+    ("", "committed release=unavailable:slot_busy branch=published", 0),  # a held release: as verify's own exit
+    ("", "committed release=released branch=unavailable:remote", 3),  # as a publish move's
     ("", "claim_leaked", 0),
     ("", "unavailable:ancestry", 3),
     ("", "unavailable:store", 3),

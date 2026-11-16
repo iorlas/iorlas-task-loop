@@ -255,14 +255,14 @@ def _setup_failed(reads: StatusPorts, row: AttemptRow, step: Next) -> Next:
     return "stuck:setup_failed" if failed >= SETUP_RUNS else step
 
 
-def _released(row: AttemptRow, step: Next, verified: bool) -> Next:
+def _released(row: AttemptRow, step: Next, committed: bool) -> Next:
     """A released attempt starts again if abandoned, publishes or advances if verified, otherwise is done.
     A collected attempt still holding its slot requires release first."""
     if row.release is not None and row.release.claim == "unclaiming":
         return "release"  # the abandon's claim is still to be returned
     if row.release is not None and row.release.abandoned:
         return "start"
-    if row.release is not None and verified:
+    if row.release is not None and committed:
         return "publish" if row.published is None else "advance" if following(row.step) is not None else "done"
     if row.release is not None:
         return "done"

@@ -10,7 +10,7 @@ from taskloop.dash_verify import CHECKS
 PAGE = Path(__file__).resolve().parents[2] / "src/taskloop/dash/static"
 REQUIRED = (
     "needs_owner", "failed:needs_owner", "answer:schema_invalid", "failed:answer:schema_invalid", "failed:test:failed", "held:slot_dirty",
-    "verified", "reused", "unsettled:branch", "uncommitted:unsafe", "uncommitted:ignored", "uncommitted:uncommitted",
+    "committed", "reused", "unsettled:branch", "uncommitted:unsafe", "uncommitted:ignored", "uncommitted:uncommitted",
     "uncommitted:staged", "uncommitted:dirty", "unsettled:rejected",
     "pending", "registered", "passed", "commit", "unsafe", "uncommitted", "ignored", "branch", "rejected", "repeat", "failed_check",
 )

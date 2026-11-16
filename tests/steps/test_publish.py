@@ -255,11 +255,11 @@ def branch_rewritten(con: sqlite3.Connection, slot: FakeWorktree, _repo: Scripte
 @pytest.mark.parametrize(
     ("change", "reason", "opened"),
     [
-        (abandoned, "abandoned", 0), (unverified, "not_verified", 0), (redirected, "repository", 0),
+        (abandoned, "abandoned", 0), (unverified, "not_committed", 0), (redirected, "repository", 0),
         (other_repository, "repository", 1), (no_origin, "no_remote", 2), (branch_missing, "branch_moved", 2),
         (branch_rewritten, "branch_moved", 2),
     ],
-    ids=["abandoned", "not_verified", "redirected", "other_repository", "no_origin", "branch_missing", "branch_rewritten"],
+    ids=["abandoned", "not_committed", "redirected", "other_repository", "no_origin", "branch_missing", "branch_rewritten"],
 )
 def test_each_precondition_refuses_before_any_push(
     registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, repo: ScriptedPushRepo, remote: FakeRemote, checkouts: Checkouts,
@@ -274,7 +274,7 @@ def test_each_precondition_refuses_before_any_push(
     found = publisher(registered, git, slot_files).publish(KEY)
     assert isinstance(found, NotPublished) and (found.kind, found.reason, publish_word(found)) == ("refused", reason, f"refused:{reason}")
     assert all(recipe not in found.detail for recipe in ("tl step ", "git remote add", "git push"))
-    if reason == "not_verified":
+    if reason == "not_committed":
         assert "Verification must accept it before publication" in found.detail
     assert (pushes, rows(registered), "task/tl-1" in remote.branches(), len(git.opened)) == ([], [], False, opened)
 
@@ -287,7 +287,7 @@ def test_absent_rejected_and_not_yet_verified_are_refused(
         "refused", "absent", "No such attempt. Nothing was pushed or recorded.")
     run(registered, tmp_path, slot, checkouts, slot_files, {P: " \n"}, release=False)  # rejected: plan_empty
     found = publisher(registered, git, slot_files).publish(KEY)
-    assert isinstance(found, NotPublished) and found.reason == "not_verified" and "plan_empty" in found.detail and git.opened == []
+    assert isinstance(found, NotPublished) and found.reason == "not_committed" and "plan_empty" in found.detail and git.opened == []
 
 
 def test_a_remote_ahead_that_contains_x_is_refused_and_never_recorded(

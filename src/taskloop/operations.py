@@ -26,7 +26,7 @@ from taskloop.admit import AdmitRequest, AdmitResult, Admitted, AdmitUnavailable
 from taskloop.admit_chain import NextStepRequest
 from taskloop.agents.settings import Overrides, StepSettings, apply
 from taskloop.attempt_reads import PublishedRow, StoreRefused, StoreUnavailable
-from taskloop.attempt_result import collect, succeeded
+from taskloop.attempt_result import CommittedStatus, collect, judged, succeeded
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import (
     AttemptKey,
@@ -193,11 +193,11 @@ class Started:
 
 
 @dataclass(frozen=True)
-class VerifiedTask:
+class CommittedTask:
     """`release`: the settled release that followed the verdict (`released`, `held:<word>`, `unavailable:<word>`);
     `published`: the publication that followed it (`published`, `refused:<word>`, `unavailable:<word>`)."""
 
-    status: Literal["verified", "reused"]
+    status: CommittedStatus
     backlog: str
     task_id: str
     attempt_id: str
@@ -510,7 +510,7 @@ def launched(result: LaunchResult, backlog: str, task_id: str, key: AttemptKey, 
 
 def commit_task(
     reader: AttemptStore, factory_commit: Commit, releaser: Release, publisher: Publish, backlog: str, task_id: str
-) -> VerifiedTask | Failed:
+) -> CommittedTask | Failed:
     """A stored verdict returns with no Git read; otherwise one verification, stored once when it settles. After a
     verdict (new or stored) the slot is released, settled, and a verified result published: a held release or a failed
     publication does not change the result, its word says so."""
@@ -527,7 +527,7 @@ def commit_task(
     if isinstance(result, Rejected):
         return replace(commit_failure(result), detail=f"Release: {released}")
     published = publish_word(publisher.publish(found[0]))
-    return VerifiedTask("reused" if result.reused else "verified", backlog, task_id, found[0].attempt_id, released, published)
+    return CommittedTask(CommittedStatus(judged(result)), backlog, task_id, found[0].attempt_id, released, published)
 
 
 def release_task(

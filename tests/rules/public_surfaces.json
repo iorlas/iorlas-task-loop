@@ -261,6 +261,27 @@
     }
   },
   "cli": {
+    "committed": {
+      "argv": [
+        "step",
+        "commit",
+        "tl-1",
+        "--backlog",
+        "tasks"
+      ],
+      "exit": 0,
+      "stderr": [],
+      "stdout": [
+        {
+          "attempt_id": "attempt",
+          "backlog": "tasks",
+          "published": "published",
+          "release": "released",
+          "status": "committed",
+          "task": "tl-1"
+        }
+      ]
+    },
     "config": {
       "argv": [
         "config",
@@ -2432,27 +2453,6 @@
         }
       ],
       "stdout": []
-    },
-    "verified": {
-      "argv": [
-        "step",
-        "commit",
-        "tl-1",
-        "--backlog",
-        "tasks"
-      ],
-      "exit": 0,
-      "stderr": [],
-      "stdout": [
-        {
-          "attempt_id": "attempt",
-          "backlog": "tasks",
-          "published": "published",
-          "release": "released",
-          "status": "verified",
-          "task": "tl-1"
-        }
-      ]
     },
     "version": {
       "argv": [

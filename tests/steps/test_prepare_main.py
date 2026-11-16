@@ -142,7 +142,7 @@ def test_admission_refreshes_origin_preserves_checkout_merges_retained_work_and_
     if retained is not None:
         assert repo.is_ancestor(retained, head(repo, slot.path) or "") and slot.read_file("retained.txt")
     later = remote.advance("main", {"later": "Next landing\n"})
-    assert run.round() == [("tl-1", "plan", "verify", "verified release=released branch=published")]
+    assert run.round() == [("tl-1", "plan", "verify", "committed release=released branch=published")]
     assert head(repo, slot.path) == target and slot.branch() is None
     assert person.dirty() == before and head(repo, repo.path) == original
     assert person.read_file("owner.txt") == "Keep this staged file\n" and person.read_file("README") == "Keep this unstaged change\n"

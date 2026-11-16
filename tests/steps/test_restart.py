@@ -103,7 +103,7 @@ def test_reopened_start_and_rounds_resume_one_saved_attempt(
                 result = run_round(ports, REQUEST)
                 assert isinstance(result, Round)
                 expected = [("relaunch", "relaunched"), ("report", "running"), ("report", "unknown"),
-                            ("verify", "verified release=released branch=published")][index]
+                            ("verify", "committed release=released branch=published")][index]
                 assert [(move.action, move.word) for move in result.moves] == [expected]
                 assert all(move.attempt_id == KEY.attempt_id for move in result.moves)
             assert bench.launcher.calls == bench.admission.requests == bench.repeats.calls == []
@@ -157,7 +157,7 @@ def complete_round(
         assert events == ["complete"] and bench.recorded.calls == []
     else:
         assert [(move.action, move.word) for move in result.moves] == [
-            ("verify", "verified release=released branch=published")]
+            ("verify", "committed release=released branch=published")]
         assert events == (["complete", "verify"] if index == 1 else ["verify"])
         stored = attempts.store.collect(KEY)
         assert stored is not None and stored.answer.kind == "valid" and stored.session_state == "complete"

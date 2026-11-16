@@ -27,13 +27,13 @@ def factory(factory: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, che
 def test_rounds_plan_advance_and_implement_a_task_to_its_check_step_without_a_second_claim_or_the_label(factory: Factory) -> None:
     factory.tracker.beads.pop("tl-2")
     assert factory.round() == [("tl-1", "plan", "start", "started")]
-    assert factory.round() == [("tl-1", "plan", "verify", "verified release=released branch=published")]
+    assert factory.round() == [("tl-1", "plan", "verify", "committed release=released branch=published")]
     planned = factory.tip("tl-1")
     assert factory.next_words() == {"tl-1": ("plan", "advance")}
     factory.tracker.beads["tl-1"] = replace(factory.tracker.beads["tl-1"], labels=())  # removed after the claim: no effect
     advanced = factory.round()
     assert advanced == [("tl-1", "implement", "advance", "started")] and factory.last.stopped == "no_free_slot"
-    assert factory.round() == [("tl-1", "implement", "verify", "verified release=released branch=published")]
+    assert factory.round() == [("tl-1", "implement", "verify", "committed release=released branch=published")]
     # the check step is next: this `main` requires no check, so the done implement attempt is skipped (S6d)
     assert factory.round() == [("tl-1", "implement", "skip", "no_required")]
     assert factory.next_words() == {"tl-1": ("implement", "advance")}
@@ -58,9 +58,9 @@ def test_two_done_tasks_and_one_slot_advance_oldest_release_first_and_new_work_w
     assert factory.round() == [("tl-2", "implement", "advance", "started")] and factory.last.stopped == "no_free_slot"
     assert factory.tracker.ready_reads == reads and factory.tracker.claims == ["tl-2", "tl-1"]  # no ready read, no claim
     assert factory.tracker.shows[shows:] == ["tl-2"]  # tl-1 found no free slot before any tracker read
-    assert factory.round() == [("tl-2", "implement", "verify", "verified release=released branch=published"),
+    assert factory.round() == [("tl-2", "implement", "verify", "committed release=released branch=published"),
                                ("tl-1", "implement", "advance", "started")]
-    assert factory.round() == [("tl-1", "implement", "verify", "verified release=released branch=published"),
+    assert factory.round() == [("tl-1", "implement", "verify", "committed release=released branch=published"),
                                ("tl-2", "implement", "skip", "no_required"), ("tl-3", "plan", "start", "started")]
     assert factory.next_words() == {"tl-1": ("implement", "advance"), "tl-2": ("implement", "advance"), "tl-3": ("plan", "verify")}
 
@@ -122,7 +122,7 @@ def test_a_restart_after_the_advance_was_admitted_but_never_launched_continues_i
     assert factory.round() == [("tl-1", "plan", "advance", "unavailable:start")] and factory.last.stopped == "unavailable:start"
     assert factory.next_words() == {"tl-1": ("implement", "start")}
     assert factory.round() == [("tl-1", "implement", "relaunch", "relaunched")]
-    assert factory.round() == [("tl-1", "implement", "verify", "verified release=released branch=published")]
+    assert factory.round() == [("tl-1", "implement", "verify", "committed release=released branch=published")]
     assert factory.next_words() == {"tl-1": ("implement", "advance")}
     assert factory.con.execute("SELECT count(*) FROM attempt WHERE step='implement'").fetchone() == (1,)
 

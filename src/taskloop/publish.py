@@ -18,6 +18,7 @@ slot file port and the clock. It imports neither `operations` nor `repeat` (the 
 import sqlite3
 from collections.abc import Callable
 from dataclasses import dataclass
+from enum import StrEnum
 from pathlib import Path
 from typing import Final, Literal
 
@@ -47,6 +48,10 @@ from taskloop.slot_state import repository
 
 REMOTE: Final = "origin"  # v1: the one remote (owner decision); never stored
 NOTHING: Final = "Nothing was pushed or recorded."
+
+
+class PublishRefusalReason(StrEnum):
+    NOT_COMMITTED = "not_committed"
 
 
 @dataclass(frozen=True)
@@ -152,8 +157,9 @@ class BranchPublish:
         if row.verdict == "committed" and row.commit is not None:
             return None
         if row.verdict == "rejected":
-            return _refused("not_verified", f"The step's result was rejected ({row.reason}).")
-        return _refused("not_verified", "The step's result is not verified yet. Verification must accept it before publication.")
+            return _refused(PublishRefusalReason.NOT_COMMITTED, f"The step's result was rejected ({row.reason}).")
+        return _refused(PublishRefusalReason.NOT_COMMITTED,
+                        "The step's result is not verified yet. Verification must accept it before publication.")
 
     def _repository(self, row: PublishRow, x: str) -> tuple[Repo, Path] | NotPublished:
         """The person's checkout through the slot's verified pointer (file reads first), `origin`, then the local branch

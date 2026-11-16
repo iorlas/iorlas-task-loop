@@ -236,17 +236,17 @@ def _step(
     if accepted:  # captured but maybe not finished (the store was busy again): finish it before verify commits anything
         resumed(lambda: app.collect(key), lambda: app.execute(key, found.me), clock, wait, found.deadline)
     timing = partial(app.files.observe_operation, clock=app.monotonic, wall=app.clock, ids=app.agent.ids)
-    verified = FactoryCommit(app.store, app.checkouts, app.slot_files, gone, app.clock, _held,
+    committed = FactoryCommit(app.store, app.checkouts, app.slot_files, gone, app.clock, _held,
                         ids=app.agent.ids, timing=timing).commit(key)
     # newly stored facts or a stored verdict: read the terminal result back
-    latest = app.collect(key) if accepted or isinstance(verified, (Committed, Rejected)) else result
+    latest = app.collect(key) if accepted or isinstance(committed, (Committed, Rejected)) else result
     line = f"{latest.status} {latest.reason}"
     if latest.explanation:
         line += f": {latest.explanation}"
     if captured is not None:  # `publish=` is the log word of the capture retry's DB acceptance, not the branch push
         then = f" then={latest.status}:{latest.reason}" if accepted else ""
         line = f"{result.status} {result.reason} publish={captured.status}{then}"
-    return f"{line} verify={shown(verified)}", succeeded(latest), latest.status == "collected"
+    return f"{line} verify={shown(committed)}", succeeded(latest), latest.status == "collected"
 
 
 def resumed(
