@@ -7,13 +7,14 @@ from datetime import UTC, datetime
 from pydantic import AwareDatetime, BaseModel, ConfigDict, TypeAdapter, ValidationError
 
 from taskloop.attempt_reads import StoreUnavailable
+from taskloop.frame_markers import CONTEXT, DISCUSSION
 from taskloop.hold_store import HoldRow
 from taskloop.input_context import InputError
 from taskloop.task import TaskInspection, TaskInspectionError, TaskReference
 from taskloop.task_content import TaskContentDigest, digest
 
-BEGIN = "BEGIN TRACKER DISCUSSION DATA"
-END = "END TRACKER DISCUSSION DATA"
+BEGIN = f"BEGIN {DISCUSSION}"
+END = f"END {DISCUSSION}"
 MAX_LINKS = 16
 MAX_BYTES = 32768
 NOTICE = (
@@ -120,7 +121,7 @@ def replace_block(text: str, block: str) -> str:
     starts = [index for index, line in enumerate(lines) if line.rstrip("\r\n") == BEGIN]
     ends = [index for index, line in enumerate(lines) if line.rstrip("\r\n") == END]
     if not starts and not ends:
-        from_context = next((index for index, line in enumerate(lines) if line.rstrip("\r\n") == "BEGIN FACTORY INPUT CONTEXT"), len(lines))
+        from_context = next((index for index, line in enumerate(lines) if line.rstrip("\r\n") == f"BEGIN {CONTEXT}"), len(lines))
         lines[from_context:from_context] = [block + "\n\n"]
     elif len(starts) == len(ends) == 1 and starts[0] < ends[0]:
         # The notice belongs outside the data and is retained on replacement.

@@ -692,6 +692,7 @@ source_modules =
     taskloop.factory_commit
     taskloop.factory_schema
     taskloop.factory_store
+    taskloop.frame_markers
     taskloop.git_views
     taskloop.glossary_extract
     taskloop.harness_choice
@@ -835,6 +836,7 @@ source_modules =
     taskloop.validate
     taskloop.verdict
     taskloop.wip
+    taskloop.workflow
 forbidden_modules = sqlite3
 as_packages = False
 allow_indirect_imports = True
