@@ -9,14 +9,15 @@ from typing import Protocol
 from pydantic import AliasPath, BaseModel, Field
 
 from taskloop import glossary_extract
+from taskloop.frame_markers import CONTEXT
 from taskloop.profile import NoCommit, NotAFile, Profile, ProfileFiles, Unavailable, read_profile
 from taskloop.shelf_digest.artifact import PATH as DIGEST_PATH
 from taskloop.shelf_digest.artifact import read_artifact
 from taskloop.shelf_digest.identities import PACKAGES, Identities, reconcile_manifests
 from taskloop.shelf_digest.source import SourceSnapshot
 
-BEGIN = "BEGIN FACTORY INPUT CONTEXT"
-END = "END FACTORY INPUT CONTEXT"
+BEGIN = f"BEGIN {CONTEXT}"
+END = f"END {CONTEXT}"
 SHELF_GUIDANCE = (
     "Shelf is read-only for agents. Use this validated digest first. If the task requires a shelf change, "
     "stop with needs_owner and describe the proposed shelf change."

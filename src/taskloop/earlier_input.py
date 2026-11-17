@@ -13,12 +13,13 @@ from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import Checkouts, SlotFiles
 from taskloop.earlier_attempt import EarlierAttempt
 from taskloop.evidence_files import EvidenceError, EvidenceFiles
+from taskloop.frame_markers import EARLIER
 from taskloop.hold_store import HoldStore
 from taskloop.input_context import InputError
 from taskloop.slot_state import pointer
 
-BEGIN: Final = "BEGIN EARLIER ATTEMPT DATA"
-END: Final = "END EARLIER ATTEMPT DATA"
+BEGIN: Final = f"BEGIN {EARLIER}"
+END: Final = f"END {EARLIER}"
 START: Final = "Start from the work in that commit; do not re-read what the explanation already tells you."
 
 
