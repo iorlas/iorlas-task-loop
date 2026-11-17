@@ -685,6 +685,7 @@ source_modules =
     taskloop.duration_file
     taskloop.earlier_attempt
     taskloop.earlier_input
+    taskloop.engine_digest
     taskloop.environment
     taskloop.evidence_files
     taskloop.exit_codes

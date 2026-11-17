@@ -44,6 +44,7 @@ from taskloop.drain.drain import reconcile_claims
 from taskloop.drain.models import Boundary, Conclusion, Reason, Result, State
 from taskloop.drain.restart import restart
 from taskloop.drain.store import DrainStore
+from taskloop.engine_digest import installed_digest
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.factory_schema import SCHEMA
 from taskloop.factory_store import open_ro
@@ -152,7 +153,7 @@ def _starting(reader: AttemptStore, database: Path, artifacts: Path, store: Stor
     repair = CheckRepeat(CheckRepeatStore(lambda: store.shared_rw(database), store.begin_immediate), EvidenceFiles(artifacts),
                          inspect_tracker_task, views.checkouts, RealSlotFiles(), probe,
                          partial(GitProfileFiles, repos=views.checkouts), launcher, entry_seen, setup_seen, time.time, ids=NativeIds(),
-                         discussion=open_discussion(database, store).for_task)
+                         engine=installed_digest(), discussion=open_discussion(database, store).for_task)
     answers = AnswerRepairRouting(reader, open_answer_repair(database, artifacts, store), launcher)
     return StartPorts(reader, admission, launcher, time.time, repeat, open_advance(database, artifacts, views, store),
                       checks, repair, answers)

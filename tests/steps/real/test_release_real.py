@@ -15,6 +15,7 @@ from any_agent.procs import Worker
 from any_agent.testing import FakeRun
 from beads_client import Bead
 from beads_client.testing import FakeTaskReadClient
+from doubles import ENGINE
 from git_porcelain.history import Identity
 from git_porcelain.testing import apply_hermetic_env, git
 from plan_fixtures import PLAN_TEXT
@@ -95,7 +96,7 @@ class Repository:
                                     lambda _setup: "gone", lambda _scratch: True, ids=NativeIds())
         self.admission = AttemptAdmission(
             lambda: factory, begin_immediate, EvidenceFiles(self.art), tasks, VIEWS.checkouts, yes, yes, lambda: 10, probe, RealSlotFiles()
-        , ids=NativeIds())
+        , ids=NativeIds(), engine=ENGINE)
         self.root = root
 
     def rev(self, name: str) -> str:

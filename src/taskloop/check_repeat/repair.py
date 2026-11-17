@@ -47,6 +47,7 @@ class CheckRepeat:
     seen: SetupSeen
     clock: Clock
     ids: Ids
+    engine: str
     discussion: RefreshDiscussion | None = None
 
     def repair(self, request: StartRequest, previous: AttemptKey, source: AttemptKey) -> Started | Failed:
@@ -67,7 +68,8 @@ class CheckRepeat:
             original = refresh(original, context)
             key = AttemptKey(self.ids.hex(), self.ids.token(16), self.store.generation(state.checks.repo_id, free))
             ref = self.files.put_input(key, failed_check_feedback(evidence, original, self.ids.token(16)))
-            admitted = self.store.admit(previous, evidence, key, ref, free, deadline_after(request.minutes, self.clock))
+            admitted = self.store.admit(previous, evidence, key, ref, free, deadline_after(request.minutes, self.clock),
+                                       self.engine, self.clock())
             if isinstance(admitted, AdmitRefused):
                 return self._winner(request, previous) if admitted.reason == "task_attempted" else Failed("refused", admitted.reason)
         except (StoreUnavailable, EvidenceError, InputError, ValidationError, GitUnavailable) as error:

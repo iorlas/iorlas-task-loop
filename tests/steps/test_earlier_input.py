@@ -3,7 +3,7 @@
 import json
 
 import pytest
-from doubles import FakeSlotFiles
+from doubles import ENGINE, FakeSlotFiles
 from git_porcelain.testing import FakeWorktree
 from test_repeat_dispatch import ENTRY, KEY, PLAN, STRAY, UNCHANGED, Agent, P, Step
 from test_repeat_dispatch import step as repeat_step
@@ -128,7 +128,7 @@ def test_a_racing_predecessor_revision_refuses_admission(step: Step, slot: FakeW
             return ref
 
     chain = ChainAdmission(lambda: step.con, step.store.begin, Racing(step.tmp), lambda: 10,
-                           step.checkouts, step.files, ids=NativeIds())
+                           step.checkouts, step.files, ids=NativeIds(), engine=ENGINE)
     refused = chain.admit_repeat(RepeatRequest(KEY, "task text", 100, "uncommitted"))
     assert isinstance(refused, AdmitRefused) and refused.reason == "task_attempted"
     assert step.con.execute("SELECT count(*) FROM attempt").fetchone() == (1,)

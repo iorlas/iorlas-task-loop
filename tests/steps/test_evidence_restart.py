@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 from check_repeat_bench import Repairing
+from doubles import ENGINE
 from round_bench import task
 from sqlite_store import Store, begin_immediate
 from test_check_repeat import failed, rig
@@ -79,7 +80,7 @@ def rows(con: sqlite3.Connection) -> Rows:
 def initial(con: sqlite3.Connection, files: EvidenceFiles, begin: Begin, bench: Repairing) -> AttemptAdmission:
     return AttemptAdmission(
         lambda: con, begin, files, bench.tracker.inspect, bench.checkouts, bench.tracker.claim, bench.tracker.unclaim,
-        lambda: bench.now, lambda _path: True, bench.files, ids=NativeIds(),
+        lambda: bench.now, lambda _path: True, bench.files, ids=NativeIds(), engine=ENGINE
     )
 
 
@@ -169,7 +170,7 @@ def test_repeat_reopens_with_the_previous_reservation_and_a_fresh_key(rig: Repai
     repeated = RepeatRequest(previous[0], "Retry feedback", 1000, "unsafe", content_digest=CONTENT_DIGEST)
 
     def build(con: sqlite3.Connection, files: EvidenceFiles, begin: Begin) -> Call:
-        admission = ChainAdmission(lambda: con, begin, files, lambda: rig.now, rig.checkouts, rig.files, ids=NativeIds())
+        admission = ChainAdmission(lambda: con, begin, files, lambda: rig.now, rig.checkouts, rig.files, ids=NativeIds(), engine=ENGINE)
         return lambda: admission.admit_repeat(repeated)
 
     exercise(rig, build, inside=inside)
@@ -184,7 +185,7 @@ def test_advance_reopens_without_losing_the_committed_plan(rig: Repairing, insid
 
     def build(con: sqlite3.Connection, files: EvidenceFiles, begin: Begin) -> Call:
         admission = NextAdmission(lambda: con, begin, files, rig.tracker.inspect, rig.checkouts, lambda: rig.now,
-                                  lambda _path: True, rig.files, ids=NativeIds())
+                                  lambda _path: True, rig.files, ids=NativeIds(), engine=ENGINE)
         return lambda: admission.admit_next(advanced)
 
     exercise(rig, build, inside=inside)
@@ -198,7 +199,7 @@ def test_check_repair_reopens_with_a_fresh_key_and_keeps_failed_check_evidence(r
         admission = CheckRepeat(
             CheckRepeatStore(lambda: con, begin), files, rig.tracker.inspect, rig.checkouts, rig.files, lambda _path: True,
             lambda path: GitProfileFiles(path, rig.checkouts), Launcher(con), rig.observe,
-            rig.command, lambda: rig.now, ids=NativeIds(),
+            rig.command, lambda: rig.now, ids=NativeIds(), engine=ENGINE
         )
         return lambda: admission.repair(rig.request(), previous, source)
 

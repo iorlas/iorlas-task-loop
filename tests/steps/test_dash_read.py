@@ -679,9 +679,10 @@ def test_first_checks_for_another_implement_attempt_are_not_a_restart(checking: 
     checking.execute(
         """INSERT INTO attempt (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,
         input_path,input_digest,schema_version,model,effort,access_policy,deadline,number,seq,slot_head,previous_attempt_id,repeat_reason,
-        phase,base_commit,end_commit,after_commit)
+        phase,base_commit,end_commit,after_commit,engine_digest,admitted_at)
         SELECT 'another','another-token',1,step,adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,input_digest,
-        schema_version,model,effort,access_policy,deadline,2,3,slot_head,'implement','unsafe',phase,base_commit,end_commit,NULL
+        schema_version,model,effort,access_policy,deadline,2,3,slot_head,'implement','unsafe',phase,base_commit,end_commit,NULL,
+        engine_digest,admitted_at
         FROM attempt WHERE attempt_id='implement'""")
     checking.execute("INSERT INTO slot_release VALUES ('another','another-token',1,?,7,'kept')", (D,))
     check_store.insert(checking, check_store.ChecksAdmitted(
@@ -701,9 +702,11 @@ def restarted_at_plan(con: sqlite3.Connection) -> None:
     for attempt, step, seq in (("implement", "implement", 2), ("again", "plan", 3)):
         con.execute(
             """INSERT INTO attempt (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,
-            input_path,input_digest,schema_version,model,effort,access_policy,deadline,number,seq,slot_head,after_commit)
+            input_path,input_digest,schema_version,model,effort,access_policy,deadline,number,seq,slot_head,after_commit,
+            engine_digest,admitted_at)
             SELECT ?,?,1,?,adapter,backlog,
-            task_id,tracker_root,repo_id,slot,input_path,input_digest,schema_version,model,effort,access_policy,deadline,1,?,slot_head,?
+            task_id,tracker_root,repo_id,slot,input_path,input_digest,schema_version,model,effort,access_policy,deadline,1,?,
+            slot_head,?,engine_digest,admitted_at
             FROM attempt WHERE attempt_id='attempt'""", (attempt, f"{attempt}-token", step, seq, "a" * 40 if step == "implement" else None))
 
 
@@ -741,9 +744,10 @@ def unsafe_repeat(con: sqlite3.Connection, listing: str = '["src/link.py", "src/
     con.execute(
         """INSERT INTO attempt (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,
         input_path,input_digest,schema_version,model,effort,access_policy,deadline,number,seq,slot_head,previous_attempt_id,repeat_reason,
-        repeat_listing) SELECT 'again','again-token',2,step,adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,input_digest,
+        repeat_listing,engine_digest,admitted_at) SELECT 'again','again-token',2,step,adapter,backlog,task_id,tracker_root,
+        repo_id,slot,input_path,input_digest,
         schema_version,model,effort,access_policy,deadline,2,3,slot_head,'implement','unsafe',
-        ? FROM attempt WHERE attempt_id='implement'""",
+        ?,engine_digest,admitted_at FROM attempt WHERE attempt_id='implement'""",
         (listing,))
 
 
@@ -803,9 +807,11 @@ def test_a_repeats_prompt_marks_the_lines_it_added_to_the_prompt_it_repeats(chec
 def test_a_plan_repeat_is_a_repeat_on_the_board_and_in_history(registered: sqlite3.Connection, tmp_path: Path) -> None:
     registered.execute(
         """INSERT INTO attempt (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,
-        input_path,input_digest,schema_version,model,effort,access_policy,deadline,number,seq,slot_head,previous_attempt_id,repeat_reason)
+        input_path,input_digest,schema_version,model,effort,access_policy,deadline,number,seq,slot_head,previous_attempt_id,
+        repeat_reason,engine_digest,admitted_at)
         SELECT 'again','again-token',2,step,adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,input_digest,
-        schema_version,model,effort,access_policy,deadline,2,2,slot_head,'attempt','unsafe' FROM attempt WHERE attempt_id='attempt'""")
+        schema_version,model,effort,access_policy,deadline,2,2,slot_head,'attempt','unsafe',engine_digest,
+        admitted_at FROM attempt WHERE attempt_id='attempt'""")
     files = EvidenceFiles(tmp_path)
     board_task, = board_of(registered, files, Tracker()).tasks
     assert board_task.repeat is not None

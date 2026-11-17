@@ -16,7 +16,7 @@ from any_agent.procs import Worker
 from any_agent.testing import FakeRun
 from beads_client import BdError
 from beads_client.testing import Script
-from doubles import FakeSlotFiles
+from doubles import ENGINE, FakeSlotFiles
 from git_porcelain import Repo, WorktreeInfo
 from git_porcelain.testing import FakeRemote, FakeWorktree
 from plan_fixtures import PLAN_TEXT
@@ -226,7 +226,7 @@ def test_settled_before_the_step_ended_is_not_terminal_and_changes_nothing(
     assert (stored(registered), ports.opens, ports.holds, ports.observed) == (before, 0, 0, [])
 
 
-WORKING = "UPDATE attempt SET phase=?,base_commit='" + "b" * 40 + "',worker_pid=?,worker_pgid=?,worker_start=?,worker_boot=?"
+WORKING = "UPDATE attempt SET phase=?,base_commit='" + "b" * 40 + "',worker_pid=?,worker_pgid=?,worker_start=?,worker_boot=?,ended_at=NULL"
 
 
 @pytest.mark.parametrize(
@@ -443,7 +443,7 @@ def test_after_a_release_every_other_writer_meets_the_fence_and_the_slot_is_free
         store.load(KEY)
     assert store.register_entry(KEY, (8, "later", "boot"), 10) == "refused"
     admission = ChainAdmission(lambda: registered, begin_immediate, EvidenceFiles(tmp_path), lambda: 10,
-                               checkouts, slot_files, ids=NativeIds())
+                               checkouts, slot_files, ids=NativeIds(), engine=ENGINE)
     assert admission.admit_repeat(RepeatRequest(KEY, "feedback", 1000, "unsafe")) == AdmitRefused("not_repeatable")
     opened: list[Path] = []
 

@@ -130,7 +130,8 @@ def test_unavailable_capture_retries_and_reopen_finishes_without_agent(tmp_path:
     down = False
     # Persist the returned execution but leave decoding to trusted completion after restart.
     evidence = app.files.capture(KEY, pending.result.raw, identity)
-    assert attempts.capture(record.admission, worker, execution_facts(pending.result.raw), evidence, "pending", identity) == "accepted"
+    assert attempts.capture(record.admission, worker, execution_facts(pending.result.raw), evidence, "pending", identity,
+                              now=10.0) == "accepted"
     con.close()
     con = sqlite3.connect(path, isolation_level=None)
     execution = FakeRun(RunOutcome(worker=UNUSED_WORKER))

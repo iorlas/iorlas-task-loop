@@ -66,9 +66,11 @@ def test_setup_resets_the_slot_and_runs_the_committed_setup_in_it(
     factory.execute("INSERT INTO reservation VALUES ('s1',?,1,'attempt')", (slot.parent.name,))
     factory.execute(
         """INSERT INTO attempt (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,
-        input_digest,schema_version,model,effort,access_policy,deadline,entry_pid,entry_start,entry_boot,number,seq,slot_head,after_commit)
+        input_digest,schema_version,model,effort,access_policy,deadline,entry_pid,entry_start,entry_boot,number,seq,slot_head,
+        after_commit,engine_digest,admitted_at)
         VALUES ('attempt','dispatch',1,'implement','beads','tasks','tl-1','/tracker',?,'s1','input.txt','x',1,'m','high',
-        '{"harness":"codex","sandbox":"workspace-write"}',?,7,'s','b',1,2,?,?)""", (slot.parent.name, time.time() + 600, d, d))
+        '{"harness":"codex","sandbox":"workspace-write"}',?,7,'s','b',1,2,?,?,
+        'abababababababababababababababababababababababababababababababab',1.0)""", (slot.parent.name, time.time() + 600, d, d))
     record = AttemptStore(lambda: factory).load(KEY)
     assert record is not None
     ports = EnvironmentPorts(SetupStore(lambda: factory), VIEWS.checkouts, VIEWS.slot_profiles, RealEnvFiles(), setup_process, setup_seen,

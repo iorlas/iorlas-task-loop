@@ -45,9 +45,9 @@ def test_usage_survives_endings_and_capture_replay(
         740000, 600000, 1500, 1790000, 1000000, 3000, 16, facts.usage_incomplete)
     loaded = owner.store.load(KEY)
     assert loaded is not None
-    assert owner.store.capture(loaded.admission, WORKER, facts, stored.evidence, "complete") == "already_same"
+    assert owner.store.capture(loaded.admission, WORKER, facts, stored.evidence, "complete", now=10.0) == "already_same"
     changed = replace(facts, usage_incomplete=not facts.usage_incomplete)
-    assert owner.store.capture(loaded.admission, WORKER, changed, stored.evidence, "complete") == "conflict"
+    assert owner.store.capture(loaded.admission, WORKER, changed, stored.evidence, "complete", now=10.0) == "conflict"
     unused = FakeRun(raw)
     reader = app(con, surroundings, unused)
     assert reader.collect(KEY) == result and reader.execute(KEY, ENTRY) == result

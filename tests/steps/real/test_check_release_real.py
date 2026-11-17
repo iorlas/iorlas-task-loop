@@ -58,9 +58,10 @@ def test_a_passed_block_s_leftovers_are_reset_away_and_the_slot_parked_at_d(
         factory.execute(
             """INSERT INTO attempt (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,
             input_path,input_digest,schema_version,model,effort,access_policy,deadline,phase,base_commit,end_commit,number,seq,slot_head,
-            after_commit)
+            after_commit,engine_digest,admitted_at)
             VALUES ('implement','implement-token',1,'implement','beads','tasks','tl-1','/tracker',?,'s0','input.txt','digest',1,'m',
-            'e','{"harness":"codex","sandbox":"workspace-write"}',100,'captured',?,?,1,2,?,?)""", (repo_id, d, x, d, d))
+            'e','{"harness":"codex","sandbox":"workspace-write"}',100,'captured',?,?,1,2,?,?,
+        'abababababababababababababababababababababababababababababababab',1.0)""", (repo_id, d, x, d, d))
         factory.execute("INSERT INTO slot_release VALUES ('implement','implement-token',1,?,1,'kept')", (d,))
         factory.execute("INSERT INTO reservation VALUES ('s1',?,1,'checks')", (repo_id,))
         insert(factory, ChecksAdmitted(CHECKS, "implement", 1, "s1", d, x, REQUIRED, 100.0))

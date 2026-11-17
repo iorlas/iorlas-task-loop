@@ -116,9 +116,11 @@ def test_latest_plan_never_falls_back_to_an_older_success(con: sqlite3.Connectio
     assert loads.latest_plan(*scope) == plan
     # Copy only admission fields: a newer implementation must not hide the latest plan.
     con.execute("INSERT INTO attempt (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,"
-                "input_path,input_digest,schema_version,model,effort,access_policy,deadline,number,seq,slot_head,after_commit) "
+                "input_path,input_digest,schema_version,model,effort,access_policy,deadline,number,seq,slot_head,after_commit,"
+                "engine_digest,admitted_at) "
                 "SELECT 'later','later-token',2,'implement',adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,input_digest,"
-                "schema_version,model,effort,access_policy,deadline,number,2,slot_head,end_commit FROM attempt WHERE attempt_id='attempt'")
+                "schema_version,model,effort,access_policy,deadline,number,2,slot_head,end_commit,"
+                "engine_digest,admitted_at FROM attempt WHERE attempt_id='attempt'")
     assert loads.latest_plan(*scope) == plan
     earlier = loads.earlier_for(KEY)
     assert earlier is not None and earlier.key == AttemptKey("later", "later-token", 2)

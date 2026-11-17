@@ -13,7 +13,7 @@ import pytest
 from any_agent import Harness, LaunchSpec, RunHooks, RunOutcome, Summary
 from any_agent.procs import Worker
 from any_agent.testing import FakeRun
-from doubles import RegisteringLauncher
+from doubles import ENGINE, RegisteringLauncher
 from git_porcelain.history import Identity
 from git_porcelain.testing import apply_hermetic_env, git
 from plan_fixtures import PLAN_TEXT, PLAN_V2
@@ -78,9 +78,11 @@ def test_a_repeat_commits_x2_on_x1_from_the_dirty_worktree_and_the_chain_commits
         factory.execute("INSERT INTO reservation VALUES ('s1',?,1,'attempt')", (VIEWS.checkouts(main).identity().key,))
         factory.execute(
             """INSERT INTO attempt (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,
-            input_digest,schema_version,model,effort,access_policy,deadline,entry_pid,entry_start,entry_boot,number,seq,slot_head)
+            input_digest,schema_version,model,effort,access_policy,deadline,entry_pid,entry_start,entry_boot,number,seq,slot_head,
+            engine_digest,admitted_at)
             VALUES ('attempt','dispatch',1,'plan','beads','tasks','tl-1','/tracker',?,'s1','input.txt',?,1,'chosen','high',
-            '{"harness":"codex","sandbox":"workspace-write"}',100,7,'entry-start','boot',1,1,?)""",
+            '{"harness":"codex","sandbox":"workspace-write"}',100,7,'entry-start','boot',1,1,?,
+        'abababababababababababababababababababababababababababababababab',1.0)""",
             (VIEWS.checkouts(main).identity().key, hashlib.sha256(TASK.encode()).hexdigest(), base),
         )
     art.mkdir()
@@ -97,7 +99,8 @@ def test_a_repeat_commits_x2_on_x1_from_the_dirty_worktree_and_the_chain_commits
     assert attempts(agent(slot, {P: PLAN_TEXT, "scratch.txt": "s"}, (), [P])).execute(KEY, ENTRY).reason == "commit"
     assert factory_commit.commit(KEY) == Uncommitted("uncommitted", ("?? scratch.txt",))
     x1 = git(slot, "rev-parse", "HEAD").strip()
-    admission = ChainAdmission(lambda: factory, begin_immediate, EvidenceFiles(art), lambda: 10, VIEWS.checkouts, files, ids=NativeIds())
+    admission = ChainAdmission(lambda: factory, begin_immediate, EvidenceFiles(art), lambda: 10, VIEWS.checkouts, files,
+                              ids=NativeIds(), engine=ENGINE)
     repeat = StepRepeat(store, factory_commit, EvidenceFiles(art), admission, RegisteringLauncher(store, SECOND),
                         lambda _w: True, lambda _e: "gone", lambda: 10,
                         repeating, ids=NativeIds(), discussion=refresh_discussion)

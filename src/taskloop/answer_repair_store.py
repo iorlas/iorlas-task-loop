@@ -45,7 +45,7 @@ class AnswerRepairStore(AttemptStore):
 
     def admit(
         self, expected: AttemptRecord, execution: StoredExecution, context: RepairContext,
-        key: AttemptKey, ref: FileRef, now: float,
+        key: AttemptKey, ref: FileRef, now: float, engine: str,
     ) -> RepairResult:
         with self._connection(write=True) as con:
             existing = self._existing(con, expected.admission.key)
@@ -61,7 +61,7 @@ class AnswerRepairStore(AttemptStore):
                     or context.failure != execution.answer.failure
                     or key.reservation_generation != current.admission.key.reservation_generation + 1):
                 return RepairResult(outcome=RepairOutcome.REFUSED, explanation="The repair context does not match the failed attempt.")
-            return self._insert(con, current, context, key, ref)
+            return self._insert(con, current, context, key, ref, engine, now)
 
     def _problem(self, con: sqlite3.Connection, record: AttemptRecord, execution: StoredExecution, now: float) -> str | None:
         admission, facts = record.admission, execution.facts
@@ -90,6 +90,7 @@ class AnswerRepairStore(AttemptStore):
 
     def _insert(
         self, con: sqlite3.Connection, record: AttemptRecord, context: RepairContext, key: AttemptKey, ref: FileRef,
+        engine: str, now: float,
     ) -> RepairResult:
         previous = record.admission.key
         row: tuple[object, ...] | None = con.execute(
@@ -100,7 +101,8 @@ class AnswerRepairStore(AttemptStore):
         values: dict[str, object] = dict(zip(ATTEMPT_ADMITTED.split(","), row, strict=True))
         values.update(attempt_id=key.attempt_id, dispatch_token=key.dispatch_token, generation=key.reservation_generation,
                       previous_attempt_id=previous.attempt_id, seq=as_int(values["seq"]) + 1,
-                      input_path=ref.path, input_digest=ref.digest, repair_context=context.model_dump_json())
+                      input_path=ref.path, input_digest=ref.digest, repair_context=context.model_dump_json(),
+                      engine_digest=engine, admitted_at=now)
         insert_attempt(con, values, TaskContentStore(lambda: con).read(previous.attempt_id))
         self.repair_session(con, key, context.session)
         if not transfer(con, previous, key, record.admission.repo_id, record.admission.slot):

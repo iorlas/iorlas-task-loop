@@ -272,8 +272,10 @@ def test_nonfinite_times_never_enter_storage(landing: sqlite3.Connection, now: f
     ("""INSERT INTO checks_attempt (attempt_id,dispatch_token,generation,after_attempt_id,number,slot,slot_head,target_commit,
      required,deadline) VALUES ('rerun','rerun-token',1,'implement',2,'s2',?,?,'[]',100)""", "no_change", "not_checked"),
     ("""INSERT INTO attempt (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,
-     input_digest,schema_version,model,effort,access_policy,deadline,number,seq,slot_head) VALUES ('plan','plan-token',1,'plan','beads',
-     'tasks','tl-1','/tracker','r','s1','i','d',1,'m','e','{"harness":"codex","sandbox":"workspace-write"}',100,1,3,?)""",
+     input_digest,schema_version,model,effort,access_policy,deadline,number,seq,slot_head,engine_digest,
+     admitted_at) VALUES ('plan','plan-token',1,'plan','beads',
+     'tasks','tl-1','/tracker','r','s1','i','d',1,'m','e','{"harness":"codex","sandbox":"workspace-write"}',100,1,3,?,
+        'abababababababababababababababababababababababababababababababab',1.0)""",
      "same_tree", "not_done"),
     ("UPDATE slot_release SET claim='unclaiming'", "no_change", "not_done"),
 ], ids=["fenced", "unreleased", "abandoned", "failed", "failed_no_change", "not_latest", "later_attempt", "claim"])

@@ -6,6 +6,7 @@ from dataclasses import replace
 from pathlib import Path
 
 import pytest
+from doubles import ENGINE
 from sqlite_store import begin_immediate
 
 from taskloop import admit_store
@@ -29,7 +30,7 @@ def values(key: AttemptKey = KEY) -> dict[str, object]:
         "model": "chosen", "effort": "high", "access_policy": '{"harness":"codex","sandbox":"workspace-write"}',
         "deadline": 100, "number": 1, "seq": 1, "slot_head": FREE.head, "previous_attempt_id": None,
         "repeat_reason": None, "repeat_listing": None, "after_commit": None, "label": "approved",
-        "harness": "codex", "provider": "openai", "compaction_token_limit": 12000,
+        "harness": "codex", "provider": "openai", "compaction_token_limit": 12000, "engine_digest": ENGINE, "admitted_at": 1.0,
     }
 
 

@@ -19,7 +19,7 @@ def capture(con: sqlite3.Connection, snapshot: Snapshot) -> None:
     files = FileRef("evidence", "digest")
     execution = ExecutionFacts(0, False, None, None, True, True, True, None, None, None, None, None, "saved")
     assert AttemptStore(lambda: con).capture(
-        snapshot.attempt.admission, None, execution, Evidence(files, files, files, files), "complete", callback(snapshot.intent),
+        snapshot.attempt.admission, None, execution, Evidence(files, files, files, files), "complete", callback(snapshot.intent), now=10.0,
     ) == "accepted"
 
 

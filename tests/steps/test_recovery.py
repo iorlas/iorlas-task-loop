@@ -161,7 +161,8 @@ def test_captured_execution_between_observation_and_commit_is_collected(con: sql
     admission = before.snapshot.attempt.admission
     files = FileRef("evidence", "digest")
     facts_input = ExecutionFacts(0, False, None, None, True, True, True, None, None, None, None, None, "saved")
-    assert AttemptStore(lambda: con).capture(admission, None, facts_input, Evidence(files, files, files, files), "complete") == "accepted"
+    assert AttemptStore(lambda: con).capture(admission, None, facts_input, Evidence(files, files, files, files), "complete",
+                                                  now=10.0) == "accepted"
     result = app.store.authorize(before, OWNER, "intent", lambda: 10)
     assert result.outcome is Outcome.CAPTURED and result.explanation
     processes = Processes()

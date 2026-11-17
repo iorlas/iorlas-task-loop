@@ -683,9 +683,9 @@ def test_list_shows_one_row_per_task_its_latest_attempt_and_show_names_the_aband
     registered.execute("UPDATE reservation SET attempt_id='fresh',generation=2")
     registered.execute(
         """INSERT INTO attempt (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,
-        input_digest,schema_version,model,effort,access_policy,deadline,number,seq,slot_head)
+        input_digest,schema_version,model,effort,access_policy,deadline,number,seq,slot_head,engine_digest,admitted_at)
         SELECT 'fresh','token',2,step,adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,input_digest,schema_version,model,effort,
-        access_policy,deadline,1,2,slot_head FROM attempt WHERE attempt_id='attempt'"""
+        access_policy,deadline,1,2,slot_head,engine_digest,admitted_at FROM attempt WHERE attempt_id='attempt'"""
     )
     reads = StatusPorts(AttemptStore(lambda: registered), observe("gone", []), lambda: 10, nothing_left, lambda: "boot")
     listed = list_attempts(reads)

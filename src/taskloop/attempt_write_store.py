@@ -197,6 +197,7 @@ class AttemptWrites(AttemptLoads):
         evidence: Evidence,
         session_state: Literal["complete", "pending", "conflict", "fault"],
         callback: Callback | None = None,
+        *, now: float,
     ) -> Literal["accepted", "already_same", "conflict"]:
         with self._connection(write=True) as con:
             current = self._owned(con, admission, callback)
@@ -225,7 +226,7 @@ class AttemptWrites(AttemptLoads):
                 f"INSERT INTO execution (attempt_id,dispatch_token,generation,{FACTS},{EVIDENCE},session_state,recovery_callback) "
                 f"VALUES ({marks})", values
             )
-            con.execute("UPDATE attempt SET phase='captured',rev=rev+1 WHERE attempt_id=?", (admission.key.attempt_id,))
+            con.execute("UPDATE attempt SET phase='captured',ended_at=?,rev=rev+1 WHERE attempt_id=?", (now, admission.key.attempt_id))
             return "accepted"
 
     def answer(

@@ -132,10 +132,10 @@ class AttemptAdmission:
         probe: Probe,
         slot_files: SlotFiles,
         me: Callable[[], Identity | None] = identity,
-        *, ids: Ids, discussion: CollectDiscussion = empty,
+        *, ids: Ids, engine: str, discussion: CollectDiscussion = empty,
     ) -> None:
         """Observe free slots through their lock probe and pinned pointer check."""
-        self.ids = ids
+        self.ids, self.engine = ids, engine
         self.discussion = discussion
         self.me = me
         self.connect, self.begin, self.files, self.tasks, self.checkouts = connect, begin, files, tasks, checkouts
@@ -322,7 +322,7 @@ class AttemptAdmission:
                     "after_commit": free[0].source if selection.decision is ReuseDecision.REUSE else None,
                     "label": request.label,
                     "harness": setting.harness,
-                    "provider": setting.provider,
+                    "provider": setting.provider, "engine_digest": self.engine, "admitted_at": self.clock(),
                 },
                 prepared.content_digest,
             )

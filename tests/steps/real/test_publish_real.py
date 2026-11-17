@@ -15,6 +15,7 @@ from any_agent.procs import Worker
 from any_agent.testing import FakeRun
 from beads_client import Bead
 from beads_client.testing import FakeTaskReadClient
+from doubles import ENGINE
 from git_porcelain import Repo
 from git_porcelain.history import Identity
 from git_porcelain.testing import apply_hermetic_env, git
@@ -96,7 +97,7 @@ class Published:
         admission = AttemptAdmission(
             lambda: factory, begin_immediate, EvidenceFiles(root / "art"), tasks, VIEWS.checkouts, yes, yes, lambda: 10, probe,
             RealSlotFiles()
-        , ids=NativeIds())
+        , ids=NativeIds(), engine=ENGINE)
         admitted = admission.admit(
             AdmitRequest(
                 "tl-1",

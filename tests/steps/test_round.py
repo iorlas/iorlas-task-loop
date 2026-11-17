@@ -199,10 +199,11 @@ def seed(con: sqlite3.Connection, task_id: str, attempt_id: str, *, phase: str =
     con.execute(
         """INSERT INTO attempt (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,
         input_digest,schema_version,model,effort,access_policy,deadline,entry_pid,entry_start,entry_boot,phase,base_commit,
-        number,seq,slot_head)
+        number,seq,slot_head,engine_digest,admitted_at)
         VALUES (?,?,1,'plan','beads','tasks',?,'/tracker','repo','s1','input.txt','digest',1,'m','high','{"harness":"codex",
         "sandbox":"workspace-write"}',
-        100,?,?,?,?,?,1,1,?)""",
+        100,?,?,?,?,?,1,1,?,
+        'abababababababababababababababababababababababababababababababab',1.0)""",
         (attempt_id, f"token-{attempt_id}", task_id, *(entry or (None, None, None)), phase, None if phase == "admitted" else HEAD, HEAD),
     )
 
