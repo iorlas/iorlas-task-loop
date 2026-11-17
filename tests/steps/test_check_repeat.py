@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 from any_agent import Harness, LaunchSpec, RunHooks, RunOutcome
 from check_repeat_bench import ASSERTION, Repairing
-from doubles import MAIN_PROFILE, FixedIds, PinnedViews
+from doubles import MAIN_PROFILE, FixedIds, PinnedViews, put_workflow
 from git_porcelain import Recorded
 from git_porcelain.testing import FakeRemote, FakeWorktree
 from hold_fixtures import event
@@ -53,6 +53,7 @@ from taskloop.task_event_codec import encode as encode_event
 def rig(tmp_path: Path, slot: FakeWorktree, checkouts: PinnedViews, slot_files: SlotFiles) -> Generator[Repairing]:
     root = slot.repo.worktree(slot.repo.identity().root)
     root.write_file(".task-loop.json", json.dumps(MAIN_PROFILE))
+    put_workflow(root)
     root.write_file("docs/glossary.md", GLOSSARY.decode())
     write_shelf(root)
     assert isinstance(root.record("profile", paths="all"), Recorded)

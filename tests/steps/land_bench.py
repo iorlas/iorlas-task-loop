@@ -15,7 +15,7 @@ from typing import Literal, override
 
 import pytest
 from beads_client import Bead
-from doubles import CHECKS, Environment, FakeProfiles, FakeSlotFiles, PinnedViews
+from doubles import CHECKS, WORKFLOW_FILES, Environment, FakeProfiles, FakeSlotFiles, PinnedViews
 from git_porcelain import Pushed, Recorded, RemoteRefs, Repo, Sha
 from git_porcelain.api import PushResult
 from git_porcelain.testing import FakeRemote, FakeRepo, FakeWorktree
@@ -300,7 +300,7 @@ def bench(tmp_path: Path, x_files: dict[str, str] | None = None) -> LandBench:
     `x_files`, default one source file)."""
     where = tmp_path.resolve()
     remote = FakeRemote("https://example.invalid/repo.git")
-    base = remote.advance("main", {"README": "one\n", ".task-loop.json": json.dumps(PROFILE)}, "base")
+    base = remote.advance("main", {"README": "one\n", ".task-loop.json": json.dumps(PROFILE), **WORKFLOW_FILES}, "base")
     repo = Racing(FakeRepo.clone(remote, where / "main"))
     slot = repo.add_worktree(where / "slots" / folder_name(repo.identity()) / "s1", "HEAD")
     root = repo.worktree(repo.identity().root)

@@ -15,7 +15,7 @@ from any_agent.procs import Worker
 from any_agent.testing import FakeRun
 from beads_client import Bead
 from beads_client.testing import FakeTaskReadClient
-from doubles import ENGINE, NO_CHECKS, Environment, FixedIds, PinnedViews
+from doubles import ENGINE, NO_CHECKS, WORKFLOW_PATH, Environment, FixedIds, PinnedViews
 from git_porcelain import Pushed, Sha
 from git_porcelain.testing import FakeRemote, FakeRepo, FakeWorktree
 from plan_fixtures import PLAN_TEXT
@@ -158,7 +158,7 @@ def test_a_done_plan_advances_to_implement_attempt_one_after_its_commit(
     d = registered.execute("SELECT slot_head FROM attempt WHERE attempt_id='attempt'").fetchone()[0]
     assert row[:8] == ("implement", 1, 2, planned, None, "/tracker", '{"harness":"codex","sandbox":"workspace-write"}', d)
     text = (tmp_path / row[8]).read_text()
-    assert text.startswith("Add a widget\n\nIt must do X") and f"`{PLAN}`" in text
+    assert "Add a widget\n\nIt must do X" in text and f"`{PLAN}`" in text
     assert f"Source commit: {planned}" in text
     assert f'Recorded result commit: "{planned}"' in text and START in text
     assert 'Disposition: "planned"' in text and 'Explanation: "done"' in text
@@ -293,7 +293,7 @@ def test_the_implement_step_commits_on_the_plan_and_is_published_then_advances_t
         CommittedStatus.COMMITTED, "tasks", "tl-1", key.attempt_id, "released", "published")
     x = tip(slot.repo)
     tree = slot.repo.tree(x)
-    assert tree is not None and set(tree.files) == {PLAN, "src/widget.py", "tests/test_widget.py", ".task-loop.json"}
+    assert tree is not None and set(tree.files) == {PLAN, "src/widget.py", "tests/test_widget.py", ".task-loop.json", WORKFLOW_PATH}
     assert slot.repo.is_ancestor(planned, x) and [entry.sha for entry in slot.repo.history([x], not_on=[planned])] == [x]
     reads = StatusPorts(AttemptStore(lambda: registered), lambda _entry: "gone", lambda: 10, lambda _key: None, lambda: "boot")
     shown = show_attempt(reads, tmp_path, "tasks", "tl-1")

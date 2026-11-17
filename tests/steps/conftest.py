@@ -12,7 +12,22 @@ from contextlib import AbstractContextManager, contextmanager
 from pathlib import Path
 
 import pytest
-from doubles import CANDIDATE, CHECKS, MAIN_PROFILE, ORIGIN, REQUIRED, SQUASH, TARGET, D, Done, FakeSlotFiles, PinnedViews, X
+from doubles import (
+    CANDIDATE,
+    CHECKS,
+    MAIN_PROFILE,
+    ORIGIN,
+    REQUIRED,
+    SQUASH,
+    TARGET,
+    WORKFLOW_FILES,
+    D,
+    Done,
+    FakeSlotFiles,
+    PinnedViews,
+    X,
+    put_workflow,
+)
 from git_porcelain import Recorded
 from git_porcelain.testing import FakeRemote, FakeRepo, FakeWorktree
 from sqlite_store import Store, begin_immediate
@@ -39,7 +54,7 @@ def factory() -> Generator[sqlite3.Connection]:
 @pytest.fixture
 def remote() -> FakeRemote:
     remote = FakeRemote("https://example.invalid/repo.git")
-    remote.advance("main", {"README": "one", ".task-loop.json": "{}"})
+    remote.advance("main", {"README": "one", ".task-loop.json": "{}", **WORKFLOW_FILES})
     return remote
 
 
@@ -225,6 +240,7 @@ def done(tmp_path: Path, repo: FakeRepo, slot: FakeWorktree) -> Done:
     `task/tl-1` holds X on it. No checks attempt yet."""
     root, d = repo.worktree(repo.identity().root), head(slot)
     root.write_file(".task-loop.json", json.dumps(MAIN_PROFILE))
+    put_workflow(root)
     target = root.record("profile", paths="all")
     root.checkout_new("task/tl-1")
     root.write_file("src/x.py", "X = 1\n")

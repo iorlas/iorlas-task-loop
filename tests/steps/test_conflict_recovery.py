@@ -8,7 +8,7 @@ import sqlite3
 from pathlib import Path
 
 import pytest
-from doubles import PinnedViews
+from doubles import WORKFLOW_FILES, PinnedViews
 from git_porcelain import Recorded, Sha
 from git_porcelain.testing import FakeRemote, FakeRepo, FakeWorktree
 from land_bench import REQUIRED, LandBench, bench
@@ -121,7 +121,7 @@ def test_a_second_conflict_has_a_working_recovery_with_its_own_aside_name(b: Lan
 @pytest.fixture
 def remote() -> FakeRemote:
     made = FakeRemote("https://example.invalid/repo.git")
-    made.advance("main", {"README": "one", ".task-loop.json": "{}"})
+    made.advance("main", {"README": "one", ".task-loop.json": "{}", **WORKFLOW_FILES})
     return made
 
 

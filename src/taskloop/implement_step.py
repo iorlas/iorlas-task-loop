@@ -25,6 +25,8 @@ from taskloop.command_conclusion import encode
 from taskloop.input_context import InputContext
 from taskloop.shelf_request import ShelfRequest
 from taskloop.task import TaskInspection
+from taskloop.workflow import StepTable
+from taskloop.workflow_render import render
 
 DISPOSITIONS: Final = ("implemented", "unchanged", "incomplete", "needs_owner")
 # Each disposition's effect, stored with it: only `implemented` commits and only `unchanged` keeps B.
@@ -47,39 +49,6 @@ ANSWER_SCHEMA: Final = {
         ]},
     },
 }
-# The prepared environment, bounded verification policy (design tl-8bh9.14.178) and editing guidance (tl-8bh9.14.182).
-ENVIRONMENT: Final = (
-    "The factory ran this repository's `setup` before you started; uv normally uses the prepared cache offline. "
-    "For an authorized shelf package addition or upgrade, acquisition of its latest release is allowed when absent "
-    "from the prepared cache. "
-    "While working, run only focused test files for the code you changed. For lint and type validation, run "
-    "`just check 2>&1 | tail -60` at most twice while working, in addition to the required final run. "
-    "Do not run a full `just test` while working. The only direct pytest invocation permitted is "
-    "`uv run --frozen --no-sync python -I -m pytest -q <file> --tb=short | tail -40`, replacing `<file>` with a focused "
-    "test file for your change. Do not invoke ruff or pyrefly directly, or use another direct pytest command. "
-    "After finishing edits and focused verification, run `just check 2>&1 | tail -60` once and then "
-    "`just test 2>&1 | tail -40` once, as the last validation before the answer, including an `unchanged` answer. "
-    "Run the final `just test` once in the foreground with sufficient command wait time; never start it in the "
-    "background or poll a running `just test`. Do not rerun either successful final command. If a command fails, "
-    "fix the reported failure, use focused verification as needed, and rerun only the failed command; failure does "
-    "not justify repeating the successful one. This failure exception overrides the normal run limits. "
-    "Enable pipeline failure propagation in the command shell (`set -o pipefail`) so `tail` cannot conceal a failed "
-    "check or test. Report the underlying command's result, not just `tail`'s status. "
-    "These factory instructions take precedence over AGENTS.md's \"Do not run whole-suite/live tests as an agent\" "
-    "for the two required final checks, once each, with the stated failure exception. This narrow exception does "
-    "not authorize other whole-suite or live tests. Keep line length at most 140 (`E501`), at most six returns per "
-    "function (`PLR0911`), and no function-local imports (`PLC0415`). In `explanation`, name the result of each final "
-    "command. Temporary files go to `$TMPDIR`; cleanup is attempted after release and required before the next agent. "
-    "Do not write elsewhere outside the repository. Your runs are evidence for you: after this step the checks run again "
-    "outside your control, "
-    "and only those results count. "
-    "First confirm that `apply_patch` is offered in your implement tool set. Make every file edit with `apply_patch`, "
-    "never with a Python or sed script. This includes additions, deletions and repairs; do not rewrite repository files "
-    "with shell redirection. The project interpreter is `.venv/bin/python`; "
-    "use `uv run --frozen --no-sync python -I` for execution or inspection scripts, never for file edits. "
-    "Bare `python3` is the host's Python 3.12, not the project's Python 3.15. Only if `apply_patch` is absent, report "
-    "the tool gap in `explanation` only and retain heredoc edits with the bounded verification above."
-)
 OPENING: Final[dict[RepeatReason, str]] = {
     "uncommitted": "Attempt {number} of this step left changes in the slot after settlement.",
     "unsafe": "These paths cannot be committed.",
@@ -140,41 +109,24 @@ def _explanation(value: object, disposition: str) -> tuple[str, ShelfRequest | N
     return request.describe(), request
 
 
-def input_text(task: TaskInspection, rules: StepRules, context: InputContext) -> str:
-    """The implement step's admitted input: the task's own prose, then the fixed closing words. The plan is passed by
-    reference: the slot starts on `task/<id>` at the published plan commit."""
-    return (f"{task.title}\n\n{task.requirements}\n\n{task.acceptance}\n\n{context.render()}\n\n"
-            f"{_closing_words(task.reference.task_id, rules)}\n")
+def input_text(table: StepTable, task: TaskInspection, rules: StepRules, context: InputContext) -> str:
+    """The workflow's sections for the implement step, then the contract. The plan is passed by reference: the slot starts
+    on `task/<id>` at the published plan commit."""
+    return render(table, task, context, contract(task.reference.task_id, rules))
 
 
-def _closing_words(task_id: str, rules: StepRules) -> str:
+def contract(task_id: str, rules: StepRules) -> str:
+    """What code appends after the workflow's sections: the plan file, the answer, path and commit rules and the Git and
+    dependency limits. Strategy prose lives in the workflow file, never here."""
     return (
-        f"The plan for this task is `docs/design/{task_id}/plan.md`, committed on this branch by the plan step. Read it "
-        "first. Immediately after reading the plan, reassess scope before broad exploration or editing. "
-        "Read its `## Read list` by the stated line ranges before exploring other files. Search with `rg -n` and read "
-        "only needed ranges; targeted searches for omitted callers or source that changed after planning are allowed. "
-        "Do not `cat` a file over 300 lines. Before any "
-        "`cat` of a file over 150 lines, run `rg -n '^def |^class '` on it and use range reads, even if the symbol search "
-        "is empty. Do not batch whole-file dumps. Do not read a file again within this session unless it changed since "
-        "you last read it; then read only the changed range, including verification after an edit. Keep enough location "
-        "information from the first read to edit without reopening unchanged content. "
-        "If the work needs "
-        "more than about 60 model calls or touches more than 60 files, stop after the first coherent part, commit nothing "
-        "extra, and answer `needs_owner` with the proposed split. If the excess is evident before editing, answer then; "
-        "do not begin a part just to have something to save. If discovered during work, stop at the first coherent boundary "
-        "without proceeding into another work package. Explain completed and remaining scope and propose named parts, "
-        "each with an acceptance criterion and dependencies (explicitly none where appropriate). Partial work is unfinished: "
-        "use `needs_owner`, `message: null`; the hold saves it. The owner or orchestrator creates parts in the "
-        "task tracker; do not create them or ask the owner to run a CLI command. The plan's 100 estimated model calls limit "
-        "is distinct from this implement reassessment at about 60 calls; these are scope instructions, not harness call "
-        "quotas. The 60-file stop is earlier than the existing 96-path safety ceiling. Within this scope, implement the "
-        "plan, with tests for the behavior it adds or changes. If the code already does what the plan "
+        f"The plan for this task is `docs/design/{task_id}/plan.md`, committed on this branch by the plan step. "
+        "If the code already does what the plan "
         "asks, change nothing and answer `unchanged`. Otherwise change the files the plan needs and answer `implemented`. "
         f"You may add, change and delete plain files anywhere in the repository, at most {rules.max_paths} files of at most "
         f"{rules.file_cap // MiB} MiB each, except: any path with a component starting with `.git`, anything under "
         f"`{'`, `'.join(rules.excluded)}`, executable files and symlinks. Do not edit `plan.md`, including status, progress "
         f"or \"As built\" sections. Other artifacts in the plan's own folder may change under the same rules; add no audit "
-        f"artifact. {PLAN_HANDOFF} {step_text.GIT_WRITES} {DEPENDENCIES} {ENVIRONMENT} With "
+        f"artifact. {PLAN_HANDOFF} {step_text.GIT_WRITES} {DEPENDENCIES} With "
         "`implemented`, give a one-line commit `message`. "
         f"{COMMIT_SELECTION} In `explanation`, name each "
         "command you ran and how it ended, and every test file you added. If you could not finish, answer "

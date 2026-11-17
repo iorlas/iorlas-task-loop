@@ -22,7 +22,6 @@ from taskloop.admit import (
     free_slots,
     open_store,
     read_task,
-    task_text,
     why,
 )
 from taskloop.admit_rows import Task
@@ -50,7 +49,9 @@ from taskloop.step import Step
 from taskloop.steps import next_step
 from taskloop.task import TaskInspection
 from taskloop.task_content import TaskContentDigest
+from taskloop.task_input import task_text
 from taskloop.tracker import ACTOR
+from taskloop.workflow_read import WorkflowRefusal, read_workflow
 
 
 @dataclass(frozen=True)
@@ -203,19 +204,20 @@ class NextAdmission:
         found, names = ready.found, tuple(each.name for each in ready.free)
         try:
             key = AttemptKey(self.ids.hex(), self.ids.token(16), issued(ready.con, RepoId(found.repo_id), names) + 1)
-            context = read_context(GitProfileFiles(request.checkout, self.checkouts), ready.free[0].source)
+            files = GitProfileFiles(request.checkout, self.checkouts)
+            context, workflow = read_context(files, ready.free[0].source), read_workflow(files, ready.free[0].source)
             discussion = self.discussion(ready.task, found.tracker_root)
             reader = AttemptStore(self.connect, self.begin)
             earlier = reader.earlier_for(request.previous)
             ready = replace(ready, earlier=earlier)
             text = EarlierInput(reader, self.files, HoldStore(self.connect, self.begin)).attach(
-                task_text(ready.task, ready.step, context, discussion.text), earlier,
+                task_text(ready.task, ready.step, context, workflow, discussion.text), earlier,
                 partial(commit_names, self.checkouts(request.checkout), request.checkout))
             ref = self.files.put_input(key, text)
         except (sqlite3.Error, StoreUnavailable) as error:
             return AdmitUnavailable("store", detail=why(error))
-        except (EvidenceError, InputError, GitUnavailable, UnicodeError, OSError) as error:
-            return AdmitRefused("input", detail=why(error))
+        except (WorkflowRefusal, EvidenceError, InputError, GitUnavailable, UnicodeError, OSError) as error:
+            return AdmitRefused("workflow" if isinstance(error, WorkflowRefusal) else "input", detail=why(error))
         try:
             return self._advance(ready, request, key, ref)
         except sqlite3.IntegrityError as error:  # caught after the rollback; every constraint is pre-checked: a schema mismatch

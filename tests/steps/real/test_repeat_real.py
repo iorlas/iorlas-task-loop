@@ -13,7 +13,7 @@ import pytest
 from any_agent import Harness, LaunchSpec, RunHooks, RunOutcome, Summary
 from any_agent.procs import Worker
 from any_agent.testing import FakeRun
-from doubles import ENGINE, RegisteringLauncher
+from doubles import ENGINE, WORKFLOW_BYTES, WORKFLOW_PATH, RegisteringLauncher
 from git_porcelain.history import Identity
 from git_porcelain.testing import apply_hermetic_env, git
 from plan_fixtures import PLAN_TEXT, PLAN_V2
@@ -68,8 +68,10 @@ def test_a_repeat_commits_x2_on_x1_from_the_dirty_worktree_and_the_chain_commits
     main.mkdir()
     git(main, "init", "-q", "-b", "main")
     (main / "README").write_text("one\n")
+    (main / WORKFLOW_PATH).parent.mkdir(parents=True)
+    (main / WORKFLOW_PATH).write_bytes(WORKFLOW_BYTES)
     (main / ".task-loop.json").write_text("{}")
-    git(main, "add", "README", ".task-loop.json")
+    git(main, "add", "README", ".task-loop.json", WORKFLOW_PATH)
     git(main, "commit", "-q", "-m", "base")
     git(main, "worktree", "add", "-q", "-b", "task/tl-1", str(slot), "HEAD")
     base = git(slot, "rev-parse", "HEAD").strip()

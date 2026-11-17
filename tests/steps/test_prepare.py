@@ -14,7 +14,7 @@ from any_agent.procs import Worker
 from any_agent.testing import FakeRun
 from beads_client import Bead
 from beads_client.testing import FakeTaskReadClient
-from doubles import ENGINE, Environment, FakeSlotFiles, PinnedViews
+from doubles import ENGINE, WORKFLOW_FILES, Environment, FakeSlotFiles, PinnedViews
 from git_porcelain import BranchHeld, GitReadFailure, Recorded, Repo, Sha
 from git_porcelain.api import TakeResult
 from git_porcelain.testing import FakeRemote, FakeRepo, FakeWorktree
@@ -56,7 +56,7 @@ class CountingHarness(CodexHarness):
 @pytest.fixture
 def remote() -> FakeRemote:
     found = FakeRemote("https://example.invalid/repo.git")
-    found.advance("main", {"README": "one", ".task-loop.json": "{}"})
+    found.advance("main", {"README": "one", ".task-loop.json": "{}", **WORKFLOW_FILES})
     return found
 
 

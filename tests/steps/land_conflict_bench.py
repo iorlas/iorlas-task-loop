@@ -10,7 +10,7 @@ import pytest
 from any_agent import Harness, LaunchSpec, RunHooks, RunOutcome, Summary
 from any_agent.procs import Worker
 from any_agent.testing import FakeRun
-from doubles import CHECKS, Environment, FakeSlotFiles, PinnedViews
+from doubles import CHECKS, WORKFLOW_FILES, Environment, FakeSlotFiles, PinnedViews
 from git_porcelain import Recorded
 from git_porcelain.testing import FakeRemote, FakeRepo, FakeWorktree
 from merge_bench import MergeRepo, head
@@ -67,7 +67,7 @@ def copy_row(con: sqlite3.Connection, table: str, identity: str, changes: dict[s
 
 def execution_repo(tmp_path: Path) -> FakeRepo:
     remote = FakeRemote("https://example.invalid/repo.git")
-    remote.advance("main", {"README": "base\n", ".task-loop.json": "{}"})
+    remote.advance("main", {"README": "base\n", ".task-loop.json": "{}", **WORKFLOW_FILES})
     return MergeRepo.clone(remote, tmp_path / "main")
 
 

@@ -8,7 +8,7 @@ import pytest
 from any_agent import LaunchInputs, LaunchSpec, OpenCodeHarness, RunOutcome, Summary
 from any_agent.access import CodexSandbox
 from any_agent.testing import FakeRun
-from doubles import FixedIds
+from doubles import WORKFLOW, FixedIds
 from test_attempt import ENTRY, KEY, PLAN, WORKER, AttemptSurroundings, app, database
 from test_attempt import surroundings as attempt_surroundings
 
@@ -117,7 +117,7 @@ def test_dispatched_step_inputs_carry_their_answer_contract(
     context = InputContext("a" * 40, ("just check", "just test"), "task: Work to accomplish.", ())
     operation = kind(step)
     rules = operation.rules(task.reference.task_id)
-    initial = operation.input_text(task, rules, context)
+    initial = operation.input_text(WORKFLOW.table(operation.step), task, rules, context)
     prompt = initial
     if failed_check:
         found = FailedCheck(source=AttemptKey("check", "dispatch", 1), block=1, commit="a" * 40, name="test",

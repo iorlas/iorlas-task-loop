@@ -4,7 +4,7 @@ import sqlite3
 from pathlib import Path
 
 import pytest
-from doubles import FakeSlotFiles, PinnedViews
+from doubles import WORKFLOW_FILES, FakeSlotFiles, PinnedViews
 from git_porcelain import CommandResult, GitUnavailable, Recorded
 from git_porcelain.testing import FakeRemote, FakeRepo, FakeWorktree
 from merge_bench import MergeRepo
@@ -20,7 +20,7 @@ from taskloop.prepare import Branch, branch_refusal
 @pytest.fixture
 def remote() -> FakeRemote:
     found = FakeRemote("https://example.invalid/repo.git")
-    found.advance("main", {"README": "old main\n", ".task-loop.json": "{}"})
+    found.advance("main", {"README": "old main\n", ".task-loop.json": "{}", **WORKFLOW_FILES})
     return found
 
 

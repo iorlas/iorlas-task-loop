@@ -18,7 +18,7 @@ from taskloop.agents.settings import AgentSetting, Overrides, StepSettings, appl
 from taskloop.attempt_reads import StoreUnavailable
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import AttemptKey, Checkouts, FileRef, SlotFiles
-from taskloop.discussion import CollectDiscussion, empty, replace_block
+from taskloop.discussion import CollectDiscussion, empty
 from taskloop.drain.models import BLOCKED, ActionKind, Identity, Reason
 from taskloop.drain.observe import identity
 from taskloop.drain.store import DrainStore, blocked
@@ -29,7 +29,7 @@ from taskloop.factory_store import current
 from taskloop.git_views import GitProfileFiles
 from taskloop.hold_store import HoldStore
 from taskloop.ids import Ids
-from taskloop.input_context import InputContext, InputError
+from taskloop.input_context import InputError
 from taskloop.input_context import read as read_context
 from taskloop.plan_reuse import ReuseDecision
 from taskloop.prepare import held_refusal, refreshed_sources, refusal_detail
@@ -37,16 +37,17 @@ from taskloop.repo import RepoId, UnsupportedCheckout, inspect_repo
 from taskloop.resume_plan import ResumePlans, Selection
 from taskloop.slots import Probe, SlotGit, SlotsUnavailable, SlotView, observe, unusable_text
 from taskloop.slots_store import SlotsStore
-from taskloop.steps import kind
 from taskloop.task import TaskInspection, TaskInspectionError
 from taskloop.task_content import TaskContentDigest
+from taskloop.task_input import task_text
+from taskloop.workflow_read import WorkflowRefusal, read_workflow
 
 type Claim = Callable[[str, str], bool]  # (tracker root, task id): True taken, False held elsewhere, BdError unknown
 type Unclaim = Callable[[str, str], bool]  # fenced to this actor's own claim; False: not released
 type Tasks = Callable[[str, str, str], TaskInspection]  # (task id, backlog, tracker root)
 type Refusal = Literal[
     "choices", "deadline", "expired", "task", "task_missing", "checkout", "no_free_slot", "task_attempted", "input",
-    "claimed_elsewhere", "constraint",
+    "claimed_elsewhere", "constraint", "workflow",
     "not_repeatable", "repeat_cap", "branch_name", "branch_held", "branch_diverged", "branch_unpublished", "claim_lost",
     "not_advanceable", "branch_moved",
     "commit_missing", "target", "target_profile", "no_required",  # the checks admission's (`check_admit`)
@@ -110,14 +111,6 @@ def why(error: BaseException) -> str:
     return f"{type(error).__name__}: {error}"[:300]
 
 
-def task_text(task: TaskInspection, step: str, context: InputContext, discussion: str | None = None) -> str:
-    """The step kind's input for the task (its own prose, then the step's closing words), stored as the admitted input
-    under its digest."""
-    found = kind(step)
-    text = found.input_text(task, found.rules(task.reference.task_id), context)
-    return replace_block(text, empty(task, "").text if discussion is None else discussion)
-
-
 class AttemptAdmission:
     def __init__(
         self,
@@ -166,7 +159,8 @@ class AttemptAdmission:
             reader = AttemptStore(self.connect, self.begin)
             earlier = reader.earlier(str(prepared.repo_id), request.backlog, request.task_id, prepared.request.tracker_root)
             key = AttemptKey(self.ids.hex(), self.ids.token(16), generation)  # the key names the evidence directory
-            context = read_context(GitProfileFiles(request.checkout, self.checkouts), free[0].source)
+            files = GitProfileFiles(request.checkout, self.checkouts)
+            context, workflow = read_context(files, free[0].source), read_workflow(files, free[0].source)
             discussion = self.discussion(prepared.task, prepared.request.tracker_root)
             selection = ResumePlans(reader, self.checkouts).select(
                 str(prepared.repo_id), request.backlog, request.task_id, prepared.request.tracker_root,
@@ -176,13 +170,13 @@ class AttemptAdmission:
             prepared = replace(prepared, earlier=earlier, content_digest=discussion.digest, selection=selection,
                                setting=apply(request.settings.for_step(selection.step), request.overrides))
             text = EarlierInput(reader, self.files, HoldStore(self.connect, self.begin)).attach(
-                task_text(prepared.task, selection.step, context, discussion.text), earlier,
+                task_text(prepared.task, selection.step, context, workflow, discussion.text), earlier,
                 partial(commit_names, prepared.repo, request.checkout))
             ref = self.files.put_input(key, text)
         except (sqlite3.Error, StoreUnavailable) as error:
             return AdmitUnavailable("store", detail=why(error))
-        except (EvidenceError, InputError, UnicodeError, OSError) as error:
-            return AdmitRefused("input", detail=why(error))
+        except (WorkflowRefusal, EvidenceError, InputError, UnicodeError, OSError) as error:
+            return AdmitRefused("workflow" if isinstance(error, WorkflowRefusal) else "input", detail=why(error))
         except ValueError as error:
             return AdmitRefused("choices", detail=why(error))
         return prepared, key, ref

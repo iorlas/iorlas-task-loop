@@ -225,9 +225,9 @@ def test_three_attempts_then_the_owner(step: Step, slot: FakeWorktree, tmp_path:
     text = step.input(third)
     assert text.startswith(
         "Your final message must be the JSON answer only; write plan.md before you answer `planned`; "
-        "a message without a tool call ends the step.\n\nFirst assess depth from the supplied task text alone"
+        "a message without a tool call ends the step.\n\n"
     )
-    assert text.index("First assess depth") < text.index("Attempt 2 of this step")
+    assert "Attempt 2 of this step" in text
     assert text.count("BEGIN SLOT STATUS") == 1 and TASK in text
     step.run(third, entry, Agent(slot, {}, UNCHANGED))
     shown_three = show_attempt(reads, tmp_path / "art", "tasks", "tl-1")

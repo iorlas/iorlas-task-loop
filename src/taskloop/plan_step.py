@@ -24,54 +24,17 @@ from taskloop.attempt_types import (
 from taskloop.input_context import InputContext
 from taskloop.plan_content import PlanDepth, validate
 from taskloop.task import TaskInspection
+from taskloop.workflow import StepTable
+from taskloop.workflow_render import render
 
 DISPOSITIONS: Final = ("planned", "unchanged", "incomplete", "needs_owner")
 # Each disposition's effect, stored with it: only `planned` commits and only `unchanged` keeps B; the rest end nothing.
 EFFECT_OF: Final[dict[str, Effect]] = {"planned": "commit", "unchanged": "keep", "incomplete": "none", "needs_owner": "none"}
 PLAN_NAME: Final = "plan.md"
+BLANK: Final = "\n\n"  # between the paragraphs of an input
 FINAL_ANSWER_WARNING: Final = (
     "Your final message must be the JSON answer only; write plan.md before you answer `planned`; "
     "a message without a tool call ends the step."
-)
-DEPTH_ASSESSMENT: Final = (
-    "First assess depth from the supplied task text alone, before any exploration or reading. State the depth in your "
-    "first commentary message so the dashboard conversation shows it for owner correction. The only optional cheap "
-    "check is at most one search for identifiers named in the task, returning only a count of files and opening nothing. "
-    "Do not read source, an existing plan, glossary, tracker or history before this assessment.\n\n"
-    "Apply these depth rules in order, using only facts in the task text:\n"
-    "- Large: more than 3 independent behaviours, or a schema version change, or an explicitly unlanded task dependency, "
-    "or more than 60 named files.\n"
-    "- Otherwise medium: 2 to 3 behaviours, or changes in 2 to 3 owning modules.\n"
-    "- Otherwise small: one behaviour in one owning module.\n"
-    "Three behaviours meet the medium rule; four meet the large rule. 60 named files do not trigger large; 61 do. "
-    "A large trigger takes precedence over medium or small. Give a one-sentence reason, state whether an owner decision "
-    "is missing or a dependency is unlanded, and state the evidence-gathering budget in model calls: small 6, medium 12, "
-    "large 20. These are total evidence ceilings, not additional calls per search or file, and are distinct from the "
-    "Size estimate for an implement attempt. Finish within the budget using bounded evidence; a budget alone is not "
-    "an owner-refusal cause.\n\n"
-    "Before exploring, answer `needs_owner` for exactly these three early causes:\n"
-    "- Large work with independent parts: propose a split in words, each part with a name, independently testable "
-    "acceptance criterion and dependencies (explicitly none where appropriate).\n"
-    "- A missing owner decision: identify the decision and what the owner must resolve.\n"
-    "- An explicitly unlanded dependency named in the task: identify the dependency and what must land first.\n"
-    "For each early refusal, put `# Depth`, the assessment and concrete reason in `explanation`, within 2000 characters; "
-    "write no new plan and offer no commit: use `paths: []`, `message: null`, and the expected or null `plan_path`. "
-    "Preserve existing saved work. The owner or orchestrator creates split tasks; do not create them or ask the owner "
-    "to run a CLI command. Do not infer a missing decision from terse wording or treat a reference to another task as "
-    "proof it is unlanded. A large classification alone is not an early refusal cause. "
-    "A single cohesive schema change may be large and still receive a bounded plan when none "
-    "of these causes applies. Later refusal for actual contradictions or infeasibility and the separate Size limits "
-    "still apply; they are not additional early causes.\n\n"
-    "If the assessment permits planning, only then read the existing plan and gather bounded evidence. Within that "
-    "evidence budget, inspect existing implementations and supplied overlapping-task information before proposing "
-    "remaining work. Use the supplied task discussion; do not require tracker access. Identify what is already "
-    "delivered and the remaining gap; avoid duplicating delivered work. Overlap alone establishes neither a missing "
-    "owner decision nor an explicitly unlanded dependency. Planning is "
-    "never skipped: a small task gets a short plan. Put depth, reason, decision/dependency status, evidence budget and "
-    "the Size estimate in Header; do not add separate Depth or Size sections. Reusing an existing plan requires both "
-    "current assessments in Header; an existing plan without them needs revision, not `unchanged`. Use the "
-    "included glossary excerpt at every depth; collect missing terms into at most one targeted glossary read, after "
-    "the assessment permits planning. Depth is plain English: add no glossary term or new stage."
 )
 ARTIFACT_RULES: Final[tuple[Rule, ...]] = ("plan_missing", "plan_encoding", "plan_empty", "plan_size", *PlanContentRule)
 TEMPLATE: Final = (
@@ -164,11 +127,9 @@ def decode(value: object, rules: StepRules) -> Answer:
     return Answer(disposition, EFFECT_OF[disposition], listed, text, answer_decode.explanation(explanation))
 
 
-def input_text(task: TaskInspection, rules: StepRules, context: InputContext) -> str:
-    """Put the depth assessment before task prose, orientation and plan reads; the factory commits listed paths."""
-    return (f"{FINAL_ANSWER_WARNING}\n\n{DEPTH_ASSESSMENT}\n\n"
-            f"{task.title}\n\n{task.requirements}\n\n{task.acceptance}\n\n{context.render()}\n\n"
-            f"{_closing_words(rules)}\n\n{_metadata_words(rules)}\n")
+def input_text(table: StepTable, task: TaskInspection, rules: StepRules, context: InputContext) -> str:
+    """The workflow's sections for the plan step, then the contract; the factory commits listed paths."""
+    return render(table, task, context, contract(rules))
 
 
 def _metadata_words(rules: StepRules) -> str:
@@ -183,39 +144,14 @@ def _metadata_words(rules: StepRules) -> str:
     )
 
 
-def _closing_words(rules: StepRules) -> str:
+def contract(rules: StepRules) -> str:
+    """What code appends after the workflow's sections: the plan file, its template and byte caps, the answer and commit
+    rules, the metadata and the final-answer warning. Strategy prose lives in the workflow file, never here."""
     root = rules.root
     return (
-        "After the depth assessment permits planning, follow this plan-only reading order. These rules supersede "
-        "the shared foundation-read condition:\n"
-        "1. AGENTS.md rules are already in context; follow them without reopening the file.\n"
-        "2. Use the supplied glossary excerpt; collect missing terms into at most one targeted read of "
-        "`docs/glossary.md`. If no glossary exists at the source commit, do not search for one.\n"
-        f"3. After the depth assessment permits planning, read `{root}{PLAN_NAME}` if it exists.\n"
-        "4. Read a foundation plan only when the task text names it.\n"
-        "For this list, read each of these once; never read a file twice. Then gather only the source evidence "
-        "needed for the task.\n\n"
-        "Search with an explicit repository path scope and a count first (`rg -c`) before printing matching lines. "
-        "Do not search outside the repository, including task-loop state, ~/.codex or the uv cache. "
-        "An output marked truncated means the search was too wide: narrow the scope or range; do not repeat "
-        "the same command or increase the output limit. "
-        "For shelf facts, use the supplied shelf digest from .186; do not discover an installed shelf package "
-        "outside the repository or invent missing digest contents. If a necessary shelf fact is absent, answer "
-        "`needs_owner` and explain the missing fact in words.\n\n"
-        f"{TEMPLATE}\n\nBefore answering `planned` or `unchanged`, require a Size estimate in Header with "
-        "estimated changed files (including tests and artifacts), independent behaviours, and model calls "
-        "for one implement attempt. Each independent behaviour must have an independently testable acceptance criterion; "
-        "file count alone is insufficient. An existing plan without this assessment needs revision, not `unchanged`. "
-        "An existing plan missing `## Read list` needs revision before answering `planned` or `unchanged`. "
-        "Reassess the existing Header Size estimate against the current requirements and code before reusing it. "
-        "If any estimate exceeds 60 files, 3 independent behaviours or 100 model calls, answer `needs_owner`, never "
-        "`planned` or `unchanged`. Equality is allowed (60 files, 3 behaviours, 100 calls); 61 files, 4 behaviours or "
-        "101 calls each suffice for refusal. Low file count cannot excuse another excess. Put the reason and proposed "
-        "split in `explanation`, within its existing 2000-character limit: each part must have a name, acceptance criterion "
-        "and dependencies (explicitly none where appropriate). The owner or orchestrator creates the parts in the task "
-        "tracker; do not create them or ask the owner to run a CLI command. On refusal, write no new successful plan and "
-        "offer no commit: use `paths: []`, `message: null`, and the expected or null `plan_path`. Preserve existing saved "
-        "work; a draft is not approval to implement. If the assessed plan is still valid for the task and code as they "
+        f"The plan file for this task is `{root}{PLAN_NAME}`: read it if it exists, once the depth assessment permits planning.\n\n"
+        f"{TEMPLATE}\n\n"
+        "If the assessed plan is still valid for the task and code as they "
         "are now, change nothing and answer `unchanged`. Otherwise write the plan there (rewrite it in place if it exists) and answer "
         f"`planned`; other files only under `{root}`. {step_text.GIT_WRITES} With `planned`, list in `paths` every file "
         "you want committed and give a "
@@ -226,7 +162,7 @@ def _closing_words(rules: StepRules) -> str:
         "what the owner must decide. If you could not finish planning, answer `incomplete` and explain why in "
         "`explanation`. Only with `planned` should `paths` list files; otherwise return `paths: []` and "
         "`message: null`, and the factory saves unfinished slot work as a work-in-progress commit on the task branch "
-        "when holding the task. " + step_text.SAVED_WORK
+        "when holding the task. " + step_text.SAVED_WORK + BLANK + _metadata_words(rules) + BLANK + FINAL_ANSWER_WARNING
     )
 
 
@@ -251,14 +187,13 @@ def repeat_instructions(rules: StepRules, number: int, *, unrecorded: bool) -> s
 
 
 def feedback(found: Uncommitted, rules: StepRules, number: int, task: str, nonce: str, *, unrecorded: bool) -> str:
-    """The next input: warning and assessment before the shared feedback frame, listing, repair instructions and task.
+    """The next input: the warning before the shared feedback frame, listing, repair instructions and task.
     `unrecorded`: attempt `number` answered `planned` and
     nothing of it was committed, so its files must be listed again. `found.reason` is one of REPEATABLE."""
     opening = next(text for reason, text in OPENING.items() if reason == found.reason)
     instructions = repeat_instructions(rules, number, unrecorded=unrecorded)
     opening = step_text.unsafe_details(found) or opening.format(number=number)
-    return (FINAL_ANSWER_WARNING + "\n\n" + DEPTH_ASSESSMENT + "\n\n"
-            + step_text.feedback(opening, found.listing, instructions, task, nonce))
+    return FINAL_ANSWER_WARNING + BLANK + step_text.feedback(opening, found.listing, instructions, task, nonce)
 
 
 def artifact(tip: Tree, rules: StepRules) -> Rejected | str:

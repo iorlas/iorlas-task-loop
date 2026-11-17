@@ -8,6 +8,7 @@ from typing import NoReturn
 import pytest
 from beads_client import Bead, Comment, Dep
 from beads_client.testing import FakeTaskReadClient
+from doubles import WORKFLOW
 from git_porcelain.testing import FakeRepo, FakeWorktree
 from hold_fixtures import event
 from test_admit import ENTRY, Tracker, admission, attempts, request, slots
@@ -19,7 +20,7 @@ from test_hold_store import attempt, held, later
 from test_repeat import KEY, SECOND, captured, repeater
 from test_steps import TASK
 
-from taskloop.admit import AdmitRefused, Admitted, task_text
+from taskloop.admit import AdmitRefused, Admitted
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import Checkouts, SlotFiles
 from taskloop.discussion import BEGIN, END, MAX_BYTES, Discussion, DiscussionComment, DiscussionSource, frame, render, replace_block
@@ -31,6 +32,7 @@ from taskloop.input_context import InputContext, InputError, refresh
 from taskloop.operations import Failed, Started
 from taskloop.task import TaskBinding, TaskInspection, TaskInspectionError, TaskReference, TaskScope
 from taskloop.task_content_store import TaskContentStore
+from taskloop.task_input import task_text
 from taskloop.tracker import inspect_task
 from taskloop.tracker_discussion import read_discussion
 
@@ -70,7 +72,7 @@ def test_own_and_direct_linked_decisions_reach_both_steps(factory: sqlite3.Conne
     ], {"tl-77": [Comment("factory", "Question\nsecond line", AT)], "tl-58": [Comment("owner", "Decision\nKeep all six", AT)]})
     operation = collector(client, factory)
     task = operation.tasks("tl-77", "tasks", "/tracker")
-    text = task_text(task, step, CONTEXT, operation.collect(task, "/tracker").text)
+    text = task_text(task, step, CONTEXT, WORKFLOW, operation.collect(task, "/tracker").text)
     assert client.comment_reads == ["tl-58", "tl-77"]
     assert "Owner's discussion; relationship: blocks, related" in text
     assert f"Author: owner; time: {AT}" in text and "| Decision\n| Keep all six" in text
@@ -113,7 +115,7 @@ def test_delimiter_shaped_text_stays_data_across_repeat_and_context_refresh(fact
     client = Threads([Bead("tl-1")], {"tl-1": [Comment("owner", dangerous, AT)]})
     operation = collector(client, factory)
     block = operation.for_task(TASK.reference, "/tracker").text
-    text = task_text(TASK, "implement", CONTEXT, block)
+    text = task_text(TASK, "implement", CONTEXT, WORKFLOW, block)
     text = refresh(replace_block(text, block), InputContext("new", (), "", ()))
     lines = text.splitlines()
     for marker in (BEGIN, END, CONTEXT_BEGIN, CONTEXT_END):
@@ -223,7 +225,7 @@ def test_repeat_refreshes_discussion_and_preserves_feedback(
     registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles,
 ) -> None:
     files = EvidenceFiles(tmp_path)
-    original = task_text(TASK, "plan", CONTEXT, frame(["Old decision"]))
+    original = task_text(TASK, "plan", CONTEXT, WORKFLOW, frame(["Old decision"]))
     ref = files.put_input(KEY, original)
     registered.execute("UPDATE attempt SET input_path=?,input_digest=?", (ref.path, ref.digest))
     captured(registered, tmp_path, slot, checkouts, slot_files, {"stray": "leftovers"})

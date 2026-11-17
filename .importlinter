@@ -829,6 +829,7 @@ source_modules =
     taskloop.task_event
     taskloop.task_event_cause
     taskloop.task_event_codec
+    taskloop.task_input
     taskloop.task_status
     taskloop.tracker
     taskloop.tracker_client
@@ -837,6 +838,8 @@ source_modules =
     taskloop.verdict
     taskloop.wip
     taskloop.workflow
+    taskloop.workflow_read
+    taskloop.workflow_render
 forbidden_modules = sqlite3
 as_packages = False
 allow_indirect_imports = True
