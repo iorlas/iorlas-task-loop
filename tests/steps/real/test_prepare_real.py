@@ -14,6 +14,7 @@ from any_agent.procs import Worker
 from any_agent.testing import FakeRun
 from beads_client import Bead
 from beads_client.testing import FakeTaskReadClient
+from doubles import ENGINE
 from git_porcelain.history import Identity
 from git_porcelain.testing import apply_hermetic_env, git
 from plan_fixtures import PLAN_TEXT
@@ -77,7 +78,7 @@ def test_a_detached_slot_is_prepared_on_its_task_branch_and_the_plan_is_committe
     m = git(origin, "rev-parse", "HEAD").strip()
     admission = AttemptAdmission(
         lambda: factory, begin_immediate, EvidenceFiles(art), tasks, VIEWS.checkouts, claimed, claimed, lambda: 10, probe, RealSlotFiles()
-    , ids=NativeIds())
+    , ids=NativeIds(), engine=ENGINE)
     admitted = admission.admit(
         AdmitRequest(
             "tl-1",

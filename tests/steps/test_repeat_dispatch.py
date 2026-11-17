@@ -12,7 +12,7 @@ import pytest
 from any_agent import Harness, LaunchSpec, RunHooks, RunOutcome, Summary
 from any_agent.procs import Worker
 from any_agent.testing import FakeRun
-from doubles import FakeSlotFiles, RegisteringLauncher, origin_main_at
+from doubles import ENGINE, FakeSlotFiles, RegisteringLauncher, origin_main_at
 from git_porcelain import Dirty, Recorded
 from git_porcelain.testing import FakeRepo, FakeWorktree
 from plan_fixtures import PLAN_TEXT, PLAN_V2
@@ -123,7 +123,7 @@ class Step:
 
     def admission(self) -> ChainAdmission:
         return ChainAdmission(lambda: self.con, begin_immediate, EvidenceFiles(self.tmp), lambda: 10,
-                              self.checkouts, self.files, ids=NativeIds())
+                              self.checkouts, self.files, ids=NativeIds(), engine=ENGINE)
 
     def repeat(self, current: AttemptKey) -> Started | Failed:
         found = self.store.attempt_of("tasks", "tl-1")

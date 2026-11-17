@@ -41,8 +41,10 @@ def attempt(con: sqlite3.Connection, attempt_id: str = "a", *, seq: int = 1, lab
     con.execute(
         """INSERT INTO attempt (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,
         input_path,input_digest,schema_version,model,effort,access_policy,deadline,phase,base_commit,end_commit,worker_pid,worker_pgid,
-        worker_start,worker_boot,number,seq,slot_head,label) VALUES (?,?,1,'plan','beads','tasks','tl-1','/tracker','r','s1','i',
-        'd',1,'m','e','{"harness":"codex","sandbox":"workspace-write"}',100,'captured',?,?,42,41,'st','boot',1,?,?,?)""",
+        worker_start,worker_boot,number,seq,slot_head,label,engine_digest,admitted_at) VALUES (?,?,1,'plan','beads','tasks',
+        'tl-1','/tracker','r','s1','i',
+        'd',1,'m','e','{"harness":"codex","sandbox":"workspace-write"}',100,'captured',?,?,42,41,'st','boot',1,?,?,?,
+        'abababababababababababababababababababababababababababababababab',1.0)""",
         (attempt_id, attempt_id + "-token", D, X, seq, D, label))
 
 

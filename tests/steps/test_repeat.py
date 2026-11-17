@@ -16,7 +16,7 @@ import pytest
 from any_agent import Harness, LaunchSpec, RunHooks, RunOutcome, Summary
 from any_agent.procs import Worker
 from any_agent.testing import FakeRun
-from doubles import NO_CHECKS, FakeSlotFiles, FixedIds, NoAdvance, RegisteringLauncher, origin_main_at
+from doubles import ENGINE, NO_CHECKS, FakeSlotFiles, FixedIds, NoAdvance, RegisteringLauncher, origin_main_at
 from git_porcelain import Recorded
 from git_porcelain.testing import FakeWorktree
 from plan_fixtures import PLAN_TEXT
@@ -122,7 +122,7 @@ def never(*_args: object, **_options: object) -> NoReturn:
 
 def admission(con: sqlite3.Connection, tmp_path: Path, checkouts: Checkouts, files: SlotFiles,
               clock: Callable[[], float] = lambda: 10) -> ChainAdmission:
-    return ChainAdmission(lambda: con, begin_immediate, EvidenceFiles(tmp_path), clock, checkouts, files, ids=NativeIds())
+    return ChainAdmission(lambda: con, begin_immediate, EvidenceFiles(tmp_path), clock, checkouts, files, ids=NativeIds(), engine=ENGINE)
 
 
 def gone(_worker: Worker) -> bool:
@@ -195,9 +195,10 @@ def renumber(con: sqlite3.Connection, number: int) -> None:
         con.execute(
             """INSERT INTO attempt (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,
             input_digest,schema_version,model,effort,access_policy,deadline,number,previous_attempt_id,repeat_reason,
-            base_commit,seq,slot_head)
+            base_commit,seq,slot_head,engine_digest,admitted_at)
             VALUES (?,?,1,'plan','beads','tasks','stand-in','/tracker','r','s0','i','d',1,'m','e','{"harness":"codex",
-            "sandbox":"workspace-write"}',1,?,?,?,?,?,?)""",
+            "sandbox":"workspace-write"}',1,?,?,?,?,?,?,
+        'abababababababababababababababababababababababababababababababab',1.0)""",
             (f"a{n}", f"d{n}", n, previous, None if previous is None else "uncommitted", "b" * 40, n, "b" * 40),
         )
         previous = f"a{n}"
@@ -340,7 +341,7 @@ GATES: list[tuple[str, str, float, str]] = [
     ("timed_out", "UPDATE execution SET timed_out=1", 1000, "not_repeatable"),
     ("pending_session", "UPDATE execution SET session_state='pending'", 1000, "not_repeatable"),
     ("no_effect", "UPDATE execution SET effect='none'", 1000, "not_repeatable"),
-    ("not_captured", "UPDATE attempt SET phase='registered'", 1000, "not_repeatable"),
+    ("not_captured", "UPDATE attempt SET phase='registered',ended_at=NULL", 1000, "not_repeatable"),
     ("not_holder", "UPDATE reservation SET generation=7", 1000, "not_repeatable"),
     ("expired", "", 10, "expired"),
     ("infinite", "", float("inf"), "deadline"),
@@ -415,9 +416,11 @@ def test_two_starts_on_two_connections_admit_exactly_one(
         con.execute("INSERT INTO reservation VALUES ('s1',?,1,'attempt')", (repo_id,))
         con.execute(
             """INSERT INTO attempt (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,
-            input_digest,schema_version,model,effort,access_policy,deadline,entry_pid,entry_start,entry_boot,number,seq,slot_head)
+            input_digest,schema_version,model,effort,access_policy,deadline,entry_pid,entry_start,entry_boot,number,seq,slot_head,
+            engine_digest,admitted_at)
             VALUES ('attempt','dispatch',1,'plan','beads','tasks','tl-1','/tracker',?,'s1','input.txt',?,1,'chosen','high',
-            '{"harness":"codex","sandbox":"workspace-write"}',100,7,'entry-start','boot',1,1,?)""",
+            '{"harness":"codex","sandbox":"workspace-write"}',100,7,'entry-start','boot',1,1,?,
+        'abababababababababababababababababababababababababababababababab',1.0)""",
             (repo_id, hashlib.sha256(TASK.encode()).hexdigest(), head(slot)),
         )
     (tmp_path / "input.txt").write_text(TASK)
@@ -433,7 +436,8 @@ def test_two_starts_on_two_connections_admit_exactly_one(
     def contender() -> None:
         store = Store(SCHEMA)
         mine = store.open_rw(path)
-        admit = ChainAdmission(lambda: mine, store.begin_immediate, Racing(tmp_path), lambda: 10, checkouts, slot_files, ids=NativeIds())
+        admit = ChainAdmission(lambda: mine, store.begin_immediate, Racing(tmp_path), lambda: 10, checkouts, slot_files,
+                              ids=NativeIds(), engine=ENGINE)
         outcomes.append(admit.admit_repeat(RepeatRequest(KEY, "feedback", 1000, "unsafe", content_digest=CONTENT_DIGEST)))
 
     threads = [threading.Thread(target=contender) for _ in range(2)]
@@ -544,7 +548,7 @@ def test_start_repeats_a_captured_current_attempt_and_launches_any_other(
     store, launcher, repeats = AttemptStore(lambda: registered), Launching(), Repeats()
     fresh = AttemptAdmission(
         lambda: registered, begin_immediate, EvidenceFiles(tmp_path), never, never, never, never, lambda: 10, never, slot_files
-    , ids=NativeIds())
+    , ids=NativeIds(), engine=ENGINE)
     ports = StartPorts(store, fresh, launcher, lambda: 10, repeats, NoAdvance(), NO_CHECKS)
     assert start(ports, request) == Started("relaunched", "tasks", "tl-1", "attempt", True, ENTRY, step="plan")
     unsafe(registered, tmp_path, slot, checkouts, slot_files)
@@ -554,9 +558,10 @@ def test_start_repeats_a_captured_current_attempt_and_launches_any_other(
 
 def test_the_schema_numbers_attempts_and_links_each_to_the_one_it_repeats(registered: sqlite3.Connection) -> None:
     insert = """INSERT INTO attempt (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,
-    input_digest,schema_version,model,effort,access_policy,deadline,number,previous_attempt_id,repeat_reason,seq,slot_head)
+    input_digest,schema_version,model,effort,access_policy,deadline,number,previous_attempt_id,repeat_reason,seq,slot_head,
+    engine_digest,admitted_at)
     VALUES (?,?,2,'plan','beads','tasks','tl-1','/tracker','r','s1','i','d',1,'m','e','{"harness":"codex",
-    "sandbox":"workspace-write"}',1,?,?,?,?,'""" + "d" * 40 + "')"
+    "sandbox":"workspace-write"}',1,?,?,?,?,'""" + "d" * 40 + f"','{ENGINE}',1.0)"
     for values, constraint in [
         (("n", "t", 2, None, "unsafe", 2), "previous_attempt_id IS NULL"),
         (("n", "t", 2, "attempt", None, 2), "repeat_reason IS NULL"),

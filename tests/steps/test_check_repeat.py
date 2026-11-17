@@ -359,9 +359,9 @@ def test_crash_before_or_after_admission_continues_without_spending_an_extra_att
     original = CheckRepeatStore.admit
 
     def crash(self: CheckRepeatStore, previous: AttemptKey, evidence: FailedCheck, key: AttemptKey, ref: FileRef,
-              free: tuple[Free, ...], deadline: float) -> Admitted | AdmitRefused:
+              free: tuple[Free, ...], deadline: float, engine: str, admitted_at: float) -> Admitted | AdmitRefused:
         if after:
-            original(self, previous, evidence, key, ref, free, deadline)
+            original(self, previous, evidence, key, ref, free, deadline, engine, admitted_at)
         raise RuntimeError("coordinator died")
 
     monkeypatch.setattr(CheckRepeatStore, "admit", crash)
@@ -380,10 +380,10 @@ def test_overlapping_starts_adopt_one_successor(rig: Repairing, monkeypatch: pyt
     winners: list[Started | Failed] = []
 
     def competing(self: CheckRepeatStore, previous: AttemptKey, evidence: FailedCheck, key: AttemptKey, ref: FileRef,
-                  free: tuple[Free, ...], deadline: float) -> Admitted | AdmitRefused:
+                  free: tuple[Free, ...], deadline: float, engine: str, admitted_at: float) -> Admitted | AdmitRefused:
         monkeypatch.setattr(CheckRepeatStore, "admit", original)
         winners.append(start(rig.starting(), rig.request()))
-        return original(self, previous, evidence, key, ref, free, deadline)
+        return original(self, previous, evidence, key, ref, free, deadline, engine, admitted_at)
 
     monkeypatch.setattr(CheckRepeatStore, "admit", competing)
     result = start(rig.starting(), rig.request())

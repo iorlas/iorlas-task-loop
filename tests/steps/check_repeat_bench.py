@@ -3,6 +3,7 @@
 import hashlib
 from dataclasses import replace
 
+from doubles import ENGINE
 from test_checks_round import Checking
 
 from taskloop.admit_chain import ChainAdmission
@@ -29,12 +30,12 @@ class Repairing(Checking):
         repair = CheckRepeat(CheckRepeatStore(lambda: self.con), EvidenceFiles(self.tmp), self.tracker.inspect,
                              self.checkouts, self.files, lambda _path: True,
                              lambda path: GitProfileFiles(path, self.checkouts), self, self.observe,
-                                 self.command, lambda: self.now, ids=NativeIds())
+                                 self.command, lambda: self.now, ids=NativeIds(), engine=ENGINE)
         factory_commit = FactoryCommit(self.store, self.checkouts, self.files, lambda _worker: True, lambda: self.now, hold,
                                        ids=NativeIds())
         repeat = StepRepeat(self.store, factory_commit, EvidenceFiles(self.tmp),
                             ChainAdmission(lambda: self.con, self.store.begin, EvidenceFiles(self.tmp),
-                                lambda: self.now, self.checkouts, self.files, ids=NativeIds()), self,
+                                lambda: self.now, self.checkouts, self.files, ids=NativeIds(), engine=ENGINE), self,
                             lambda _worker: True, self.observe, lambda: self.now, repeating, ids=NativeIds())
         return replace(super().starting(), check_repeat=repair, repeat=repeat)
 

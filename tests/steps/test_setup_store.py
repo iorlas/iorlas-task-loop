@@ -27,9 +27,10 @@ def store(con: sqlite3.Connection) -> SetupStore:
 def add_owner(con: sqlite3.Connection, identity: str, started: float, *, backlog: str = "tasks", step: str = "implement") -> None:
     con.execute("""INSERT INTO attempt
         (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,input_digest,
-        schema_version,model,effort,access_policy,deadline,number,seq,slot_head,after_commit)
+        schema_version,model,effort,access_policy,deadline,number,seq,slot_head,after_commit,engine_digest,admitted_at)
         SELECT ?,?,generation,?,adapter,?,?,tracker_root,repo_id,slot,input_path,input_digest,
-        schema_version,model,effort,access_policy,deadline,number,seq,slot_head,? FROM attempt WHERE attempt_id='attempt'""",
+        schema_version,model,effort,access_policy,deadline,number,seq,slot_head,?,engine_digest,
+        admitted_at FROM attempt WHERE attempt_id='attempt'""",
         (identity, f"token-{identity}", step, backlog, identity, B if step == "implement" else None))
     con.execute("""INSERT INTO setup_run (attempt_id,run,dispatch_token,generation,commit_sha,digest,started_at)
         VALUES (?,1,?,1,?,?,?)""", (identity, f"token-{identity}", B, DIGEST, started))

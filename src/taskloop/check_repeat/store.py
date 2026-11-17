@@ -77,7 +77,7 @@ class CheckRepeatStore(StoreConnection):
             return issued(con, RepoId(repo_id), tuple(each.name for each in free)) + 1
 
     def admit(self, previous: AttemptKey, evidence: FailedCheck, key: AttemptKey, ref: FileRef,
-              free: tuple[Free, ...], deadline: float) -> Admitted | AdmitRefused:
+              free: tuple[Free, ...], deadline: float, engine: str, admitted_at: float) -> Admitted | AdmitRefused:
         """Fenced source, current attempt, completed block, cap, release, hold and successor uniqueness under one lock."""
         with self._connection(write=True) as con:
             if blocked(con):
@@ -105,6 +105,7 @@ class CheckRepeatStore(StoreConnection):
                 "model": choices.model, "effort": choices.effort, "access_policy": encode_policy(choices.access),
                 "compaction_token_limit": choices.compaction_token_limit,
                 "harness": choices.harness, "provider": choices.provider, "deadline": deadline,
+                "engine_digest": engine, "admitted_at": admitted_at,
                 "number": row.number + 1, "seq": row.seq + 1, "previous_attempt_id": previous.attempt_id,
                 "repeat_reason": CheckRepeatReason.FAILED_CHECK.value, "repeat_listing": None,
                 "source_checks_id": source.key.attempt_id, "slot_head": head, "after_commit": source.commit, "label": row.label,

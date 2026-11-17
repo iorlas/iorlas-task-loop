@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 from admission_boundaries import guard_git, outside_transaction
-from doubles import MAIN_PROFILE, ChecksBench, Done, FakeSlotFiles, FixedIds, PinnedViews
+from doubles import ENGINE, MAIN_PROFILE, ChecksBench, Done, FakeSlotFiles, FixedIds, PinnedViews
 from git_porcelain import Sha
 from git_porcelain.testing import FakeRemote, FakeRepo
 from sqlite_store import begin_immediate
@@ -243,7 +243,7 @@ def test_a_commit_between_the_reads_and_the_write_is_seen_under_the_lock(
 def test_the_agent_advance_refuses_the_check_step_before_any_tracker_read_or_input(bench: ChecksBench) -> None:
     """`admit_chain` admits only agent steps: after implement it is `not_advanceable` (never `kind("check")`)."""
     advance = NextAdmission(lambda: bench.con, begin_immediate, EvidenceFiles(bench.done.path.parent), bench.inspect, bench.views,
-                            lambda: 10, lambda _p: True, bench.files, ids=NativeIds())
+                            lambda: 10, lambda _p: True, bench.files, ids=NativeIds(), engine=ENGINE)
     found = advance.admit_next(
         NextStepRequest(
             bench.done.implement,

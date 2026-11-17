@@ -11,6 +11,7 @@ from typing import Literal
 
 import pytest
 from any_agent.procs import Worker
+from doubles import ENGINE
 from hold_fixtures import STUCK_SQL
 from sqlite_store import Store
 from test_attempt import ENTRY, KEY, PLAN, WORKER, AttemptSurroundings, app, fake, seed
@@ -58,7 +59,7 @@ def failed(surroundings: AttemptSurroundings) -> Generator[sqlite3.Connection]:
 
 def operation(con: sqlite3.Connection, surroundings: AttemptSurroundings, processes: Processes | None = None) -> AnswerRepair:
     return AnswerRepair(AnswerRepairStore(lambda: con), EvidenceFiles(surroundings.tmp), processes or Processes(),
-                        hold, lambda: 10, ids=NativeIds())
+                        hold, lambda: 10, ids=NativeIds(), engine=ENGINE)
 
 
 def successor(con: sqlite3.Connection, surroundings: AttemptSurroundings) -> AttemptKey:
@@ -110,8 +111,8 @@ def test_restart_and_lost_admission_acknowledgement_find_one_saved_successor(
     admit = repair.store.admit
 
     def lost(expected: AttemptRecord, execution: StoredExecution, context: RepairContext,
-             key: AttemptKey, ref: FileRef, now: float) -> RepairResult:
-        admit(expected, execution, context, key, ref, now)
+             key: AttemptKey, ref: FileRef, now: float, engine: str) -> RepairResult:
+        admit(expected, execution, context, key, ref, now, engine)
         raise StoreUnavailable("admission acknowledgement lost")
 
     monkeypatch.setattr(repair.store, "admit", lost)
@@ -272,8 +273,9 @@ def test_capture_lost_acknowledgement_reopens_and_collects_saved_facts(
     capture = attempts.store.capture
 
     def lost(admission: Admission, worker: Worker | None, facts: ExecutionFacts, evidence: Evidence,
-             session_state: Literal["complete", "pending", "conflict", "fault"], callback: Callback | None = None) -> None:
-        capture(admission, worker, facts, evidence, session_state, callback)
+             session_state: Literal["complete", "pending", "conflict", "fault"], callback: Callback | None = None,
+             *, now: float) -> None:
+        capture(admission, worker, facts, evidence, session_state, callback, now=now)
         raise StoreUnavailable("capture acknowledgement lost")
 
     with monkeypatch.context() as patch:
@@ -307,7 +309,7 @@ def test_repair_restart_never_renews_the_original_deadline(failed: sqlite3.Conne
     run = fake(refs=("saved",))
     assert app(failed, surroundings, run).execute(key, rebooted).execution is not None
     failed.execute("DELETE FROM execution WHERE attempt_id=?", (key.attempt_id,))
-    failed.execute("UPDATE attempt SET phase='registered' WHERE attempt_id=?", (key.attempt_id,))
+    failed.execute("UPDATE attempt SET phase='registered',ended_at=NULL WHERE attempt_id=?", (key.attempt_id,))
     snapshot = RecoveryStore(lambda: failed).snapshot(key, 100, allow_expired=True)
     assert isinstance(snapshot, Result) and snapshot.outcome is Outcome.EXPIRED
 
@@ -330,7 +332,7 @@ def test_implement_repair_preserves_work_without_running_setup(failed: sqlite3.C
 def test_repairs_preserve_commit_repeat_numbers_and_cap(failed: sqlite3.Connection, surroundings: AttemptSurroundings) -> None:
     repair = operation(failed, surroundings)
     chain = ChainAdmission(repair.store.connect, repair.store.begin, repair.files, lambda: 10,
-                           surroundings.checkouts, surroundings.files, ids=NativeIds())
+                           surroundings.checkouts, surroundings.files, ids=NativeIds(), engine=ENGINE)
     store, current = repair.store, KEY
     unchanged = json.dumps(PLAN | {"disposition": "unchanged", "paths": [], "message": None})
     for number in range(1, 4):

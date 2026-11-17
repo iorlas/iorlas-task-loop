@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 from any_agent import Harness, LaunchSpec, RunHooks, RunOutcome
-from doubles import CHECKS, ChecksBench, Command, Done, FakeSlotFiles, PinnedViews
+from doubles import CHECKS, ENGINE, ChecksBench, Command, Done, FakeSlotFiles, PinnedViews
 from git_porcelain.testing import FakeRepo, FakeWorktree
 from land_bench import LandBench, bench
 from plan_fixtures import PLAN_TEXT
@@ -148,7 +148,7 @@ def test_repeat_and_failed_check_repair_cannot_create_an_attempt_behind_the_fenc
     DrainStore(lambda: factory, ids=NativeIds()).request()
     key = AttemptKey("previous", "token", 1)
     chain = ChainAdmission(lambda: factory, Store(SCHEMA).begin_immediate, EvidenceFiles(tmp_path), lambda: 10,
-                           checkouts, slot_files, ids=NativeIds())
+                           checkouts, slot_files, ids=NativeIds(), engine=ENGINE)
     found = chain.admit_repeat(RepeatRequest(key, "repeat", 100, "uncommitted"))
     assert isinstance(found, AdmitRefused) and found.reason is Reason.DRAINING
     source = AttemptKey("checks", "checks-token", 1)
@@ -162,7 +162,7 @@ def test_repeat_and_failed_check_repair_cannot_create_an_attempt_behind_the_fenc
         output=OutputTail(availability=Availability.UNAVAILABLE),
     )
     repair = CheckRepeatStore(lambda: factory).admit(
-        key, feedback, AttemptKey("next", "next-token", 2), FileRef("input", "d" * 64), (), 100
+        key, feedback, AttemptKey("next", "next-token", 2), FileRef("input", "d" * 64), (), 100, ENGINE, 1.0
     )
     assert isinstance(repair, AdmitRefused) and repair.reason is Reason.DRAINING
     assert rows(factory) == (0, 0)

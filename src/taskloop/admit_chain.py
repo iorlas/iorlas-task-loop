@@ -78,9 +78,9 @@ class ChainAdmission:
         clock: Callable[[], float],
         checkouts: Checkouts,
         slot_files: SlotFiles,
-        *, ids: Ids,
+        *, ids: Ids, engine: str,
     ) -> None:
-        self.ids = ids
+        self.ids, self.engine = ids, engine
         self.connect, self.begin, self.files, self.clock = connect, begin, files, clock
         self.checkouts, self.slot_files = checkouts, slot_files
 
@@ -142,7 +142,7 @@ class ChainAdmission:
             "previous_attempt_id": previous.attempt_id,
             "repeat_reason": request.reason, "repeat_listing": json.dumps(request.listing), "seq": row.seq + 1,
             "slot_head": row.slot_head, "step": row.step,
-            "harness": row.harness, "provider": row.provider,
+            "harness": row.harness, "provider": row.provider, "engine_digest": self.engine, "admitted_at": self.clock(),
             "compaction_token_limit": row.compaction_token_limit,
             "after_commit": None, "label": row.label,  # a repeat starts at E, the chain's own
         }, request.content_digest)
@@ -186,10 +186,10 @@ class NextAdmission:
         clock: Callable[[], float],
         probe: Probe,
         slot_files: SlotFiles,
-        *, ids: Ids, discussion: CollectDiscussion = empty,
+        *, ids: Ids, engine: str, discussion: CollectDiscussion = empty,
     ) -> None:
         """The ports of a fresh admission (`admit.AttemptAdmission`) without the claim: an advance never claims."""
-        self.ids = ids
+        self.ids, self.engine = ids, engine
         self.discussion = discussion
         self.connect, self.begin, self.files, self.tasks, self.checkouts = connect, begin, files, tasks, checkouts
         self.clock, self.probe, self.slot_files = clock, probe, slot_files
@@ -322,7 +322,7 @@ class NextAdmission:
                     "after_commit": row.end_commit,
                     "label": row.label,
                     "harness": request.setting.harness,
-                    "provider": request.setting.provider,
+                    "provider": request.setting.provider, "engine_digest": self.engine, "admitted_at": self.clock(),
                 },
             )
         return Admitted(key, name)

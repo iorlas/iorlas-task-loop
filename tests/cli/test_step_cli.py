@@ -438,10 +438,11 @@ def admitted(path: Path) -> None:
         con.execute("INSERT INTO reservation VALUES ('s1','repo',1,'attempt')")
         con.execute(
             """INSERT INTO attempt (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,
-            input_digest,schema_version,model,effort,access_policy,deadline,number,seq,slot_head)
+            input_digest,schema_version,model,effort,access_policy,deadline,number,seq,slot_head,engine_digest,admitted_at)
             VALUES ('attempt',?,1,'plan','beads','tasks','tl-1','/tracker','repo','s1','input.txt',?,1,'m','high',
             '{"harness":"codex","sandbox":"workspace-write"}',100,1,1,
-            'dddddddddddddddddddddddddddddddddddddddd')""",
+            'dddddddddddddddddddddddddddddddddddddddd',
+        'abababababababababababababababababababababababababababababababab',1.0)""",
             (KEY.dispatch_token, hashlib.sha256(b"x").hexdigest()),
         )
     con.close()
@@ -457,9 +458,10 @@ def test_a_repeat_shows_the_setup_of_the_attempt_whose_environment_it_keeps(tmp_
                     "VALUES ('attempt',1,?,1,?,?,1,2,'passed',0)", (KEY.dispatch_token, "d" * 40, "f" * 64))
         con.execute("""INSERT INTO attempt (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,
             input_path,input_digest,schema_version,model,effort,access_policy,deadline,number,seq,slot_head,
-            previous_attempt_id,repeat_reason)
+            previous_attempt_id,repeat_reason,engine_digest,admitted_at)
             SELECT 'second','token-2',1,step,adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,input_digest,schema_version,
-            model,effort,access_policy,deadline,2,2,slot_head,'attempt','uncommitted' FROM attempt WHERE attempt_id='attempt'""")
+            model,effort,access_policy,deadline,2,2,slot_head,'attempt','uncommitted',engine_digest,
+            admitted_at FROM attempt WHERE attempt_id='attempt'""")
     con.close()
     assert main(["step", "show", "tl-1", "--backlog", "tasks", "--db", str(db), "--artifacts", str(art), "--json"]) == 0
     shown = json.loads(capsys.readouterr().out)

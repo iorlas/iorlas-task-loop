@@ -46,7 +46,7 @@ _UNDEFINED = encode(CommandConclusion.UNDEFINED)
 # This is also the runtime's persisted-state compatibility version: increment it for incompatible changes to the
 # interpretation of execution state, even without a DDL change. Compatible code changes keep it and resume normally.
 SCHEMA = Schema(
-    version=32,
+    version=33,
     name="factory",
     steps={},
     ddl=f"""
@@ -129,6 +129,8 @@ CREATE TABLE attempt (
  label TEXT CHECK(label IS NULL OR length(label) BETWEEN 1 AND 200),
  harness TEXT NOT NULL DEFAULT '{HarnessKind.CODEX}' CHECK(harness IN ({_HARNESSES})),
  provider TEXT NOT NULL DEFAULT '{Provider.OPENAI}' CHECK(provider IN ({_PROVIDERS})),
+ engine_digest TEXT NOT NULL CHECK(length(engine_digest)=64 AND engine_digest NOT GLOB '*[^0-9a-f]*'),
+ admitted_at REAL NOT NULL, ended_at REAL CHECK(ended_at IS NULL OR phase='captured'),
  CHECK((number = 1 AND repair_context IS NULL) = (previous_attempt_id IS NULL)),
  CHECK((number = 1) = (repeat_reason IS NULL)),
  CHECK(((number = 1 AND step <> 'plan') OR source_checks_id IS NOT NULL) = (after_commit IS NOT NULL)),
@@ -285,7 +287,7 @@ RESERVATION = "slot,repo_id,generation,attempt_id"
 ATTEMPT_ADMITTED = (
     "attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,input_digest,"
     "schema_version,model,effort,access_policy,deadline,number,previous_attempt_id,repeat_reason,repeat_listing,seq,slot_head,"
-    "after_commit,label,harness,provider,source_checks_id,compaction_token_limit,repair_context"
+    "after_commit,label,harness,provider,source_checks_id,compaction_token_limit,repair_context,engine_digest,admitted_at"
 )
 ATTEMPT_LOADED = (
     "backlog,task_id,repo_id,slot,input_path,input_digest,model,effort,access_policy,deadline,entry_pid,entry_start,entry_boot,"

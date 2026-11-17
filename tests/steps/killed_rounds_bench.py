@@ -87,8 +87,9 @@ class RestartFactory(Factory):
         def captured(
             admission: Admission, worker: Worker | None, facts: ExecutionFacts, evidence: Evidence,
             session_state: Literal["complete", "pending", "conflict", "fault"], callback: Callback | None = None,
+            *, now: float,
         ) -> Literal["accepted", "already_same", "conflict"]:
-            result = capture(admission, worker, facts, evidence, session_state, callback)
+            result = capture(admission, worker, facts, evidence, session_state, callback, now=now)
             effects.after("capture")
             return result
 

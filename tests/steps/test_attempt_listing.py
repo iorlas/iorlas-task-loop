@@ -26,9 +26,9 @@ def add(con: sqlite3.Connection, key: str, seq: int, backlog: str = "tasks", tas
         previous: str | None = None, step: str = "plan") -> None:
     con.execute("""INSERT INTO attempt (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,
         repo_id,slot,input_path,input_digest,schema_version,model,effort,access_policy,deadline,number,seq,slot_head,
-        previous_attempt_id,repeat_reason,after_commit)
+        previous_attempt_id,repeat_reason,after_commit,engine_digest,admitted_at)
         SELECT ?,?,1,?,adapter,?,?,tracker_root,?,slot,input_path,input_digest,schema_version,model,effort,access_policy,
-        deadline,?,?,slot_head,?,?,? FROM attempt WHERE attempt_id='attempt'""",
+        deadline,?,?,slot_head,?,?,?,engine_digest,admitted_at FROM attempt WHERE attempt_id='attempt'""",
         (key, key, step, backlog, task, repo, 2 if previous else 1, seq, previous, "unsafe" if previous else None,
          "a" * 40 if step == "implement" and previous is None else None))
 

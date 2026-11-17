@@ -147,7 +147,7 @@ class Attempts:
             session_state = "complete"
         else:
             return stored
-        self.store.capture(record.admission, None, stored.facts, stored.evidence, session_state, callback)
+        self.store.capture(record.admission, None, stored.facts, stored.evidence, session_state, callback, now=self.clock())
         return self.store.collect(record.admission.key) or stored
 
     def _refusal(self, admission: Admission, me: EntryIdentity, now: float) -> str | None:
@@ -321,7 +321,7 @@ class Attempts:
         pending = replace(pending, facts=facts)
         session_state = reconcile(self.store, admission, pending.sessions, facts, callback)
         try:
-            status = self.store.capture(admission, pending.raw.worker, facts, evidence, session_state, callback)
+            status = self.store.capture(admission, pending.raw.worker, facts, evidence, session_state, callback, now=self.clock())
         except StoreUnavailable:
             return CaptureResult("unavailable", "store"), pending
         except StoreRefused as error:

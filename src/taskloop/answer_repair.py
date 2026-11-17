@@ -17,10 +17,10 @@ from taskloop.slot_lock import SlotBusy, SlotLockUnavailable
 class AnswerRepair:
     def __init__(
         self, store: AnswerRepairStore, files: EvidenceFiles, processes: Processes,
-        hold: Callable[[Admission], AbstractContextManager[None]], clock: Callable[[], float], *, ids: Ids,
+        hold: Callable[[Admission], AbstractContextManager[None]], clock: Callable[[], float], *, ids: Ids, engine: str,
     ) -> None:
         self.store, self.files, self.processes = store, files, processes
-        self.hold, self.clock, self.ids = hold, clock, ids
+        self.hold, self.clock, self.ids, self.engine = hold, clock, ids, engine
 
     def admit(self, previous: AttemptKey) -> RepairResult:
         try:
@@ -63,4 +63,4 @@ class AnswerRepair:
                 "Return a corrected answer in this same session, following the original task and answer contract. "
                 "The existing work and original deadline are retained.\n")
         ref = self.files.put_input(key, text)
-        return self.store.admit(record, execution, context, key, ref, self.clock())
+        return self.store.admit(record, execution, context, key, ref, self.clock(), self.engine)

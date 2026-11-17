@@ -111,7 +111,7 @@ def test_captured_completion_and_explicit_holds_keep_their_own_paths(tmp_path: P
     view = current_view(reads, "tasks", "tl-1")
     assert view is not None and view.next == "commit"
     con.execute("DELETE FROM execution")
-    con.execute("UPDATE attempt SET phase='registered', label='auto'")
+    con.execute("UPDATE attempt SET phase='registered',ended_at=NULL,label='auto'")
     con.execute(STUCK_SQL)
     before = list(con.iterdump())
     shown = show_attempt(ports(con, Processes()), tmp_path / "artifacts", "tasks", "tl-1")

@@ -15,7 +15,7 @@ from any_agent.procs import Worker
 from any_agent.testing import FakeRun
 from beads_client import Bead
 from beads_client.testing import FakeTaskReadClient
-from doubles import NO_CHECKS, Environment, FixedIds, PinnedViews
+from doubles import ENGINE, NO_CHECKS, Environment, FixedIds, PinnedViews
 from git_porcelain import Pushed, Sha
 from git_porcelain.testing import FakeRemote, FakeRepo, FakeWorktree
 from plan_fixtures import PLAN_TEXT
@@ -104,7 +104,7 @@ def tasks(*beads: Bead) -> Callable[[str, str, str], TaskInspection]:
 
 def advancing(con: sqlite3.Connection, tmp_path: Path, checkouts: Checkouts, files: SlotFiles, bead: Bead = CLAIMED) -> NextAdmission:
     return NextAdmission(lambda: con, begin_immediate, EvidenceFiles(tmp_path), outside_transaction(con, tasks(bead)), checkouts,
-        lambda: 10, lambda _p: True, files, ids=NativeIds(), discussion=outside_transaction(con, empty))
+        lambda: 10, lambda _p: True, files, ids=NativeIds(), discussion=outside_transaction(con, empty), engine=ENGINE)
 
 
 def request(repo: FakeRepo, previous: AttemptKey = KEY) -> NextStepRequest:
@@ -246,7 +246,7 @@ def test_a_superseded_or_racing_advance_is_task_attempted_and_one_attempt_is_adm
     other = advancing(registered, tmp_path, checkouts, slot_files)
     files = Racing(tmp_path, lambda: other.admit_next(request(slot.repo)))
     racing = NextAdmission(lambda: registered, begin_immediate, files, outside_transaction(registered, tasks(CLAIMED)),
-        checkouts, lambda: 10, lambda _p: True, slot_files, ids=NativeIds())
+        checkouts, lambda: 10, lambda _p: True, slot_files, ids=NativeIds(), engine=ENGINE)
     found = racing.admit_next(request(slot.repo))
     assert isinstance(files.won, Admitted)
     assert isinstance(found, AdmitRefused) and found.reason == "task_attempted"
@@ -316,7 +316,7 @@ def test_a_repeat_of_implement_stays_in_implement_and_names_no_after_commit(
     execute(registered, tmp_path, key, agent(answer, change), checkouts, slot_files)
     ids = FixedIds()
     repeated = ChainAdmission(lambda: registered, begin_immediate, EvidenceFiles(tmp_path), lambda: 10,
-                              checkouts, slot_files, ids=ids).admit_repeat(
+                              checkouts, slot_files, ids=ids, engine=ENGINE).admit_repeat(
         RepeatRequest(key, "feedback", 100, "uncommitted"))
     assert isinstance(repeated, Admitted)
     assert repeated.key.attempt_id == ids.fresh[0] and repeated.key.dispatch_token == ids.tokens[0][1]
@@ -360,7 +360,7 @@ def test_the_advance_and_the_repeat_copy_the_label_the_task_was_taken_under(
 
     execute(registered, tmp_path, key, agent(answer, change), checkouts, slot_files)
     repeated = ChainAdmission(lambda: registered, begin_immediate, EvidenceFiles(tmp_path), lambda: 10,
-                              checkouts, slot_files, ids=NativeIds()).admit_repeat(
+                              checkouts, slot_files, ids=NativeIds(), engine=ENGINE).admit_repeat(
         RepeatRequest(key, "feedback", 100, "uncommitted"))
     assert isinstance(repeated, Admitted)
     found = registered.execute("SELECT attempt_id,label FROM attempt ORDER BY seq").fetchall()
@@ -374,7 +374,8 @@ def test_an_abandoned_implement_restarts_the_task_at_plan(
     key = implement(registered, tmp_path, slot.repo, checkouts, slot_files)
     abandon(registered, checkouts, slot_files, key)
     fresh = AttemptAdmission(lambda: registered, begin_immediate, EvidenceFiles(tmp_path), tasks(CLAIMED), checkouts,
-                             lambda _r, _t: True, lambda _r, _t: True, lambda: 10, lambda _p: True, slot_files, ids=NativeIds())
+                             lambda _r, _t: True, lambda _r, _t: True, lambda: 10, lambda _p: True, slot_files, ids=NativeIds(),
+                              engine=ENGINE)
     admitted = fresh.admit(
         AdmitRequest(
             "tl-1",
@@ -467,9 +468,10 @@ def test_step_start_on_a_done_plan_admits_and_launches_implement(
 
 V11 = "INSERT INTO attempt (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,"
 V11 += """input_digest,schema_version,model,effort,access_policy,deadline,number,seq,slot_head,
-previous_attempt_id,repeat_reason,after_commit) """
+previous_attempt_id,repeat_reason,after_commit,engine_digest,admitted_at) """
 V11 += """VALUES (?,?,1,?,'beads','tasks','tl-1','/t','r','s1','i','d',1,'m','e','{"harness":"codex",
-"sandbox":"workspace-write"}',100,?,?,?,?,?,?)"""
+"sandbox":"workspace-write"}',100,?,?,?,?,?,?,
+        'abababababababababababababababababababababababababababababababab',1.0)"""
 SHA = "a" * 40
 
 

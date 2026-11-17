@@ -14,7 +14,7 @@ from any_agent import Harness, LaunchSpec, RunHooks, RunOutcome, Summary
 from any_agent.procs import Worker
 from any_agent.testing import FakeRun
 from beads_client import BdError, Bead
-from doubles import Environment, NoChecks, PinnedViews
+from doubles import ENGINE, Environment, NoChecks, PinnedViews
 from git_porcelain.testing import FakeRepo, FakeWorktree
 from plan_fixtures import PLAN_TEXT
 from sqlite_store import begin_immediate
@@ -210,10 +210,10 @@ class Factory:
     def starting(self) -> StartPorts:
         files, clock = EvidenceFiles(self.tmp), lambda: self.now
         fresh = AttemptAdmission(lambda: self.con, begin_immediate, files, self.tracker.inspect, self.checkouts, self.tracker.claim,
-                                 self.tracker.unclaim, clock, lambda _p: True, self.files, ids=NativeIds())
+                                 self.tracker.unclaim, clock, lambda _p: True, self.files, ids=NativeIds(), engine=ENGINE)
         advance = NextAdmission(lambda: self.con, begin_immediate, files, self.tracker.inspect, self.checkouts, clock, lambda _p: True,
-                                self.files, ids=NativeIds())
-        repairs = AnswerRepair(AnswerRepairStore(lambda: self.con), files, StoppedProcesses(), hold, clock, ids=NativeIds())
+                                self.files, ids=NativeIds(), engine=ENGINE)
+        repairs = AnswerRepair(AnswerRepairStore(lambda: self.con), files, StoppedProcesses(), hold, clock, ids=NativeIds(), engine=ENGINE)
         return StartPorts(self.store, fresh, self, clock, Never(), advance, ChecksPorts(NoRequired(), NoChecks(), NoChecks()),
                           answer_repair=AnswerRepairRouting(self.store, repairs, self))
 

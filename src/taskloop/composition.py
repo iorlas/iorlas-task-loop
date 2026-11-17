@@ -34,6 +34,7 @@ from taskloop.checks import Block, BlockPorts
 from taskloop.command_sink import WatchedHooks
 from taskloop.commit import FactoryCommit
 from taskloop.discussion import Discussion
+from taskloop.engine_digest import installed_digest
 from taskloop.environment import EnvironmentPorts, Preparation, SlotProfiles
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.factory_schema import SCHEMA
@@ -279,7 +280,7 @@ def open_admission(database: Path, artifacts: Path, views: GitViews, store: Stor
         slot_lock.probe,
         RealSlotFiles(),
         discussion=open_discussion(database, store).collect,
-        ids=NativeIds(),
+        ids=NativeIds(), engine=installed_digest(),
     )
 
 
@@ -287,14 +288,16 @@ def open_chain(database: Path, artifacts: Path, views: GitViews, store: Store | 
     """Real wiring of the admissions that continue a task: per-thread shared writers on factory.db, wall-clock deadlines."""
     store = store if store is not None else Store(SCHEMA)
     return ChainAdmission(lambda: store.shared_rw(database), store.begin_immediate, EvidenceFiles(artifacts), time.time,
-                          views.checkouts, RealSlotFiles(), ids=NativeIds())
+                          views.checkouts, RealSlotFiles(), ids=NativeIds(),
+                          engine=installed_digest())
 
 
 def open_answer_repair(database: Path, artifacts: Path, store: Store | None = None) -> AnswerRepair:
     """Repair admission shares the attempt lifecycle; dispatch uses the ordinary launcher and continuation."""
     store = store if store is not None else Store(SCHEMA)
     return AnswerRepair(AnswerRepairStore(lambda: store.shared_rw(database), store.begin_immediate), EvidenceFiles(artifacts),
-                        NativeProcesses(), slot_lock.hold, time.time, ids=NativeIds())
+                        NativeProcesses(), slot_lock.hold, time.time, ids=NativeIds(),
+                        engine=installed_digest())
 
 
 def open_advance(database: Path, artifacts: Path, views: GitViews, store: Store | None = None) -> NextAdmission:
@@ -305,7 +308,7 @@ def open_advance(database: Path, artifacts: Path, views: GitViews, store: Store 
         lambda: store.shared_rw(database), store.begin_immediate, EvidenceFiles(artifacts), inspect_tracker_task, views.checkouts,
         time.time, slot_lock.probe, RealSlotFiles(),
         discussion=open_discussion(database, store).collect,
-        ids=NativeIds(),
+        ids=NativeIds(), engine=installed_digest(),
     )
 
 

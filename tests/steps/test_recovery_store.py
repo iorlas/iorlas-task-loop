@@ -30,9 +30,11 @@ def seed(con: sqlite3.Connection, *, attempt: str = "attempt", task: str = "tl-1
     con.execute(
         """INSERT INTO attempt(attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,
         repo_id,slot,input_path,input_digest,schema_version,model,effort,access_policy,deadline,number,seq,slot_head,
-        entry_pid,entry_start,entry_boot,phase,rev,worker_pid,worker_pgid,worker_start,worker_boot,session_ref,base_commit)
+        entry_pid,entry_start,entry_boot,phase,rev,worker_pid,worker_pgid,worker_start,worker_boot,session_ref,base_commit,
+        engine_digest,admitted_at)
         VALUES(?,?,1,'plan','beads','tasks',?,'/tracker','repo',?,'input','digest',1,'chosen','high',
-        '{"harness":"codex","sandbox":"workspace-write"}',100,1,1,?,7,'entry','boot','registered',4,8,8,'worker','boot',?,?)""",
+        '{"harness":"codex","sandbox":"workspace-write"}',100,1,1,?,7,'entry','boot','registered',4,8,8,'worker','boot',?,?,
+        'abababababababababababababababababababababababababababababababab',1.0)""",
         (attempt, "dispatch" if attempt == "attempt" else attempt, task, attempt, "d" * 40, session, "b" * 40),
     )
 

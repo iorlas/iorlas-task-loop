@@ -106,7 +106,7 @@ def test_capture_and_explicit_hold_prevent_reconciliation_even_after_stop_proof(
             assert captured is not None
             if race:
                 registered.execute(f"INSERT INTO execution VALUES ({','.join('?' for _ in captured)})", captured)
-            registered.execute("UPDATE attempt SET phase='dispatching'")  # capture remains authoritative
+            registered.execute("UPDATE attempt SET phase='dispatching',ended_at=NULL")  # capture remains authoritative
         else:
             HoldStore(lambda: registered).insert(HoldInsert(event=event(STUCK, KEY.attempt_id), now=20))
 

@@ -14,7 +14,7 @@ from any_agent.procs import Worker
 from any_agent.testing import FakeRun
 from beads_client import Bd, BdError, Bead
 from beads_client.testing import FakeTaskReadClient, Script
-from doubles import FakeSlotFiles, FixedIds, PinnedViews
+from doubles import ENGINE, FakeSlotFiles, FixedIds, PinnedViews
 from git_porcelain import GitTimeout, NotARepo, Repo
 from git_porcelain.testing import FakeRemote, FakeRepo
 from sqlite_store import Store, begin_immediate
@@ -142,7 +142,7 @@ def admission(con: sqlite3.Connection, tmp_path: Path, tracker: Tracker, repo: F
         lambda: con, begin_immediate, tracker.files, outside_transaction(con, tasks), PinnedViews(repo),
         tracker.claim, tracker.unclaim, time, unlocked,
         FakeSlotFiles(repo),
-        ids=NativeIds(), discussion=outside_transaction(con, empty))
+        ids=NativeIds(), discussion=outside_transaction(con, empty), engine=ENGINE)
 
 
 @pytest.fixture(autouse=True)
