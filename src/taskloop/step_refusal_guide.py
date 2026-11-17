@@ -44,6 +44,8 @@ REFUSALS = {
     "checkout": "The checkout is absent or belongs to another repository. Select an existing checkout of the task's repository.",
     "input": "The agent input could not be prepared. Inspect the supplied detail and the artifacts directory's "
     "permissions and free space before starting work.",
+    "workflow": "The workflow file could not be used at the task's source commit. Inspect the supplied detail, then correct or add "
+    "`.task-loop/workflows/default.toml` on the task branch or on main before approving new work.",
     "claimed_elsewhere": "Another actor holds the tracker claim. Leave its work intact and wait for that actor's decision.",
     "constraint": "Admission conflicted with a retained reservation or task. Inspect the current attempt and "
     "slots before deciding which work may proceed.",

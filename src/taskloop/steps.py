@@ -17,6 +17,7 @@ from taskloop.check_repeat.feedback import FailedCheck
 from taskloop.input_context import InputContext
 from taskloop.step import Step, decode_step
 from taskloop.task import TaskInspection
+from taskloop.workflow import StepTable
 
 type Built = Step | Literal["check"]  # a built step: an agent step or the check
 
@@ -38,7 +39,7 @@ class StepKind:
 
     step: Step
     rules: Callable[[str], StepRules]
-    input_text: Callable[[TaskInspection, StepRules, InputContext], str]
+    input_text: Callable[[StepTable, TaskInspection, StepRules, InputContext], str]
     answer_schema: Mapping[str, object]
     decode: Callable[[object, StepRules], Answer]
     artifact: Callable[[Tree, StepRules], Rejected | str | None]

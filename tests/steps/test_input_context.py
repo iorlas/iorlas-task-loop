@@ -7,7 +7,7 @@ from pathlib import Path
 from shlex import split
 
 import pytest
-from doubles import Environment
+from doubles import WORKFLOW, Environment
 from git_porcelain import Recorded, Sha
 from git_porcelain.testing import FakeRepo, FakeWorktree
 from shelf_input_fixtures import shelf_files, write_shelf
@@ -64,13 +64,11 @@ class Files:
 def test_both_steps_supply_the_spec_commands_and_orientation_once(step: StepKind) -> None:
     paths = ("src/taskloop/app.py", "tests/steps/example.py", "docs/design/tl-1/plan.md")
     context = read(Files(profile=json.dumps(PROFILE).encode(), paths=paths), "commit")
-    text = step.input_text(TASK, step.rules("tl-1"), context)
+    table = WORKFLOW.table(step.step)
+    text = step.input_text(table, TASK, step.rules("tl-1"), context)
     assert TASK.title in text and TASK.requirements in text and TASK.acceptance in text
-    for phrase in ("AGENTS.md is already in context", "without reading it again", "complete task specification",
-                   "No task tracker lookup is required: use the supplied task text", "bd prime", "bd show",
-                   "beads SKILL.md", "grep pattern",
-                   "Do not read the justfile or .task-loop.json", "at most one targeted read", "only if the task's own plan cites it"):
-        assert phrase in text
+    places = [text.index(section.text) for section in table.prompt if section.text is not None]  # the file's prose, in its order
+    assert places and places == sorted(places)
     assert "- just check\n- just test" in text
     assert text.count(BEGIN) == text.count(END) == text.count(HEADING) == 1
     assert text.splitlines().count("CODE MAP") == 1
@@ -81,25 +79,19 @@ def test_both_steps_supply_the_spec_commands_and_orientation_once(step: StepKind
     assert "task: Work to accomplish." in glossary
     assert code_map.splitlines() == ["In this repository, source modules are primarily src/taskloop/*.py.",
                                      "Tests: tests/steps/.", *sorted(paths)]
-    assert SAVED_WORK in text and "tl-8bh9.8.7" not in text
-    assert "run every command listed under" not in text
-    assert "You have no task tracker" not in text and "bd and the beads skill are unavailable" not in text
+    assert SAVED_WORK in text
 
 
 @pytest.mark.parametrize("step", [PLAN, IMPLEMENT], ids=lambda step: step.step)
 @pytest.mark.parametrize("repeat", [False, True])
-def test_context_refresh_removes_unsupported_tracker_claims(step: StepKind, repeat: bool) -> None:
-    context = read(Files(), "commit")
-    text = step.input_text(TASK, step.rules("tl-1"), context)
-    text = text.replace("No task tracker lookup is required: use the supplied task text.",
-                        "You have no task tracker: bd and the beads skill are unavailable.")
+def test_context_refresh_replaces_only_the_factory_block(step: StepKind, repeat: bool) -> None:
+    old, new = read(Files(), "commit"), read(Files(paths=("src/fresh.py",)), "commit")
+    text = step.input_text(WORKFLOW.table(step.step), TASK, step.rules("tl-1"), old)
     if repeat:
         text = step.feedback(Uncommitted("uncommitted"), step.rules("tl-1"), 1, text, "nonce", unrecorded=True)
-    text = refresh(text, context)
-    assert "You have no task tracker" not in text and "bd and the beads skill are unavailable" not in text
-    assert text.count("No task tracker lookup is required: use the supplied task text.") == 1
-    assert text.count(BEGIN) == text.count(END) == 1
-    assert ("Do not search outside the repository" in text) is (step is PLAN)
+    refreshed = refresh(text, new)
+    assert refreshed == text.replace(old.render(), new.render()) and "src/fresh.py" in refreshed and "src/fresh.py" not in text
+    assert refreshed.count(BEGIN) == refreshed.count(END) == 1
 
 
 def test_all_validated_commands_keep_complete_shell_safe_argv() -> None:
@@ -256,7 +248,7 @@ def test_ordinary_repeat_uses_original_spec_and_current_committed_context_once(
     commit = committed(slot.repo.worktree(slot.repo.identity().root), "Original definition.")
     context = read(Files(blobs=shelf_files("b" * 40)), commit)
     files = EvidenceFiles(tmp_path)
-    ref = files.put_input(KEY, IMPLEMENT.input_text(TASK, IMPLEMENT.rules("tl-1"), context))
+    ref = files.put_input(KEY, IMPLEMENT.input_text(WORKFLOW.table(IMPLEMENT.step), TASK, IMPLEMENT.rules("tl-1"), context))
     registered.execute("UPDATE attempt SET step='implement',after_commit=?,input_path=?,input_digest=?", (commit, ref.path, ref.digest))
     changed = {"stray": "leftovers",
                DIGEST_PATH: shelf_files("c" * 40, stale=stale)[DIGEST_PATH].decode()}
@@ -305,7 +297,7 @@ def test_ordinary_repeat_uses_original_spec_and_current_committed_context_once(
 @pytest.mark.parametrize("step", [PLAN, IMPLEMENT], ids=lambda step: step.step)
 def test_steps_receive_one_validated_shelf_block_and_refresh_it(step: StepKind) -> None:
     files = Files(blobs=shelf_files())
-    text = step.input_text(TASK, step.rules("tl-1"), read(files, "first"))
+    text = step.input_text(WORKFLOW.table(step.step), TASK, step.rules("tl-1"), read(files, "first"))
     text = refresh(text, read(Files(blobs=shelf_files("b" * 40)), "second"))
     assert text.count(SHELF_GUIDANCE) == text.count("Validated shelf digest (") == 1
     assert "a" * 40 not in text and "b" * 40 in text
@@ -326,7 +318,7 @@ def test_required_digest_failures_are_explained(
     blobs: dict[str, bytes | NotAFile | Unavailable | NoCommit | None] = dict(shelf_files())
     blobs[DIGEST_PATH] = blob
     with pytest.raises(InputError, match=rf"(?s)docs/shelf-digest.json.*{reason}"):
-        step.input_text(TASK, step.rules("tl-1"), read(Files(blobs=blobs), "selected"))
+        step.input_text(WORKFLOW.table(step.step), TASK, step.rules("tl-1"), read(Files(blobs=blobs), "selected"))
 
 
 def test_present_bad_digest_is_never_skipped_without_shelf_declarations() -> None:

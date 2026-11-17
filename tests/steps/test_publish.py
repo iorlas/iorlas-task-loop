@@ -16,7 +16,7 @@ from admission_boundaries import guard_git, outside_transaction
 from any_agent import Harness, LaunchSpec, RunHooks, RunOutcome, Summary
 from any_agent.procs import Worker
 from any_agent.testing import FakeRun
-from doubles import FakeSlotFiles
+from doubles import WORKFLOW_FILES, FakeSlotFiles
 from git_porcelain import GitTimeout, GitUnavailable, HookRejected, MissingRemote, RefRejected, Rejected, RemoteRejected, Repo, Sha
 from git_porcelain.api import PushResult
 from git_porcelain.testing import FakeRemote, FakeRepo, FakeWorktree
@@ -107,7 +107,7 @@ def test_push_guard_rejects_a_write_transaction_before_effects(
 def remote(request: pytest.FixtureRequest) -> FakeRemote:
     """origin; `indirect` parametrization adds files to main's first commit (a plan already at D)."""
     found = FakeRemote("https://example.invalid/repo.git")
-    found.advance("main", {"README": "one", ".task-loop.json": "{}", **getattr(request, "param", {})})
+    found.advance("main", {"README": "one", ".task-loop.json": "{}", **getattr(request, "param", {}), **WORKFLOW_FILES})
     return found
 
 

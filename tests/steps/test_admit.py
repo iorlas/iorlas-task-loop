@@ -14,7 +14,7 @@ from any_agent.procs import Worker
 from any_agent.testing import FakeRun
 from beads_client import Bd, BdError, Bead
 from beads_client.testing import FakeTaskReadClient, Script
-from doubles import ENGINE, FakeSlotFiles, FixedIds, PinnedViews
+from doubles import ENGINE, WORKFLOW, WORKFLOW_FILES, FakeSlotFiles, FixedIds, PinnedViews
 from git_porcelain import GitTimeout, NotARepo, Repo
 from git_porcelain.testing import FakeRemote, FakeRepo
 from sqlite_store import Store, begin_immediate
@@ -39,6 +39,7 @@ from taskloop.slot_lock import custody
 from taskloop.slot_release import NotReleased, Released, SlotRelease
 from taskloop.slots import SlotGit, adopt, folder_name
 from taskloop.slots_store import SlotsStore
+from taskloop.step import Step
 from taskloop.task import TaskBinding, TaskInspection, TaskInspectionError, TaskScope
 from taskloop.tracker import inspect_task
 from taskloop.tracker_client import BD_DISCOVERY, tracker_claims, tracker_located
@@ -88,8 +89,8 @@ class Tracker:
         bead = TASKS.show(task_id)
         assert bead is not None
         prompt = self.files.read(self.files.inputs[-1])
-        assert prompt.startswith(PLAN_WARNING + "\n\nFirst assess depth from the supplied task text alone")
-        assert prompt.index("First assess depth") < prompt.index(bead.title)
+        assert prompt.startswith(WORKFLOW.table(Step.PLAN).prompt[0].text or "?")
+        assert prompt.index(bead.title) < prompt.index(PLAN_WARNING)
         self.calls.append("claim:" + task_id)
         self.during()
         if isinstance(self.claimed, BdError):
@@ -260,7 +261,7 @@ def test_admit_then_register_entry_then_execute_by_that_entry_is_collected(
     assert (collected.status, collected.reason) == ("pending", "commit") and len(run.calls) == 1
     _harness, spec, _timeout, _hooks = run.calls[0]
     assert spec.cwd == str(root.resolve() / folder_name(repo.identity()) / "s1")
-    assert spec.stdin.startswith(PLAN_WARNING + "\n\n")
+    assert PLAN_WARNING in spec.stdin
     prompt = spec.stdin + " ".join(spec.argv)
     assert "Do the thing" in prompt and "It is done" in prompt
     closing = "After the depth assessment permits planning, follow this plan-only reading order."
@@ -491,7 +492,7 @@ def test_composition_constructs_without_running_git_or_bd(tmp_path: Path) -> Non
 
 def test_two_repos_both_get_s1_and_the_fence_is_per_repo(factory: sqlite3.Connection, repo: FakeRepo, root: Path, tmp_path: Path) -> None:
     remote = FakeRemote("https://example.invalid/other.git")
-    remote.advance("main", {"README": "two", ".task-loop.json": "{}"})
+    remote.advance("main", {"README": "two", ".task-loop.json": "{}", **WORKFLOW_FILES})
     other = FakeRepo.clone(remote, tmp_path / "other")
     keys: list[AttemptKey] = []
     for each, task_id in ((repo, "tl-1"), (other, "tl-2")):

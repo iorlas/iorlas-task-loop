@@ -14,6 +14,7 @@ from pydantic import BaseModel, ConfigDict, ValidationError, model_validator
 
 from taskloop.frame_markers import RESERVED
 from taskloop.harness_choice import HarnessKind
+from taskloop.step import Step
 
 MAX_BYTES: Final = 64 * 1024
 
@@ -30,8 +31,10 @@ class Renderer(StrEnum):
 
 
 class Reason(StrEnum):
-    """Why a file is refused (decision 15); the reader adds `missing` and `not_a_file` where Git is read."""
+    """Why a file is refused (decision 15)."""
 
+    MISSING = "missing"
+    NOT_A_FILE = "not_a_file"
     TOO_LARGE = "too_large"
     NOT_TOML = "not_toml"
     UNKNOWN_KEY = "unknown_key"
@@ -93,6 +96,9 @@ class Steps(Input):
 
 class Workflow(Input):
     step: Steps
+
+    def table(self, step: Step) -> StepTable:
+        return self.step.plan if step is Step.PLAN else self.step.implement
 
 
 @dataclass(frozen=True)

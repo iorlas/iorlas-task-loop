@@ -4,15 +4,16 @@ import json
 from pathlib import Path
 
 import pytest
+from doubles import WORKFLOW
 from pydantic import ValidationError
 from test_steps import CONTEXT
 
-from taskloop.admit import task_text
 from taskloop.attempt_types import AttemptKey, PathExplanation, Uncommitted
 from taskloop.check_repeat.feedback import RENDER_BYTES, TAIL_BYTES, Availability, FailedCheck
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.steps import failed_check_feedback, kind
 from taskloop.task import TaskInspection, TaskReference, TaskScope
+from taskloop.task_input import task_text
 
 KEY = AttemptKey("checks", "token", 1)
 TASK = TaskInspection(TaskReference(TaskScope("tasks"), "tl-1"), "Fix a widget", "Fix X.", "X works.", (), "in_progress", "taskloop")
@@ -21,7 +22,7 @@ TASK = TaskInspection(TaskReference(TaskScope("tasks"), "tl-1"), "Fix a widget",
 def prompt(files: EvidenceFiles, argv: tuple[str, ...] = ("pytest", "a file.py", "a'\"b", "é")) -> str:
     found = FailedCheck(source=KEY, block=1, commit="a" * 40, name="test", argv=argv, rc=1,
                         output=files.check_output(KEY, 1, "test"))
-    return failed_check_feedback(found, task_text(TASK, "implement", CONTEXT), "NONCE")
+    return failed_check_feedback(found, task_text(TASK, "implement", CONTEXT, WORKFLOW), "NONCE")
 
 
 def test_failed_check_repeat_retains_the_original_implement_policy(tmp_path: Path) -> None:
@@ -34,7 +35,7 @@ def test_failed_check_repeat_retains_the_original_implement_policy(tmp_path: Pat
     assert "`paths`" not in instructions and "paths list" not in instructions
     assert "Remove unwanted untracked files and restore unwanted tracked edits before answering" in instructions
     assert "An unchanged answer still goes through fresh factory checks." in text
-    assert text.endswith(f"The task and plan instructions, for reference:\n\n{task_text(TASK, 'implement', CONTEXT)}")
+    assert text.endswith(f"The task and plan instructions, for reference:\n\n{task_text(TASK, 'implement', CONTEXT, WORKFLOW)}")
     assert "at most twice while working" in text and "Do not rerun either successful final command." in text
     assert "run `just check 2>&1 | tail -60` once and then `just test 2>&1 | tail -40` once" in text
 

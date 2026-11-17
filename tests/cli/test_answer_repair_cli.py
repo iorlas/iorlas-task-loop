@@ -6,7 +6,7 @@ from contextlib import contextmanager
 from pathlib import Path
 
 import pytest
-from doubles import FakeSlotFiles, PinnedViews
+from doubles import WORKFLOW_FILES, FakeSlotFiles, PinnedViews
 from git_porcelain.testing import FakeRemote, FakeRepo
 from round_bench import Factory, Tracker, scripts, task
 from sqlite_store import Store
@@ -24,7 +24,7 @@ def test_cli_repairs_once_and_reports_the_latest_rule(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], valid: bool,
 ) -> None:
     remote = FakeRemote("https://example.invalid/repo.git")
-    remote.advance("main", {"README": "one", ".task-loop.json": "{}"})
+    remote.advance("main", {"README": "one", ".task-loop.json": "{}", **WORKFLOW_FILES})
     repo = FakeRepo.clone(remote, tmp_path / "main")
     slot = repo.add_worktree(tmp_path / "slots" / "s1", "HEAD")
     store = Store(SCHEMA)

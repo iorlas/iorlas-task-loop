@@ -11,7 +11,7 @@ from dataclasses import replace
 from pathlib import Path
 
 import pytest
-from doubles import PinnedViews
+from doubles import WORKFLOW_PATH, PinnedViews
 from git_porcelain import Sha
 from git_porcelain.testing import FakeWorktree
 from plan_fixtures import PLAN_TEXT
@@ -291,7 +291,7 @@ def test_a_hold_saves_edits_deletions_and_new_files_but_not_ignored_files(factor
     factory.round(frozenset())
     (saved,) = _saved(factory)
     files = factory.slot.repo.tree(saved.sha)
-    assert files is not None and sorted(files.files) == [".task-loop.json", "README", "new/file.txt"]
+    assert files is not None and sorted(files.files) == [".task-loop.json", WORKFLOW_PATH, "README", "new/file.txt"]
     assert files.read("README") == b"edited\n"
     assert not factory.slot.dirty().raw and factory.slot.dirty(ignored_under=["."]).ignored == ("junk.log",)
     assert len(_saved(factory)) == 1 and len(dict(factory.slot.repo.branches("task/"))) == 1

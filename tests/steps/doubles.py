@@ -34,9 +34,28 @@ from taskloop.slot_release import ReleaseResult
 from taskloop.task import TaskBinding, TaskInspection, TaskScope
 from taskloop.tracker import inspect_task
 from taskloop.tracker_client import HoldAnswer, HoldWrite, LabelStep, TrackerHolds
+from taskloop.workflow import Workflow, load
 
 # The `checking` fixture's checks attempt: its key, its slot's HEAD D, the implement attempt's X, its target (`main`'s
 # commit at admission), and the required names with their argv digests at the target.
+# The repo's real default workflow, as every fake Git source serves it at the admission's source commit.
+WORKFLOW_PATH = ".task-loop/workflows/default.toml"
+WORKFLOW_BYTES = (Path(__file__).resolve().parents[2] / WORKFLOW_PATH).read_bytes()
+WORKFLOW_FILES = {WORKFLOW_PATH: WORKFLOW_BYTES.decode()}  # for `advance` and `write_file`
+
+
+def put_workflow(root: FakeWorktree) -> None:
+    root.write_file(WORKFLOW_PATH, WORKFLOW_BYTES.decode())
+
+
+def loaded_workflow() -> Workflow:
+    found = load(WORKFLOW_BYTES)
+    assert isinstance(found, Workflow)
+    return found
+
+
+WORKFLOW = loaded_workflow()
+
 # A valid engine digest (64 lowercase hex) for admissions and rows that need one.
 ENGINE = "ab" * 32
 CHECKS = AttemptKey("checks", "checks-token", 1)

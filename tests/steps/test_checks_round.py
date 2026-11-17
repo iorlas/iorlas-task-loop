@@ -11,7 +11,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 
 import pytest
-from doubles import MAIN_PROFILE, PinnedViews
+from doubles import MAIN_PROFILE, PinnedViews, put_workflow
 from git_porcelain import Recorded
 from git_porcelain.testing import FakeWorktree
 from round_bench import Factory, Tracker, scripts, task
@@ -190,6 +190,7 @@ def rig(tmp_path: Path, slot: FakeWorktree, checkouts: PinnedViews, slot_files: 
     """One adopted slot, tl-1 ready with `auto`; the person's `main` requires `check` and `test` (`MAIN_PROFILE`)."""
     root = slot.repo.worktree(slot.repo.identity().root)
     root.write_file(".task-loop.json", json.dumps(MAIN_PROFILE))
+    put_workflow(root)
     assert isinstance(root.record("profile", paths="all"), Recorded)
     root.push("main")
     path = tmp_path / "factory.db"

@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 from any_agent import Harness, LaunchSpec, RunHooks, RunOutcome
 from beads_client import Bead
-from doubles import MAIN_PROFILE, FakeSlotFiles, PinnedViews
+from doubles import MAIN_PROFILE, WORKFLOW_FILES, FakeSlotFiles, PinnedViews
 from git_porcelain.testing import FakeRemote, FakeRepo, FakeWorktree
 from merge_bench import MergeRepo
 from plan_fixtures import CHANGE_MAP, HEADER
@@ -20,7 +20,7 @@ from taskloop.merge.store import MergeStore
 @pytest.fixture
 def remote() -> FakeRemote:
     found = FakeRemote("https://example.invalid/repo.git")
-    found.advance("main", {"README": "old main\n", ".task-loop.json": json.dumps(MAIN_PROFILE)})
+    found.advance("main", {"README": "old main\n", ".task-loop.json": json.dumps(MAIN_PROFILE), **WORKFLOW_FILES})
     return found
 
 

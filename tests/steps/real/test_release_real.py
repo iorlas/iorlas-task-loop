@@ -15,7 +15,7 @@ from any_agent.procs import Worker
 from any_agent.testing import FakeRun
 from beads_client import Bead
 from beads_client.testing import FakeTaskReadClient
-from doubles import ENGINE
+from doubles import ENGINE, WORKFLOW_BYTES, WORKFLOW_PATH
 from git_porcelain.history import Identity
 from git_porcelain.testing import apply_hermetic_env, git
 from plan_fixtures import PLAN_TEXT
@@ -79,8 +79,10 @@ class Repository:
         self.main.mkdir()
         git(self.main, "init", "-q", "-b", "main")
         (self.main / "README").write_text("one\n")
+        (self.main / WORKFLOW_PATH).parent.mkdir(parents=True)
+        (self.main / WORKFLOW_PATH).write_bytes(WORKFLOW_BYTES)
         (self.main / ".task-loop.json").write_text("{}")
-        git(self.main, "add", "README", ".task-loop.json")
+        git(self.main, "add", "README", ".task-loop.json", WORKFLOW_PATH)
         git(self.main, "commit", "-q", "-m", "base")
         origin = root / "origin"
         git(root, "clone", "-q", "--bare", str(self.main), str(origin))

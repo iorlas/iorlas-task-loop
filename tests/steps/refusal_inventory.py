@@ -76,7 +76,9 @@ def typed_reasons() -> set[str]:
 REVIEWED_DYNAMIC = {
     ('admit.py', 'AdmitRefused', 'Reason.DRAINING'),
     ('admit.py', 'AdmitRefused', 'found'),
+    ('admit.py', 'AdmitRefused', "'workflow' if isinstance(error, WorkflowRefusal) else 'input'"),
     ('admit_chain.py', 'AdmitRefused', 'Reason.DRAINING'),
+    ('admit_chain.py', 'AdmitRefused', "'workflow' if isinstance(error, WorkflowRefusal) else 'input'"),
     ('answer_repair_route.py', 'Failed', 'RepairReason.ADMISSION'),
     ('answer_repair_route.py', 'Failed', 'result.reason'),  # captured answer failures, listed in DYNAMIC_REASONS
     ('attempt_loads.py', 'Rejected', 'rule'),

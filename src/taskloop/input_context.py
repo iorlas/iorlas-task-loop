@@ -22,17 +22,6 @@ SHELF_GUIDANCE = (
     "Shelf is read-only for agents. Use this validated digest first. If the task requires a shelf change, "
     "stop with needs_owner and describe the proposed shelf change."
 )
-ORIENTATION = (
-    "AGENTS.md is already in context: follow it without reading it again. These attempt-specific directions replace "
-    "its general orientation-file read instructions. The supplied task text is the complete task specification. "
-    "No task tracker lookup is required: use the supplied task text. Do not invoke bd (including bd prime or bd show) "
-    "or load the beads SKILL.md. Do not search git log with the task id as a grep pattern: it supplies no further spec. "
-    "Do not read the justfile or .task-loop.json: the check commands below replace instructions to read those files. Listing checks "
-    "does not require a plan attempt to run implementation checks. Use the included glossary definitions; read the full "
-    "glossary only for missing terms, collected into at most one targeted read command per attempt. Do not start by "
-    "reading it in full. Read the task's own plan as this step requires; read an older foundation plan only if the task's "
-    "own plan cites it. If no glossary exists at the source commit, do not search for one."
-)
 
 
 class InputError(Exception):
@@ -67,7 +56,7 @@ class InputContext:
     def render(self) -> str:
         commands = "\n".join(f"- {command}" for command in self.commands) or "(none)"
         names = "\n".join(self.paths) or "(no tracked paths under src/, tests/ or docs/design/)"
-        return (f"{BEGIN}\n{ORIENTATION}\nSource commit: {self.commit}\nCheck commands:\n{commands}\n\n"
+        return (f"{BEGIN}\nSource commit: {self.commit}\nCheck commands:\n{commands}\n\n"
                 f"{self.glossary}\n{self.shelf}CODE MAP\n{self.layout}{names}\n{END}")
 
 

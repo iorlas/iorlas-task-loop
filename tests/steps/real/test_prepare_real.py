@@ -14,7 +14,7 @@ from any_agent.procs import Worker
 from any_agent.testing import FakeRun
 from beads_client import Bead
 from beads_client.testing import FakeTaskReadClient
-from doubles import ENGINE
+from doubles import ENGINE, WORKFLOW_BYTES, WORKFLOW_PATH
 from git_porcelain.history import Identity
 from git_porcelain.testing import apply_hermetic_env, git
 from plan_fixtures import PLAN_TEXT
@@ -63,8 +63,10 @@ def test_a_detached_slot_is_prepared_on_its_task_branch_and_the_plan_is_committe
     main.mkdir()
     git(main, "init", "-q", "-b", "main")
     (main / "README").write_text("one\n")
+    (main / WORKFLOW_PATH).parent.mkdir(parents=True)
+    (main / WORKFLOW_PATH).write_bytes(WORKFLOW_BYTES)
     (main / ".task-loop.json").write_text("{}")
-    git(main, "add", "README", ".task-loop.json")
+    git(main, "add", "README", ".task-loop.json", WORKFLOW_PATH)
     git(main, "commit", "-q", "-m", "base")
     slot = slots / folder_name(VIEWS.checkouts(main).identity()) / "s1"
     git(main, "worktree", "add", "-q", "--detach", str(slot), "HEAD")
