@@ -18,6 +18,8 @@ from taskloop.input_context import InputContext
 from taskloop.step import Step, decode_step
 from taskloop.task import TaskInspection
 
+type Built = Step | Literal["check"]  # a built step: an agent step or the check
+
 
 class Feedback(Protocol):
     def __call__(self, found: Uncommitted, rules: StepRules, number: int, task: str, nonce: str, *, unrecorded: bool) -> str:
@@ -52,9 +54,9 @@ IMPLEMENT: Final = StepKind(
     Step.IMPLEMENT, implement_step.step_rules, implement_step.input_text, implement_step.ANSWER_SCHEMA, implement_step.decode,
     implement_step.artifact, implement_step.feedback, environment=True,
 )
-STEPS: Final[tuple[StepKind, ...]] = (PLAN, IMPLEMENT)  # the agent steps, in order
+KINDS: Final[Mapping[Step, StepKind]] = {each.step: each for each in (PLAN, IMPLEMENT)}  # the registry, one kind per `Step`
 CHECK: Final = "check"  # the checks step: no kind, its own tables (`check_store`)
-ORDER: Final = (PLAN.step, IMPLEMENT.step, CHECK)  # every built step, in the fixed order
+ORDER: Final[tuple[Built, ...]] = (*KINDS, CHECK)  # every built step, in the fixed order: the `Step` enum's, then the check
 # every verdict word a stored verdict may hold
 RULES: Final[tuple[Rule, ...]] = CHAIN_RULES + plan_step.ARTIFACT_RULES + implement_step.ARTIFACT_RULES
 
@@ -70,11 +72,7 @@ def kind(step: str) -> StepKind:
         selected = decode_step(step)
     except ValueError as error:
         raise ValueError(f"Unknown step: {step}") from error
-    match selected:
-        case Step.PLAN:
-            return PLAN
-        case Step.IMPLEMENT:
-            return IMPLEMENT
+    return KINDS[selected]
 
 
 def is_agent(step: str) -> bool:
@@ -86,17 +84,17 @@ def is_agent(step: str) -> bool:
     return True
 
 
-def following(step: str) -> Step | Literal["check"] | None:
+def following(step: str) -> Built | None:
     """The step after `step` in `ORDER`; None after the last built step. An unknown step is a programming error."""
     selected = CHECK if step == CHECK else kind(step).step
     at = ORDER.index(selected)
     return ORDER[at + 1] if at + 1 < len(ORDER) else None
 
 
-def next_step(current: str | None, done: bool) -> Step | Literal["check"] | None:
+def next_step(current: str | None, done: bool) -> Built | None:
     """What a task admits next. `current`: its current attempt's step, None when it has none or its abandon returned the
     claim (a fresh start: the first step). `done`: that attempt is accepted by factory commit, its release settled (claim kept) and its
     commit published. None: the current attempt's own `Next` applies, or the last step is done."""
     if current is None:
-        return STEPS[0].step
+        return next(iter(KINDS))
     return following(current) if done else None

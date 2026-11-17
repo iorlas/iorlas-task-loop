@@ -11,7 +11,7 @@ from taskloop.plan_reuse import ReuseDecision
 from taskloop.resume_plan import Selection
 from taskloop.step import Step
 from taskloop.step_text import GIT_WRITES, SAVED_WORK
-from taskloop.steps import CHECK, IMPLEMENT, ORDER, PLAN, failed_check_feedback, following, is_agent, kind, next_step
+from taskloop.steps import CHECK, IMPLEMENT, KINDS, ORDER, PLAN, failed_check_feedback, following, is_agent, kind, next_step
 from taskloop.task import TaskInspection, TaskReference, TaskScope
 
 CONTEXT = InputContext("a" * 40, ("just check", "just test"), "Partial glossary: task: Work.\n", ())
@@ -50,6 +50,12 @@ def test_next_step_follows_the_fixed_order_only_after_a_done_step(current: str |
     assert found == expected
     if isinstance(expected, Step):
         assert found is expected
+
+
+def test_every_step_has_one_kind_and_the_order_is_the_enum_then_check() -> None:
+    assert set(KINDS) == set(Step)
+    assert all(kind(step) is KINDS[step] and KINDS[step].step is step for step in Step)
+    assert tuple(ORDER) == (*Step, CHECK)
 
 
 def test_the_check_step_follows_implement_and_is_no_agent_kind() -> None:
