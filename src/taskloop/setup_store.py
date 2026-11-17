@@ -26,6 +26,7 @@ from taskloop.check_store import RESULT_HELD
 from taskloop.command_conclusion import SETUP_CONCLUSIONS, CommandConclusion, decode, encode
 from taskloop.drain.models import Owner, Role, owners
 from taskloop.land_conflict.reservation_store import owns
+from taskloop.step import Step
 
 FAILURES: Final[tuple[CommandConclusion, ...]] = (CommandConclusion.FAILED, CommandConclusion.TIMED_OUT,
     CommandConclusion.LINGERING, CommandConclusion.DIRTY)  # `interrupted` is not the setup's fault
@@ -162,9 +163,9 @@ class SetupStore(AttemptReads):
         with self._connection() as con:
             rows = con.execute("""SELECT a.attempt_id,a.task_id,a.repo_id,s.run,s.started_at,s.ended_at,s.conclusion
                 FROM attempt a JOIN setup_run s ON s.attempt_id=a.attempt_id
-                WHERE a.backlog=? AND a.step='implement' AND a.previous_attempt_id IS NULL
+                WHERE a.backlog=? AND a.step=? AND a.previous_attempt_id IS NULL
                 AND s.run=(SELECT max(r.run) FROM setup_run r WHERE r.attempt_id=a.attempt_id)
-                ORDER BY s.started_at DESC,a.attempt_id ASC LIMIT 10""", (backlog,)).fetchall()
+                ORDER BY s.started_at DESC,a.attempt_id ASC LIMIT 10""", (backlog, Step.IMPLEMENT)).fetchall()
             return tuple(SetupSample(attempt_id=as_text(row[0]), task_id=as_text(row[1]), repo_id=as_text(row[2]),
                                      run=as_int(row[3]), started_at=_time(row[4]),
                                      ended_at=None if row[5] is None else _time(row[5]), conclusion=_conclusion(row[6]))

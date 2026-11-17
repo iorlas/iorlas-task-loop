@@ -10,6 +10,7 @@ from taskloop.attempt_status_store import AttemptReads
 from taskloop.attempt_types import AttemptKey, FileRef
 from taskloop.attempt_write_store import AttemptWrites
 from taskloop.factory_schema import ANSWER, ATTEMPT_LOADED, EVIDENCE, FACTS, VERDICT, prefixed
+from taskloop.step import Step
 
 __all__ = ["REGISTRATION_BUSY_MS", "AttemptLoads", "AttemptReads", "AttemptStore", "configure_registration", "retained_on"]
 
@@ -28,8 +29,8 @@ def retained_on(con: sqlite3.Connection, key: AttemptKey) -> RetainedInputs | No
     row = con.execute(
         "SELECT repo_id,backlog,task_id,tracker_root,end_commit,input_path,input_digest,harness,provider,model,effort,access_policy,"
         "compaction_token_limit "
-        "FROM attempt WHERE attempt_id=? AND dispatch_token=? AND generation=? AND step='implement'",
-        astuple(key),
+        "FROM attempt WHERE attempt_id=? AND dispatch_token=? AND generation=? AND step=?",
+        (*astuple(key), Step.IMPLEMENT),
     ).fetchone()
     if row is None:
         return None
@@ -52,7 +53,7 @@ class AttemptLoads(LoadDecoding):
             "FROM attempt p LEFT JOIN factory_commit v ON v.attempt_id=p.attempt_id "
             "AND v.dispatch_token=p.dispatch_token AND v.generation=p.generation "
             "WHERE p.repo_id=? AND p.adapter='beads' AND p.backlog=? AND p.task_id=? AND p.tracker_root=? "
-            "AND p.step='plan' ORDER BY p.seq DESC LIMIT 1", (repo_id, backlog, task_id, tracker_root),
+            "AND p.step=? ORDER BY p.seq DESC LIMIT 1", (repo_id, backlog, task_id, tracker_root, Step.PLAN),
         ).fetchone()
 
     def _earlier_row(self, con: sqlite3.Connection, repo_id: str, backlog: str, task_id: str,

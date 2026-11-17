@@ -42,7 +42,7 @@ class ResumePlans:
 
     def required(self, record: AttemptRecord) -> bool:
         admission = record.admission
-        return (admission.step == "implement" and record.start is None and admission.source_checks_id is None
+        return (admission.step == Step.IMPLEMENT and record.start is None and admission.source_checks_id is None
                 and self.store.previous_abandoned(admission.key))
 
     def select(

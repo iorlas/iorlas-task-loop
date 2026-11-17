@@ -239,7 +239,7 @@
     "unborn": 3
   },
   "src/taskloop/factory_schema.py": {
-    ",": 11,
+    ",": 10,
     "EXISTS (SELECT 1 FROM land_candidate l WHERE ": 3
   },
   "src/taskloop/git_views.py": {
@@ -640,9 +640,6 @@
   },
   "src/taskloop/step_text.py": {
     "": 4
-  },
-  "src/taskloop/steps.py": {
-    "check": 3
   },
   "src/taskloop/task.py": {
     "invalid_binding": 3

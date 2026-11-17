@@ -27,15 +27,23 @@ v27: captured per-attempt compaction threshold. Drain old entries before discard
 v31: durable answer repairs retain their predecessor's repeat number, settings, session and deadline.
 """
 
+from enum import StrEnum
+
 from sqlite_store import Schema
 
 from taskloop.check_repeat.feedback import CheckRepeatReason
 from taskloop.command_conclusion import SETUP_CONCLUSIONS, CommandConclusion, encode
 from taskloop.drain.models import ActionKind, ActionState, State
 from taskloop.harness_choice import HarnessKind, Provider
+from taskloop.step import Step
 
-_HARNESSES = ",".join(f"'{each}'" for each in HarnessKind)
-_PROVIDERS = ",".join(f"'{each}'" for each in Provider)
+
+def _quoted(vocabulary: type[StrEnum]) -> str:
+    """A closed vocabulary as the quoted list of a SQL `IN (...)`."""
+    return ",".join(f"'{each}'" for each in vocabulary)
+
+
+_HARNESSES, _STEPS, _PROVIDERS = _quoted(HarnessKind), _quoted(Step), _quoted(Provider)
 
 _COMMAND_CONCLUSIONS = ",".join(repr(encode(each)) for each in CommandConclusion)
 _SETUP_CONCLUSIONS = ",".join(repr(encode(each)) for each in SETUP_CONCLUSIONS)
@@ -105,7 +113,7 @@ CREATE TABLE reservation (
 );
 CREATE TABLE attempt (
  attempt_id TEXT PRIMARY KEY, dispatch_token TEXT NOT NULL UNIQUE, generation INTEGER NOT NULL,
- step TEXT NOT NULL CHECK(step IN ('plan','implement')),
+ step TEXT NOT NULL CHECK(step IN ({_STEPS})),
  adapter TEXT NOT NULL CHECK(adapter='beads'), backlog TEXT NOT NULL, task_id TEXT NOT NULL,
  tracker_root TEXT NOT NULL CHECK(substr(tracker_root,1,1)='/'),
  repo_id TEXT NOT NULL, slot TEXT NOT NULL, input_path TEXT NOT NULL, input_digest TEXT NOT NULL,
@@ -133,9 +141,9 @@ CREATE TABLE attempt (
  admitted_at REAL NOT NULL, ended_at REAL CHECK(ended_at IS NULL OR phase='captured'),
  CHECK((number = 1 AND repair_context IS NULL) = (previous_attempt_id IS NULL)),
  CHECK((number = 1) = (repeat_reason IS NULL)),
- CHECK(((number = 1 AND step <> 'plan') OR source_checks_id IS NOT NULL) = (after_commit IS NOT NULL)),
+ CHECK(((number = 1 AND step <> '{Step.PLAN}') OR source_checks_id IS NOT NULL) = (after_commit IS NOT NULL)),
  CHECK((repeat_reason IS '{CheckRepeatReason.FAILED_CHECK.value}') = (source_checks_id IS NOT NULL)),
- CHECK(source_checks_id IS NULL OR step='implement'),
+ CHECK(source_checks_id IS NULL OR step='{Step.IMPLEMENT}'),
  CHECK(phase='admitted' OR base_commit IS NOT NULL), CHECK(end_commit IS NULL OR phase='captured'),
  UNIQUE(adapter, backlog, task_id, seq)
 );
