@@ -7,6 +7,28 @@ and `docs/design/tl-8bh9.8.7/plan.md` only when the task's own plan cites it. On
 foundation completion is not completion of the task factory. Carry retained behavior in bounded tasks, not
 whole old packages, test bootstraps or unused abstractions. No baseline runtime imports or fallback.
 
+## Values
+
+Judge every task, plan, change, review and subagent brief by these. If two clash, the lower number loses. Tag findings
+with the emoji instead of explaining at length.
+
+1. 🏗️ Architecture beats code. Fix the structure, not the symptom.
+2. 🚧 Guardrails beat discipline. Make the wrong state impossible to write.
+3. ✂️ Simple. Fewer ideas, files and lines: the simplest system, not the smallest diff.
+4. 1️⃣ One way, one owner. No copy, fallback or second reader.
+5. 🧹 Do it right, then wipe. No backward compatibility; deleting is welcome.
+6. 🚫 No sunk cost. Old code, names or plans never justify keeping a mistake.
+7. 🔁 Consistent. Same thing, same way, same word.
+8. 🔍 Explicit. No magic strings, hidden defaults or regex on text.
+9. ⚡ Fail fast, in the open. Fix the cause; add no watcher.
+10. 🔒 Least power. An agent never edits what judges its own work.
+11. 📏 Evidence. Say verified or unverified; unknown is not zero; say what would change your mind.
+12. 🙋 The owner decides meaning: names, glossary, outward or irreversible acts.
+
+Talking: tokens cost money. Plain English, common words, answer first. Prefer a table, a tag, a diagram or emojis to a
+paragraph; combine several emojis to say more (✅🚧 done but guarded, 🔥💸 costly), never as decoration. No filler or
+recap. A subagent brief points here and asks for tags.
+
 ## Ownership
 
 | what | who may write it | never |

@@ -1,0 +1,74 @@
+# DRAFT v5 "parameters and roles": numbers that today repeat inside prose become typed parameters in one [limits] table,
+# prose reaches them only through a code renderer (`use = "limits"`), and agents are named roles with a cost tier.
+# Aimed at evaluation: a variant changes ONE number or ONE role, not three sentences. Prose abbreviated (`…`).
+# Not loadable; a design sketch.
+
+[workflow]
+name = "default"
+steps = ["plan", "implement", "check"]
+
+# ------------------------------------------------------------- one home for every number prose repeats today
+[limits.plan]
+depth_files_large = 60              # "more than 60 named files" (appears twice in plan prose)
+depth_behaviours_large = 3
+evidence_calls = { small = 6, medium = 12, large = 20 }
+size_files = 60                     # the plan's Size estimate refusal (same 60, different meaning)
+size_model_calls = 100
+size_behaviours = 3
+byte_caps = { small = 4000, medium = 8000, large = 12000 }
+[limits.implement]
+reassess_model_calls = 60
+reassess_files = 60
+max_paths = 96
+final_runs = { check = 1, test = 1 }
+[limits.loop]
+attempts = 3
+main_moved_reruns = 3
+
+# ------------------------------------------------------------- agents as roles, referenced by steps
+[role.thinker]
+harness = "codex"
+model = "gpt-6.1-sol"
+effort = "high"
+tier = "expensive"                  # cost tier is documentation for the reader; billing comes from usage rows
+[role.worker]
+harness = "codex"
+model = "gpt-6.1-sol"
+effort = "high"
+
+# ------------------------------------------------------------- steps: prose is text, numbers come from `limits` via renderers
+[step.plan]
+role = "thinker"
+root = "docs/design/{task_id}/"
+prompt = [
+  { text = "Your final message must be the JSON answer only; … a message without a tool call ends the step." },
+  { text = "First assess depth from the supplied task text alone, before any exploration or reading. … Apply these depth rules in order:" },
+  { use = "limits.depth_rules" },    # renders "Large: more than {60} named files …" from [limits.plan]
+  { use = "limits.evidence_budget" },# renders "small 6, medium 12, large 20"
+  { use = "task" }, { use = "input_context" },
+  { text = "Use exactly these sections in this order …" },
+  { use = "limits.byte_caps" },     # renders "small 4,000, medium 8,000, large 12,000"
+  { use = "limits.size_gate" },
+]
+
+[step.implement]
+role = "worker"
+root = ""
+excluded = [".beads/", ".task-loop/"]
+prompt = [
+  { use = "task" }, { use = "input_context" },
+  { text = "The plan for this task is … Read it first. Immediately after reading the plan, reassess scope …" },
+  { use = "limits.reassess" },       # renders "more than about 60 model calls or touches more than 60 files"
+  { text = "The factory ran this repository's `setup` before you started …" },
+  { use = "limits.final_runs" },     # renders "run `just check` once and `just test` once" from the profile's check names
+]
+
+[step.check]
+repeat_to = "implement"
+attempts = "limits.loop.attempts"    # a reference, not a copy
+
+# What this draft makes visible:
+# - Today one number (60) means four different things in prose; here each has its own key. Good for variants, but the prose
+#   is no longer readable as one text: the reader must open the renderers to know what the agent sees.
+# - `use = "limits.*"` renderers are code, so the sentence shape around each number is NOT editable by a variant.
+# - Role names (thinker/worker) add an indirection with only one real difference possible (model, effort).
