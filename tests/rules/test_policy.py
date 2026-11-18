@@ -88,6 +88,7 @@ WRITERS = {
     ("CREATE TABLE", "slot"): "factory_schema.py",
     ("CREATE TABLE", "reservation"): "factory_schema.py",
     ("CREATE TABLE", "attempt"): "factory_schema.py",
+    ("CREATE TABLE", "workflow_file"): "factory_schema.py",
     ("CREATE TABLE", "execution"): "factory_schema.py",
     ("CREATE TABLE", "factory_commit"): "factory_schema.py",
     ("CREATE TABLE", "slot_release"): "factory_schema.py",
@@ -113,6 +114,7 @@ WRITERS = {
     ("INSERT", "slot"): "slots_store.py",
     ("INSERT", "reservation"): "admit_store.py",
     ("INSERT", "attempt"): "admit_store.py",
+    ("INSERT", "workflow_file"): "admit_store.py",  # the pinned workflow bytes, stored once per digest
     ("UPDATE", "reservation"): "admit_store.py",  # a repeat's takeover
     ("UPDATE", "slot"): "admit_store.py",
     ("INSERT", "slot_release"): "slot_release_store.py",

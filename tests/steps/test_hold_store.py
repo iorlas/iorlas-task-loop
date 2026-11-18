@@ -8,7 +8,7 @@ import re
 import sqlite3
 
 import pytest
-from doubles import D, X
+from doubles import D, X, pin_workflow
 from hold_fixtures import event
 from pydantic import ValidationError
 from sqlite_store import begin_immediate
@@ -29,13 +29,16 @@ LABEL = "label IS NULL OR length(label) BETWEEN 1 AND 200"
 
 def attempt(con: sqlite3.Connection, attempt_id: str, *, task: str = "tl-1", seq: int = 1, label: str | None = "auto") -> None:
     """An admitted plan attempt 1 of `task` at `seq`, taken under `label` (None: by hand)."""
+    pin_workflow(con)
     con.execute(
         """INSERT INTO attempt (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,
-        input_path,input_digest,schema_version,model,effort,access_policy,deadline,number,seq,slot_head,label,engine_digest,
+        input_path,input_digest,schema_version,model,effort,access_policy,deadline,number,seq,slot_head,label,engine_digest,workflow_digest,workflow_sha,
         admitted_at) VALUES
         (?,?,1,'plan','beads','tasks',?,'/tracker','r','s1','input.txt','digest',1,'m','e',
         '{"harness":"codex","sandbox":"workspace-write"}',100,1,?,?,?,
-        'abababababababababababababababababababababababababababababababab',1.0)""",
+        'abababababababababababababababababababababababababababababababab',
+        (SELECT digest FROM workflow_file),
+        'eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',1.0)""",
         (attempt_id, attempt_id + "-token", task, seq, D, label))
 
 

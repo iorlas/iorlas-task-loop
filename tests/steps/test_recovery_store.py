@@ -8,6 +8,7 @@ from pathlib import Path
 from threading import Barrier
 
 import pytest
+from doubles import pin_workflow
 from hold_fixtures import STUCK_SQL
 from sqlite_store import begin_immediate
 
@@ -27,14 +28,17 @@ OWNED = Claim(state=ClaimState.OWNED, explanation="The task claim still belongs 
 def seed(con: sqlite3.Connection, *, attempt: str = "attempt", task: str = "tl-1", session: str = "saved") -> None:
     con.execute("INSERT INTO slot(repo_id,name,path) VALUES('repo',?,?)", (attempt, f"/slots/{attempt}"))
     con.execute("INSERT INTO reservation VALUES(?,'repo',1,?)", (attempt, attempt))
+    pin_workflow(con)
     con.execute(
         """INSERT INTO attempt(attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,
         repo_id,slot,input_path,input_digest,schema_version,model,effort,access_policy,deadline,number,seq,slot_head,
         entry_pid,entry_start,entry_boot,phase,rev,worker_pid,worker_pgid,worker_start,worker_boot,session_ref,base_commit,
-        engine_digest,admitted_at)
+        engine_digest,workflow_digest,workflow_sha,admitted_at)
         VALUES(?,?,1,'plan','beads','tasks',?,'/tracker','repo',?,'input','digest',1,'chosen','high',
         '{"harness":"codex","sandbox":"workspace-write"}',100,1,1,?,7,'entry','boot','registered',4,8,8,'worker','boot',?,?,
-        'abababababababababababababababababababababababababababababababab',1.0)""",
+        'abababababababababababababababababababababababababababababababab',
+        (SELECT digest FROM workflow_file),
+        'eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',1.0)""",
         (attempt, "dispatch" if attempt == "attempt" else attempt, task, attempt, "d" * 40, session, "b" * 40),
     )
 

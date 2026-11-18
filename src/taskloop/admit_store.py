@@ -4,6 +4,7 @@ slot's counter (`generation`, the last reservation generation issued for it)."""
 import sqlite3
 from collections.abc import Mapping
 from dataclasses import astuple
+from typing import Final
 
 from pydantic import BaseModel, ValidationError
 
@@ -14,6 +15,7 @@ from taskloop.repo import RepoId
 from taskloop.step import Step, decode_step, encode_step
 from taskloop.task_content import TaskContentDigest
 from taskloop.task_content_store import TaskContentStore
+from taskloop.workflow_read import Pin, pinned
 
 _PREVIOUS = f"""SELECT p.generation,p.number,p.adapter,p.backlog,p.task_id,p.repo_id,p.slot,p.model,p.effort,p.access_policy,
 {REPEATED},
@@ -67,6 +69,39 @@ def insert_attempt(con: sqlite3.Connection, attempt: Mapping[str, object], conte
     con.execute(f"INSERT INTO attempt ({ATTEMPT_ADMITTED}) VALUES ({marks(ATTEMPT_ADMITTED)})", values)
     if step is Step.PLAN and content_digest is not None:
         TaskContentStore.insert(con, str(attempt["attempt_id"]), content_digest)
+
+
+PIN: Final = ("workflow_digest", "workflow_sha")  # the attempt columns that name its stored workflow file and its commit
+PIN_SQL: Final = f"{PIN[0]}, {PIN[1]}"
+
+
+def pin_columns(con: sqlite3.Connection, pin: Pin) -> dict[str, object]:
+    """Store the pin's bytes (once, keyed by their sha256) and name them for a new attempt row, inside the caller's write
+    transaction; a task keeps the exact file it was admitted with."""
+    con.execute("INSERT OR IGNORE INTO workflow_file (digest, content) VALUES (?, ?)", (pin.digest, pin.content))
+    return dict(zip(PIN, (pin.digest, pin.sha), strict=True))
+
+
+def _pin_of(con: sqlite3.Connection, previous_id: str) -> tuple[str, str]:
+    row = con.execute(f"SELECT {PIN_SQL} FROM attempt WHERE attempt_id=?", (previous_id,)).fetchone()
+    if row is None:
+        raise sqlite3.DatabaseError("The earlier attempt is absent")
+    return str(row[0]), str(row[1])
+
+
+def copied_pin(con: sqlite3.Connection, previous_id: str) -> dict[str, object]:
+    """The workflow columns of an earlier attempt, for a repeat of it: the same stored file, never a new read."""
+    return dict(zip(PIN, _pin_of(con, previous_id), strict=True))
+
+
+def stored_pin(con: sqlite3.Connection, previous_id: str) -> Pin:
+    """The workflow an earlier attempt was admitted with, read from the stored bytes and never from Git; stored bytes that
+    are missing or no longer load are a database fault (`sqlite3.DatabaseError`) or a `WorkflowRefusal`."""
+    digest, sha = _pin_of(con, previous_id)
+    row = con.execute("SELECT content FROM workflow_file WHERE digest=?", (digest,)).fetchone()
+    if row is None:
+        raise sqlite3.DatabaseError("The stored workflow file is absent")
+    return pinned(bytes(row[0]), sha)
 
 
 def issue(con: sqlite3.Connection, repo_id: object, slot: object, generation: int) -> None:

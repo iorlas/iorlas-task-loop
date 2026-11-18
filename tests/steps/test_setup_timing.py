@@ -39,9 +39,11 @@ def test_reports_any_partial_sample_count_without_writes(
         identity = f"owner-{index}"
         registered.execute("""INSERT INTO attempt
             (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,input_digest,
-            schema_version,model,effort,access_policy,deadline,number,seq,slot_head,after_commit,engine_digest,admitted_at)
+            schema_version,model,effort,access_policy,deadline,number,seq,slot_head,after_commit,engine_digest,workflow_digest,workflow_sha,
+            admitted_at)
             SELECT ?,?,generation,step,adapter,backlog,?,tracker_root,repo_id,slot,input_path,input_digest,
-            schema_version,model,effort,access_policy,deadline,number,seq,slot_head,after_commit,engine_digest,admitted_at FROM attempt
+            schema_version,model,effort,access_policy,deadline,number,seq,slot_head,after_commit,engine_digest,workflow_digest,workflow_sha,
+            admitted_at FROM attempt
             WHERE attempt_id='attempt'""", (identity, identity, identity))
         registered.execute("""INSERT INTO setup_run
             (attempt_id,run,dispatch_token,generation,commit_sha,digest,started_at,ended_at,conclusion)

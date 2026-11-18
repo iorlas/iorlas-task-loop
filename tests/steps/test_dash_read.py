@@ -679,10 +679,10 @@ def test_first_checks_for_another_implement_attempt_are_not_a_restart(checking: 
     checking.execute(
         """INSERT INTO attempt (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,
         input_path,input_digest,schema_version,model,effort,access_policy,deadline,number,seq,slot_head,previous_attempt_id,repeat_reason,
-        phase,base_commit,end_commit,after_commit,engine_digest,admitted_at)
+        phase,base_commit,end_commit,after_commit,engine_digest,workflow_digest,workflow_sha,admitted_at)
         SELECT 'another','another-token',1,step,adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,input_digest,
         schema_version,model,effort,access_policy,deadline,2,3,slot_head,'implement','unsafe',phase,base_commit,end_commit,NULL,
-        engine_digest,admitted_at
+        engine_digest,workflow_digest,workflow_sha,admitted_at
         FROM attempt WHERE attempt_id='implement'""")
     checking.execute("INSERT INTO slot_release VALUES ('another','another-token',1,?,7,'kept')", (D,))
     check_store.insert(checking, check_store.ChecksAdmitted(
@@ -703,10 +703,10 @@ def restarted_at_plan(con: sqlite3.Connection) -> None:
         con.execute(
             """INSERT INTO attempt (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,
             input_path,input_digest,schema_version,model,effort,access_policy,deadline,number,seq,slot_head,after_commit,
-            engine_digest,admitted_at)
+            engine_digest,workflow_digest,workflow_sha,admitted_at)
             SELECT ?,?,1,?,adapter,backlog,
             task_id,tracker_root,repo_id,slot,input_path,input_digest,schema_version,model,effort,access_policy,deadline,1,?,
-            slot_head,?,engine_digest,admitted_at
+            slot_head,?,engine_digest,workflow_digest,workflow_sha,admitted_at
             FROM attempt WHERE attempt_id='attempt'""", (attempt, f"{attempt}-token", step, seq, "a" * 40 if step == "implement" else None))
 
 
@@ -744,10 +744,11 @@ def unsafe_repeat(con: sqlite3.Connection, listing: str = '["src/link.py", "src/
     con.execute(
         """INSERT INTO attempt (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,
         input_path,input_digest,schema_version,model,effort,access_policy,deadline,number,seq,slot_head,previous_attempt_id,repeat_reason,
-        repeat_listing,engine_digest,admitted_at) SELECT 'again','again-token',2,step,adapter,backlog,task_id,tracker_root,
+        repeat_listing,engine_digest,workflow_digest,workflow_sha,
+        admitted_at) SELECT 'again','again-token',2,step,adapter,backlog,task_id,tracker_root,
         repo_id,slot,input_path,input_digest,
         schema_version,model,effort,access_policy,deadline,2,3,slot_head,'implement','unsafe',
-        ?,engine_digest,admitted_at FROM attempt WHERE attempt_id='implement'""",
+        ?,engine_digest,workflow_digest,workflow_sha,admitted_at FROM attempt WHERE attempt_id='implement'""",
         (listing,))
 
 
@@ -808,9 +809,9 @@ def test_a_plan_repeat_is_a_repeat_on_the_board_and_in_history(registered: sqlit
     registered.execute(
         """INSERT INTO attempt (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,
         input_path,input_digest,schema_version,model,effort,access_policy,deadline,number,seq,slot_head,previous_attempt_id,
-        repeat_reason,engine_digest,admitted_at)
+        repeat_reason,engine_digest,workflow_digest,workflow_sha,admitted_at)
         SELECT 'again','again-token',2,step,adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,input_digest,
-        schema_version,model,effort,access_policy,deadline,2,2,slot_head,'attempt','unsafe',engine_digest,
+        schema_version,model,effort,access_policy,deadline,2,2,slot_head,'attempt','unsafe',engine_digest,workflow_digest,workflow_sha,
         admitted_at FROM attempt WHERE attempt_id='attempt'""")
     files = EvidenceFiles(tmp_path)
     board_task, = board_of(registered, files, Tracker()).tasks

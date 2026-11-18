@@ -1,5 +1,6 @@
 """Plain test doubles shared by the plan tests; fixtures stay in conftest.py."""
 
+import hashlib
 import json
 import os
 import sqlite3
@@ -58,6 +59,14 @@ WORKFLOW = loaded_workflow()
 
 # A valid engine digest (64 lowercase hex) for admissions and rows that need one.
 ENGINE = "ab" * 32
+# The workflow pin an attempt row records: the digest of `WORKFLOW_BYTES` and a Git object id (40 lowercase hex).
+PIN_DIGEST = hashlib.sha256(WORKFLOW_BYTES).hexdigest()
+PIN_SHA = "e" * 40
+
+
+def pin_workflow(con: sqlite3.Connection) -> None:
+    """Store the workflow bytes that `PIN_DIGEST` names, which an attempt row's `workflow_digest` references."""
+    con.execute("INSERT OR IGNORE INTO workflow_file VALUES (?,?)", (PIN_DIGEST, WORKFLOW_BYTES))
 CHECKS = AttemptKey("checks", "checks-token", 1)
 D, X, TARGET = "d" * 40, "c" * 40, "f" * 40
 REQUIRED = (("check", "1" * 64), ("test", "2" * 64))

@@ -16,7 +16,18 @@ import pytest
 from any_agent import Harness, LaunchSpec, RunHooks, RunOutcome, Summary
 from any_agent.procs import Worker
 from any_agent.testing import FakeRun
-from doubles import ENGINE, NO_CHECKS, FakeSlotFiles, FixedIds, NoAdvance, RegisteringLauncher, origin_main_at
+from doubles import (
+    ENGINE,
+    NO_CHECKS,
+    PIN_DIGEST,
+    PIN_SHA,
+    FakeSlotFiles,
+    FixedIds,
+    NoAdvance,
+    RegisteringLauncher,
+    origin_main_at,
+    pin_workflow,
+)
 from git_porcelain import Recorded
 from git_porcelain.testing import FakeWorktree
 from plan_fixtures import PLAN_TEXT
@@ -192,13 +203,16 @@ def renumber(con: sqlite3.Connection, number: int) -> None:
     cap reads the number alone."""
     previous = None
     for n in range(1, number):
+        pin_workflow(con)
         con.execute(
             """INSERT INTO attempt (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,
             input_digest,schema_version,model,effort,access_policy,deadline,number,previous_attempt_id,repeat_reason,
-            base_commit,seq,slot_head,engine_digest,admitted_at)
+            base_commit,seq,slot_head,engine_digest,workflow_digest,workflow_sha,admitted_at)
             VALUES (?,?,1,'plan','beads','tasks','stand-in','/tracker','r','s0','i','d',1,'m','e','{"harness":"codex",
             "sandbox":"workspace-write"}',1,?,?,?,?,?,?,
-        'abababababababababababababababababababababababababababababababab',1.0)""",
+        'abababababababababababababababababababababababababababababababab',
+        (SELECT digest FROM workflow_file),
+        'eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',1.0)""",
             (f"a{n}", f"d{n}", n, previous, None if previous is None else "uncommitted", "b" * 40, n, "b" * 40),
         )
         previous = f"a{n}"
@@ -414,13 +428,16 @@ def test_two_starts_on_two_connections_admit_exactly_one(
     with begin_immediate(con):
         con.execute("INSERT INTO slot (repo_id,name,path) VALUES (?,'s1',?)", (repo_id, str(slot.path)))
         con.execute("INSERT INTO reservation VALUES ('s1',?,1,'attempt')", (repo_id,))
+        pin_workflow(con)
         con.execute(
             """INSERT INTO attempt (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,
             input_digest,schema_version,model,effort,access_policy,deadline,entry_pid,entry_start,entry_boot,number,seq,slot_head,
-            engine_digest,admitted_at)
+            engine_digest,workflow_digest,workflow_sha,admitted_at)
             VALUES ('attempt','dispatch',1,'plan','beads','tasks','tl-1','/tracker',?,'s1','input.txt',?,1,'chosen','high',
             '{"harness":"codex","sandbox":"workspace-write"}',100,7,'entry-start','boot',1,1,?,
-        'abababababababababababababababababababababababababababababababab',1.0)""",
+        'abababababababababababababababababababababababababababababababab',
+        (SELECT digest FROM workflow_file),
+        'eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',1.0)""",
             (repo_id, hashlib.sha256(TASK.encode()).hexdigest(), head(slot)),
         )
     (tmp_path / "input.txt").write_text(TASK)
@@ -559,9 +576,9 @@ def test_start_repeats_a_captured_current_attempt_and_launches_any_other(
 def test_the_schema_numbers_attempts_and_links_each_to_the_one_it_repeats(registered: sqlite3.Connection) -> None:
     insert = """INSERT INTO attempt (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,
     input_digest,schema_version,model,effort,access_policy,deadline,number,previous_attempt_id,repeat_reason,seq,slot_head,
-    engine_digest,admitted_at)
+    engine_digest,workflow_digest,workflow_sha,admitted_at)
     VALUES (?,?,2,'plan','beads','tasks','tl-1','/tracker','r','s1','i','d',1,'m','e','{"harness":"codex",
-    "sandbox":"workspace-write"}',1,?,?,?,?,'""" + "d" * 40 + f"','{ENGINE}',1.0)"
+    "sandbox":"workspace-write"}',1,?,?,?,?,'""" + "d" * 40 + f"','{ENGINE}','{PIN_DIGEST}','{PIN_SHA}',1.0)"
     for values, constraint in [
         (("n", "t", 2, None, "unsafe", 2), "previous_attempt_id IS NULL"),
         (("n", "t", 2, "attempt", None, 2), "repeat_reason IS NULL"),

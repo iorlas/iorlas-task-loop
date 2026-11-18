@@ -14,7 +14,7 @@ from any_agent import Harness, LaunchSpec, RunHooks, RunOutcome, Summary
 from any_agent.procs import Worker
 from any_agent.testing import FakeRun
 from beads_client import BdError, Bead
-from doubles import NO_CHECKS, NoAdvance, NoChecks, ReadyTracker, no_holds
+from doubles import NO_CHECKS, NoAdvance, NoChecks, ReadyTracker, no_holds, pin_workflow
 from git_porcelain.testing import FakeWorktree
 from hold_fixtures import event
 from plan_fixtures import PLAN_TEXT
@@ -196,14 +196,17 @@ class Bench:
 
 def seed(con: sqlite3.Connection, task_id: str, attempt_id: str, *, phase: str = "admitted", entry: EntryIdentity | None = None) -> None:
     """One attempt of `tasks/<task_id>` (deadline 100), with its registered entry when given."""
+    pin_workflow(con)
     con.execute(
         """INSERT INTO attempt (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,
         input_digest,schema_version,model,effort,access_policy,deadline,entry_pid,entry_start,entry_boot,phase,base_commit,
-        number,seq,slot_head,engine_digest,admitted_at)
+        number,seq,slot_head,engine_digest,workflow_digest,workflow_sha,admitted_at)
         VALUES (?,?,1,'plan','beads','tasks',?,'/tracker','repo','s1','input.txt','digest',1,'m','high','{"harness":"codex",
         "sandbox":"workspace-write"}',
         100,?,?,?,?,?,1,1,?,
-        'abababababababababababababababababababababababababababababababab',1.0)""",
+        'abababababababababababababababababababababababababababababababab',
+        (SELECT digest FROM workflow_file),
+        'eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',1.0)""",
         (attempt_id, f"token-{attempt_id}", task_id, *(entry or (None, None, None)), phase, None if phase == "admitted" else HEAD, HEAD),
     )
 

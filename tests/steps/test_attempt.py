@@ -13,7 +13,7 @@ import pytest
 from any_agent import CodexHarness, Harness, LaunchInputs, LaunchSpec, RunHooks, RunOutcome, Summary
 from any_agent.procs import Worker
 from any_agent.testing import FakeRun
-from doubles import ENGINE
+from doubles import ENGINE, pin_workflow
 from git_porcelain.testing import FakeWorktree
 from sqlite_store import Store, begin_immediate
 
@@ -109,13 +109,14 @@ def seed(con: sqlite3.Connection, surroundings: AttemptSurroundings) -> sqlite3.
     with begin_immediate(con):
         con.execute("INSERT INTO slot (repo_id,name,path) VALUES (?,'s1',?)", (repo_id, str(surroundings.slot.path)))
         con.execute("INSERT INTO reservation VALUES ('s1',?,1,'attempt')", (repo_id,))
+        pin_workflow(con)
         con.execute("""INSERT INTO attempt
             (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,input_digest,
-             schema_version,model,effort,access_policy,deadline,entry_pid,entry_start,entry_boot,number,seq,slot_head,engine_digest,
+             schema_version,model,effort,access_policy,deadline,entry_pid,entry_start,entry_boot,number,seq,slot_head,engine_digest,workflow_digest,workflow_sha,
              admitted_at)
             VALUES ('attempt','dispatch',1,'plan','beads','tasks','tl-1','/tracker',?,'s1','input.txt',?,1,'chosen','high',
             '{"harness":"codex","sandbox":"workspace-write"}',100,7,'entry-start','boot',1,1,'dddddddddddddddddddddddddddddddddddddddd',
-            ?,1.0)""",
+            ?,(SELECT digest FROM workflow_file),'eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',1.0)""",
             (repo_id, hashlib.sha256(b"Plan the actual task").hexdigest(), ENGINE))
     (surroundings.tmp / "input.txt").write_text("Plan the actual task")
     return con

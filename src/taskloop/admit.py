@@ -13,7 +13,7 @@ from beads_client import BdError
 from git_porcelain import GitUnavailable, NotARepo, Repo
 
 from taskloop.admit_rows import Free
-from taskloop.admit_store import insert_attempt, issued, next_seq, reserve, task_attempted, unheld
+from taskloop.admit_store import insert_attempt, issued, next_seq, pin_columns, reserve, task_attempted, unheld
 from taskloop.agents.settings import AgentSetting, Overrides, StepSettings, apply, encode_policy
 from taskloop.attempt_reads import StoreUnavailable
 from taskloop.attempt_store import AttemptStore
@@ -40,7 +40,7 @@ from taskloop.slots_store import SlotsStore
 from taskloop.task import TaskInspection, TaskInspectionError
 from taskloop.task_content import TaskContentDigest
 from taskloop.task_input import task_text
-from taskloop.workflow_read import WorkflowRefusal, read_workflow
+from taskloop.workflow_read import Pin, WorkflowRefusal, read_workflow
 
 type Claim = Callable[[str, str], bool]  # (tracker root, task id): True taken, False held elsewhere, BdError unknown
 type Unclaim = Callable[[str, str], bool]  # fenced to this actor's own claim; False: not released
@@ -104,6 +104,7 @@ class _Prepared:
     content_digest: TaskContentDigest | None = None
     selection: Selection | None = None
     setting: AgentSetting | None = None
+    pin: Pin | None = None
 
 
 def why(error: BaseException) -> str:
@@ -160,17 +161,17 @@ class AttemptAdmission:
             earlier = reader.earlier(str(prepared.repo_id), request.backlog, request.task_id, prepared.request.tracker_root)
             key = AttemptKey(self.ids.hex(), self.ids.token(16), generation)  # the key names the evidence directory
             files = GitProfileFiles(request.checkout, self.checkouts)
-            context, workflow = read_context(files, free[0].source), read_workflow(files, free[0].source)
+            context, pin = read_context(files, free[0].source), read_workflow(files, free[0].source)
             discussion = self.discussion(prepared.task, prepared.request.tracker_root)
             selection = ResumePlans(reader, self.checkouts).select(
                 str(prepared.repo_id), request.backlog, request.task_id, prepared.request.tracker_root,
                 request.checkout, free[0].source, discussion.digest)
             if selection.decision is ReuseDecision.UNAVAILABLE:
                 return AdmitUnavailable("git", detail=selection.explanation)
-            prepared = replace(prepared, earlier=earlier, content_digest=discussion.digest, selection=selection,
+            prepared = replace(prepared, earlier=earlier, content_digest=discussion.digest, selection=selection, pin=pin,
                                setting=apply(request.settings.for_step(selection.step), request.overrides))
             text = EarlierInput(reader, self.files, HoldStore(self.connect, self.begin)).attach(
-                task_text(prepared.task, selection.step, context, workflow, discussion.text), earlier,
+                task_text(prepared.task, selection.step, context, pin.workflow, discussion.text), earlier,
                 partial(commit_names, prepared.repo, request.checkout))
             ref = self.files.put_input(key, text)
         except (sqlite3.Error, StoreUnavailable) as error:
@@ -269,8 +270,8 @@ class AttemptAdmission:
     ) -> Admitted | AdmitRefused:
         """Recheck task and plan evidence under the write lock, then reserve a slot and insert the attempt."""
         request, repo_id, generation = prepared.request, prepared.repo_id, key.reservation_generation
-        selection, setting = prepared.selection, prepared.setting
-        if selection is None or setting is None:
+        selection, setting, pin = prepared.selection, prepared.setting, prepared.pin
+        if selection is None or setting is None or pin is None:
             raise StoreUnavailable("The admission choices were not prepared.")
         with self.begin(con):
             if blocked(con):
@@ -317,6 +318,7 @@ class AttemptAdmission:
                     "label": request.label,
                     "harness": setting.harness,
                     "provider": setting.provider, "engine_digest": self.engine, "admitted_at": self.clock(),
+                    **pin_columns(con, pin),
                 },
                 prepared.content_digest,
             )
