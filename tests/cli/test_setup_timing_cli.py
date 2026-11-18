@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 import pytest
+from doubles import pin_workflow
 from sqlite_store import Store
 
 from taskloop.cli import main
@@ -25,12 +26,16 @@ def test_empty_partial_and_full_reports_are_read_only(
     with con:
         for index in range(count):
             identity = f"owner-{index}"
+            pin_workflow(con)
             con.execute("""INSERT INTO attempt
                 (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,input_digest,
-                schema_version,model,effort,access_policy,deadline,number,seq,slot_head,after_commit,engine_digest,admitted_at)
+                schema_version,model,effort,access_policy,deadline,number,seq,slot_head,after_commit,engine_digest,workflow_digest,workflow_sha,
+                admitted_at)
                 VALUES (?,?,1,'implement','beads','tasks',?,'/tracker','repo','s1','input',?,1,'m','high',
                 '{"harness":"codex","sandbox":"workspace-write"}',100,1,1,?,?,
-        'abababababababababababababababababababababababababababababababab',1.0)""",
+        'abababababababababababababababababababababababababababababababab',
+        (SELECT digest FROM workflow_file),
+        'eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',1.0)""",
                 (identity, f"secret-{identity}", identity, "d" * 64, "b" * 40, "b" * 40))
             conclusion, end = (None, None) if index == 0 else ("failed", 20) if index == 1 else ("passed", 9 if index == 2 else 10)
             con.execute("""INSERT INTO setup_run

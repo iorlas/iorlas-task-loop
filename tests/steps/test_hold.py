@@ -10,7 +10,7 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 import pytest
-from doubles import CHECKS, D, X
+from doubles import CHECKS, D, X, pin_workflow
 from hold_fixtures import event, event_for
 from sqlite_store import begin_immediate
 from stream_proc import OwnedProcess
@@ -38,13 +38,17 @@ RETURNED = Released("s1", D, True, "unclaimed", True)
 
 def attempt(con: sqlite3.Connection, attempt_id: str = "a", *, seq: int = 1, label: str | None = "auto") -> None:
     """tl-1's captured plan attempt at `seq` on slot s1 (X stored, agent pid 42 group 41), taken under `label`."""
+    pin_workflow(con)
     con.execute(
         """INSERT INTO attempt (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,
         input_path,input_digest,schema_version,model,effort,access_policy,deadline,phase,base_commit,end_commit,worker_pid,worker_pgid,
-        worker_start,worker_boot,number,seq,slot_head,label,engine_digest,admitted_at) VALUES (?,?,1,'plan','beads','tasks',
+        worker_start,worker_boot,number,seq,slot_head,label,engine_digest,workflow_digest,workflow_sha,
+        admitted_at) VALUES (?,?,1,'plan','beads','tasks',
         'tl-1','/tracker','r','s1','i',
         'd',1,'m','e','{"harness":"codex","sandbox":"workspace-write"}',100,'captured',?,?,42,41,'st','boot',1,?,?,?,
-        'abababababababababababababababababababababababababababababababab',1.0)""",
+        'abababababababababababababababababababababababababababababababab',
+        (SELECT digest FROM workflow_file),
+        'eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',1.0)""",
         (attempt_id, attempt_id + "-token", D, X, seq, D, label))
 
 

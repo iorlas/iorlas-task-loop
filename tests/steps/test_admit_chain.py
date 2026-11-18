@@ -2,6 +2,7 @@
 fake remote, the owning agent and task-read fakes: what it stores, what refuses it, the implement step committed and
 published on top of the plan, a repeat staying in implement, an abandon restarting at plan, and the v11 CHECKs."""
 
+import hashlib
 import json
 import sqlite3
 from collections.abc import Callable, Mapping
@@ -15,7 +16,7 @@ from any_agent.procs import Worker
 from any_agent.testing import FakeRun
 from beads_client import Bead
 from beads_client.testing import FakeTaskReadClient
-from doubles import ENGINE, NO_CHECKS, WORKFLOW_PATH, Environment, FixedIds, PinnedViews
+from doubles import ENGINE, NO_CHECKS, PIN_DIGEST, PIN_SHA, WORKFLOW_BYTES, WORKFLOW_PATH, Environment, FixedIds, PinnedViews, pin_workflow
 from git_porcelain import Pushed, Sha
 from git_porcelain.testing import FakeRemote, FakeRepo, FakeWorktree
 from plan_fixtures import PLAN_TEXT
@@ -429,6 +430,7 @@ def test_a_task_branch_reset_after_the_plan_is_branch_moved_before_anything_is_r
     repo.drop_worktree(other.path)
     found = advancing(registered, tmp_path, checkouts, slot_files).admit_next(request(repo))
     assert isinstance(found, AdmitRefused) and found.reason == "branch_moved"
+    pin_workflow(registered)
     assert registered.execute("SELECT (SELECT count(*) FROM attempt),(SELECT count(*) FROM reservation)").fetchone() == (1, 0)
 
 
@@ -468,10 +470,12 @@ def test_step_start_on_a_done_plan_admits_and_launches_implement(
 
 V11 = "INSERT INTO attempt (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,"
 V11 += """input_digest,schema_version,model,effort,access_policy,deadline,number,seq,slot_head,
-previous_attempt_id,repeat_reason,after_commit,engine_digest,admitted_at) """
+previous_attempt_id,repeat_reason,after_commit,engine_digest,workflow_digest,workflow_sha,admitted_at) """
 V11 += """VALUES (?,?,1,?,'beads','tasks','tl-1','/t','r','s1','i','d',1,'m','e','{"harness":"codex",
 "sandbox":"workspace-write"}',100,?,?,?,?,?,?,
-        'abababababababababababababababababababababababababababababababab',1.0)"""
+        'abababababababababababababababababababababababababababababababab',
+        (SELECT digest FROM workflow_file),
+        'eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',1.0)"""
 SHA = "a" * 40
 
 
@@ -510,3 +514,50 @@ def test_v11_setup_run_checks(
     else:
         with pytest.raises(sqlite3.IntegrityError, match="CHECK"):
             factory.execute(SETUP, values)
+
+
+PIN_MARK = "AGENTS.md is already in context"
+
+
+def test_an_advance_reads_the_workflow_its_task_was_admitted_with_and_not_git(
+    registered: sqlite3.Connection, planned: str, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles
+) -> None:
+    """The plan was admitted with an earlier file; Git now serves another at the source commit; implement uses the stored one."""
+    stored = WORKFLOW_BYTES.replace(PIN_MARK.encode(), b"PINNED EARLIER FILE")
+    digest = hashlib.sha256(stored).hexdigest()
+    registered.execute("INSERT INTO workflow_file VALUES (?,?)", (digest, stored))
+    registered.execute("UPDATE attempt SET workflow_digest=?, workflow_sha=? WHERE attempt_id='attempt'", (digest, "a" * 40))
+    admitted = advancing(registered, tmp_path, checkouts, slot_files).admit_next(request(slot.repo))
+    assert isinstance(admitted, Admitted)
+    row = registered.execute("SELECT workflow_digest, workflow_sha, input_path FROM attempt WHERE attempt_id=?",
+                             (admitted.key.attempt_id,)).fetchone()
+    assert row[:2] == (digest, "a" * 40)
+    text = (tmp_path / row[2]).read_text()
+    assert "PINNED EARLIER FILE" in text and PIN_MARK not in text
+
+
+def test_a_stored_workflow_that_no_longer_loads_refuses_the_advance_as_workflow(
+    registered: sqlite3.Connection, planned: str, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles
+) -> None:
+    bad = b"not = [toml"
+    digest = hashlib.sha256(bad).hexdigest()
+    registered.execute("INSERT INTO workflow_file VALUES (?,?)", (digest, bad))
+    registered.execute("UPDATE attempt SET workflow_digest=? WHERE attempt_id='attempt'", (digest,))
+    refused = advancing(registered, tmp_path, checkouts, slot_files).admit_next(request(slot.repo))
+    assert isinstance(refused, AdmitRefused) and refused.reason == "workflow"
+    assert registered.execute("SELECT count(*) FROM attempt").fetchone() == (1,)
+
+
+def test_a_repeat_keeps_the_pin_of_the_attempt_it_repeats(
+    registered: sqlite3.Connection, planned: str, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles
+) -> None:
+    key = implement(registered, tmp_path, slot.repo, checkouts, slot_files)
+    execute(registered, tmp_path, key, agent({"disposition": "implemented", "message": "A", "explanation": "x"},
+                                             lambda: slot.write_file("scratch.log", "left over\n")), checkouts, slot_files)
+    repeated = ChainAdmission(lambda: registered, begin_immediate, EvidenceFiles(tmp_path), lambda: 10,
+                              checkouts, slot_files, ids=FixedIds(), engine=ENGINE).admit_repeat(
+        RepeatRequest(key, "feedback", 100, "uncommitted"))
+    assert isinstance(repeated, Admitted)
+    pins = registered.execute("SELECT workflow_digest, workflow_sha FROM attempt WHERE attempt_id IN (?,?)",
+                              (key.attempt_id, repeated.key.attempt_id)).fetchall()
+    assert pins == [(PIN_DIGEST, PIN_SHA)] * 2

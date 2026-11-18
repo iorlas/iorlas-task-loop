@@ -120,9 +120,9 @@ def test_entry_interruption_persists_cause_before_normal_capture_and_survives_re
         reopened.execute(
             """INSERT INTO attempt
             (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,input_digest,
-             schema_version,model,effort,access_policy,deadline,number,seq,slot_head,engine_digest,admitted_at)
+             schema_version,model,effort,access_policy,deadline,number,seq,slot_head,engine_digest,workflow_digest,workflow_sha,admitted_at)
             SELECT 'later','later-token',2,step,adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,input_digest,
-                   schema_version,model,effort,access_policy,deadline,1,seq+1,slot_head,engine_digest,
+                   schema_version,model,effort,access_policy,deadline,1,seq+1,slot_head,engine_digest,workflow_digest,workflow_sha,
                    admitted_at FROM attempt WHERE attempt_id='attempt'""",
         )
         reopened.execute("UPDATE reservation SET generation=2,attempt_id='later'")

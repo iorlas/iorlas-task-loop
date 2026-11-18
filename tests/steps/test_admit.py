@@ -1,5 +1,6 @@
 """Admission through real SQLite, real files, the owning Git and task-read fakes, and a local claim double."""
 
+import hashlib
 import json
 import sqlite3
 from collections.abc import Callable, Generator
@@ -14,7 +15,7 @@ from any_agent.procs import Worker
 from any_agent.testing import FakeRun
 from beads_client import Bd, BdError, Bead
 from beads_client.testing import FakeTaskReadClient, Script
-from doubles import ENGINE, WORKFLOW, WORKFLOW_FILES, FakeSlotFiles, FixedIds, PinnedViews
+from doubles import ENGINE, WORKFLOW, WORKFLOW_BYTES, WORKFLOW_FILES, FakeSlotFiles, FixedIds, PinnedViews
 from git_porcelain import GitTimeout, NotARepo, Repo
 from git_porcelain.testing import FakeRemote, FakeRepo
 from sqlite_store import Store, begin_immediate
@@ -228,6 +229,17 @@ def test_the_admission_stores_the_label_the_task_is_ingested_under(
     result = admission(factory, tmp_path, tracker, repo).admit(request(tmp_path, repo, label=label))
     assert isinstance(result, Admitted)
     assert factory.execute("SELECT attempt_id,label FROM attempt").fetchall() == [(result.key.attempt_id, label)]
+
+
+def test_the_admission_stores_the_workflow_bytes_once_and_names_them_and_their_commit(
+    factory: sqlite3.Connection, repo: FakeRepo, root: Path, tmp_path: Path
+) -> None:
+    slots(factory, repo, root, 1)
+    tracker = Tracker(factory, tmp_path / "artifacts")
+    assert isinstance(admission(factory, tmp_path, tracker, repo).admit(request(tmp_path, repo)), Admitted)
+    digest, sha = factory.execute("SELECT workflow_digest, workflow_sha FROM attempt").fetchone()
+    assert digest == hashlib.sha256(WORKFLOW_BYTES).hexdigest() and len(sha) in (40, 64)
+    assert factory.execute("SELECT digest, content FROM workflow_file").fetchall() == [(digest, WORKFLOW_BYTES)]
 
 
 @pytest.mark.parametrize(("harness", "model", "provider"), [

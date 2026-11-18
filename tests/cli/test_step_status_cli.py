@@ -6,6 +6,7 @@ from collections.abc import Generator
 from pathlib import Path
 
 import pytest
+from doubles import pin_workflow
 from hold_fixtures import event_for
 from sqlite_store import Store, begin_immediate
 
@@ -70,13 +71,16 @@ def factory(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Generator[sqlite
 def attempt(con: sqlite3.Connection, key: str, backlog: str, task: str = "tl-1", *, seq: int = 1,
             label: str | None = None, deadline: float = 100) -> None:
     with begin_immediate(con):
+        pin_workflow(con)
         con.execute(
             """INSERT INTO attempt (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,
-            input_path,input_digest,schema_version,model,effort,access_policy,deadline,number,seq,slot_head,label,engine_digest,
+            input_path,input_digest,schema_version,model,effort,access_policy,deadline,number,seq,slot_head,label,engine_digest,workflow_digest,workflow_sha,
             admitted_at) VALUES
             (?,?,1,'plan','beads',?,?,'/tracker','repo','s1','input','digest',1,'m','high',
             '{"harness":"codex","sandbox":"workspace-write"}',?,1,?,?,?,
-        'abababababababababababababababababababababababababababababababab',1.0)""",
+        'abababababababababababababababababababababababababababababababab',
+        (SELECT digest FROM workflow_file),
+        'eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',1.0)""",
             (key, f"{key}-token", backlog, task, deadline, seq, D, label),
         )
 

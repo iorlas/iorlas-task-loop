@@ -6,7 +6,7 @@ import threading
 from pathlib import Path
 
 import pytest
-from doubles import ENGINE
+from doubles import ENGINE, pin_workflow
 from sqlite_store import Store
 from test_attempt import ENTRY, AttemptSurroundings, Flaky, database, fake, owner
 from test_attempt import KEY as BENCH_KEY
@@ -27,13 +27,16 @@ def seed(con: sqlite3.Connection) -> sqlite3.Connection:
     """An admitted, unregistered attempt (entry_* NULL) and its held reservation, as admission writes them."""
     con.execute("INSERT INTO slot (repo_id,name,path) VALUES ('repo','slot','/slots/repo/slot')")
     con.execute("INSERT INTO reservation VALUES ('slot','repo',1,'attempt')")
+    pin_workflow(con)
     con.execute(
         """INSERT INTO attempt
         (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,input_digest,
-         schema_version,model,effort,access_policy,deadline,number,seq,slot_head,engine_digest,admitted_at)
+         schema_version,model,effort,access_policy,deadline,number,seq,slot_head,engine_digest,workflow_digest,workflow_sha,admitted_at)
         VALUES ('attempt','dispatch',1,'plan','beads','tasks','tl-1','/tracker','repo','slot','input.txt','0',1,'chosen','high',
         '{"harness":"codex","sandbox":"workspace-write"}',100,1,1,'dddddddddddddddddddddddddddddddddddddddd',
-        'abababababababababababababababababababababababababababababababab',1.0)"""
+        'abababababababababababababababababababababababababababababababab',
+        (SELECT digest FROM workflow_file),
+        'eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',1.0)"""
     )
     return con
 

@@ -7,7 +7,7 @@ import pytest
 from taskloop.input_context import InputError
 from taskloop.profile import NoCommit, NotAFile, Unavailable
 from taskloop.workflow import Reason, Workflow
-from taskloop.workflow_read import DEFAULT, DIRECTORY, WorkflowRefusal, read_workflow
+from taskloop.workflow_read import DEFAULT, DIRECTORY, Pin, WorkflowRefusal, read_workflow
 
 PATH = f"{DIRECTORY}{DEFAULT}.toml"
 REPO_FILE = Path(__file__).resolve().parents[2] / PATH
@@ -28,7 +28,7 @@ class Files:
 def test_the_repo_default_workflow_loads_and_is_read_from_the_commit() -> None:
     files = Files(REPO_FILE.read_bytes())
     found = read_workflow(files, "c" * 40)
-    assert isinstance(found, Workflow)
+    assert isinstance(found, Pin) and isinstance(found.workflow, Workflow) and found.sha == "c" * 40
     assert files.asked == [("c" * 40, PATH)]
 
 

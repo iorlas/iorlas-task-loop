@@ -25,7 +25,18 @@ from taskloop.admit import (
     why,
 )
 from taskloop.admit_rows import Task
-from taskloop.admit_store import current, insert_attempt, issued, reserve, task_of, transfer, unheld
+from taskloop.admit_store import (
+    copied_pin,
+    current,
+    insert_attempt,
+    issued,
+    pin_columns,
+    reserve,
+    stored_pin,
+    task_of,
+    transfer,
+    unheld,
+)
 from taskloop.admit_store import previous as read_previous
 from taskloop.agents.settings import AgentSetting, encode_policy
 from taskloop.attempt_reads import StoreUnavailable
@@ -51,7 +62,7 @@ from taskloop.task import TaskInspection
 from taskloop.task_content import TaskContentDigest
 from taskloop.task_input import task_text
 from taskloop.tracker import ACTOR
-from taskloop.workflow_read import WorkflowRefusal, read_workflow
+from taskloop.workflow_read import Pin, WorkflowRefusal
 
 
 @dataclass(frozen=True)
@@ -144,7 +155,7 @@ class ChainAdmission:
             "repeat_reason": request.reason, "repeat_listing": json.dumps(request.listing), "seq": row.seq + 1,
             "slot_head": row.slot_head, "step": row.step,
             "harness": row.harness, "provider": row.provider, "engine_digest": self.engine, "admitted_at": self.clock(),
-            "compaction_token_limit": row.compaction_token_limit,
+            **copied_pin(con, previous.attempt_id), "compaction_token_limit": row.compaction_token_limit,
             "after_commit": None, "label": row.label,  # a repeat starts at E, the chain's own
         }, request.content_digest)
         if not transfer(con, previous, key, row.repo_id, row.slot):
@@ -174,6 +185,7 @@ class _Ready:
     task: TaskInspection
     free: tuple[Free, ...]
     earlier: EarlierAttempt | None = None
+    pin: Pin | None = None
 
 
 class NextAdmission:
@@ -205,13 +217,13 @@ class NextAdmission:
         try:
             key = AttemptKey(self.ids.hex(), self.ids.token(16), issued(ready.con, RepoId(found.repo_id), names) + 1)
             files = GitProfileFiles(request.checkout, self.checkouts)
-            context, workflow = read_context(files, ready.free[0].source), read_workflow(files, ready.free[0].source)
+            context, pin = read_context(files, ready.free[0].source), stored_pin(ready.con, request.previous.attempt_id)
             discussion = self.discussion(ready.task, found.tracker_root)
             reader = AttemptStore(self.connect, self.begin)
             earlier = reader.earlier_for(request.previous)
-            ready = replace(ready, earlier=earlier)
+            ready = replace(ready, earlier=earlier, pin=pin)
             text = EarlierInput(reader, self.files, HoldStore(self.connect, self.begin)).attach(
-                task_text(ready.task, ready.step, context, workflow, discussion.text), earlier,
+                task_text(ready.task, ready.step, context, pin.workflow, discussion.text), earlier,
                 partial(commit_names, self.checkouts(request.checkout), request.checkout))
             ref = self.files.put_input(key, text)
         except (sqlite3.Error, StoreUnavailable) as error:
@@ -277,7 +289,9 @@ class NextAdmission:
         """Under the write lock: the task's current attempt is still `previous` and done; the lowest observed-free slot
         still unheld; then the reservation, the slot's counter and attempt 1 of the next step starting after the previous
         X."""
-        con, found, step, free = ready.con, ready.found, ready.step, ready.free
+        con, found, step, free, pin = ready.con, ready.found, ready.step, ready.free, ready.pin
+        if pin is None:
+            raise StoreUnavailable("The advance's workflow was not read.")
         repo_id, generation = RepoId(found.repo_id), key.reservation_generation
         with self.begin(con):
             if blocked(con):
@@ -325,6 +339,7 @@ class NextAdmission:
                     "label": row.label,
                     "harness": request.setting.harness,
                     "provider": request.setting.provider, "engine_digest": self.engine, "admitted_at": self.clock(),
+                    **pin_columns(con, pin),
                 },
             )
         return Admitted(key, name)

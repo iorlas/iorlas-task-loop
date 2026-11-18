@@ -15,7 +15,7 @@ from typing import Literal, override
 
 import pytest
 from beads_client import Bead
-from doubles import CHECKS, WORKFLOW_FILES, Environment, FakeProfiles, FakeSlotFiles, PinnedViews
+from doubles import CHECKS, WORKFLOW_FILES, Environment, FakeProfiles, FakeSlotFiles, PinnedViews, pin_workflow
 from git_porcelain import Pushed, Recorded, RemoteRefs, Repo, Sha
 from git_porcelain.api import PushResult
 from git_porcelain.testing import FakeRemote, FakeRepo, FakeWorktree
@@ -278,13 +278,17 @@ def database(path: Path, repo_id: str, slot: Path, base: str, x: str, d: str) ->
     with begin_immediate(con):
         con.execute("INSERT INTO slot (repo_id,name,path,generation) VALUES (?,'s0','/elsewhere/s0',0),(?,'s1',?,1)",
                     (repo_id, repo_id, str(slot)))
+        pin_workflow(con)
         con.execute(
             """INSERT INTO attempt (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,
             input_path,input_digest,schema_version,model,effort,access_policy,deadline,phase,base_commit,end_commit,number,seq,slot_head,
-            after_commit,engine_digest,admitted_at) VALUES ('implement','implement-token',1,'implement','beads','tasks','tl-1',
+            after_commit,engine_digest,workflow_digest,workflow_sha,
+            admitted_at) VALUES ('implement','implement-token',1,'implement','beads','tasks','tl-1',
             '/tracker',?,'s0','input.txt',
             'digest',1,'m','e','{"harness":"codex","sandbox":"workspace-write"}',100,'captured',?,?,1,2,?,?,
-        'abababababababababababababababababababababababababababababababab',1.0)""", (repo_id,
+        'abababababababababababababababababababababababababababababababab',
+        (SELECT digest FROM workflow_file),
+        'eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',1.0)""", (repo_id,
             base, x, d, base))
         for statement in DONE:
             con.execute(statement)

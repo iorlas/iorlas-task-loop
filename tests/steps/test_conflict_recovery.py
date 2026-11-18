@@ -8,7 +8,7 @@ import sqlite3
 from pathlib import Path
 
 import pytest
-from doubles import WORKFLOW_FILES, PinnedViews
+from doubles import WORKFLOW_FILES, PinnedViews, pin_workflow
 from git_porcelain import Recorded, Sha
 from git_porcelain.testing import FakeRemote, FakeRepo, FakeWorktree
 from land_bench import REQUIRED, LandBench, bench
@@ -43,13 +43,17 @@ def seed_chain(b: LandBench, number: int, x: str) -> None:
     """The restarted chain's done implement attempt (X on `task/tl-1`, published) and its passed, released checks attempt."""
     base, repo_id, implement, checks = b.origin_main(), b.repo.identity().key, f"implement{number}", f"checks{number}"
     with begin_immediate(b.con):
+        pin_workflow(b.con)
         b.con.execute(
             """INSERT INTO attempt (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,
             input_path,input_digest,schema_version,model,effort,access_policy,deadline,phase,base_commit,end_commit,number,seq,slot_head,
-            after_commit,engine_digest,admitted_at) VALUES (?,?,1,'implement','beads','tasks','tl-1','/tracker',?,'s0',
+            after_commit,engine_digest,workflow_digest,workflow_sha,
+            admitted_at) VALUES (?,?,1,'implement','beads','tasks','tl-1','/tracker',?,'s0',
             'input.txt','digest',1,'m','e',
             '{"harness":"codex","sandbox":"workspace-write"}',100,'captured',?,?,1,?,?,?,
-        'abababababababababababababababababababababababababababababababab',1.0)""", (implement,
+        'abababababababababababababababababababababababababababababababab',
+        (SELECT digest FROM workflow_file),
+        'eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',1.0)""", (implement,
             f"{implement}-token", repo_id, base, x, 2 * number, b.d, base))
         b.con.execute(
             """INSERT INTO execution (attempt_id,dispatch_token,generation,rc,timed_out,work,stands,stdout_path,stdout_digest,

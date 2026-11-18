@@ -9,7 +9,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 import pytest
-from doubles import CANDIDATE, CHECKS, ORIGIN, REQUIRED, SQUASH, D, X
+from doubles import CANDIDATE, CHECKS, ORIGIN, REQUIRED, SQUASH, D, X, pin_workflow
 from git_porcelain.testing import FakeRepo
 from land_conflict_bench import bench, copy_row
 from sqlite_store import begin_immediate
@@ -168,6 +168,7 @@ def checked(con: sqlite3.Connection, conclusion: str = "passed") -> None:
     reason = None if conclusion == "passed" else "test:failed"
     con.execute("""UPDATE checks_attempt SET phase='concluded',conclusion=?,reason=?,concluded_at=5,released_at=6,parked=?
     WHERE attempt_id='checks'""", (conclusion, reason, D))
+    pin_workflow(con)
     con.execute("DELETE FROM reservation")
 
 
@@ -272,10 +273,12 @@ def test_nonfinite_times_never_enter_storage(landing: sqlite3.Connection, now: f
     ("""INSERT INTO checks_attempt (attempt_id,dispatch_token,generation,after_attempt_id,number,slot,slot_head,target_commit,
      required,deadline) VALUES ('rerun','rerun-token',1,'implement',2,'s2',?,?,'[]',100)""", "no_change", "not_checked"),
     ("""INSERT INTO attempt (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,
-     input_digest,schema_version,model,effort,access_policy,deadline,number,seq,slot_head,engine_digest,
+     input_digest,schema_version,model,effort,access_policy,deadline,number,seq,slot_head,engine_digest,workflow_digest,workflow_sha,
      admitted_at) VALUES ('plan','plan-token',1,'plan','beads',
      'tasks','tl-1','/tracker','r','s1','i','d',1,'m','e','{"harness":"codex","sandbox":"workspace-write"}',100,1,3,?,
-        'abababababababababababababababababababababababababababababababab',1.0)""",
+        'abababababababababababababababababababababababababababababababab',
+        (SELECT digest FROM workflow_file),
+        'eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',1.0)""",
      "same_tree", "not_done"),
     ("UPDATE slot_release SET claim='unclaiming'", "no_change", "not_done"),
 ], ids=["fenced", "unreleased", "abandoned", "failed", "failed_no_change", "not_latest", "later_attempt", "claim"])

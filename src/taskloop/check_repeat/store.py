@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from git_porcelain import Repo
 
 from taskloop.admit import AdmitRefused, Admitted, Free, branched, free_slots
-from taskloop.admit_store import insert_attempt, issued, reserve, unheld
+from taskloop.admit_store import copied_pin, insert_attempt, issued, reserve, unheld
 from taskloop.agents.settings import encode_policy
 from taskloop.attempt_reads import AttemptRow, StoreConnection, StoreRefused, StoreUnavailable, as_text
 from taskloop.attempt_result import collect, succeeded
@@ -105,7 +105,7 @@ class CheckRepeatStore(StoreConnection):
                 "model": choices.model, "effort": choices.effort, "access_policy": encode_policy(choices.access),
                 "compaction_token_limit": choices.compaction_token_limit,
                 "harness": choices.harness, "provider": choices.provider, "deadline": deadline,
-                "engine_digest": engine, "admitted_at": admitted_at,
+                "engine_digest": engine, "admitted_at": admitted_at, **copied_pin(con, previous.attempt_id),
                 "number": row.number + 1, "seq": row.seq + 1, "previous_attempt_id": previous.attempt_id,
                 "repeat_reason": CheckRepeatReason.FAILED_CHECK.value, "repeat_listing": None,
                 "source_checks_id": source.key.attempt_id, "slot_head": head, "after_commit": source.commit, "label": row.label,

@@ -9,7 +9,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 import pytest
-from doubles import CANDIDATE, CHECKS, ORIGIN, REQUIRED, SQUASH, TARGET, D, X
+from doubles import CANDIDATE, CHECKS, ORIGIN, REQUIRED, SQUASH, TARGET, D, X, pin_workflow
 from sqlite_store import begin_immediate
 from stream_proc import OwnedProcess
 
@@ -380,12 +380,15 @@ def test_attempt_of_is_the_latest_checks_attempt_of_the_tasks_current_agent_atte
     with begin_immediate(checking):
         check_store.insert(checking, admitted(2))
     assert checks.attempt_of("tasks", "tl-1") == (AttemptKey("next", "next-token", 1), "admitted", None)
+    pin_workflow(checking)
     checking.execute(  # a fresh plan after an abandon: the task's current attempt has no checks attempt
         """INSERT INTO attempt (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,
-        input_digest,schema_version,model,effort,access_policy,deadline,number,seq,slot_head,engine_digest,
+        input_digest,schema_version,model,effort,access_policy,deadline,number,seq,slot_head,engine_digest,workflow_digest,workflow_sha,
         admitted_at) VALUES ('plan','plan-token',1,'plan','beads',
         'tasks','tl-1','/tracker','r','s1','i','d',1,'m','e','{"harness":"codex","sandbox":"workspace-write"}',100,1,3,?,
-        'abababababababababababababababababababababababababababababababab',1.0)""", (D,))
+        'abababababababababababababababababababababababababababababababab',
+        (SELECT digest FROM workflow_file),
+        'eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',1.0)""", (D,))
     assert checks.attempt_of("tasks", "tl-1") is None
 
 
