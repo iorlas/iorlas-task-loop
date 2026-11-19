@@ -69,6 +69,7 @@ def register(commands: Parsers) -> None:
         start.add_argument(flag, required=True)
     start.add_argument("--minutes", type=int, required=True, help="Deadline of the attempt (or of its repeat), from now")
     _harness_flag(start)
+    _new_task_flags(start)
     _common(start, "--db", "--artifacts")
     status = _add(step, "show", "The task's attempt, its entry, setup run, result and next action (read-only)")
     status.add_argument("task_id", metavar="TASK")
@@ -152,6 +153,9 @@ def _harness_flag(parser: argparse.ArgumentParser) -> None:
         parser.add_argument(flag, default=None, help="Override this field of each newly admitted step (flag > machine config > default)")
     parser.add_argument("--harness", type=HarnessKind, choices=list(HarnessKind), default=None,
                         help="Override each newly admitted step's configured harness")
+
+
+def _new_task_flags(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--from", dest="start_step", type=Step, choices=[Step.IMPLEMENT], default=None, help="Start a new task at "
                         "implement from the plan committed at its source commit (refused when none is valid), not at plan")
     parser.add_argument("--workflow", default=None, metavar="NAME", help="Take a new task's prompts and agent choice from "
@@ -169,6 +173,7 @@ def _round_flags(parser: argparse.ArgumentParser) -> None:
                         "approved: use a label only those tasks carry")
     parser.add_argument("--minutes", type=int, required=True, help="Deadline of each attempt a round admits, from now")
     _harness_flag(parser)
+    _new_task_flags(parser)
     parser.add_argument("--retake-lapsed", action="store_true", help="After a factory.db discard only: also take the tasks "
                         "`taskloop` still holds in progress with an expired lease and no attempt here (assumes this is the one "
                         "factory on the tracker); run it once, with `tl step next`")
@@ -309,7 +314,7 @@ def _adopt(arguments: argparse.Namespace, loaded: Loaded) -> Result:
 
 
 def _configuration(arguments: argparse.Namespace, loaded: Loaded) -> Loaded | Failed:
-    flags = _overrides(arguments)
+    flags = Overrides(harness=arguments.harness, model=arguments.model, effort=arguments.effort)
     try:
         settings = loaded.settings.agents.overridden(flags)
     except ValueError as error:
