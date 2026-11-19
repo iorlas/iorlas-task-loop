@@ -15,7 +15,7 @@ from any_agent.procs import Worker
 from any_agent.testing import FakeRun
 from beads_client import Bd, BdError, Bead
 from beads_client.testing import FakeTaskReadClient, Script
-from doubles import ENGINE, WORKFLOW, WORKFLOW_BYTES, WORKFLOW_FILES, FakeSlotFiles, FixedIds, PinnedViews
+from doubles import ENGINE, WORKFLOW, WORKFLOW_BYTES, WORKFLOW_FILES, WORKFLOW_PATH, FakeSlotFiles, FixedIds, PinnedViews
 from git_porcelain import GitTimeout, NotARepo, Repo
 from git_porcelain.testing import FakeRemote, FakeRepo
 from sqlite_store import Store, begin_immediate
@@ -255,6 +255,20 @@ def test_a_named_workflow_is_the_file_read_at_the_source_commit_and_pinned(
     assert isinstance(admission(factory, tmp_path, Tracker(factory, tmp_path / "artifacts"), repo).admit(wanted), Admitted)
     stored = factory.execute("SELECT workflow_digest FROM attempt").fetchone()[0]
     assert stored == hashlib.sha256(variant).hexdigest()
+
+
+def test_the_workflow_agent_keys_set_the_stored_choice_and_a_flag_still_wins(
+    factory: sqlite3.Connection, root: Path, tmp_path: Path
+) -> None:
+    agent = '\n[step.plan.agent]\nmodel = "wf-model"\neffort = "low"\ncompaction_token_limit = 5000\n'
+    remote = FakeRemote("https://example.invalid/agent.git")
+    remote.advance("main", {"README": "one", ".task-loop.json": "{}", **WORKFLOW_FILES,
+                            WORKFLOW_PATH: WORKFLOW_BYTES.decode() + agent})
+    repo = FakeRepo.clone(remote, tmp_path / "agent")
+    slots(factory, repo, root, 1)
+    wanted = replace(request(tmp_path, repo), overrides=Overrides(effort="max"))
+    assert isinstance(admission(factory, tmp_path, Tracker(factory, tmp_path / "artifacts"), repo).admit(wanted), Admitted)
+    assert factory.execute("SELECT model,effort,compaction_token_limit FROM attempt").fetchall() == [("wf-model", "max", 5000)]
 
 
 def test_an_unknown_named_workflow_refuses_the_admission_as_workflow(

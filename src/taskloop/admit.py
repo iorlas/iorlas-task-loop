@@ -14,7 +14,7 @@ from git_porcelain import GitUnavailable, NotARepo, Repo
 
 from taskloop.admit_rows import Free
 from taskloop.admit_store import insert_attempt, issued, next_seq, pin_columns, reserve, task_attempted, unheld
-from taskloop.agents.settings import AgentSetting, Overrides, StepSettings, apply, encode_policy
+from taskloop.agents.settings import AgentSetting, Overrides, StepSettings, choose, encode_policy
 from taskloop.attempt_reads import StoreUnavailable
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import AttemptKey, Checkouts, FileRef, SlotFiles
@@ -169,7 +169,8 @@ class AttemptAdmission:
             if selection.decision is ReuseDecision.UNAVAILABLE:
                 return AdmitUnavailable("git", detail=selection.explanation)
             prepared = replace(prepared, earlier=earlier, content_digest=discussion.digest, selection=selection, pin=pin,
-                               setting=apply(request.settings.for_step(selection.step), request.overrides))
+                               setting=choose(request.settings.for_step(selection.step), pin.workflow.table(selection.step).agent,
+                                              request.overrides))
             text = EarlierInput(reader, self.files, HoldStore(self.connect, self.begin)).attach(
                 task_text(prepared.task, selection.step, context, pin.workflow, discussion.text), earlier,
                 partial(commit_names, prepared.repo, request.checkout))
