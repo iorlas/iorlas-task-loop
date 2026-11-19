@@ -171,3 +171,9 @@ def test_a_workflow_override_is_a_plain_lowercase_file_name_only(name: str) -> N
 @pytest.mark.parametrize("name", ["default", "no-code-map", "v2_fast"])
 def test_a_plain_workflow_name_is_accepted(name: str) -> None:
     assert Overrides(workflow=name).workflow == name
+
+
+def test_only_the_implement_step_can_be_named_as_a_start() -> None:
+    assert Overrides(start=Step.IMPLEMENT).start is Step.IMPLEMENT
+    with pytest.raises(ValueError, match="only implement"):
+        Overrides(start=Step.PLAN)

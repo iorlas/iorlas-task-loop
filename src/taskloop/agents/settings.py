@@ -137,12 +137,20 @@ class Overrides(Input):
     harness: HarnessKind | None = None
     model: str | None = None
     effort: str | None = None
+    start: Step | None = None  # the step a new task starts at: None is the first (plan); implement needs a committed plan
     workflow: str | None = None  # the file `.task-loop/workflows/<workflow>.toml` of a task's first step; None is the default one
 
     @field_validator("model", "effort")
     @classmethod
     def word(cls, value: str | None) -> str | None:
         return None if value is None else identifier(value)
+
+    @field_validator("start")
+    @classmethod
+    def implement_only(cls, value: Step | None) -> Step | None:
+        if value is Step.PLAN:
+            raise ValueError("a task starts at the plan step by default; only implement can be named")
+        return value
 
     @field_validator("workflow")
     @classmethod

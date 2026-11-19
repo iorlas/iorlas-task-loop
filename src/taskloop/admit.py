@@ -47,7 +47,7 @@ type Unclaim = Callable[[str, str], bool]  # fenced to this actor's own claim; F
 type Tasks = Callable[[str, str, str], TaskInspection]  # (task id, backlog, tracker root)
 type Refusal = Literal[
     "choices", "deadline", "expired", "task", "task_missing", "checkout", "no_free_slot", "task_attempted", "input",
-    "claimed_elsewhere", "constraint", "workflow",
+    "claimed_elsewhere", "constraint", "workflow", "plan",
     "not_repeatable", "repeat_cap", "branch_name", "branch_held", "branch_diverged", "branch_unpublished", "claim_lost",
     "not_advanceable", "branch_moved",
     "commit_missing", "target", "target_profile", "no_required",  # the checks admission's (`check_admit`)
@@ -165,9 +165,11 @@ class AttemptAdmission:
             discussion = self.discussion(prepared.task, prepared.request.tracker_root)
             selection = ResumePlans(reader, self.checkouts).select(
                 str(prepared.repo_id), request.backlog, request.task_id, prepared.request.tracker_root,
-                request.checkout, free[0].source, discussion.digest)
+                request.checkout, free[0].source, discussion.digest, start=request.overrides.start)
             if selection.decision is ReuseDecision.UNAVAILABLE:
                 return AdmitUnavailable("git", detail=selection.explanation)
+            if selection.declared and selection.decision is not ReuseDecision.REUSE:
+                return AdmitRefused("plan", detail=selection.explanation)
             prepared = replace(prepared, earlier=earlier, content_digest=discussion.digest, selection=selection, pin=pin,
                                setting=choose(request.settings.for_step(selection.step), pin.workflow.table(selection.step).agent,
                                               request.overrides))
