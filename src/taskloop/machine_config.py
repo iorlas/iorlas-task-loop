@@ -32,7 +32,7 @@ class Effective:
     artifacts: Setting[Path]
     slots_root: Setting[Path]
     slot_count: Setting[int]
-    round_seconds: Setting[int]  # `tl step rounds`: seconds from the end of one regular round to the next
+    round_seconds: Setting[int]  # `tl rounds start`: seconds from the end of one regular round to the next
     git_read_seconds: Setting[int]  # seconds a Git read (status, diff, ls-files, ...) may take before it is `unavailable:git`
     backlog: Setting[str | None]  # the file's default for `tl step show`; its explicit flag remains a separate input
 

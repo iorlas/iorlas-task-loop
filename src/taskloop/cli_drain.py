@@ -19,7 +19,7 @@ def register(commands: argparse._SubParsersAction[argparse.ArgumentParser]) -> N
         "drain", help="Block new work, let existing executions finish, and verify idle", allow_abbrev=False,
         description="Block new work, let existing executions finish, and verify the factory idle, before an upgrade or restart. "
         "Writes a durable drain request in factory.db; schedules, signals and releases nothing. Retrying observes the same "
-        "request. A completed drain stays in force until `tl step rounds` is started again under matching code, which reopens it.")
+        "request. A completed drain stays in force until `tl rounds start` is started again under matching code, which reopens it.")
     parser.add_argument("--db", metavar="PATH", help="Existing compatible factory.db (overrides machine config)")
     parser.add_argument("--json", dest="json_output", action="store_true", help="Print structured progress and final result")
 

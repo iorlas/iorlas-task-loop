@@ -24,7 +24,7 @@ def test_inspection_output(structured: bool, tmp_path: Path, monkeypatch: pytest
         return inspect_repo(repo, repo.path)
 
     monkeypatch.setattr(GitViews, "inspect_checkout", lambda _views, path: inspect(path))
-    assert main(["repo", "inspect", str(repo.path), *(["--json"] if structured else [])]) == 0
+    assert main(["repo", "show", str(repo.path), *(["--json"] if structured else [])]) == 0
     output = capsys.readouterr()
     assert output.err == ""
     if structured:
@@ -56,29 +56,29 @@ def test_inspection_failures_are_nonzero(
         raise error
 
     monkeypatch.setattr(GitViews, "inspect_checkout", lambda _views, path: fail(path))
-    assert main(["repo", "inspect", "missing", *(["--json"] if structured else [])]) == 1
+    assert main(["repo", "show", "missing", *(["--json"] if structured else [])]) == 1
     output = capsys.readouterr()
     assert output.out == ""
     if structured:
         assert json.loads(output.err) == {"error": {"kind": kind, "message": str(error)}}
     else:
-        assert output.err == f"tl repo inspect: {error}\n{REPO[kind]}\n"
+        assert output.err == f"tl repo show: {error}\n{REPO[kind]}\n"
 
 
 @pytest.mark.parametrize("structured", [False, True])
 def test_unknown_home_is_a_cli_refusal(structured: bool, capsys: pytest.CaptureFixture[str]) -> None:
     path = "~__taskloop_missing_home_6c6fd109__/repo"
-    assert main(["repo", "inspect", path, *(["--json"] if structured else [])]) == 1
+    assert main(["repo", "show", path, *(["--json"] if structured else [])]) == 1
     output = capsys.readouterr()
     assert output.out == ""
     message = f"Cannot expand checkout path: {path}"
     if structured:
         assert json.loads(output.err) == {"error": {"kind": "unsupported_checkout", "message": message}}
     else:
-        assert output.err == f"tl repo inspect: {message}\n{REPO['unsupported_checkout']}\n"
+        assert output.err == f"tl repo show: {message}\n{REPO['unsupported_checkout']}\n"
 
 
-@pytest.mark.parametrize("arguments", [["repo"], ["repo", "inspect"], ["repo", "inspect", ".", "--js"]])
+@pytest.mark.parametrize("arguments", [["repo"], ["repo", "show"], ["repo", "show", ".", "--js"]])
 def test_inspection_requires_explicit_input(arguments: list[str], capsys: pytest.CaptureFixture[str]) -> None:
     with pytest.raises(SystemExit) as result:
         main(arguments)

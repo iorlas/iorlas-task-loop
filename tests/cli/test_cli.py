@@ -63,6 +63,13 @@ def test_legacy_step_command_is_not_an_alias(capsys: pytest.CaptureFixture[str])
     assert "invalid choice: 'verify'" in capsys.readouterr().err
 
 
+@pytest.mark.parametrize("arguments", [["step", "next"], ["step", "rounds"], ["repo", "inspect", "."]])
+def test_renamed_commands_keep_no_old_spelling(arguments: list[str]) -> None:
+    with pytest.raises(SystemExit) as result:
+        main(arguments)
+    assert result.value.code == 2
+
+
 @pytest.mark.parametrize(
     "arguments",
     [["plan"], ["step"], ["implement"], ["--unknown"], ["--he"], ["land", "tl-123"], ["step", "prepare"], ["slot"], ["config"],

@@ -29,7 +29,7 @@ runs only from that environment. There is no other guard, and none is needed.
 |---|---|---|
 | Agent sandbox | `sandbox` under `[agents.<step>.access]` in `~/.config/task-loop/config.toml` | A real sandbox needs user namespaces: available on the OrbStack machine, not in the sol container, which sets `danger-full-access`. Off is acceptable only for an owner-only factory. |
 | Slot count | `slot_count` in the same file (`round_seconds` is there too), and `--max-running` | 8 on sol, 6 on the OrbStack machine |
-| Model and effort | the `step rounds` options | `gpt-6.1-sol`, `high` |
+| Model and effort | the `rounds start` options | `gpt-6.1-sol`, `high` |
 
 ## Layout (the same on every machine)
 
@@ -50,7 +50,7 @@ Start (one process, started by hand; nothing restarts it):
 
 1. `cd ~/.local/share/task-loop/checkouts/iorlas-task-loop`, with `MISE_TRUSTED_CONFIG_PATHS` set.
 2. `git fetch origin && git merge --ff-only origin/main`, then `just install`.
-3. Run `step rounds` with `--backlog tl --tracker-root ~/Workspaces/iorlas-task-loop --checkout <the checkout>
+3. Run `rounds start` with `--backlog tl --tracker-root ~/Workspaces/iorlas-task-loop --checkout <the checkout>
    --model gpt-6.1-sol --effort high --label real-run-1 --max-running N --minutes 240 --retake-lapsed`, in the
    background, with output to `~/.local/state/task-loop/rounds.out`.
 

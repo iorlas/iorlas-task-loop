@@ -24,7 +24,7 @@ Start with [First landed task](#first-landed-task-linux) for an ordered setup an
   newline, with no timestamps or host paths. Success writes one complete digest to stdout. Invalid inputs, missing
   objects, unreadable documentation and extraction or serialization failures explain themselves on stderr and exit
   nonzero with empty stdout. No tracker configuration is needed.
-- `tl repo inspect PATH [--json]` reports the local repository identity, common directory, selected checkout and origin.
+- `tl repo show PATH [--json]` reports the local repository identity, common directory, selected checkout and origin.
 - `tl task show TASK_ID --backlog BACKLOG --tracker-root PATH [--json]` reads the explicitly configured Beads tracker,
   preserving requirements, acceptance and dependency relationships. The backlog key is supplied configuration; it is
   not inferred from Git. Missing, malformed and unavailable reads are distinct nonzero results; JSON errors go to stderr.
@@ -35,20 +35,20 @@ Start with [First landed task](#first-landed-task-linux) for an ordered setup an
 - `tl step start|show|list|commit|release|publish` run, inspect, complete factory commit, release (`--abandon` returns the tracker
   claim) and publish one task's current attempt. `tl step start` on a done plan admits implementation; after implementation
   is accepted by factory commit it admits checks. Checks run the profile's commands in the factory, with results and logs available
-  through `tl step show`. `tl step next` runs one
+  through `tl step show`. `tl rounds once` runs one
   scheduling round: it settles existing attempts, advances each claimed task whose step is done (no label check), then
   admits approved ready tasks (`--label`) into the slots left while fewer than `--max-running` (default 3) of the backlog's
   tasks are in flight (a step running, or passed and waiting for land). `--max-new` is removed and rejected.
 - `tl step show TASK [--backlog KEY]` selects the explicit backlog, then the machine config's `backlog`, then the sole
   distinct backlog retained in `factory.db` (including ended attempts). With none or several, supply the flag or config
-  default. `tl step list` lists all backlogs; its `hold cause` column shows the recorded or due reason after `next`.
+  default. `tl step list` lists all backlogs; its `hold cause` column shows the recorded or due reason after `rounds once`.
 - `tl drain [--db PATH] [--json]` durably blocks new work across the resolved factory database and
   waits for existing entries, agents, setup, checks and synchronous operations to finish. Success verifies idle; it
   preserves claims, reservations, sessions and unlaunched attempts. Uncertainty exits 3 and Ctrl-C exits 130, leaving
   the fence in place. JSON writes progress and the final result as JSON Lines.
-- `tl step rounds` repeats rounds in the foreground until Ctrl-C. `--retake-lapsed` on `next` or `rounds` is for recovery
+- `tl rounds start` repeats rounds in the foreground until Ctrl-C. `--retake-lapsed` on `rounds once` or `rounds start` is for recovery
   after discarding `factory.db`: it also takes the factory's expired claims absent from that database, assuming one
-  factory on the tracker. Prefer one `next` invocation for that recovery.
+  factory on the tracker. Prefer one `rounds once` invocation for that recovery.
 - `tl step land TASK --backlog BACKLOG --checkout PATH` is the person's delivery command: squash the checked commit
   onto origin's `main`, validate again when required, push without force, then close the task in the local tracker.
   Use `--summary` to inspect first. Some lands require `--minutes N` for validation. Reruns reconcile unfinished actions;
@@ -56,7 +56,7 @@ Start with [First landed task](#first-landed-task-linux) for an ordered setup an
   the person's responsibility. Publishing a task branch does not land it.
 
 For a refusal, retain its kind, reason and supplied detail and follow the reason-specific guidance. To inspect the
-local situation without advancing work, use `tl config show`, `tl repo inspect CHECKOUT`,
+local situation without advancing work, use `tl config show`, `tl repo show CHECKOUT`,
 `tl profile show --checkout CHECKOUT --at REV --target main`, and
 `tl task show TASK --backlog KEY --tracker-root TRACKER`. Inspect retained execution with
 `tl step list --stuck` and `tl step show TASK --backlog KEY`; add `--json` to these reads for structured output.
@@ -101,20 +101,20 @@ explains the cause, evidence and claim state. `tl step list --stuck`, `tl step s
 them. Answer by editing the task's description or acceptance criteria, then add its approval label back; the next
 round starts it again at plan. Follow any pending cleanup instructions before reapproval. Comments alone are not answers.
 
-`tl step rounds` serves the dashboard on `127.0.0.1:8765` for the lifetime of rounds; `--dash-port PORT` changes the port (0 chooses a free port).
+`tl rounds start` serves the dashboard on `127.0.0.1:8765` for the lifetime of rounds; `--dash-port PORT` changes the port (0 chooses a free port).
 `--dash-host ADDRESS` selects a literal IPv4 or IPv6 bind address (default `127.0.0.1`); names such as `localhost` are rejected.
 For a reverse proxy reaching a container over its network address, use e.g. `--dash-host 0.0.0.0` to listen on all IPv4 interfaces.
 The startup line reports the listener address and allocated port. The dashboard is read-only and unauthenticated.
 Binding anything but loopback is the operator's explicit choice: put it behind a proxy with sign-in and restrict direct access.
 The dashboard itself provides no authentication.
 `--no-dashboard` serves none. A dashboard startup failure warns on stderr while rounds continue.
-`step rounds --json` writes JSON Lines: one start record and one end record for a normal graceful session.
+`rounds start --json` writes JSON Lines: one start record and one end record for a normal graceful session.
 Dashboard notices go to stderr in this mode, as do early refusals and abrupt end results; stdout records keep their
 existing shapes. Other commands' `--json` output is a single document.
 
 Exit codes are 0 for success/already complete (including a graceful rounds stop), 1 for refusals and task/repo
 inspection failures, 2 for invalid syntax, 3 for no reliable result (profile unavailable or a step classified unknown;
-retry is safe), and 130 for an abrupt rounds stop or interrupted land or drain. Task/repo inspection failures remain 1 even
+retry is safe), and 130 for an abrupt rounds stop or interrupted land or drain. Task/repo showion failures remain 1 even
 when a backend read is unavailable. Continuous rounds retry unknown results themselves.
 
 The machine config is `~/.config/task-loop/config.toml` or `--config FILE`; state defaults to
@@ -122,7 +122,7 @@ The machine config is `~/.config/task-loop/config.toml` or `--config FILE`; stat
 `unset` (JSON null) when absent. Other commands are rejected until their behavior is implemented. `tl <command> --help`
 is the reference; the design index links each slice's plan and implementation evidence. `tl plan` is no longer a command.
 Agent choices live in the machine config, independently for each built agent step. With no agent flags,
-start, next and rounds use Codex with `gpt-6.1-sol`, high effort for plan and medium for implement. These effort defaults
+`step start`, `rounds once` and `rounds start` use Codex with `gpt-6.1-sol`, high effort for plan and medium for implement. These effort defaults
 are the owner's convention, not vendor guidance. For example:
 
 ```toml
@@ -196,7 +196,7 @@ eval "$(mise env --shell bash)"
 just install
 tl() { uv run --directory "$checkout" --frozen --no-sync python -I -m taskloop "$@"; }
 tl version
-tl repo inspect "$checkout"
+tl repo show "$checkout"
 tl profile show --checkout "$checkout" --at HEAD --target origin/main
 prek install
 just check
@@ -292,7 +292,7 @@ task_id=$(bd create "Document the team's first task" --type task \
 tl task show "$task_id" --backlog first-run --tracker-root "$checkout"
 bd label add "$task_id" first-run-approved
 bd ready --label first-run-approved
-tl step rounds --backlog first-run --tracker-root "$checkout" --checkout "$checkout" \
+tl rounds start --backlog first-run --tracker-root "$checkout" --checkout "$checkout" \
   --label first-run-approved --max-running 1 --minutes 30
 ```
 
@@ -359,7 +359,7 @@ your shell's PATH before retrying; verification never installs or upgrades exter
 ```bash
 just install
 uv run --frozen --no-sync python -I -m taskloop --help
-uv run --frozen --no-sync python -I -m taskloop repo inspect . --json
+uv run --frozen --no-sync python -I -m taskloop repo show . --json
 just check
 just test
 ```

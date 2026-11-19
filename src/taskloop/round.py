@@ -1,4 +1,4 @@
-"""`tl step next`: one scheduling round over the existing operations, stateless and idempotent.
+"""`tl rounds once`: one scheduling round over the existing operations, stateless and idempotent.
 
 Settle each existing attempt of the backlog by its `Next` word (relaunch an admitted attempt whose entry is not running,
 a checks attempt with the checks launcher; commit, repeat; hold a round-taken task that stopped (`Next: hold`, through

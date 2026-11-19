@@ -1,7 +1,7 @@
 """The rounds process's own Ctrl-C, SIGTERM and SIGHUP: the only signal use in factory source (AGENTS.md, `.importlinter`
 one-signal-owner).
 
-While `tl step rounds` runs, a SIGINT handler sets a flag (`stopping`), puts the previous disposition back (Python's
+While `tl rounds start` runs, a SIGINT handler sets a flag (`stopping`), puts the previous disposition back (Python's
 `default_int_handler` in a terminal, so the next press is the ordinary `KeyboardInterrupt`: the abrupt stop) and says one
 line; on exit the previous disposition is restored. A process started with SIGINT ignored (`SIG_IGN`: `nohup`, `&`, an
 agent's background shell) keeps it ignored and says so once (`IGNORED`). SIGTERM and SIGHUP (the terminal closing;

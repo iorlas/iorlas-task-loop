@@ -73,7 +73,7 @@ def test_rounds_restart_reports_the_same_recovery_in_human_and_json_and_preserve
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
     path = incompatible(tmp_path, version)
     before = path.read_bytes()
-    argv = ["step", "rounds", "--db", str(path), "--artifacts", str(tmp_path / "art"), "--backlog", "tasks",
+    argv = ["rounds", "start", "--db", str(path), "--artifacts", str(tmp_path / "art"), "--backlog", "tasks",
             "--tracker-root", "/tracker", "--checkout", "/checkout", "--label", "auto", "--model", "m", "--effort", "high",
             "--minutes", "30"]
     for _ in range(2):
@@ -85,7 +85,7 @@ def test_rounds_restart_reports_the_same_recovery_in_human_and_json_and_preserve
             assert (error["kind"], error["reason"]) == ("refused", "schema")
             detail = error["message"]
         else:
-            detail = output.err.removeprefix("tl step rounds: refused:schema\n")
+            detail = output.err.removeprefix("tl rounds start: refused:schema\n")
         recovery_words(detail.splitlines()[0], path, version)
         assert path.read_bytes() == before
     with sqlite3.connect(path) as con:

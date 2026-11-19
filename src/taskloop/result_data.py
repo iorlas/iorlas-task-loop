@@ -177,13 +177,13 @@ def _step_data(result: StepResult, *, admission: bool) -> dict[str, object]:
 
 
 def rounds_data(backlog: str, every: int, log: str, label: str, max_running: int) -> dict[str, object]:
-    """`tl step rounds`'s start, printed before the first round; its end is `as_data(Ended)`."""
+    """`tl rounds start`'s start, printed before the first round; its end is `as_data(Ended)`."""
     return {"status": "rounds", "backlog": backlog, "every": every, "log": log, "label": label, "max_running": max_running}
 
 
 def _rows_data(result: Listed | Round | Ended | SetupTimingReport) -> dict[str, object]:
-    """`tl step list`: every current attempt; `tl step next`: each move in the order performed and `stopped`, the word that
-    ended admission early, or null; `tl step rounds`: why the rounds ended."""
+    """`tl step list`: every current attempt; `tl rounds once`: each move in the order performed and `stopped`, the word that
+    ended admission early, or null; `tl rounds start`: why the rounds ended."""
     if isinstance(result, SetupTimingReport):
         return result.model_dump(mode="json")
     if isinstance(result, Listed):

@@ -1,6 +1,6 @@
 """The hold operation (tl-8bh9.14.9 sections 5 and 7.3): `hold_task`, the one application operation that holds a
 round-taken task, and `clear_holds`, which removes `held` once a held task was taken again. The round calls both (H3);
-`tl step next` is a round and may run beside `tl step rounds`, so every step is fenced and a rerun or a concurrent caller
+`tl rounds once` is a round and may run beside `tl rounds start`, so every step is fenced and a rerun or a concurrent caller
 does only what is missing.
 
 `hold_task`, in order: the record (`HoldStore.insert`, fenced on A and its cause being current; a lost race is
@@ -232,7 +232,7 @@ def _agent_row(reader: AttemptStore, view: AttemptView, attempt_id: str) -> Atte
 
 def clear_holds(store: HoldStore, tracker: TrackerHolds, clock: Clock, backlog: str) -> tuple[Cleared, ...]:
     """Section 7.3, each round after publication: every hold whose task was taken again and whose `held` may still be
-    on the task. Right before each tracker call the task's current hold is read again (a round and `tl step next` may
+    on the task. Right before each tracker call the task's current hold is read again (a round and `tl rounds once` may
     hold the task again meanwhile): one that moved the labels (`moved`, `absent`) owns `held`, so only `cleared_at` is
     set (no tracker call); one whose label step has not finished leaves the row for a later round (it may yet end
     `not_ours`, which writes no label); with none, or one that wrote no label, `held` is removed with no read first (an

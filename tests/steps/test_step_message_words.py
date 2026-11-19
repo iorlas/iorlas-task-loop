@@ -93,7 +93,7 @@ def test_abandon_and_interrupted_rounds_render_the_remaining_decision() -> None:
     lines = human("tl step release", result, None)
     assert "Inspect tracker ownership" in lines[-2]
     assert "next approved admission starts a fresh attempt" in lines[-1]
-    stopped = human("tl step rounds", Ended("tasks", "interrupted"), None)
+    stopped = human("tl rounds start", Ended("tasks", "interrupted"), None)
     assert "Launched steps keep running" in stopped[0] and "restarting scheduling continues them" in stopped[0]
     assert all(recipe not in line for line in [*lines, *stopped] for recipe in RECIPES)
 

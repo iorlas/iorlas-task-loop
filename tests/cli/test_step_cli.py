@@ -85,7 +85,7 @@ X, T = "a" * 40, "b" * 40
 PUBLISH = ["step", "publish", "tl-1", "--backlog", "tasks"]
 PUBLISHED = {"status", "backlog", "task", "attempt_id", "commit", "remote_head"}
 CHECKED = {"status", "backlog", "task", "attempt_id", "release", "published"}
-NEXT = ["step", "next", "--backlog", "tasks", "--tracker-root", "/tracker", "--checkout", "/checkout", "--label", "auto", "--model", "m",
+NEXT = ["rounds", "once", "--backlog", "tasks", "--tracker-root", "/tracker", "--checkout", "/checkout", "--label", "auto", "--model", "m",
         "--effort", "high", "--minutes", "30"]
 ROUND = {"status", "backlog", "moves", "stopped", "logged"}
 MOVES = (Move("tl-3", "start", "started", "a3"), Move("tl-2", "report", "stuck:hung", "a2"), Move("tl-10", "skip", "abandoned"),
@@ -268,7 +268,7 @@ CASES: list[tuple[list[str], Result, int, list[str], set[str]]] = [
       "tl-5   report   claim_leaked\n", f"claim_leaked: {automatic_guide('claim_leaked')}"], ROUND),
     (NEXT, Round("tasks", (), "unavailable:tracker"), 3, ["Stopped: unavailable:tracker"], ROUND),
     (NEXT, Round("tasks", ()), 0, ["Nothing to do in backlog tasks."], ROUND),
-    (NEXT, Failed("refused", "label"), 1, ["tl step next: refused:label"], ERROR),
+    (NEXT, Failed("refused", "label"), 1, ["tl rounds once: refused:label"], ERROR),
     (["slot", "adopt", "/repo"], Adoption((Adopted("s1", Path("/s/s1")),)), 0, ["s1 adopted /s/s1"], {"slots"}),
     (["slot", "adopt", "/repo"], Adoption((NotAdopted("s1", "not_listed", Path("/s/s1")),)), 1,
      ["s1 not_listed /s/s1", "Missing slots need registered detached worktrees"], {"slots"}),
@@ -588,7 +588,7 @@ def test_next_requires_every_choice_and_its_help_names_the_round(missing: str, c
         main([*NEXT[:at], *NEXT[at + 2:]])
     assert result.value.code == 2 and missing in capsys.readouterr().err
     with pytest.raises(SystemExit):
-        main(["step", "next", "--help"])
+        main(["rounds", "once", "--help"])
     shown = " ".join(capsys.readouterr().out.split())
     assert ("Run one scheduling round: settle existing attempts, advance claimed tasks whose step is done to the next step "
             "(no label check), start approved ready tasks in the free slots left") in shown
@@ -619,7 +619,7 @@ def test_one_round_runs_over_the_real_next_wiring_and_an_empty_factory_db(tmp_pa
     assert isinstance(found, Round) and (found.moves, found.stopped) == ((), "no_free_slot")
 
 
-ROUNDS = ["step", "rounds", "--no-dashboard", *NEXT[2:]]
+ROUNDS = ["rounds", "start", "--no-dashboard", *NEXT[2:]]
 
 
 class Run:
@@ -684,7 +684,7 @@ def test_a_whole_round_refusal_ends_the_rounds_with_exit_1(monkeypatch: pytest.M
     assert main(ROUNDS) == 1
     output = capsys.readouterr()
     assert output.out.startswith("Rounds for backlog tasks every 60 s")
-    assert output.err.splitlines() == ["tl step rounds: refused:database", "No readable factory.db", automatic_guide("database")]
+    assert output.err.splitlines() == ["tl rounds start: refused:database", "No readable factory.db", automatic_guide("database")]
 
 
 @pytest.mark.parametrize("structured", [False, True])
@@ -727,7 +727,7 @@ def test_rounds_require_every_choice_and_the_help_names_the_stop(missing: str, c
         main([*ROUNDS[:at], *ROUNDS[at + 2:]])
     assert result.value.code == 2 and missing in capsys.readouterr().err
     with pytest.raises(SystemExit):
-        main(["step", "rounds", "--help"])
+        main(["rounds", "start", "--help"])
     shown = " ".join(capsys.readouterr().out.split())
     assert "Scheduling starts with a round immediately, then repeats at the configured interval and when a slot becomes free." in shown
     assert "Ctrl-C once stops scheduling after the current move; twice exits immediately. Launched steps keep running." in shown
@@ -752,7 +752,7 @@ def test_the_real_opener_refuses_inputs_a_missing_database_and_a_second_rounds_p
     finally:
         held.release()
     output = capsys.readouterr()
-    assert output.out == "" and "tl step rounds: refused:rounds_running" in output.err and step_guide.GUIDE["rounds_running"] in output.err
+    assert output.out == "" and "tl rounds start: refused:rounds_running" in output.err and step_guide.GUIDE["rounds_running"] in output.err
 
 
 def test_a_running_agents_time_since_its_last_command_is_listed_and_shown(

@@ -65,7 +65,7 @@ def test_no_guide_or_message_asks_the_owner_to_run_a_command() -> None:
 def test_a_removed_guide_and_a_new_producer_reason_fail_coverage(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delitem(GUIDE, "label")
     with pytest.raises(KeyError):
-        human("tl step next", Failed("refused", "label"), None)
+        human("tl rounds once", Failed("refused", "label"), None)
     for reason in ("new_reason_without_a_guide", "environment:new_reason", "answer:new_reason", "run:new_reason"):
         with pytest.raises(KeyError):
             human("tl step start", Failed("refused", reason), None)
@@ -89,9 +89,9 @@ def test_checks_land_and_candidate_release_keep_their_overrides() -> None:
                                   "waiting:worker_alive", "waiting:git:Unreadable", "waiting:validation_pending"])
 def test_rounds_and_end_results_do_not_omit_reasons_or_request_cli_actions(word: str) -> None:
     result = Round("tasks", (Move("tl-1", "land", word),), "")
-    lines = human("tl step next", result, None)
+    lines = human("tl rounds once", result, None)
     assert len(lines) >= 2 and all("`tl " not in line and "`bd " not in line for line in lines)
-    ended = human("tl step rounds", Ended("tasks", word, "arbitrary detail"), None)
+    ended = human("tl rounds start", Ended("tasks", word, "arbitrary detail"), None)
     assert len(ended) >= 3 and "`tl " not in ended[-1]
 
 
@@ -104,7 +104,7 @@ def test_pending_holds_name_the_situation_and_decision_in_words(word: str) -> No
 @pytest.mark.parametrize("context,reason", CASES)
 def test_forwarded_round_refusals_have_reason_guidance_without_cli_requests(context: str, reason: str) -> None:
     result = Round("tasks", (Move("tl-1", "land" if context == "land" else "advance", f"refused:{reason}"),))
-    lines = human("tl step next", result, None)
+    lines = human("tl rounds once", result, None)
     assert len(lines) >= 2 and "`tl " not in lines[-1] and "`bd " not in lines[-1]
 
 

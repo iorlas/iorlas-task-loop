@@ -2,8 +2,8 @@
 factory.db, taken without waiting and held for the process's life; with slot custody the
 only importers of `process_lock`.
 
-A second `tl step rounds` for the same factory.db and backlog is refused at once (`RoundsRunning`, naming the holder
-record's pid: informational, nothing decides on it); another backlog has its own lock. One-shot rounds (`tl step next`,
+A second `tl rounds start` for the same factory.db and backlog is refused at once (`RoundsRunning`, naming the holder
+record's pid: informational, nothing decides on it); another backlog has its own lock. One-shot rounds (`tl rounds once`,
 `tl step start`) never take it: the fences make them safe beside it. The kernel frees the lock when its holder exits;
 nothing deletes the file.
 """

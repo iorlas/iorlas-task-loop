@@ -37,7 +37,7 @@ def test_profile_checkout_defaults_to_the_current_directory(
 
 
 @pytest.mark.parametrize(("argv", "required"), [
-    (["repo", "inspect"], "PATH"),
+    (["repo", "show"], "PATH"),
     (["slot", "adopt"], "CHECKOUT"),
     (["step", "start", "tl-1", "--backlog", "tasks", "--tracker-root", "/tracker", "--model", "m", "--effort", "high",
       "--minutes", "30"], "--checkout"),
@@ -45,7 +45,7 @@ def test_profile_checkout_defaults_to_the_current_directory(
 def test_positional_checkouts_and_start_checkout_are_required_before_an_operation(
     argv: list[str], required: str, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str],
 ) -> None:
-    monkeypatch.setattr("taskloop.cli.inspect_repo", lambda _arguments: pytest.fail("inspection started"))
+    monkeypatch.setattr("taskloop.cli.show_repo", lambda _arguments: pytest.fail("inspection started"))
     monkeypatch.setattr("taskloop.cli.cli_step.run", lambda _arguments: pytest.fail("operation started"))
     with pytest.raises(SystemExit) as ended:
         main(argv)
