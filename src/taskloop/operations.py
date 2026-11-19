@@ -24,7 +24,7 @@ from sqlite_store import SchemaError
 
 from taskloop.admit import AdmitRequest, AdmitResult, Admitted, AdmitUnavailable
 from taskloop.admit_chain import NextStepRequest
-from taskloop.agents.settings import Overrides, StepSettings, apply
+from taskloop.agents.settings import Overrides, StepSettings
 from taskloop.attempt_reads import PublishedRow, StoreRefused, StoreUnavailable
 from taskloop.attempt_result import CommittedStatus, collect, judged, succeeded
 from taskloop.attempt_store import AttemptStore
@@ -478,11 +478,8 @@ def _admit(ports: StartPorts, request: StartRequest, advance: _Advance | None) -
         admitted = ports.admission.admit(AdmitRequest(request.task_id, request.backlog, request.tracker_root,
                                                     request.checkout, request.settings, deadline, request.label, request.overrides))
     else:
-        try:
-            setting = apply(request.settings.for_step(advance.step), request.overrides)
-        except ValueError as error:
-            return Failed("refused", "choices", str(error))
-        admitted = ports.advance.admit_next(NextStepRequest(advance.previous, request.checkout, setting, deadline))
+        admitted = ports.advance.admit_next(NextStepRequest(advance.previous, request.checkout,
+                                                            request.settings.for_step(advance.step), deadline, request.overrides))
     if isinstance(admitted, Admitted):
         return admitted.key, False
     if isinstance(admitted, AdmitUnavailable):

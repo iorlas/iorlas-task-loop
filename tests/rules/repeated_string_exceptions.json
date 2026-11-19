@@ -425,7 +425,7 @@
     "abandoned": 3,
     "absent": 3,
     "already_dispatched": 4,
-    "refused": 21,
+    "refused": 20,
     "release": 3,
     "store": 6,
     "unavailable": 11,

@@ -10,6 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field, JsonValue, TypeAdapter, field
 
 from taskloop.harness_choice import HarnessKind, Provider, provider_of
 from taskloop.step import Step, decode_step
+from taskloop.workflow import Agent
 
 
 class Input(BaseModel):
@@ -169,6 +170,19 @@ def apply(setting: AgentSetting, flags: Overrides) -> AgentSetting:
         raise ValueError(f"{flags.harness} needs matching per-step model and access configuration")
     return AgentSetting(harness=setting.harness, model=flags.model or setting.model, effort=flags.effort or setting.effort,
                         access=setting.access, compaction_token_limit=setting.compaction_token_limit)
+
+
+def choose(machine: AgentSetting, workflow: Agent, flags: Overrides) -> AgentSetting:
+    """The step's agent choice: `machine`, then each key the workflow names, then the flags (decision 18). Sandbox, access and
+    credentials stay the machine's. A harness the workflow names that differs from the machine's is refused like the flag case
+    (`ValueError`), since the model and access policy of another harness are machine configuration."""
+    if workflow.harness is not None and workflow.harness is not machine.harness:
+        raise ValueError(f"The workflow names harness {workflow.harness}, but the machine configuration sets {machine.harness}")
+    named = AgentSetting(
+        harness=machine.harness, model=workflow.model or machine.model, effort=workflow.effort or machine.effort, access=machine.access,
+        compaction_token_limit=workflow.compaction_token_limit or machine.compaction_token_limit,
+    )
+    return apply(named, flags)
 
 
 def encode_policy(policy: Policy) -> str:

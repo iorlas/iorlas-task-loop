@@ -4,7 +4,7 @@ import json
 import sqlite3
 from collections.abc import Callable
 from contextlib import AbstractContextManager
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from functools import partial
 from pathlib import Path
 
@@ -38,7 +38,7 @@ from taskloop.admit_store import (
     unheld,
 )
 from taskloop.admit_store import previous as read_previous
-from taskloop.agents.settings import AgentSetting, encode_policy
+from taskloop.agents.settings import AgentSetting, Overrides, choose, encode_policy
 from taskloop.attempt_reads import StoreUnavailable
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import ATTEMPTS, AttemptKey, Checkouts, FileRef, RepeatReason, SlotFiles
@@ -171,8 +171,9 @@ class NextStepRequest:
 
     previous: AttemptKey
     checkout: Path
-    setting: AgentSetting
+    setting: AgentSetting  # the machine configuration's for the next step; the workflow's keys and `overrides` are applied on it
     deadline: float
+    overrides: Overrides = field(default_factory=Overrides)
 
 
 @dataclass(frozen=True)
@@ -222,6 +223,7 @@ class NextAdmission:
             reader = AttemptStore(self.connect, self.begin)
             earlier = reader.earlier_for(request.previous)
             ready = replace(ready, earlier=earlier, pin=pin)
+            request = replace(request, setting=choose(request.setting, pin.workflow.table(ready.step).agent, request.overrides))
             text = EarlierInput(reader, self.files, HoldStore(self.connect, self.begin)).attach(
                 task_text(ready.task, ready.step, context, pin.workflow, discussion.text), earlier,
                 partial(commit_names, self.checkouts(request.checkout), request.checkout))
@@ -230,6 +232,13 @@ class NextAdmission:
             return AdmitUnavailable("store", detail=why(error))
         except (WorkflowRefusal, EvidenceError, InputError, GitUnavailable, UnicodeError, OSError) as error:
             return AdmitRefused("workflow" if isinstance(error, WorkflowRefusal) else "input", detail=why(error))
+        except ValueError as error:  # the workflow's or a flag's agent choice is invalid
+            return AdmitRefused("choices", detail=why(error))
+        return self._advanced(ready, request, key, ref)
+
+    def _advanced(
+        self, ready: _Ready, request: NextStepRequest, key: AttemptKey, ref: FileRef
+    ) -> Admitted | AdmitRefused | AdmitUnavailable:
         try:
             return self._advance(ready, request, key, ref)
         except sqlite3.IntegrityError as error:  # caught after the rollback; every constraint is pre-checked: a schema mismatch

@@ -378,11 +378,11 @@ def test_an_advance_refusal_is_a_skip_of_the_done_step_and_a_stop_word_ends_admi
     assert (moves(found), found.stopped, exit_code(found)) == (expected + ([("t-9", "start", "started")] if not stopped else []), stopped,
                                                                code)
     sent = advances.requests[0]
-    assert (sent.previous, sent.checkout, sent.setting.model, sent.setting.effort, sent.deadline) == (
+    assert (sent.previous, sent.checkout, sent.setting, sent.overrides, sent.deadline) == (
         KEY,
         Path("/checkout"),
-        "model-m",
-        "high",
+        StepSettings().implement,
+        Overrides(model="model-m", effort="high"),
         1810,
     )
     assert ready.ready_reads == ([] if stopped else ["auto"]) and bench.launcher.calls == ([] if stopped else ["t-9"])
