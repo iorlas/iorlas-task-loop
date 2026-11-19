@@ -22,7 +22,7 @@ from sqlite_store import Store, begin_immediate
 
 from taskloop.admit import AdmitRefused, AdmitRequest, AdmitResult, Admitted, AdmitUnavailable, AttemptAdmission, checkout_repo, read_task
 from taskloop.agents.launch import AgentLaunch
-from taskloop.agents.settings import AgentSetting, ClaudePolicy, CodexPolicy, OpenCodePolicy, StepSettings
+from taskloop.agents.settings import AgentSetting, ClaudePolicy, CodexPolicy, OpenCodePolicy, Overrides, StepSettings
 from taskloop.attempt import Attempts
 from taskloop.attempt_reads import StoreRefused
 from taskloop.attempt_store import AttemptStore
@@ -240,6 +240,31 @@ def test_the_admission_stores_the_workflow_bytes_once_and_names_them_and_their_c
     digest, sha = factory.execute("SELECT workflow_digest, workflow_sha FROM attempt").fetchone()
     assert digest == hashlib.sha256(WORKFLOW_BYTES).hexdigest() and len(sha) in (40, 64)
     assert factory.execute("SELECT digest, content FROM workflow_file").fetchall() == [(digest, WORKFLOW_BYTES)]
+
+
+def test_a_named_workflow_is_the_file_read_at_the_source_commit_and_pinned(
+    factory: sqlite3.Connection, root: Path, tmp_path: Path
+) -> None:
+    variant = WORKFLOW_BYTES.replace(b"AGENTS.md is already in context", b"VARIANT PROMPT")
+    remote = FakeRemote("https://example.invalid/variant.git")
+    remote.advance("main", {"README": "one", ".task-loop.json": "{}", **WORKFLOW_FILES,
+                            ".task-loop/workflows/variant.toml": variant.decode()})
+    repo = FakeRepo.clone(remote, tmp_path / "variant")
+    slots(factory, repo, root, 1)
+    wanted = replace(request(tmp_path, repo), overrides=Overrides(workflow="variant"))
+    assert isinstance(admission(factory, tmp_path, Tracker(factory, tmp_path / "artifacts"), repo).admit(wanted), Admitted)
+    stored = factory.execute("SELECT workflow_digest FROM attempt").fetchone()[0]
+    assert stored == hashlib.sha256(variant).hexdigest()
+
+
+def test_an_unknown_named_workflow_refuses_the_admission_as_workflow(
+    factory: sqlite3.Connection, repo: FakeRepo, root: Path, tmp_path: Path
+) -> None:
+    slots(factory, repo, root, 1)
+    wanted = replace(request(tmp_path, repo), overrides=Overrides(workflow="absent"))
+    refused = admission(factory, tmp_path, Tracker(factory, tmp_path / "artifacts"), repo).admit(wanted)
+    assert isinstance(refused, AdmitRefused) and refused.reason == "workflow"
+    assert factory.execute("SELECT count(*) FROM attempt").fetchone() == (0,)
 
 
 @pytest.mark.parametrize(("harness", "model", "provider"), [

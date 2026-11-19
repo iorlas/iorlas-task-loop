@@ -136,11 +136,21 @@ class Overrides(Input):
     harness: HarnessKind | None = None
     model: str | None = None
     effort: str | None = None
+    workflow: str | None = None  # the file `.task-loop/workflows/<workflow>.toml` of a task's first step; None is the default one
 
     @field_validator("model", "effort")
     @classmethod
     def word(cls, value: str | None) -> str | None:
         return None if value is None else identifier(value)
+
+    @field_validator("workflow")
+    @classmethod
+    def file_name(cls, value: str | None) -> str | None:
+        """A plain lowercase file name: letters, digits, `-` and `_`, so it can never name a path, a ref or a flag."""
+        if value is not None and not (value.isascii() and value.replace("-", "").replace("_", "").isalnum()
+                                      and value == value.lower() and value[0].isalnum()):
+            raise ValueError("a workflow is a plain file name of lowercase letters, digits, '-' and '_'")
+        return value
 
 
 class StepSettings(Input):

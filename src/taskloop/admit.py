@@ -40,7 +40,7 @@ from taskloop.slots_store import SlotsStore
 from taskloop.task import TaskInspection, TaskInspectionError
 from taskloop.task_content import TaskContentDigest
 from taskloop.task_input import task_text
-from taskloop.workflow_read import Pin, WorkflowRefusal, read_workflow
+from taskloop.workflow_read import DEFAULT, Pin, WorkflowRefusal, read_workflow
 
 type Claim = Callable[[str, str], bool]  # (tracker root, task id): True taken, False held elsewhere, BdError unknown
 type Unclaim = Callable[[str, str], bool]  # fenced to this actor's own claim; False: not released
@@ -161,7 +161,7 @@ class AttemptAdmission:
             earlier = reader.earlier(str(prepared.repo_id), request.backlog, request.task_id, prepared.request.tracker_root)
             key = AttemptKey(self.ids.hex(), self.ids.token(16), generation)  # the key names the evidence directory
             files = GitProfileFiles(request.checkout, self.checkouts)
-            context, pin = read_context(files, free[0].source), read_workflow(files, free[0].source)
+            context, pin = read_context(files, free[0].source), read_workflow(files, free[0].source, request.overrides.workflow or DEFAULT)
             discussion = self.discussion(prepared.task, prepared.request.tracker_root)
             selection = ResumePlans(reader, self.checkouts).select(
                 str(prepared.repo_id), request.backlog, request.task_id, prepared.request.tracker_root,

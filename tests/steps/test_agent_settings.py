@@ -160,3 +160,14 @@ def test_policy_documents_are_validated_before_admission(tmp_path: Path, harness
     field = "settings_file" if harness == "claude" else "sandbox_file"
     with pytest.raises(ValueError, match=r"agents\.plan"):
         resolve_agents({"plan": {"harness": harness, "model": "chosen", "access": {field: str(path)}}}, tmp_path)
+
+
+@pytest.mark.parametrize("name", ["", "-x", "a/b", "../x", "A", "v1@abc", "a b", "default.toml", "é"])
+def test_a_workflow_override_is_a_plain_lowercase_file_name_only(name: str) -> None:
+    with pytest.raises(ValueError, match="plain file name"):
+        Overrides(workflow=name)
+
+
+@pytest.mark.parametrize("name", ["default", "no-code-map", "v2_fast"])
+def test_a_plain_workflow_name_is_accepted(name: str) -> None:
+    assert Overrides(workflow=name).workflow == name
