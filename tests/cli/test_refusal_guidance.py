@@ -10,7 +10,7 @@ from refusal_inventory import DYNAMIC_REASONS, REVIEWED_DYNAMIC, census, typed_r
 
 from taskloop import check_release, hold_cause, land, land_check, prepare
 from taskloop.hold_guide import HOLD, ON_HOLD, pending_guide
-from taskloop.inspection_guide import CONFIG, PROFILE
+from taskloop.inspection_guide import CONFIG, PROFILE, WORKFLOW, WORKFLOW_INIT
 from taskloop.land_guide import CANDIDATE_RELEASE, LAND_GUIDE
 from taskloop.machine_config import ConfigRefused, Refusal
 from taskloop.operations import Ended, Failed, Move, Round, refused_config
@@ -37,7 +37,8 @@ def test_every_public_reason_renders_explanation_and_action(context: str, reason
 
 
 GIT_VERBS = {"add", "branch", "checkout", "commit", "fetch", "log", "pull", "push", "show", "status", "switch", "worktree"}
-TEXT_TABLES = (GUIDE, CHECKS_GUIDE, LAND_GUIDE, CANDIDATE_RELEASE, CONFIG, PROFILE, hold_cause.RULES, hold_cause.RUN,
+TEXT_TABLES = (GUIDE, CHECKS_GUIDE, LAND_GUIDE, CANDIDATE_RELEASE, CONFIG, PROFILE, WORKFLOW, WORKFLOW_INIT,
+               hold_cause.RULES, hold_cause.RUN,
                hold_cause.STUCK, hold_cause.LAND)
 TEXT_CONSTANTS = (HOLD, ON_HOLD, land.SHOW, land.NEEDS_MINUTES.detail, check_release.LANDED, check_release.CLOSED,
                   check_release.LANDING, land_check.RACED, prepare.HELD_SLOT, prepare.HELD_MAIN, prepare.HELD_OTHER,

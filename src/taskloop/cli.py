@@ -11,7 +11,7 @@ from pathlib import Path
 
 from git_porcelain import GitReadFailure, GitTimeout, GitUnavailable, NotARepo
 
-from taskloop import cli_composition, cli_drain, cli_step
+from taskloop import cli_composition, cli_drain, cli_step, cli_workflow
 from taskloop.attempt_types import DEFAULT_GIT_READ_SECONDS
 from taskloop.cli_common import ConfigMissing, backlog, backlog_of, tracker_root, tracker_root_of
 from taskloop.exit_codes import ExitCode, profile_exit_code
@@ -128,7 +128,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         prog="tl",
         description=("Task loop runs agent work on tracker tasks in managed slots and lands the checked results. First run: "
                      "`tl config show`, `tl slot adopt CHECKOUT`, `tl profile show`, then `tl rounds start`. "
-                     f"Command groups: config, slot, repo, profile, task, step, attempt, land, rounds, drain, version. {STEP_ONLY}"),
+                     "Command groups: config, slot, repo, profile, workflow, task, step, attempt, land, rounds, drain, version. "
+                     f"{STEP_ONLY}"),
         epilog="Exit 0: success; 1: refusal or task/repo showion error; 2: invalid syntax; "
                "3: no reliable result (profile unavailable or step unknown), safe to retry; "
                "130: abrupt rounds stop, interrupted land or interrupted drain.",
@@ -164,6 +165,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     profile_show.add_argument("--target", default="main", metavar="REF", help="The target ref holding required and target "
                               "(default: main)")
     profile_show.add_argument("--json", action="store_true", dest="json_output", help="Print JSON data; refusals are JSON on stderr")
+    cli_workflow.register(commands)
     cli_step.register(commands)
     cli_drain.register(commands)
     commands.add_parser("version", help="Print the running package version", allow_abbrev=False,
@@ -175,6 +177,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return ExitCode.SUCCESS
     if arguments.command == "drain":
         return cli_drain.run(arguments)
+    if arguments.command == "workflow":
+        return cli_workflow.run(arguments)
     if arguments.command in cli_step.COMMANDS:
         return cli_step.run(arguments)
     handlers = {"repo": show_repo, "task": show_task, "profile": show_profile, "version": show_version}

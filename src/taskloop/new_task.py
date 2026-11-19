@@ -5,7 +5,7 @@ from pydantic import field_validator
 
 from taskloop.step import Step
 from taskloop.workflow import Input
-from taskloop.workflow_read import DEFAULT
+from taskloop.workflow_read import DEFAULT, plain_name
 
 
 class NewTask(Input):
@@ -23,7 +23,7 @@ class NewTask(Input):
     @classmethod
     def file_name(cls, value: str) -> str:
         """A plain lowercase file name: letters, digits, `-` and `_`, so it can never name a path, a ref or a flag."""
-        if not (value.isascii() and value.replace("-", "").replace("_", "").isalnum() and value == value.lower() and value[0].isalnum()):
+        if not plain_name(value):
             raise ValueError("a workflow is a plain file name of lowercase letters, digits, '-' and '_'")
         return value
 
