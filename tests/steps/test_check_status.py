@@ -1,6 +1,6 @@
 """The status of a task in its check step (S6d, tl-8bh9.14.6 section 9) over a factory.db file (the `done` implement
 attempt and a checks attempt the real admission stored): the view takes the checks attempt's fields, every row of the
-`Next` table, `tl step show`'s directory, setup, logs and earlier attempts, and `--stuck`."""
+`Next` table, `tl attempt show`'s directory, setup, logs and earlier attempts, and `--stuck`."""
 
 import dataclasses
 from collections.abc import Callable, Generator
@@ -95,8 +95,8 @@ def test_running_checks_never_display_agent_command_age(status: Status, tmp_path
     shown, listed = show_attempt(reads, files.root, "tasks", "tl-1"), list_attempts(reads)
     assert isinstance(shown, Shown) and isinstance(listed, Listed)
     assert shown.view.entry == "running" and shown.view.step == "check" and shown.view.last_command is None
-    assert not any(line.startswith("Last command:") for line in human("tl step show", shown, None))
-    assert human("tl step list", listed, None)[1].endswith("\twait\t-\t-")
+    assert not any(line.startswith("Last command:") for line in human("tl attempt show", shown, None))
+    assert human("tl attempt list", listed, None)[1].endswith("\twait\t-\t-")
     assert as_data(shown)["last_command"] is None
     rows = as_data(listed)["attempts"]
     assert isinstance(rows, list) and isinstance(rows[0], dict) and rows[0]["last_command"] is None
@@ -177,7 +177,7 @@ def test_show_names_the_checks_attempt_s_directory_setup_logs_and_earlier_attemp
     assert found.events_path == EvidenceFiles(artifacts).events_path(again.key)
     assert found.events_path != EvidenceFiles(artifacts).events_path(status.key)
     assert as_data(found)["events_path"] == str(found.events_path)
-    assert f"Events: {found.events_path}" in human("tl step show", found, None)
+    assert f"Events: {found.events_path}" in human("tl attempt show", found, None)
     assert found.setup is not None
     assert (found.setup.row.run, found.setup.log, found.setup.attempt_id) == (1, directory / "setup-1.log", None)
     view = found.view

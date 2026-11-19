@@ -1,4 +1,4 @@
-"""The dashboard's board: one card per task, from the same reads as `tl step list` (`attempt_status.list_attempts`) plus the
+"""The dashboard's board: one card per task, from the same reads as `tl attempt list` (`attempt_status.list_attempts`) plus the
 tracker's titles and its ready tasks that no attempt has taken yet. Display only; the start times are the evidence
 files' (an attempt row stores none), so they are as good as a file's modification time."""
 

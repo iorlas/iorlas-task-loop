@@ -794,7 +794,7 @@ def test_a_moved_head_lists_the_tags_the_agent_made_and_the_guide_names_the_work
     slot.repo.tag("task/evil", head(slot))
     result = factory_commit(registered, checkouts, slot_files).commit(KEY)
     assert result == CommitRefused("head_moved", ("refs/tags/task/evil",))
-    assert factory_commit(registered, checkouts, slot_files).leftovers(KEY) == result  # what `tl step show` reads, with no write
+    assert factory_commit(registered, checkouts, slot_files).leftovers(KEY) == result  # what `tl attempt show` reads, with no write
     guide = GUIDE["unsettled"]
     assert "abandon before admitting a fresh attempt" in guide and "`head_moved`" in guide
     assert "unexpected branch" in guide and "restoration to the attempt's expected branch" in guide

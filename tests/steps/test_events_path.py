@@ -40,5 +40,5 @@ def test_agent_events_location_is_read_only_before_launch(
     shown = show_attempt(reads, files.root, "tasks", "tl-1")
     assert isinstance(shown, Shown)
     assert shown.events_path == expected and as_data(shown)["events_path"] == str(expected)
-    assert f"Events: {expected}" in human("tl step show", shown, None)
+    assert f"Events: {expected}" in human("tl attempt show", shown, None)
     assert sorted(files.root.rglob("*")) == before and registered.total_changes == changes

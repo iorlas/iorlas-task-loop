@@ -180,7 +180,7 @@ class EvidenceFiles:
 
     def check_path(self, key: AttemptKey, block: int, name: str) -> Path:
         """Check `name`'s log in block `block` (`check-<block>-<name>.log` in the attempt's key-derived directory), made
-        nothing (`tl step show`). A check name is the profile's `[A-Za-z0-9._-]`, never starting with `.` or `-`: no
+        nothing (`tl attempt show`). A check name is the profile's `[A-Za-z0-9._-]`, never starting with `.` or `-`: no
         escaping."""
         return self._path(f"{self.directory(key)}/check-{block}-{name}.log")
 

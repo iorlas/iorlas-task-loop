@@ -35,13 +35,13 @@ Start with [First landed task](#first-landed-task-linux) for an ordered setup an
 - `tl step start|show|list|commit|release|abandon|publish` run, inspect, complete factory commit, release, abandon (returns the tracker
   claim) and publish one task's current attempt. `tl step start` on a done plan admits implementation; after implementation
   is accepted by factory commit it admits checks. Checks run the profile's commands in the factory, with results and logs available
-  through `tl step show`. `tl rounds once` runs one
+  through `tl attempt show`. `tl rounds once` runs one
   scheduling round: it settles existing attempts, advances each claimed task whose step is done (no label check), then
   admits approved ready tasks (`--label`) into the slots left while fewer than `--max-running` (default 3) of the backlog's
   tasks are in flight (a step running, or passed and waiting for land). `--max-new` is removed and rejected.
-- `tl step show TASK [--backlog KEY]` selects the explicit backlog, then the machine config's `backlog`, then the sole
+- `tl attempt show TASK [--backlog KEY]` selects the explicit backlog, then the machine config's `backlog`, then the sole
   distinct backlog retained in `factory.db` (including ended attempts). With none or several, supply the flag or config
-  default. `tl step list` lists all backlogs; its `hold cause` column shows the recorded or due reason after `rounds once`.
+  default. `tl attempt list` lists all backlogs; its `hold cause` column shows the recorded or due reason after `rounds once`.
 - `tl drain [--db PATH] [--json]` durably blocks new work across the resolved factory database and
   waits for existing entries, agents, setup, checks and synchronous operations to finish. Success verifies idle; it
   preserves claims, reservations, sessions and unlaunched attempts. Uncertainty exits 3 and Ctrl-C exits 130, leaving
@@ -59,10 +59,10 @@ For a refusal, retain its kind, reason and supplied detail and follow the reason
 local situation without advancing work, use `tl config show`, `tl repo show CHECKOUT`,
 `tl profile show --checkout CHECKOUT --at REV --target main`, and
 `tl task show TASK --backlog KEY --tracker-root TRACKER`. Inspect retained execution with
-`tl step list --stuck` and `tl step show TASK --backlog KEY`; add `--json` to these reads for structured output.
+`tl attempt list --stuck` and `tl attempt show TASK --backlog KEY`; add `--json` to these reads for structured output.
 Use the same machine config and database/artifacts overrides as the factory being inspected.
 
-`step show` prints `Directory:`, `Entry log:` and `Events:`; JSON includes `directory`, `entry_log` and `events_path`.
+`attempt show` prints `Directory:`, `Entry log:` and `Events:`; JSON includes `directory`, `entry_log` and `events_path`.
 These belong to the selected attempt, including a repeat or the latest checks attempt. Candidate logs are identified
 separately. An events path is a location even before launch or when no events file exists; showing it neither creates
 nor reads that file. Preserve the evidence when investigating a refusal, and review configuration, origins, agent
@@ -97,7 +97,7 @@ scheduling across that boundary. Unresolved external actions or unprovable proce
 success. Retrying drain observes the same durable request; it never launches an unstarted attempt to make progress.
 
 Rounds hold tasks they took when work needs a person: the approval label is removed, `held` is added, and a comment
-explains the cause, evidence and claim state. `tl step list --stuck`, `tl step show` and `bd list --label held` expose
+explains the cause, evidence and claim state. `tl attempt list --stuck`, `tl attempt show` and `bd list --label held` expose
 them. Answer by editing the task's description or acceptance criteria, then add its approval label back; the next
 round starts it again at plan. Follow any pending cleanup instructions before reapproval. Comments alone are not answers.
 
@@ -118,7 +118,7 @@ retry is safe), and 130 for an abrupt rounds stop or interrupted land or drain. 
 when a backend read is unavailable. Continuous rounds retry unknown results themselves.
 
 The machine config is `~/.config/task-loop/config.toml` or `--config FILE`; state defaults to
-`~/.local/state/task-loop`. Its optional `backlog = "KEY"` sets the default for `step show`; `config show` reports
+`~/.local/state/task-loop`. Its optional `backlog = "KEY"` sets the default for `attempt show`; `config show` reports
 `unset` (JSON null) when absent. Other commands are rejected until their behavior is implemented. `tl <command> --help`
 is the reference; the design index links each slice's plan and implementation evidence. `tl plan` is no longer a command.
 Agent choices live in the machine config, independently for each built agent step. With no agent flags,
@@ -299,11 +299,11 @@ tl rounds start --backlog first-run --tracker-root "$checkout" --checkout "$chec
 Only the task you intend to run should carry `first-run-approved`; it must be open, unclaimed and unblocked to appear
 in the ready listing. The factory claims it and advances plan, implementation and checks. Rounds run in the foreground;
 the dashboard URL is printed at startup (normally `http://127.0.0.1:8765`). Inspect progress there, or in a second shell
-with the same environment using `tl step show TASK_ID --backlog first-run` and `tl step list --stuck`.
+with the same environment using `tl attempt show TASK_ID --backlog first-run` and `tl attempt list --stuck`.
 Wait for the checks attempt to show `Step: checks`, passed required check results and `Succeeded: yes`, then stop rounds
 with Ctrl-C. Under manual land it waits for delivery; a published `task/<id>` branch alone is not completion.
 
-If the task is held, read its cause and evidence in `step show` and the tracker. Edit its description or acceptance
+If the task is held, read its cause and evidence in `attempt show` and the tracker. Edit its description or acceptance
 criteria to answer the issue, complete any reported cleanup, then restore `first-run-approved` and start rounds again.
 A discussion comment alone does not answer the agent. For other refusals, follow the supplied reason and detail.
 
@@ -312,12 +312,12 @@ A discussion comment alone does not answer the agent. For other refusals, follow
 In the original shell, where `task_id` is still set (otherwise set it to the ID from the tracker):
 
 ```bash
-tl step show "$task_id" --backlog first-run
+tl attempt show "$task_id" --backlog first-run
 tl land show "$task_id" --backlog first-run --checkout "$checkout"
 git -C "$checkout" diff "origin/main...task/$task_id"
 # Read the summary and diff before delivery.
 tl land run "$task_id" --backlog first-run --checkout "$checkout" --minutes 30
-tl step show "$task_id" --backlog first-run
+tl attempt show "$task_id" --backlog first-run
 tl task show "$task_id" --backlog first-run --tracker-root "$checkout"
 git -C "$checkout" pull --ff-only
 ```

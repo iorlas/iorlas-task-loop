@@ -24,11 +24,11 @@ def test_show_prints_the_owning_events_path_in_human_and_json(
     shown = Shown(view, directory, directory / "entry.log", files.events_path(key))
     loaded = Loaded(tmp_path / "config.toml", False, defaults(tmp_path))
     monkeypatch.setattr(cli_composition, "load_config", lambda *_args: loaded)
-    monkeypatch.setitem(cli_step.OPERATIONS, ("step", "show"), lambda *_args: shown)
-    assert main(["step", "show", "tl-1", "--backlog", "tasks"]) == 0
+    monkeypatch.setitem(cli_step.OPERATIONS, ("attempt", "show"), lambda *_args: shown)
+    assert main(["attempt", "show", "tl-1", "--backlog", "tasks"]) == 0
     human = capsys.readouterr()
     assert human.err == "" and f"Events: {shown.events_path}\n" in human.out
-    assert main(["step", "show", "tl-1", "--backlog", "tasks", "--json"]) == 0
+    assert main(["attempt", "show", "tl-1", "--backlog", "tasks", "--json"]) == 0
     structured = capsys.readouterr()
     assert structured.err == ""
     assert json.loads(structured.out)["events_path"] == str(files.events_path(key))

@@ -1,4 +1,4 @@
-"""The one task status (tl-8bh9.14.143): one status per task computed from its stored facts, the same one in `tl step list`, the
+"""The one task status (tl-8bh9.14.143): one status per task computed from its stored facts, the same one in `tl attempt list`, the
 board and the drawer, the queued reasons, and the restart rule for a task a person abandoned."""
 
 import sqlite3
@@ -115,7 +115,7 @@ def test_list_board_and_drawer_agree_on_a_task_a_person_abandoned(registered: sq
     reads = reads_of(registered)
     listed = list_attempts(reads)
     assert isinstance(listed, Listed) and listed.attempts[0].next == "start"
-    row = human("tl step list", listed, None)[1]
+    row = human("tl attempt list", listed, None)[1]
     assert "\tabandoned: " in row  # the list does not read the tracker: it cannot know the label
     unlabelled = build_board(BoardPorts(reads, files, Tracker()))
     assert isinstance(unlabelled, Board) and (unlabelled.tasks[0].column, unlabelled.tasks[0].status) == ("waiting", "abandoned")

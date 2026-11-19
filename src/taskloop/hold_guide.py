@@ -1,4 +1,4 @@
-"""The fixed words a person reads about a hold (tl-8bh9.14.9 sections 7.1, 10 and 12): `tl step show`'s `Hold:` lines,
+"""The fixed words a person reads about a hold (tl-8bh9.14.9 sections 7.1, 10 and 12): `tl attempt show`'s `Hold:` lines,
 the guides of `Next: hold` and `Next: on_hold`, and the action each abandon refusal asks of the person. Text only; the
 status read decides the words (`hold_status`), the hold operation acts (`hold`)."""
 

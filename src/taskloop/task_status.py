@@ -1,6 +1,6 @@
 """The one task status (tl-8bh9.14.143): what a task is doing, computed once from the stored facts of its current view (the attempt,
 its release, hold and land) and, when the reader knows it, the admission facts (which tasks the tracker lists ready under the round's
-label, and what keeps a round from starting one). `tl step list`, the dashboard's board and drawer and the round's admission all call
+label, and what keeps a round from starting one). `tl attempt list`, the dashboard's board and drawer and the round's admission all call
 `task_status`, so they cannot disagree. Pure: values in, values out.
 
 A task whose attempt a person abandoned (`tl step abandon`, the claim returned, no hold) is `abandoned` until the tracker

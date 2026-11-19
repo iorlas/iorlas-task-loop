@@ -1,4 +1,4 @@
-"""The `config`, `slot` and `step` command surface: parsers and rendering only; every decision is an operation's."""
+"""The `config`, `slot`, `step` and `rounds` command surface: parsers and rendering only; every decision is an operation's."""
 
 import argparse
 import json
@@ -10,7 +10,7 @@ from pathlib import Path
 
 from pydantic import ValidationError
 
-from taskloop import attempt_status, cli_composition, cli_land, dash_composition, operations, result_data, setup_timing
+from taskloop import cli_attempt, cli_composition, cli_land, dash_composition, operations, result_data
 from taskloop.agents.settings import Overrides
 from taskloop.cli_common import ARTIFACTS, DB, PATH, Parsers, add, backlog, common, group, views_for
 from taskloop.composition import real_slots
@@ -23,7 +23,6 @@ from taskloop.operations import Ended, Failed, Round, StartRequest
 from taskloop.result_data import Result
 from taskloop.round import NextRequest, run_round
 from taskloop.rounds import RoundsRequest, run_rounds
-from taskloop.setup_store import SetupStore
 from taskloop.step import Step, encode_step
 from taskloop.step_guide import ROUNDS, STEP_ONLY
 from taskloop.step_render import human
@@ -32,7 +31,7 @@ from taskloop.workflow_read import DEFAULT
 
 DASH_PORT = 8765
 SCHEDULER, STEP, START = "rounds", "step", "start"
-COMMANDS = ("config", "slot", STEP, SCHEDULER, cli_land.GROUP)
+COMMANDS = ("config", "slot", STEP, cli_attempt.GROUP, SCHEDULER, cli_land.GROUP)
 
 
 def _binding(parser: argparse.ArgumentParser) -> None:
@@ -83,17 +82,6 @@ def register(commands: Parsers) -> None:
     _harness_flag(start)
     _new_task_flags(start)
     common(start, DB, ARTIFACTS)
-    status = add(step, "show", "The task's attempt, its entry, setup run, result and next action (read-only)")
-    status.add_argument("task_id", metavar="TASK")
-    status.add_argument("--backlog", metavar="KEY", help="Task scope; defaults to the machine config's backlog, then the sole backlog "
-                        "in factory.db")
-    common(status, DB, ARTIFACTS)
-    listing = add(step, "list", "Every task's current attempt with its next action (read-only)")
-    listing.add_argument("--stuck", action="store_true", help="Only attempts whose next action is stuck:*, hold or unknown")
-    common(listing, DB, ARTIFACTS)
-    timing = add(step, "setup-times", "Recent persisted implement setup times (read-only; no decision)")
-    backlog(timing)
-    common(timing, DB)
     commit = add(step, "commit", "Complete factory commit: obtain the result commit and judge the step's rules, "
                   "then release a clean slot and publish an accepted result; an agent step's only, never the checks")
     commit.add_argument("task_id", metavar="TASK")
@@ -112,6 +100,7 @@ def register(commands: Parsers) -> None:
     publish.add_argument("task_id", metavar="TASK")
     backlog(publish)
     common(publish, DB, ARTIFACTS)
+    cli_attempt.register(commands)
     cli_land.register(commands)
     _register_rounds(commands)
 
@@ -223,26 +212,6 @@ def _rounds(arguments: argparse.Namespace, loaded: Loaded) -> Result:
         return Ended(request.backlog, "abrupt")
 
 
-def _show(arguments: argparse.Namespace, loaded: Loaded) -> Result:
-    with cli_composition.open_reads(loaded.settings.db.value, loaded.settings.artifacts.value, views_for(loaded)) as reads:
-        if isinstance(reads, Failed):
-            return reads
-        return attempt_status.show_attempt(reads, loaded.settings.artifacts.value, arguments.backlog, arguments.task_id,
-                                           configured_backlog=loaded.settings.backlog.value)
-
-
-def _list(arguments: argparse.Namespace, loaded: Loaded) -> Result:
-    with cli_composition.open_reads(loaded.settings.db.value, loaded.settings.artifacts.value, views_for(loaded)) as reads:
-        return reads if isinstance(reads, Failed) else attempt_status.list_attempts(reads, stuck=arguments.stuck)
-
-
-def _setup_times(arguments: argparse.Namespace, loaded: Loaded) -> Result:
-    with cli_composition.open_reads(loaded.settings.db.value, loaded.settings.artifacts.value, views_for(loaded)) as reads:
-        if isinstance(reads, Failed):
-            return reads
-        return setup_timing.report(SetupStore(reads.store.connect, reads.store.begin), arguments.backlog)
-
-
 def _commit(arguments: argparse.Namespace, loaded: Loaded) -> Result:
     with cli_composition.open_commit(loaded.settings.db.value, views_for(loaded), loaded.settings.artifacts.value) as opened:
         return opened if isinstance(opened, Failed) else operations.commit_task(*opened, arguments.backlog, arguments.task_id)
@@ -290,13 +259,11 @@ OPERATIONS: dict[tuple[str, str], Callable[[argparse.Namespace, Loaded], Result]
     (STEP, START): _start,
     (SCHEDULER, "once"): _next,
     (SCHEDULER, START): _rounds,
-    (STEP, "show"): _show,
-    (STEP, "list"): _list,
-    (STEP, "setup-times"): _setup_times,
     (STEP, "commit"): _commit,
     (STEP, "release"): _release,
     (STEP, "publish"): _publish,
     (STEP, "abandon"): _abandon,
+    **cli_attempt.OPERATIONS,
     **cli_land.OPERATIONS,
 }
 

@@ -43,7 +43,7 @@ class LandState(StrEnum):
 
 @dataclass(frozen=True)
 class LandView:
-    """The latest candidate (`row`), its latest block's results with each log path by position (`tl step show` only), and
+    """The latest candidate (`row`), its latest block's results with each log path by position (`tl attempt show` only), and
     its stored land process as observed now (`none`: none stored)."""
 
     row: LandRow

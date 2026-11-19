@@ -43,7 +43,7 @@ def test_empty_partial_and_full_reports_are_read_only(
                 VALUES (?,1,?,1,?,?,10,?,?)""", (identity, f"secret-{identity}", "b" * 40, "d" * 64, end, conclusion))
     con.close()
     before = db.read_bytes()
-    args = ["step", "setup-times", "--backlog", "tasks", "--db", str(db)]
+    args = ["attempt", "setup-times", "--backlog", "tasks", "--db", str(db)]
     assert main([*args, "--json"]) == 0
     output = capsys.readouterr()
     data = json.loads(output.out)
@@ -65,7 +65,7 @@ def test_empty_partial_and_full_reports_are_read_only(
     assert db.read_bytes() == before and not (tmp_path / "home").exists()
 
     if count:
-        assert main(["step", "show", "owner-0", "--backlog", "tasks", "--db", str(db), "--json"]) == 0
+        assert main(["attempt", "show", "owner-0", "--backlog", "tasks", "--db", str(db), "--json"]) == 0
         setup = json.loads(capsys.readouterr().out)["setup"]
         assert (setup["started_at"], setup["ended_at"], setup["duration_seconds"]) == (10, None, None)
         assert db.read_bytes() == before
@@ -73,6 +73,6 @@ def test_empty_partial_and_full_reports_are_read_only(
 
 def test_absent_database_is_not_created(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     db = tmp_path / "absent.db"
-    assert main(["step", "setup-times", "--backlog", "tasks", "--db", str(db), "--json"]) == 1
+    assert main(["attempt", "setup-times", "--backlog", "tasks", "--db", str(db), "--json"]) == 1
     assert json.loads(capsys.readouterr().err)["error"]["reason"] == "database"
     assert not db.exists()

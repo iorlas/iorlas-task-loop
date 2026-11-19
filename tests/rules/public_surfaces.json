@@ -1034,7 +1034,7 @@
     },
     "list.empty": {
       "argv": [
-        "step",
+        "attempt",
         "list"
       ],
       "exit": 0,
@@ -1047,7 +1047,7 @@
     },
     "list.full": {
       "argv": [
-        "step",
+        "attempt",
         "list"
       ],
       "exit": 0,
@@ -1677,7 +1677,7 @@
     },
     "setup-times": {
       "argv": [
-        "step",
+        "attempt",
         "setup-times",
         "--backlog",
         "tasks"
@@ -1694,7 +1694,7 @@
     },
     "setup-times.full": {
       "argv": [
-        "step",
+        "attempt",
         "setup-times",
         "--backlog",
         "tasks"
@@ -1722,7 +1722,7 @@
     },
     "show.empty": {
       "argv": [
-        "step",
+        "attempt",
         "show",
         "tl-1",
         "--backlog",
@@ -1778,7 +1778,7 @@
     },
     "show.full": {
       "argv": [
-        "step",
+        "attempt",
         "show",
         "tl-1",
         "--backlog",
@@ -1996,7 +1996,7 @@
     },
     "show.refused": {
       "argv": [
-        "step",
+        "attempt",
         "show",
         "tl-1",
         "--backlog",
@@ -2016,7 +2016,7 @@
     },
     "show.unavailable": {
       "argv": [
-        "step",
+        "attempt",
         "show",
         "tl-1",
         "--backlog",

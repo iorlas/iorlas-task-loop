@@ -45,7 +45,7 @@ type Next = (
             "landed", "hold", "on_hold"]
     | Stuck
 )
-SHOWN: Final = frozenset({"head_moved", "branch", "unborn"})  # leftovers `tl step show` prints though no repeat hands them back
+SHOWN: Final = frozenset({"head_moved", "branch", "unborn"})  # leftovers `tl attempt show` prints though no repeat hands them back
 type Leftovers = Callable[[AttemptKey], Uncommitted | CommitRefused | None]  # read-only Git and file reads of a step still to settle
 
 

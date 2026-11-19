@@ -183,19 +183,21 @@ def test_invalid_backlog_is_refused_even_with_an_explicit_show_override(
     monkeypatch.setenv("HOME", str(tmp_path))
     config = tmp_path / "scratch.toml"
     config.write_text(text)
-    assert main(["--config", str(config), "step", "show", "t-1", "--backlog", "work", *(["--json"] if structured else [])]) == 1
+    assert main(["--config", str(config), "attempt", "show", "t-1", "--backlog", "work", *(["--json"] if structured else [])]) == 1
     output = capsys.readouterr()
     assert output.out == ""
     if structured:
         assert json.loads(output.err)["error"]["reason"] == "type"
         assert "backlog" in json.loads(output.err)["error"]["message"]
     else:
-        assert output.err.startswith("tl step show: refused:type") and "backlog" in output.err
+        assert output.err.startswith("tl attempt show: refused:type") and "backlog" in output.err
     assert not (tmp_path / ".local").exists()
 
 
 @pytest.mark.parametrize("structured", [False, True])
-@pytest.mark.parametrize("argv", [["config", "show"], ["step", "list"], ["slot", "adopt", "."], ["step", "show", "t-1", "--backlog", "b"]])
+@pytest.mark.parametrize(
+    "argv", [["config", "show"], ["attempt", "list"], ["slot", "adopt", "."], ["attempt", "show", "t-1", "--backlog", "b"]]
+)
 def test_a_bad_config_refuses_every_command_with_exit_1(
     argv: list[str], structured: bool, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:

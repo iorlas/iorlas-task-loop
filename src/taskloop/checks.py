@@ -254,6 +254,6 @@ def conclusion(results: Sequence[ResultRow], required: Required) -> tuple[Outcom
 
 
 def differs(required: Required, row: ResultRow) -> bool:
-    """A required check whose argv at X differs from the one stored from the target (`tl step show` marks it)."""
+    """A required check whose argv at X differs from the one stored from the target (`tl attempt show` marks it)."""
     stored = dict(required).get(row.name)
     return stored is not None and row.argv_digest is not None and row.argv_digest != stored

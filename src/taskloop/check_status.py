@@ -24,7 +24,7 @@ HALF_DONE: Final = ("The task's abandon is half done: its checks attempt is aban
 @dataclass(frozen=True)
 class ChecksView:
     """The latest checks attempt of the view's done implement attempt, whose fields the view then shows (section 9), with
-    the latest block's results and (`tl step show` only) each result's log path, by position."""
+    the latest block's results and (`tl attempt show` only) each result's log path, by position."""
 
     row: ChecksRow
     results: tuple[ResultRow, ...]

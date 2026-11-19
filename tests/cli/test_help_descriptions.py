@@ -6,7 +6,7 @@ from taskloop.cli import main
 
 COMMANDS = [
     ["repo", "show"], ["task", "show"], ["profile", "show"], ["drain"], ["version"], ["config", "show"], ["slot", "adopt"],
-    ["step", "start"], ["step", "show"], ["step", "list"], ["step", "setup-times"], ["step", "commit"], ["step", "release"],
+    ["step", "start"], ["attempt", "show"], ["attempt", "list"], ["attempt", "setup-times"], ["step", "commit"], ["step", "release"],
     ["rounds", "once"], ["rounds", "start"], ["step", "publish"], ["step", "abandon"],
     ["land", "run"], ["land", "show"], ["land", "withdraw"],
 ]
@@ -26,3 +26,11 @@ def test_the_binding_flags_have_help(command: list[str], capsys: pytest.CaptureF
         main([*command, "--help"])
     text = " ".join(capsys.readouterr().out.split())
     assert "The tracker backlog" in text and "The directory of the task tracker" in text and "Your checkout of the repository" in text
+
+
+@pytest.mark.parametrize("command", [["step", "show"], ["step", "list"], ["step", "setup-times"]], ids=" ".join)
+def test_the_attempt_reads_are_no_longer_step_commands(command: list[str], capsys: pytest.CaptureFixture[str]) -> None:
+    with pytest.raises(SystemExit) as result:
+        main(command)
+    assert result.value.code == 2
+    assert "invalid choice" in capsys.readouterr().err

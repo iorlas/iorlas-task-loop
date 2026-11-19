@@ -1,4 +1,4 @@
-"""The JSON shape of a land (tl-8bh9.14.8 section 14): a candidate (`tl step show`'s `land` key, null without one) and
+"""The JSON shape of a land (tl-8bh9.14.8 section 14): a candidate (`tl attempt show`'s `land` key, null without one) and
 `tl land run`'s answers (`Landed`, `Withdrawn`, `LandSummary`). Additive to `result_data`'s shapes; no dispatch token,
 remote URL, Git output or log content. `synced` is always false: the land never shares the tracker (O4)."""
 
@@ -25,7 +25,7 @@ def candidate_data(row: LandRow) -> dict[str, object]:
 
 
 def view_data(land: LandView | None) -> dict[str, object] | None:
-    """`tl step show`'s `land`: the latest candidate, its land process as observed now, its latest block's results."""
+    """`tl attempt show`'s `land`: the latest candidate, its land process as observed now, its latest block's results."""
     if land is None:
         return None
     logs = land.logs or (None,) * len(land.results)
