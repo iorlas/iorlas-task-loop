@@ -101,7 +101,7 @@ def test_dashboard_selection_lifetime_and_output(
     monkeypatch.setattr(dash_composition, "serving", dashboard.serving)
     named = ["--no-dashboard"] if port == "off" else [] if port is None else ["--dash-port", str(port)]
     flags = named + (["--json"] if structured else [])
-    assert main(["step", "rounds", *CHOICES, "--db", str(db), "--artifacts", str(artifacts), *flags]) == 0
+    assert main(["rounds", "start", *CHOICES, "--db", str(db), "--artifacts", str(artifacts), *flags]) == 0
     number = int(port) if isinstance(port, int) else DASH_PORT
     shown = None if port == "off" else DashRequest("tasks", "/tracker", "approved", ip_address("127.0.0.1"), number,
                                                  db, artifacts, Path("/checkout"))
@@ -127,7 +127,7 @@ def test_dashboard_closes_when_rounds_are_interrupted(
     dashboard = Dashboard(execution.events)
     execution.ending = KeyboardInterrupt()
     monkeypatch.setattr(dash_composition, "serving", dashboard.serving)
-    assert main(["step", "rounds", *CHOICES, "--dash-port", "0", "--json"]) == 130
+    assert main(["rounds", "start", *CHOICES, "--dash-port", "0", "--json"]) == 130
     output = capsys.readouterr()
     assert json.loads(output.out)["status"] == "rounds"
     notice, ending = output.err.splitlines()
@@ -148,7 +148,7 @@ def test_dashboard_address_selection_and_exposure_notice(
     dashboard = Dashboard(execution.events, (host, 8123))
     monkeypatch.setattr(dash_composition, "serving", dashboard.serving)
     flags = ["--json"] if structured else []
-    assert main(["step", "rounds", *CHOICES, "--dash-host", host, "--dash-port", "0", *flags]) == 0
+    assert main(["rounds", "start", *CHOICES, "--dash-host", host, "--dash-port", "0", *flags]) == 0
     request = dashboard.requests[0]
     assert request is not None and request.host == ip_address(host) and request.port == 0
     output = capsys.readouterr()
@@ -166,7 +166,7 @@ def test_dashboard_address_selection_and_exposure_notice(
                                   "[::1]", "300.0.0.1", ""])
 def test_invalid_dashboard_addresses_fail_before_execution(host: str, execution: Execution) -> None:
     with pytest.raises(SystemExit) as ended:
-        main(["step", "rounds", *CHOICES, "--dash-host", host])
+        main(["rounds", "start", *CHOICES, "--dash-host", host])
     assert ended.value.code == 2
     assert execution.events == [] and execution.requests == []
 
@@ -179,7 +179,7 @@ def test_dashboard_startup_warning_leaves_rounds_to_determine_exit(
     if refused:
         execution.ending = Ended("tasks", "refused:database", "Database unavailable")
     monkeypatch.setattr(dash_composition, "serving", dashboard.serving)
-    assert main(["step", "rounds", *CHOICES, "--dash-port", "8123", "--json"]) == (1 if refused else 0)
+    assert main(["rounds", "start", *CHOICES, "--dash-port", "8123", "--json"]) == (1 if refused else 0)
     output = capsys.readouterr()
     assert output.err.startswith("Dashboard not started (Port 8123 occupied); the rounds go on without it\n")
     assert execution.rounds == [RoundsRequest("tasks", 60)]
@@ -234,26 +234,26 @@ def test_invalid_count_refuses_before_adoption(
         assert json.loads(output.err)["error"]["reason"] == "count"
 
 
-@pytest.mark.parametrize("operation", ["next", "rounds"])
+@pytest.mark.parametrize("operation", ["once", "start"])
 def test_removed_max_new_is_a_usage_error_before_execution_ports(
     operation: str, execution: Execution, capsys: pytest.CaptureFixture[str],
 ) -> None:
     with pytest.raises(SystemExit) as ended:
-        main(["step", operation, *CHOICES, "--max-new", "2"])
+        main(["rounds", operation, *CHOICES, "--max-new", "2"])
     assert ended.value.code == 2
     assert "unrecognized arguments: --max-new 2" in capsys.readouterr().err
     assert execution.events == [] and execution.requests == []
 
 
-@pytest.mark.parametrize("operation", ["next", "rounds"])
+@pytest.mark.parametrize("operation", ["once", "start"])
 @pytest.mark.parametrize("maximum", [None, 7])
 @pytest.mark.parametrize("retake", [False, True])
 def test_scheduling_choices_reach_each_commands_request(
     operation: str, maximum: int | None, retake: bool, execution: Execution, capsys: pytest.CaptureFixture[str],
 ) -> None:
     flags = ([] if maximum is None else ["--max-running", str(maximum)]) + (["--retake-lapsed"] if retake else [])
-    quiet = ["--no-dashboard"] if operation == "rounds" else []
-    assert main(["step", operation, *CHOICES, *flags, *quiet, "--json"]) == 0
+    quiet = ["--no-dashboard"] if operation == "start" else []
+    assert main(["rounds", operation, *CHOICES, *flags, *quiet, "--json"]) == 0
     expected = 3 if maximum is None else maximum
     assert execution.requests == [
         NextRequest(
@@ -270,7 +270,7 @@ def test_scheduling_choices_reach_each_commands_request(
     ]
     output = capsys.readouterr()
     assert output.err == ""
-    if operation == "rounds":
+    if operation == "start":
         start, end = [json.loads(line) for line in output.out.splitlines()]
         assert start["max_running"] == expected and start["status"] == "rounds"
         assert end["reason"] == "interrupted"
@@ -282,14 +282,14 @@ def test_scheduling_choices_reach_each_commands_request(
 def test_rounds_announces_recovery_only_when_selected(
     retake: bool, execution: Execution, capsys: pytest.CaptureFixture[str],
 ) -> None:
-    assert main(["step", "rounds", "--no-dashboard", *CHOICES, *(["--retake-lapsed"] if retake else [])]) == 0
+    assert main(["rounds", "start", "--no-dashboard", *CHOICES, *(["--retake-lapsed"] if retake else [])]) == 0
     assert ("(and its own lapsed claims)" in capsys.readouterr().out) == retake
 
 
-@pytest.mark.parametrize("operation", ["next", "rounds"])
+@pytest.mark.parametrize("operation", ["once", "start"])
 def test_retake_help_keeps_the_recovery_limit(operation: str, capsys: pytest.CaptureFixture[str]) -> None:
     with pytest.raises(SystemExit) as ended:
-        main(["step", operation, "--help"])
+        main(["rounds", operation, "--help"])
     assert ended.value.code == 0
     shown = " ".join(capsys.readouterr().out.split())
     assert "After a factory.db discard only" in shown
@@ -297,14 +297,14 @@ def test_retake_help_keeps_the_recovery_limit(operation: str, capsys: pytest.Cap
     assert "assumes this is the one factory on the tracker" in shown
 
 
-@pytest.mark.parametrize("operation", ["next", "rounds"])
+@pytest.mark.parametrize("operation", ["once", "start"])
 def test_round_commands_work_without_agent_flags_and_keep_a_configuration_snapshot(
     operation: str, execution: Execution, tmp_path: Path, capsys: pytest.CaptureFixture[str],
 ) -> None:
     config = tmp_path / "config.toml"
     config.write_text('[agents.implement]\nmodel = "configured"\neffort = "low"\n')
     argv = CHOICES[:8] + CHOICES[12:]
-    assert main(["--config", str(config), "step", operation, *argv, *(["--no-dashboard"] if operation == "rounds" else [])]) == 0
+    assert main(["--config", str(config), "rounds", operation, *argv, *(["--no-dashboard"] if operation == "start" else [])]) == 0
     capsys.readouterr()
     (request,) = execution.requests
     assert request.overrides == Overrides()

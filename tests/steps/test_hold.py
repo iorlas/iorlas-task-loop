@@ -314,7 +314,7 @@ def test_an_unclaim_still_to_retry_is_no_returned_claim(bench: Bench) -> None:
 
 
 def test_two_callers_comment_once(bench: Bench) -> None:
-    """A second caller (`tl step next` beside `tl step rounds`) arriving while the first posts finds the lease taken."""
+    """A second caller (`tl rounds once` beside `tl rounds start`) arriving while the first posts finds the lease taken."""
     seen: list[HoldMove] = []
     timeout = replace(VIEW, result=AttemptResult("collected", "run:timeout"), hold_due="failed:run:timeout")
     bench.tracker.during_comment.append(lambda: seen.append(bench.hold(timeout)))

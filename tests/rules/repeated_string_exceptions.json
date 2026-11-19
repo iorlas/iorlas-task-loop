@@ -165,11 +165,8 @@
     "TASK": 6,
     "config": 3,
     "land": 4,
-    "operation": 3,
     "show": 4,
     "slot": 3,
-    "start": 3,
-    "step": 13,
     "store_true": 9,
     "task_id": 6
   },

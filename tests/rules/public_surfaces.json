@@ -1452,7 +1452,7 @@
     "repo.origin.False": {
       "argv": [
         "repo",
-        "inspect",
+        "show",
         "/snapshot"
       ],
       "exit": 0,
@@ -1469,7 +1469,7 @@
     "repo.origin.True": {
       "argv": [
         "repo",
-        "inspect",
+        "show",
         "/snapshot"
       ],
       "exit": 0,
@@ -1486,7 +1486,7 @@
     "repo.refused": {
       "argv": [
         "repo",
-        "inspect",
+        "show",
         "/snapshot"
       ],
       "exit": 1,
@@ -1502,8 +1502,8 @@
     },
     "round.empty": {
       "argv": [
-        "step",
-        "next",
+        "rounds",
+        "once",
         "--backlog",
         "tasks",
         "--tracker-root",
@@ -1529,8 +1529,8 @@
     },
     "round.full": {
       "argv": [
-        "step",
-        "next",
+        "rounds",
+        "once",
         "--backlog",
         "tasks",
         "--tracker-root",
@@ -1564,8 +1564,8 @@
     },
     "rounds.drained": {
       "argv": [
-        "step",
         "rounds",
+        "start",
         "--backlog",
         "tasks",
         "--tracker-root",
@@ -1590,8 +1590,8 @@
     },
     "rounds.interrupted": {
       "argv": [
-        "step",
         "rounds",
+        "start",
         "--backlog",
         "tasks",
         "--tracker-root",
@@ -1616,8 +1616,8 @@
     },
     "rounds.start-end": {
       "argv": [
-        "step",
         "rounds",
+        "start",
         "--backlog",
         "tasks",
         "--no-dashboard",
@@ -1651,8 +1651,8 @@
     },
     "rounds.unavailable": {
       "argv": [
-        "step",
         "rounds",
+        "start",
         "--backlog",
         "tasks",
         "--tracker-root",

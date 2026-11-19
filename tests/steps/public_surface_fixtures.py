@@ -95,8 +95,8 @@ def step_cases() -> dict[str, tuple[list[str], Result]]:
         "show.full": (["step", "show", "tl-1", "--backlog", "tasks"], full),
         "list.empty": (["step", "list"], Listed(())),
         "list.full": (["step", "list"], Listed((full.view,))),
-        "round.empty": (["step", "next", "--backlog", "tasks", *ROUND_FLAGS], Round("tasks", ())),
-        "round.full": (["step", "next", "--backlog", "tasks", *ROUND_FLAGS],
+        "round.empty": (["rounds", "once", "--backlog", "tasks", *ROUND_FLAGS], Round("tasks", ())),
+        "round.full": (["rounds", "once", "--backlog", "tasks", *ROUND_FLAGS],
                        Round("tasks", (Move("tl-1", "start", "started", "attempt", "detail"),), "capacity", False)),
         "committed": (["step", "commit", "tl-1", "--backlog", "tasks"],
                      CommittedTask(
@@ -122,7 +122,7 @@ def step_cases() -> dict[str, tuple[list[str], Result]]:
                 Failed(kind, "choices", "Operation refused", True, (SlotView("s1", PATH, "held", attempt_id="attempt"),), True),
             )
     for reason in ("interrupted", "drained", "unavailable"):
-        cases[f"rounds.{reason}"] = (["step", "rounds", "--backlog", "tasks", *ROUND_FLAGS], Ended("tasks", reason, "Rounds ended"))
+        cases[f"rounds.{reason}"] = (["rounds", "start", "--backlog", "tasks", *ROUND_FLAGS], Ended("tasks", reason, "Rounds ended"))
     released = ReleasedTask("tasks", "tl-1", "attempt", Released("s1", "parked", True, "unclaimed", False))
     for name, result in {"released": released, "released.nested": replace(released, checks=released, land=released, candidate=True),
                          "released.already": replace(released, result=AlreadyReleased("s1", "kept", True))}.items():

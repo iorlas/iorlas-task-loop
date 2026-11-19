@@ -162,7 +162,7 @@ def _starting(reader: AttemptStore, database: Path, artifacts: Path, store: Stor
 @contextmanager
 def open_next(database: Path, artifacts: Path, views: GitViews, tracker_root: str,
               store: Store | None = None, registration: Store | None = None) -> Generator[RoundPorts | Failed]:
-    """`tl step next`: the database guard first, then the tracker's read port at the explicit root (an unusable root
+    """`tl rounds once`: the database guard first, then the tracker's read port at the explicit root (an unusable root
     refuses `tracker_root`), the start, commit, release, publish and hold ports on one shared writer (closed here; the
     hold's abandon uses the release ports `tl step release --abandon` uses, its tracker writes `tracker_holds`), the reads
     the round log appended under the artifacts root, and the land's ports and profile reader (`land: auto`, `round_land`)."""
@@ -213,7 +213,7 @@ def one_round(
     database: Path, artifacts: Path, views: GitViews, request: NextRequest, stopping: Callable[[], bool], generation: int | None = None,
     store: Store | None = None, registration: Store | None = None,
 ) -> Callable[[Quiet], Round | Failed]:
-    """One `tl step rounds` round: `open_next`'s fresh ports, its `stopping` the rounds process's flag. A factory.db
+    """One `tl rounds start` round: `open_next`'s fresh ports, its `stopping` the rounds process's flag. A factory.db
     that exists but cannot be opened now (locked, busy) is `unavailable:store`, so the rounds back off; an absent one stays
     `refused:database` (a deliberate discard ends the rounds)."""
 
@@ -278,7 +278,7 @@ def _rounds_lock(database: Path, request: NextRequest) -> Callable[[], None] | F
 def open_rounds(database: Path, artifacts: Path, views: GitViews, request: NextRequest,
                 install: Callable[[Callable[[str], object]], AbstractContextManager[Interrupts]] = installed,
                 ) -> Generator[RoundsPorts | Ended | Failed]:
-    """`tl step rounds`: refused before any round (inputs, `database`/`schema`, `rounds_running`), else the rounds lock,
+    """`tl rounds start`: refused before any round (inputs, `database`/`schema`, `rounds_running`), else the rounds lock,
     then the SIGINT and SIGTERM handlers (`interrupts`) for the block's life, per-round `open_next` ports, the wall and monotonic clocks,
     `time.sleep`, the round log and the `Log: not written` warning on stderr. `install` is the real handler unless a test passes its own."""
     release = _rounds_lock(database, request)

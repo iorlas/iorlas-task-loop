@@ -55,9 +55,9 @@ def inspections(patch: pytest.MonkeyPatch) -> dict[str, object]:
     for configured in (False, True):
         repo = RepoInspection(RepoId("repo"), PATH / "git", PATH, "https://example.test/repo" if configured else None)
         patch.setattr(cli, "GitViews", lambda _seconds, repo=repo: RepoViews(repo))
-        cases[f"repo.origin.{configured}"] = capture(["repo", "inspect", str(PATH)])
+        cases[f"repo.origin.{configured}"] = capture(["repo", "show", str(PATH)])
     patch.setattr(cli, "GitViews", raising(UnsupportedCheckout("Unsupported checkout")))
-    cases["repo.refused"] = capture(["repo", "inspect", str(PATH)])
+    cases["repo.refused"] = capture(["repo", "show", str(PATH)])
     reference = TaskReference(TaskScope("tasks"), "tl-1")
     dependency = TaskDependency(TaskReference(reference.scope, "tl-2"), "blocks", "Dependency", "open")
     argv = ["task", "show", "tl-1", "--backlog", "tasks", "--tracker-root", "/tracker"]
@@ -95,7 +95,7 @@ def steps(patch: pytest.MonkeyPatch) -> dict[str, object]:
     patch.setattr(cli_composition, "open_rounds", lambda *_args: nullcontext(RoundFacts()))
     patch.setattr(dash_composition, "serving", lambda *_args: nullcontext(None))
     patch.setattr(cli_step, "run_rounds", lambda *_args: Ended("tasks", "interrupted"))
-    cases["rounds.start-end"] = capture(["step", "rounds", "--backlog", "tasks", "--no-dashboard", *ROUND_FLAGS])
+    cases["rounds.start-end"] = capture(["rounds", "start", "--backlog", "tasks", "--no-dashboard", *ROUND_FLAGS])
     return cases
 
 

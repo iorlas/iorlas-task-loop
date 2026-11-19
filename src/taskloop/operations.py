@@ -236,7 +236,7 @@ type Quiet = frozenset[tuple[str, str, str, str]]  # (task, action, word, attemp
 
 @dataclass(frozen=True)
 class Round:
-    """`tl step next`: the moves in the order performed; `stopped`, the word that ended admission early; `logged`, False
+    """`tl rounds once`: the moves in the order performed; `stopped`, the word that ended admission early; `logged`, False
     when a round-log line could not be written; `written`, the keys of its moves and of its stopped word
     (`("", "stopped", word, "moves=<n>")`) now in the round log (written now, or before and unchanged): the next round's `quiet`,
     empty when any write failed so that the next round writes the state again."""
@@ -250,7 +250,7 @@ class Round:
 
 @dataclass(frozen=True)
 class Ended:
-    """`tl step rounds` stopped: `interrupted` (the first Ctrl-C), `abrupt` (a second Ctrl-C, the surface's) or the
+    """`tl rounds start` stopped: `interrupted` (the first Ctrl-C), `abrupt` (a second Ctrl-C, the surface's) or the
     whole-round refusal that ended it (`<kind>:<reason>`); launched steps keep running in every case."""
 
     backlog: str

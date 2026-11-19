@@ -238,7 +238,7 @@ class Factory:
                          EvidenceFiles(self.tmp), partial(current_view, reads))
 
     def ports(self) -> RoundPorts:
-        """Fresh ports over the same factory.db each round, as each `tl step rounds` round opens them (a restart too)."""
+        """Fresh ports over the same factory.db each round, as each `tl rounds start` round opens them (a restart too)."""
         factory_commit = FactoryCommit(self.store, self.checkouts, self.files, lambda _worker: True, lambda: self.now, hold,
                                        ids=NativeIds())
         reads = StatusPorts(self.store, self.observe, lambda: self.now, factory_commit.leftovers, lambda: "boot")

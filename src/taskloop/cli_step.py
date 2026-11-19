@@ -34,7 +34,8 @@ from taskloop.workflow_read import DEFAULT
 
 type Parsers = argparse._SubParsersAction[argparse.ArgumentParser]
 DASH_PORT = 8765
-COMMANDS = ("config", "slot", "step")
+SCHEDULER, STEP, START = "rounds", "step", "start"
+COMMANDS = ("config", "slot", STEP, SCHEDULER)
 DB, ARTIFACTS = "--db", "--artifacts"  # flags shared by many commands
 PATH = "PATH"  # the metavar of a flag that takes a file or directory
 
@@ -65,19 +66,44 @@ def _add(parsers: Parsers, name: str, text: str) -> argparse.ArgumentParser:
     return parsers.add_parser(name, help=text, description=text, allow_abbrev=False)
 
 
+def _register_rounds(commands: Parsers) -> None:
+    scheduler = _group(commands, SCHEDULER, "Scheduling rounds over the whole backlog")
+    _round_flags(_add(scheduler, "once", "Run one scheduling round: settle existing attempts, advance claimed tasks whose "
+                      "step is done to the next step (no label check), start approved ready tasks in the free slots left, publish "
+                      "results accepted by factory commit, hold each task a round took that stopped "
+                      "(its label removed, `held` added, the claim "
+                      "returned, one comment: `bd list --label held`; adding the label back takes it again at plan) and remove "
+                      "`held` once a held task is taken again"))
+    rounds = _add(scheduler, START, ROUNDS)
+    rounds.add_argument("--every", type=int, metavar="SECONDS", help="Seconds between regular rounds, at least 5 (overrides the "
+                        "machine config's round_seconds)")
+    rounds.add_argument("--dash-host", type=ip_address, metavar="ADDRESS", default="127.0.0.1",
+                        help="Dashboard bind address: IPv4 or IPv6 literal (default 127.0.0.1)")
+    rounds.add_argument("--dash-port", type=int, metavar="PORT", default=DASH_PORT, help="Serve the read-only dashboard on "
+                        f"--dash-host:PORT while the rounds run (default {DASH_PORT}; 0 picks a free port)")
+    rounds.add_argument("--no-dashboard", action="store_true", help="Serve no dashboard (for a second rounds on one machine)")
+    _round_flags(rounds)
+    rounds.epilog = ("--json prints JSON Lines: one start record and one end record on a graceful stop; "
+                     "refusals and abrupt end results go to stderr. Dashboard notices go to stderr with --json.")
+
+
+def _group(commands: Parsers, name: str, text: str) -> Parsers:
+    return _add(commands, name, text).add_subparsers(dest="operation", required=True)
+
+
 def register(commands: Parsers) -> None:
-    config = _add(commands, "config", "Machine configuration").add_subparsers(dest="operation", required=True)
+    config = _group(commands, "config", "Machine configuration")
     show = _add(config, "show", "Print each effective setting, its source, and the config file")
     _common(show, DB, ARTIFACTS, "--root")
     _harness_flag(show)
     show.add_argument("--count", type=int, help="Slot count (overrides the machine config's slot_count)")
-    slot = _add(commands, "slot", "Managed slots (setup)").add_subparsers(dest="operation", required=True)
+    slot = _group(commands, "slot", "Managed slots (setup)")
     adopt = _add(slot, "adopt", "Adopt worktrees made by hand with `git worktree add --detach <root>/<repo name>/sN`; creates factory.db")
     adopt.add_argument("checkout", metavar="CHECKOUT", help="The person's checkout of the repository")
     adopt.add_argument("--count", type=int, help="Adopt s1..sN (overrides slot_count); adds slots only, retires none")
     _common(adopt, "--root", DB)
-    step = _add(commands, "step", f"Step attempts ({STEP_ONLY})").add_subparsers(dest="operation", required=True)
-    start = _add(step, "start", "Admit, relaunch or repeat the task's attempt (free slot, tracker claim), advance a done step, or "
+    step = _group(commands, STEP, f"Step attempts ({STEP_ONLY})")
+    start = _add(step, START, "Admit, relaunch or repeat the task's attempt (free slot, tracker claim), advance a done step, or "
                  "re-run failed checks on the same commit. The tracker claim stays held between steps; nothing renews it then")
     start.add_argument("task_id", metavar="TASK")
     _binding(start)
@@ -109,29 +135,13 @@ def register(commands: Parsers) -> None:
     release.add_argument("--abandon", action="store_true", help="Throw the attempt away and give the task back; `tl step start` "
                          "then admits a fresh attempt")
     _common(release, DB)
-    _round_flags(_add(step, "next", "Run one scheduling round: settle existing attempts, advance claimed tasks whose "
-                      "step is done to the next step (no label check), start approved ready tasks in the free slots left, publish "
-                      "results accepted by factory commit, hold each task a round took that stopped "
-                      "(its label removed, `held` added, the claim "
-                      "returned, one comment: `bd list --label held`; adding the label back takes it again at plan) and remove "
-                      "`held` once a held task is taken again"))
-    rounds = _add(step, "rounds", ROUNDS)
-    rounds.add_argument("--every", type=int, metavar="SECONDS", help="Seconds between regular rounds, at least 5 (overrides the "
-                        "machine config's round_seconds)")
-    rounds.add_argument("--dash-host", type=ip_address, metavar="ADDRESS", default="127.0.0.1",
-                        help="Dashboard bind address: IPv4 or IPv6 literal (default 127.0.0.1)")
-    rounds.add_argument("--dash-port", type=int, metavar="PORT", default=DASH_PORT, help="Serve the read-only dashboard on "
-                        f"--dash-host:PORT while the rounds run (default {DASH_PORT}; 0 picks a free port)")
-    rounds.add_argument("--no-dashboard", action="store_true", help="Serve no dashboard (for a second rounds on one machine)")
-    _round_flags(rounds)
-    rounds.epilog = ("--json prints JSON Lines: one start record and one end record on a graceful stop; "
-                     "refusals and abrupt end results go to stderr. Dashboard notices go to stderr with --json.")
     publish = _add(step, "publish", "Push the step's commit accepted by factory commit to origin's task/<id> as you, "
                    "never forced; nothing merges or lands")
     publish.add_argument("task_id", metavar="TASK")
     _backlog(publish)
     _common(publish, DB, ARTIFACTS)
     _land_flags(_add(step, "land", LAND))
+    _register_rounds(commands)
 
 
 LAND = ("Land the task's checked commit X yourself: fetch origin's main (O), squash X onto it as one commit S (Git objects only), "
@@ -189,7 +199,7 @@ def _round_flags(parser: argparse.ArgumentParser) -> None:
     _new_task_flags(parser)
     parser.add_argument("--retake-lapsed", action="store_true", help="After a factory.db discard only: also take the tasks "
                         "`taskloop` still holds in progress with an expired lease and no attempt here (assumes this is the one "
-                        "factory on the tracker); run it once, with `tl step next`")
+                        "factory on the tracker); run it once, with `tl rounds once`")
     _common(parser, DB, ARTIFACTS)
 
 
@@ -347,16 +357,16 @@ def _configuration(arguments: argparse.Namespace, loaded: Loaded) -> Loaded | Fa
 OPERATIONS: dict[tuple[str, str], Callable[[argparse.Namespace, Loaded], Result]] = {
     ("config", "show"): _configuration,
     ("slot", "adopt"): _adopt,
-    ("step", "start"): _start,
-    ("step", "next"): _next,
-    ("step", "rounds"): _rounds,
-    ("step", "show"): _show,
-    ("step", "list"): _list,
-    ("step", "setup-times"): _setup_times,
-    ("step", "commit"): _commit,
-    ("step", "release"): _release,
-    ("step", "publish"): _publish,
-    ("step", "land"): _land,
+    (STEP, START): _start,
+    (SCHEDULER, "once"): _next,
+    (SCHEDULER, START): _rounds,
+    (STEP, "show"): _show,
+    (STEP, "list"): _list,
+    (STEP, "setup-times"): _setup_times,
+    (STEP, "commit"): _commit,
+    (STEP, "release"): _release,
+    (STEP, "publish"): _publish,
+    (STEP, "land"): _land,
 }
 
 
@@ -376,7 +386,7 @@ def run(arguments: argparse.Namespace) -> int:
                                             and result.reason not in {"interrupted", Reason.DRAINED, Reason.DRAINING})
     stream = sys.stderr if failed else sys.stdout
     if arguments.json_output:
-        admission = (arguments.command, arguments.operation) == ("step", "start")  # the one command whose refusals carry slots
+        admission = (arguments.command, arguments.operation) == (STEP, START)  # the one command whose refusals carry slots
         print(json.dumps(result_data.as_data(result, admission=admission)), file=stream)
     else:
         if isinstance(result, Failed) and result.claim_leaked:
