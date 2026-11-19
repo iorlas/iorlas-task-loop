@@ -365,10 +365,9 @@ def test_removed_commit_spelling_fails_parsing_before_opening(
     assert "invalid choice" in error and obsolete in error and "commit" in error
 
 
-def test_release_needs_its_backlog(capsys: pytest.CaptureFixture[str]) -> None:
-    with pytest.raises(SystemExit) as result:
-        main(RELEASE[:3])
-    assert result.value.code == 2 and "usage: tl" in capsys.readouterr().err
+def test_release_needs_its_backlog_from_the_flag_or_the_config(capsys: pytest.CaptureFixture[str]) -> None:
+    assert main(RELEASE[:3]) == 1
+    assert CONFIG["backlog_missing"] in capsys.readouterr().err
 
 
 class Releases:
@@ -584,12 +583,19 @@ def test_next_flags_reach_the_request_and_the_opener_and_its_json_is_exact(
     assert f"Log: not written ({tmp_path / 'art' / 'rounds.log'})" in capsys.readouterr().out
 
 
-@pytest.mark.parametrize("missing", ["--label", "--backlog", "--tracker-root", "--checkout", "--minutes"])
-def test_next_requires_every_choice_and_its_help_names_the_round(missing: str, capsys: pytest.CaptureFixture[str]) -> None:
+@pytest.mark.parametrize("missing", ["--label", "--backlog", "--tracker-root", "--checkout"])
+def test_a_round_without_a_flag_or_a_config_value_is_refused(missing: str, capsys: pytest.CaptureFixture[str]) -> None:
     at = NEXT.index(missing)
+    assert main([*NEXT[:at], *NEXT[at + 2:]]) == 1
+    error = capsys.readouterr().err
+    assert ("refused:backlog_missing" if missing == "--backlog" else "refused:binding_missing") in error
+
+
+def test_next_requires_its_minutes_and_its_help_names_the_round(capsys: pytest.CaptureFixture[str]) -> None:
+    at = NEXT.index("--minutes")
     with pytest.raises(SystemExit) as result:
         main([*NEXT[:at], *NEXT[at + 2:]])
-    assert result.value.code == 2 and missing in capsys.readouterr().err
+    assert result.value.code == 2 and "--minutes" in capsys.readouterr().err
     with pytest.raises(SystemExit):
         main(["rounds", "once", "--help"])
     shown = " ".join(capsys.readouterr().out.split())
@@ -723,12 +729,11 @@ def test_rounds_refuse_a_short_interval_before_opening_anything(
     assert CONFIG["interval"] in capsys.readouterr().err
 
 
-@pytest.mark.parametrize("missing", ["--label", "--backlog", "--tracker-root", "--checkout", "--minutes"])
-def test_rounds_require_every_choice_and_the_help_names_the_stop(missing: str, capsys: pytest.CaptureFixture[str]) -> None:
-    at = ROUNDS.index(missing)
+def test_rounds_require_minutes_and_the_help_names_the_stop(capsys: pytest.CaptureFixture[str]) -> None:
+    at = ROUNDS.index("--minutes")
     with pytest.raises(SystemExit) as result:
         main([*ROUNDS[:at], *ROUNDS[at + 2:]])
-    assert result.value.code == 2 and missing in capsys.readouterr().err
+    assert result.value.code == 2 and "--minutes" in capsys.readouterr().err
     with pytest.raises(SystemExit):
         main(["rounds", "start", "--help"])
     shown = " ".join(capsys.readouterr().out.split())

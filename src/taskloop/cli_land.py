@@ -2,10 +2,9 @@
 
 import argparse
 from collections.abc import Callable
-from pathlib import Path
 
 from taskloop import cli_composition, land
-from taskloop.cli_common import ARTIFACTS, DB, Parsers, add, backlog, common, group, views_for
+from taskloop.cli_common import ARTIFACTS, DB, Parsers, add, backlog, backlog_of, checkout, checkout_of, common, group, views_for
 from taskloop.land import Mode
 from taskloop.land_guide import INTERRUPTED
 from taskloop.machine_config import Loaded
@@ -30,7 +29,7 @@ RUN = ("Land the task's checked commit X yourself: fetch origin's main (O), squa
 def _task(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("task_id", metavar="TASK")
     backlog(parser)
-    parser.add_argument("--checkout", required=True, help="Your checkout of the repository: its origin is fetched and pushed")
+    checkout(parser, "Your checkout of the repository: its origin is fetched and pushed")
     common(parser, DB, ARTIFACTS)
 
 
@@ -53,8 +52,9 @@ def _land(mode: Mode) -> Callable[[argparse.Namespace, Loaded], Result]:
     def operation(arguments: argparse.Namespace, loaded: Loaded) -> Result:
         """The one land; a `KeyboardInterrupt` (Ctrl-C) anywhere in it is `unavailable:interrupted`, exit 130: the land's own
         unwinding already stopped a running check's tree, and the rerun reconciles what is left (as the rounds' abrupt stop)."""
-        request = land.LandRequest(arguments.backlog, arguments.task_id, Path(arguments.checkout), getattr(arguments, "minutes", None),
-                                   mode, getattr(arguments, "no_change", False), getattr(arguments, "accept_gate_changes", False))
+        request = land.LandRequest(backlog_of(arguments, loaded), arguments.task_id, checkout_of(arguments, loaded),
+                                   getattr(arguments, "minutes", None), mode, getattr(arguments, "no_change", False),
+                                   getattr(arguments, "accept_gate_changes", False))
         try:
             with cli_composition.open_land(loaded.settings.db.value, loaded.settings.artifacts.value,
                                            views_for(loaded)) as ports:

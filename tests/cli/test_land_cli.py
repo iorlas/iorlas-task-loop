@@ -95,8 +95,8 @@ def test_the_subcommand_and_flags_become_one_land_request_for_the_one_operation(
 
 @pytest.mark.parametrize("argv", [
     [*LAND, "--summary"], [*LAND, "--withdraw"], ["land", "show", *BASE, "--minutes", "20"], ["land", "withdraw", *BASE, "--no-change"],
-    ["land", "run", "tl-1", "--backlog", "tasks"], ["land"], ["step", "land", *BASE], ["step", "release", *BASE[:3], "--abandon"],
-], ids=["summary_flag", "withdraw_flag", "show_minutes", "withdraw_no_change", "no_checkout", "no_subcommand",
+    ["land"], ["step", "land", *BASE], ["step", "release", *BASE[:3], "--abandon"],
+], ids=["summary_flag", "withdraw_flag", "show_minutes", "withdraw_no_change", "no_subcommand",
     "step_land", "release_abandon"])
 def test_usage_errors_exit_2_before_any_operation(argv: list[str], monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(cli_composition, "open_land", lambda *_: pytest.fail("opened"))

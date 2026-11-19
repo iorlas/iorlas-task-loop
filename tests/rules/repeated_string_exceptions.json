@@ -399,10 +399,8 @@
     "": 3,
     "artifacts": 3,
     "default": 8,
-    "file": 4,
     "flag": 3,
-    "task-loop": 3,
-    "type": 6
+    "task-loop": 3
   },
   "src/taskloop/merge/resolve.py": {
     "capturing": 3,

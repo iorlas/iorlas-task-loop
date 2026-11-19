@@ -2,8 +2,15 @@
 
 import errno
 import socket
+from pathlib import Path
 
 import pytest
+
+
+@pytest.fixture(autouse=True)
+def isolated_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Commands read the machine config under HOME: a test's own tmp_path, never the real ~/.config."""
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
 
 
 @pytest.fixture(scope="session")

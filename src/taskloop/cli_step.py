@@ -12,7 +12,24 @@ from pydantic import ValidationError
 
 from taskloop import cli_attempt, cli_composition, cli_land, dash_composition, operations, result_data
 from taskloop.agents.settings import Overrides
-from taskloop.cli_common import ARTIFACTS, DB, PATH, Parsers, add, backlog, common, group, views_for
+from taskloop.cli_common import (
+    ARTIFACTS,
+    DB,
+    ConfigMissing,
+    Parsers,
+    add,
+    backlog,
+    backlog_of,
+    checkout,
+    checkout_of,
+    common,
+    group,
+    label,
+    label_of,
+    tracker_root,
+    tracker_root_of,
+    views_for,
+)
 from taskloop.composition import real_slots
 from taskloop.drain.models import Reason
 from taskloop.exit_codes import exit_code
@@ -37,8 +54,8 @@ COMMANDS = ("config", "slot", STEP, cli_attempt.GROUP, SCHEDULER, cli_land.GROUP
 def _binding(parser: argparse.ArgumentParser) -> None:
     """The three flags that bind a command to a tracker and a repository."""
     backlog(parser)
-    parser.add_argument("--tracker-root", required=True, metavar=PATH, help="The directory of the task tracker (the only writer)")
-    parser.add_argument("--checkout", required=True, metavar=PATH, help="Your checkout of the repository the tasks change")
+    tracker_root(parser)
+    checkout(parser)
 
 
 def _register_rounds(commands: Parsers) -> None:
@@ -121,8 +138,8 @@ def _new_task_flags(parser: argparse.ArgumentParser) -> None:
 
 def _round_flags(parser: argparse.ArgumentParser) -> None:
     _binding(parser)
-    parser.add_argument("--label", required=True, help="The tracker label approving a ready task for "
-                        "autonomous execution (`auto`), read only when a new task is taken; a claimed task advances without it")
+    label(parser, "The tracker label approving a ready task for "
+          "autonomous execution (`auto`), read only when a new task is taken; a claimed task advances without it")
     parser.add_argument("--max-running", type=int, default=3, metavar="N", help="Tasks of this backlog in flight (a step "
                         "running, or passed and waiting to be landed, which counts until landed; not failed, stuck or held) "
                         "at which no new task starts (default 3, at least 1); claimed work advances regardless. Start only what you "
@@ -137,7 +154,8 @@ def _round_flags(parser: argparse.ArgumentParser) -> None:
 
 
 def _start(arguments: argparse.Namespace, loaded: Loaded) -> Result:
-    request = StartRequest(arguments.task_id, arguments.backlog, arguments.tracker_root, Path(arguments.checkout), loaded.settings.agents,
+    request = StartRequest(arguments.task_id, backlog_of(arguments, loaded), tracker_root_of(arguments, loaded),
+                           checkout_of(arguments, loaded), loaded.settings.agents,
                            _overrides(arguments), arguments.minutes, new=_new_task(arguments))
     with cli_composition.open_start(loaded.settings.db.value, loaded.settings.artifacts.value, views_for(loaded)) as ports:
         return ports if isinstance(ports, Failed) else operations.start(ports, request)
@@ -152,23 +170,24 @@ def _new_task(arguments: argparse.Namespace) -> NewTask:
 
 
 def _next_request(arguments: argparse.Namespace, loaded: Loaded) -> NextRequest:
-    return NextRequest(arguments.backlog, arguments.tracker_root, Path(arguments.checkout), arguments.label, loaded.settings.agents,
+    return NextRequest(backlog_of(arguments, loaded), tracker_root_of(arguments, loaded), checkout_of(arguments, loaded),
+                       label_of(arguments, loaded), loaded.settings.agents,
                        _overrides(arguments), arguments.minutes, max_running=arguments.max_running, retake=arguments.retake_lapsed,
                        new=_new_task(arguments))
 
 
 def _next(arguments: argparse.Namespace, loaded: Loaded) -> Result:
     settings, request = loaded.settings, _next_request(arguments, loaded)
-    with cli_composition.open_next(settings.db.value, settings.artifacts.value, views_for(loaded), arguments.tracker_root) as ports:
+    with cli_composition.open_next(settings.db.value, settings.artifacts.value, views_for(loaded), request.tracker_root) as ports:
         return ports if isinstance(ports, Failed) else run_round(ports, request)
 
 
-def _dash_request(arguments: argparse.Namespace, settings: Effective) -> dash_composition.DashRequest | None:
+def _dash_request(arguments: argparse.Namespace, settings: Effective, round_request: NextRequest) -> dash_composition.DashRequest | None:
     if arguments.no_dashboard:
         return None
-    return dash_composition.DashRequest(arguments.backlog, arguments.tracker_root, arguments.label,
+    return dash_composition.DashRequest(round_request.backlog, round_request.tracker_root, round_request.label,
                                         arguments.dash_host, arguments.dash_port,
-                                        settings.db.value, settings.artifacts.value, Path(arguments.checkout))
+                                        settings.db.value, settings.artifacts.value, round_request.checkout)
 
 
 def _dashboard_notice(address: tuple[str, int]) -> str:
@@ -184,15 +203,16 @@ def _dashboard_notice(address: tuple[str, int]) -> str:
 def _rounds(arguments: argparse.Namespace, loaded: Loaded) -> Result:
     """The start line once the rounds are set up, then the rounds; a `KeyboardInterrupt` anywhere (the second Ctrl-C) is
     the abrupt stop, exit 130 (the operation writes its `rounds stopped abrupt` line once its rounds started)."""
-    settings, request = loaded.settings, RoundsRequest(arguments.backlog, loaded.settings.round_seconds.value)
+    settings, round_request = loaded.settings, _next_request(arguments, loaded)
+    request = RoundsRequest(round_request.backlog, loaded.settings.round_seconds.value)
     log = settings.artifacts.value / "rounds.log"
     try:
         with cli_composition.open_rounds(
-            settings.db.value, settings.artifacts.value, views_for(loaded), _next_request(arguments, loaded)
+            settings.db.value, settings.artifacts.value, views_for(loaded), round_request
         ) as ports:
             if isinstance(ports, (Failed, Ended)):
                 return ports
-            label = arguments.label.strip()  # as `run_round` reads it
+            label = round_request.label.strip()  # as `run_round` reads it
             data = result_data.rounds_data(request.backlog, request.every, str(log), label, arguments.max_running)
             started = (json.dumps(data) if arguments.json_output else
                        f"Rounds for backlog {request.backlog} every {request.every} s, taking tasks labelled {label!r}"
@@ -201,7 +221,7 @@ def _rounds(arguments: argparse.Namespace, loaded: Loaded) -> Result:
                        f"passed and waiting to be landed, by a round under the profile's `land: auto`, else by a person); log: {log}; "
                        + ("stop with Ctrl-C" if ports.ctrl_c else "Ctrl-C is ignored here: stop with SIGTERM"))
             print(started, flush=True)
-            with dash_composition.serving(_dash_request(arguments, settings), views_for(loaded)) as address:
+            with dash_composition.serving(_dash_request(arguments, settings, round_request), views_for(loaded)) as address:
                 if isinstance(address, Failed):
                     print(f"Dashboard not started ({address.detail}); the rounds go on without it", file=sys.stderr, flush=True)
                 elif address is not None:
@@ -213,15 +233,17 @@ def _rounds(arguments: argparse.Namespace, loaded: Loaded) -> Result:
 
 
 def _commit(arguments: argparse.Namespace, loaded: Loaded) -> Result:
+    name = backlog_of(arguments, loaded)
     with cli_composition.open_commit(loaded.settings.db.value, views_for(loaded), loaded.settings.artifacts.value) as opened:
-        return opened if isinstance(opened, Failed) else operations.commit_task(*opened, arguments.backlog, arguments.task_id)
+        return opened if isinstance(opened, Failed) else operations.commit_task(*opened, name, arguments.task_id)
 
 
 def _release(arguments: argparse.Namespace, loaded: Loaded, *, abandon: bool = False) -> Result:
+    name = backlog_of(arguments, loaded)
     with cli_composition.open_release(loaded.settings.db.value, views_for(loaded)) as opened:
         if isinstance(opened, Failed):
             return opened
-        return operations.release_task(*opened, arguments.backlog, arguments.task_id, abandon=abandon)
+        return operations.release_task(*opened, name, arguments.task_id, abandon=abandon)
 
 
 def _abandon(arguments: argparse.Namespace, loaded: Loaded) -> Result:
@@ -229,8 +251,9 @@ def _abandon(arguments: argparse.Namespace, loaded: Loaded) -> Result:
 
 
 def _publish(arguments: argparse.Namespace, loaded: Loaded) -> Result:
+    name = backlog_of(arguments, loaded)
     with cli_composition.open_publish(loaded.settings.db.value, views_for(loaded), loaded.settings.artifacts.value) as opened:
-        return opened if isinstance(opened, Failed) else operations.publish_task(*opened, arguments.backlog, arguments.task_id)
+        return opened if isinstance(opened, Failed) else operations.publish_task(*opened, name, arguments.task_id)
 
 
 def _adopt(arguments: argparse.Namespace, loaded: Loaded) -> Result:
@@ -268,6 +291,14 @@ OPERATIONS: dict[tuple[str, str], Callable[[argparse.Namespace, Loaded], Result]
 }
 
 
+def refused(arguments: argparse.Namespace, refusal: ConfigRefused) -> int:
+    """A command's own config refusal (a bad file, or a value neither flag nor file gives): to stderr, exit 1."""
+    result = operations.refused_config(refusal)
+    print(json.dumps(result_data.as_data(result)) if arguments.json_output
+          else "\n".join(human(f"tl {arguments.command} {arguments.operation}", result, None)), file=sys.stderr)
+    return exit_code(result)
+
+
 def run(arguments: argparse.Namespace) -> int:
     """Resolve the machine config (every command refuses a bad one), run the one operation, render it."""
     flags = Flags(getattr(arguments, "db", None), getattr(arguments, "artifacts", None), getattr(arguments, "slots_root", None),
@@ -278,6 +309,8 @@ def run(arguments: argparse.Namespace) -> int:
     else:
         try:
             result = OPERATIONS[arguments.command, arguments.operation](arguments, loaded)
+        except ConfigMissing as missing:
+            result = operations.refused_config(missing.refused)
         except ValidationError as error:
             result = Failed("refused", "choices", str(error))
     failed = isinstance(result, Failed) or (isinstance(result, Ended)
