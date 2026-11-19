@@ -216,7 +216,7 @@ def test_minutes_out_of_range_are_refused_before_any_read_or_launch(minutes: int
     unread = AttemptStore(lambda: None)  # any read would raise StoreUnavailable
     found = start(StartPorts(unread, admission, launcher,
                              lambda: 1000, Repeats(), NoAdvance(), NO_CHECKS), replace(REQUEST, minutes=minutes))
-    assert found == Failed("refused", "choices", f"--minutes must be from 1 to {MAX_MINUTES}")
+    assert found == Failed("refused", "choices", f"Minutes must be from 1 to {MAX_MINUTES}")
     assert admission.requests == [] and launcher.calls == []
 
 

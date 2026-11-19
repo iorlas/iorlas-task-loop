@@ -463,7 +463,7 @@ def test_a_slot_left_on_the_task_branch_is_named_with_its_fix_while_another_slot
     result, claims = admitted(factory, repo, root, tmp_path)
     assert isinstance(result, AdmitRefused) and result.reason == "branch_held" and claims.calls == []
     assert [(view.name, view.reason, view.path) for view in result.slots] == [("s1", "attached", first.path)]
-    assert "`git switch --detach`" in result.detail and "`tl slot adopt`" in result.detail
+    assert "detach it from the branch" in result.detail and "adopt the slot again" in result.detail
     assert f"s1 attached ({first.path})" in result.detail
 
 
@@ -474,7 +474,7 @@ def test_a_main_checkout_on_the_task_branch_is_named_as_the_persons_to_switch_no
     repo.worktree(repo.identity().root).checkout_new(BRANCH)
     result, claims = admitted(factory, repo, root, tmp_path)
     assert isinstance(result, AdmitRefused) and result.reason == "branch_held" and result.slots == () and claims.calls == []
-    assert "your main checkout" in result.detail and "tl slot adopt" not in result.detail and "unusable" not in result.detail
+    assert "your main checkout" in result.detail and "adopt the slot" not in result.detail and "unusable" not in result.detail
 
 
 def test_admission_skips_a_free_slot_whose_head_the_branch_does_not_contain(
@@ -588,7 +588,7 @@ def test_a_local_task_branch_with_the_persons_unpublished_commit_is_refused_but_
 ) -> None:
     tip = leave(repo, tmp_path, BRANCH, extra=True, own=False)
     assert branch_refusal(repo, "tl-1", ()) == "branch_unpublished"
-    assert "git branch -m task/{task} old/task/{task}" in UNPUBLISHED
+    assert "rename the branch to old/task/{task}" in UNPUBLISHED
     repo.delete_branch(BRANCH, expected=tip)
     leave(repo, tmp_path, BRANCH, extra=True)  # an abandoned attempt's own commit (trailer): resumed as before
     assert isinstance(branch_refusal(repo, "tl-1", ()), Branch)

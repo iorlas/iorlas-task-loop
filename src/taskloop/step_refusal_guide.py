@@ -40,7 +40,7 @@ REFUSALS = {
     "label": "An approval label is required. Select the label whose tasks the owner approved for the factory.",
     "bad_label": "The approval label is invalid. Choose a non-blank label accepted by the task tracker.",
     "tracker_root": "The tracker root cannot be used. Check the explicitly configured tracker directory and its access permissions.",
-    "choices": "The requested options are invalid. Correct the values named above using the command's help.",
+    "choices": "The requested options are invalid. Correct the values named above to ones the step accepts.",
     "checkout": "The checkout is absent or belongs to another repository. Select an existing checkout of the task's repository.",
     "input": "The agent input could not be prepared. Inspect the supplied detail and the artifacts directory's "
     "permissions and free space before starting work.",
@@ -52,8 +52,8 @@ REFUSALS = {
     "claimed_elsewhere": "Another actor holds the tracker claim. Leave its work intact and wait for that actor's decision.",
     "constraint": "Admission conflicted with a retained reservation or task. Inspect the current attempt and "
     "slots before deciding which work may proceed.",
-    "deadline": "The requested deadline is outside the supported range. Choose a positive --minutes value within "
-    "the command's maximum.",
+    "deadline": "The requested deadline is outside the supported range. Choose a positive number of minutes within "
+    "the allowed maximum.",
     "expired": "The attempt's deadline has passed. Inspect its retained evidence and current status before "
     "deciding whether to abandon or continue it.",
     "registration_refused": "The entry registration was refused by the retained attempt state. Inspect the "
@@ -110,8 +110,8 @@ REFUSALS = {
     "diagnostic before proceeding.",
     "validation_pending": "Answer validation has not completed. Wait for the owning entry to finish collection.",
     "inconsistent": "The retained facts do not produce a consistent verdict. Preserve all evidence and ask the owner to investigate.",
-    "read_only": "Factory commit requires writes but this reader is read-only. Use the owning step commit "
-    "operation after inspecting status.",
+    "read_only": "Factory commit requires writes but this reader is read-only. Commit it through the step "
+    "that owns writes after inspecting status.",
     "released": "The attempt has already released its slot. Inspect the current task status before starting its next step.",
     "uncommitted": "The attempt left uncommitted work. Inspect and settle the listed files before factory commit or release.",
     "unsafe": "The attempt left paths the factory cannot safely settle. Inspect the listing and preserve needed "

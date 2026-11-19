@@ -65,7 +65,7 @@ def _step_lines(command: str, result: StepResult, db: Path | None) -> list[str]:
             lines = [f"{result.status}: attempt {result.attempt_id} for {result.task_id} (backlog {result.backlog}){entry}"]
             lines += [f"Result: {result.result}"] if result.result else []
             if result.number is not None:
-                stand = f"attempt {result.number - 1}'s choices stand; deadline from --minutes"
+                stand = f"attempt {result.number - 1}'s choices stand; deadline from the minutes given"
                 lines += [f"attempt {result.number} of at most {ATTEMPTS}; {stand}"]
             lines += ["existing attempt; its admitted choices stand"] if result.existing else [HELD]
             return [*lines, STEP_ONLY, "The attempt's status and retained evidence show its progress."]

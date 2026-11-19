@@ -78,8 +78,8 @@ def _foreign_unpublished(repo: Repo, local: str, seen: Sequence[str]) -> bool:
 
 
 HELD_SLOT = (
-    "task/{task} is checked out in a slot ({slots}; the round log reports it `unusable`): run `git switch --detach` there "
-    "(commit or stash what it holds first, nothing is deleted for you), then `tl slot adopt` if it is not adopted."
+    "task/{task} is checked out in a slot ({slots}; the round log reports it `unusable`): detach it from the branch "
+    "there (commit or stash what it holds first, nothing is deleted for you), then adopt the slot again if it is not adopted."
 )
 HELD_MAIN = "task/{task} is checked out in your main checkout ({path}): switch it off the branch yourself, then start again."
 HELD_OTHER = "task/{task} is checked out in {path}, which is not a slot: switch it off the branch yourself, then start again."
@@ -147,9 +147,8 @@ DIVERGED: Final = (
 
 
 UNPUBLISHED: Final = (
-    "The local task/{task} has commits that are not on origin (`git log --oneline main..task/{task}` or `git log "
-    "--oneline origin/task/{task}..task/{task}` lists them) and a publish would push them: rename the branch (`git branch -m "
-    "task/{task} old/task/{task}`), or push it by hand, then start again."
+    "The local task/{task} has commits that are not on origin (compare it with main and with origin/task/{task} to list "
+    "them) and a publish would push them: rename the branch to old/task/{task}, or push it by hand, then start again."
 )
 
 

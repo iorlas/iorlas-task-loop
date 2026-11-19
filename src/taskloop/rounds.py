@@ -60,7 +60,7 @@ def inputs(request: NextRequest) -> Failed | None:
     if not IDENT.fullmatch(request.backlog) or "/" in request.backlog:
         return Failed("refused", "backlog", "The backlog must be one word of letters, digits and ._:@+-")
     if not request.label.strip():
-        return Failed("refused", "label", "An approval label is required (`--label auto`); a round never takes every ready task")
+        return Failed("refused", "label", "An approval label is required (name the label); a round never takes every ready task")
     return minutes_refused(request.minutes) or max_running_refused(request.max_running)
 
 

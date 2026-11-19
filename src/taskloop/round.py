@@ -154,7 +154,8 @@ def _request(request: NextRequest, task_id: str) -> StartRequest:
 
 
 def max_running_refused(count: int) -> Failed | None:
-    return None if count >= 1 else Failed("refused", "max_running", "`--max-running` is at least 1 (tasks in flight before nothing starts)")
+    return None if count >= 1 else Failed(
+        "refused", "max_running", "The running limit must be at least 1 (tasks in flight before nothing starts)")
 
 
 def run_round(ports: RoundPorts, request: NextRequest) -> Round | Failed:
@@ -173,7 +174,7 @@ def _run_round(ports: RoundPorts, request: NextRequest) -> Round | Failed:
     """One round: settle, advance, admit (while fewer than `max_running` tasks are in flight), publish, clear. A
     whole-round refusal (empty label, unreadable store) is `Failed`."""
     label = request.label.strip()
-    refused = (Failed("refused", "label", "An approval label is required (`--label auto`); a round never takes every ready task")
+    refused = (Failed("refused", "label", "An approval label is required (name the label); a round never takes every ready task")
                if not label else minutes_refused(request.minutes) or max_running_refused(request.max_running))
     if refused is not None:
         return refused

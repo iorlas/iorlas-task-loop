@@ -127,10 +127,10 @@ def checks_stopped(seen: SetupSeen, results: tuple[ResultRow, ...]) -> NotReleas
     return None
 
 
-LANDED = "The task's land delivered S to origin's main but has not closed the task: rerun `tl step land` to finish the close."
+LANDED = "The task's land delivered S to origin's main but has not closed the task: land the task again to finish the close."
 CLOSED = "The task's land delivered S to origin's main and closed the task: nothing is left to abandon or finish."
-LANDING = ("A land candidate of these checks holds its slot or may already be on origin's main: run `tl step land` to land "
-           "it, or `tl step land --withdraw`, then abandon.")
+LANDING = ("A land candidate of these checks holds its slot or may already be on origin's main: land the task "
+           "again to land it, or withdraw its candidate, then abandon.")
 
 
 def _refused_by_land(recorded: Recorded, where: str) -> NotReleased | None:
@@ -223,7 +223,7 @@ class CandidateTarget:
         if held.slot_path is None:
             return NotReleased("unavailable", "changed", f"The land candidate no longer holds its reservation. {NOTHING}")
         if not abandon and found.validation is None:
-            unfinished = "The land's validation has not concluded: rerun `tl step land`, or abandon."
+            unfinished = "The land's validation has not concluded: land the task again, or abandon."
             return NotReleased("refused", "not_terminal", f"{unfinished} {NOTHING}")
         return _landing_of(found, abandon)
 

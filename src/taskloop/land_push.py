@@ -132,7 +132,7 @@ def _pushed(origin: Origin, s: str) -> Literal["pushed", "rejected"] | Failed:
     try:
         result = origin.repo.worktree(origin.checkout).push("main", remote=REMOTE, head=Sha(s))
     except GitUnavailable as error:
-        return Failed("unavailable", "git", f"Git could not push ({type(error).__name__}): check `git push` works from this shell.")
+        return Failed("unavailable", "git", f"Git could not push ({type(error).__name__}): check that pushing works from this shell.")
     if isinstance(result, Pushed):
         return "pushed"
     return "rejected" if isinstance(result, RefRejected) else _refusal(result, s)

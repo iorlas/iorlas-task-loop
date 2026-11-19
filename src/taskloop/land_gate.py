@@ -27,7 +27,6 @@ DOCS: Final = frozenset({".md", ".rst", ".txt"})
 TOOL_SUFFIXES: Final = frozenset({".toml", ".ini", ".cfg"})  # a tool's configuration at any depth (`src/ruff.toml`, `tests/pytest.ini`)
 SKIPS: Final = frozenset({"skip", "skipif", "xfail", "importorskip"})  # `pytest.mark.skip`, `skip()` after `from pytest import skip`
 FILES: Final = 50  # changed files listed, then `... and <n> more`
-ACCEPT: Final = "--accept-gate-changes"
 
 
 @dataclass(frozen=True)

@@ -23,7 +23,7 @@ from git_porcelain import Conflicted, GitUnavailable, MissingRevision, Repo, Sha
 
 from taskloop.check_store import ChecksRow, Required, ResultRow
 from taskloop.command_conclusion import CommandConclusion, encode
-from taskloop.land_gate import ACCEPT, FILES, Changed, Gate, gate_of
+from taskloop.land_gate import FILES, Changed, Gate, gate_of
 from taskloop.land_push import Origin
 from taskloop.operations import Failed
 from taskloop.printable import one_line, title_line
@@ -216,6 +216,6 @@ def gate_lines(gate: Gate) -> list[str]:
                                               f"{', '.join(gate.required[1]) or '(none)'}"]),
         *(f"Configuration changed: {one_line(path, 200)}" for path in gate.configs),
         *(f"Test weakened: {one_line(each.path, 200)}: {each.why}" for each in gate.weakened),
-        *([f"These change what decides a pass: rerun `tl step land` with {ACCEPT} to land them (a test module split, or its "
+        *(["These change what decides a pass: land the task again, accepting gate changes, to land them (a test module split, or its "
            "assertions merged, shows as weakened and is accepted the same way)."] if gate.decisive else []),
     ]

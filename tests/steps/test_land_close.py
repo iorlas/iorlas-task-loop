@@ -121,7 +121,7 @@ def test_a_claim_taken_during_the_push_leaves_the_task_open_until_closed_by_hand
     b.repo.after_ls = [None, lambda: setattr(b, "assignee", "someone")]  # after the delivery's read, before the push
     found = b.land()
     assert word(found) == ("refused", "claim_lost") and isinstance(found, Failed)
-    assert "assigned to someone: close it by hand with `bd close tl-1 --force`" in found.detail
+    assert "assigned to someone: close it in the tracker by hand, forced" in found.detail
     s = b.rows()[0].commit
     assert b.origin_main() == s and b.rows()[0].close is None and b.status == "in_progress"
     assert word(b.land()) == ("refused", "claim_lost")  # the rerun goes straight to the close again
@@ -250,9 +250,9 @@ def test_the_port_s_bd_calls_are_capped_at_bd_timeout(tmp_path: Path) -> None:
 
 
 @pytest.mark.parametrize(("holder", "advice"), [
-    ("", "it is unassigned (its claim lapsed): close it by hand with `bd close tl-1`;"),
-    ("someone", "it is assigned to someone: close it by hand with `bd close tl-1 --force`"),
-    (None, "another actor took it meanwhile: inspect it (`bd show tl-1`)"),
+    ("", "it is unassigned (its claim lapsed): close it in the tracker by hand;"),
+    ("someone", "it is assigned to someone: close it in the tracker by hand, forced"),
+    (None, "another actor took it meanwhile: look at it in the tracker"),
 ], ids=["unassigned", "another_actor", "fence"])
 def test_a_lost_claim_names_the_close_by_hand_that_works(b: LandBench, holder: str | None, advice: str) -> None:
     b.closing = [CloseAnswer("claim_lost", holder)]
@@ -264,7 +264,7 @@ def test_a_blocked_close_names_bd_s_words_and_is_no_plain_rerun(b: LandBench) ->
     b.closing = [CloseAnswer("blocked", detail=f"{BLOCKERS}\x1b[2J")]
     found = b.land()
     assert word(found) == ("refused", "blocked") and isinstance(found, Failed) and found.detail.isprintable()
-    assert "is blocked by [tl-2]" in found.detail and "`bd close tl-1 --force`" in found.detail
+    assert "is blocked by [tl-2]" in found.detail and "close it in the tracker by hand, forced" in found.detail
 
 
 @pytest.mark.parametrize("closed_by_hand", [True, False], ids=["closed_task", "no_change"])

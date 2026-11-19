@@ -48,7 +48,7 @@ from taskloop.validate import Ended, Target, Verdict, concluded, reconcile, vali
 
 NO_SLOT = "No slot is free: rerun when one is, or stop rounds."
 UNAVAILABLE: Final = "unavailable"
-RACED = "Another land of the task, or a change of its attempts, came first: `tl step show TASK`."
+RACED = "Another land of the task, or a change of its attempts, came first: look at the task's status."
 type Squash = tuple[int, str, str, bool, Required]  # number, O, S, S's tree is X's, the required names at O
 
 
@@ -89,7 +89,7 @@ def checked(ports: LandPorts, row: LandRow) -> LandRow | Failed:
         return found
     return Failed("refused", "checks_failed", f"The checks of S ({found.commit}) failed ({found.reason}), though they passed on "
                   "the task's own commit: the change does not hold on the current main. The `Land check:` logs say which. Nothing was "
-                  "pushed; a flaky check may be retried (`tl step land`), otherwise the task starts again.")
+                  "pushed; a flaky check may be retried (land the task again), otherwise the task starts again.")
 
 
 def released(ports: LandPorts, row: LandRow | None) -> tuple[LandRow | None, str | None] | tuple[Failed, None]:
@@ -158,7 +158,7 @@ def _held(ports: LandPorts, checks: ChecksRow) -> Failed | None:
     if held is None or not held.holds_slot or held.pending:
         return None
     return Failed("refused", "landing", f"The land candidate {held.number} still holds its slot {held.slot} (its release was "
-                  "held): rerun `tl step land`, which retries the release first, or `tl step release TASK`. Nothing was recorded.")
+                  "held): land the task again, which retries the release first, or release the task. Nothing was recorded.")
 
 
 def _unheld(_slot_path: str, _candidate_id: str) -> AbstractContextManager[None]:
@@ -210,7 +210,7 @@ def _custody(ports: LandPorts, row: LandRow, slot_path: str, me: EntryIdentity) 
         verdict = concluded(ended)
         if verdict is None:
             where = f"The artifacts directory {ports.work.files.root} cannot be written. " if ended.reason == "log" else ""
-            return Failed("unavailable", ended.reason, f"{where}The validation could not go on: rerun `tl step land`.")
+            return Failed("unavailable", ended.reason, f"{where}The validation could not go on: land the task again.")
         ended = verdict
     try:
         lands.conclude(key, ended.outcome, ended.reason, ports.work.clock())

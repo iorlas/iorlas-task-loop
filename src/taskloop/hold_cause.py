@@ -55,11 +55,11 @@ RULES = {  # the verdict rule words (`attempt_types.Rule`): what broke, and the 
     "nothing_written": ("the agent reported work but wrote no file, so there is nothing to commit", None),
 }
 RUN = {  # the run's classified end words the shelf names: what happened, and the fix
-    "vendor_blip": ("The agent CLI failed with an error the factory cannot tell from a blip; often `--model` or `--effort` is "
+    "vendor_blip": ("The agent CLI failed with an error the factory cannot tell from a blip; often the model or effort setting is "
                     f"not offered to the account. The vendor's message is in {EVIDENCE}.",
-                    "correct `--model` or `--effort` if the message says so"),
-    "bad_request": (f"The vendor rejected the request, often because of `--model` or `--effort`; its message is in {EVIDENCE}.",
-                    "correct `--model` or `--effort`"),
+                    "correct the model or effort if the message says so"),
+    "bad_request": (f"The vendor rejected the request, often because of the model or effort setting; its message is in {EVIDENCE}.",
+                    "correct the model or effort"),
     "hung": ("The agent printed nothing for too long and was stopped.", ""),
     "crash": ("The agent process crashed.", ""),
     "killed": ("The agent process was killed by a signal. The factory has no recorded sender or stop cause.", ""),
@@ -74,7 +74,7 @@ RUN = {  # the run's classified end words the shelf names: what happened, and th
     "setup": ("The slot's setup failed before the agent started.", "fix the setup or environment named in the setup log"),
 }
 STUCK = {
-    "expired_admitted": ("The attempt's deadline passed before its entry started.", "raise `--minutes` for the next run"),
+    "expired_admitted": ("The attempt's deadline passed before its entry started.", "raise the minutes for the next run"),
     "entry_lost": ("The attempt's entry process ended without recording a result.", ""),
     "uncollected": ("The attempt's result could not be read back in full.", ""),
     "conflict": ("The attempt's stored session facts conflict.", ""),
@@ -155,7 +155,7 @@ def cause(reason: str, deadline: float | None = None, stop: AgentStop | None = N
     """The cause line and fix of a hold's `reason`, None for a reason without one of its own (the owner's answer then)."""
     word = reason.removeprefix("failed:")
     if word == "run:timeout":
-        found = Cause(f"The agent did not finish before its deadline{_at(deadline)}.", "raise `--minutes` for the next run")
+        found = Cause(f"The agent did not finish before its deadline{_at(deadline)}.", "raise the minutes for the next run")
     else:
         found = OWNER.get(word) or next((build(word.removeprefix(prefix)) for prefix, build in BY_PREFIX if word.startswith(prefix)), None)
     attribution = stop_text(stop, rc) if word.startswith("run:") or word == "stuck:entry_lost" else None

@@ -282,7 +282,7 @@ MAX_MINUTES = 7 * 24 * 60  # a week: an attempt's deadline (and a renewal after 
 def minutes_refused(minutes: int) -> Failed | None:
     """`--minutes` of `tl step start`, `next` and `rounds`: from 1 to MAX_MINUTES, checked before any
     store, tracker or launch call."""
-    return None if 1 <= minutes <= MAX_MINUTES else Failed("refused", "choices", f"--minutes must be from 1 to {MAX_MINUTES}")
+    return None if 1 <= minutes <= MAX_MINUTES else Failed("refused", "choices", f"Minutes must be from 1 to {MAX_MINUTES}")
 
 
 @dataclass(frozen=True)
@@ -331,7 +331,7 @@ def _start(ports: StartPorts, request: StartRequest, advancing: str | None, reru
         if advancing is not None and not wanted:
             found = _not_advanced(found)
         if advancing is None and request.new.given and isinstance(found, (tuple, _Relaunch, _Advance, CheckRepeatTarget)):
-            found = Failed("refused", "choices", "--from and --workflow apply to a task's first attempt; this task is under way")
+            found = Failed("refused", "choices", "The starting step and workflow apply to a task's first attempt; this task is under way")
         if isinstance(found, (Started, Failed)):
             return found
         if isinstance(found, CheckRepeatTarget):

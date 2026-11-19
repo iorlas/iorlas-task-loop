@@ -39,8 +39,8 @@ def landed_lines(found: Landed) -> list[str]:
     lines_ += [] if found.gate is None else ["Gate changes accepted:", *gate_lines(found.gate)[:-1]]
     lines_ += [] if found.release is None else [f"Release: {one_line(found.release, 200)}"]
     if row.close is None:
-        return [*lines_, "Closed: not yet: rerun `tl step land` to close the task (the code is on main)."]
-    return [*lines_, f"Closed: {row.close}", NOT_SYNCED, "Next: `git pull --ff-only` in your checkout."]
+        return [*lines_, "Closed: not yet: land the task again to close it (the code is on main)."]
+    return [*lines_, f"Closed: {row.close}", NOT_SYNCED, "Next: bring your checkout up to date with origin's main."]
 
 
 def land_lines(command: str, found: Landed | Withdrawn | LandSummary | Failed) -> list[str]:
@@ -55,12 +55,12 @@ def land_lines(command: str, found: Landed | Withdrawn | LandSummary | Failed) -
 def withdrawn_lines(found: Withdrawn) -> list[str]:
     row = found.row
     return [f"withdrawn: {row.task_id} (backlog {row.backlog}); candidate {row.number} ({row.key.attempt_id}) superseded, S "
-            f"{row.commit} was not on origin's main", "`tl step release --abandon` may now abandon the task; `tl step land` makes "
+            f"{row.commit} was not on origin's main", "the task may now be abandoned; landing it again makes "
             "a new candidate."]
 
 
 def summary_lines(found: LandSummary) -> list[str]:
-    return [*lines(found), "Nothing was recorded, reserved, pushed or closed: `tl step land TASK` lands it."]
+    return [*lines(found), "Nothing was recorded, reserved, pushed or closed: landing the task lands it."]
 
 
 def failed_lines(command: str, found: Failed) -> list[str]:
