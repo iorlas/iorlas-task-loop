@@ -360,7 +360,8 @@ def test_implement_commits_all_slot_changes_with_the_answer_message_and_attempt_
 
 
 @pytest.mark.parametrize(("path", "predicate"), [
-    (".Beads/data", "excluded"), ("src/.github/data", "changed Git file"),
+    (".Beads/data", "excluded"), (".task-loop/workflows/default.toml", "excluded"), (".task-loop.json", "excluded"),
+    ("src/.github/data", "changed Git file"),
     ("docs/PLAN.MD", "cannot change plan.md"), ("line\nbreak.txt", "newline"), ("x" * 256, "255 bytes"),
 ])
 def test_unlisted_forbidden_paths_refuse_before_staging_and_match_preview(
