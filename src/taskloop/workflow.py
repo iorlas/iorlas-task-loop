@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Final, Self
 
-from pydantic import BaseModel, ConfigDict, ValidationError, model_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
 
 from taskloop.frame_markers import RESERVED
 from taskloop.harness_choice import HarnessKind
@@ -92,6 +92,14 @@ class Steps(Input):
 
     plan: StepTable
     implement: StepTable
+    feedback: tuple[Section, ...] = Field(min_length=1)  # the opening of a failed-check input: verbatim text sections only
+
+    @field_validator("feedback")
+    @classmethod
+    def text_only(cls, value: tuple[Section, ...]) -> tuple[Section, ...]:
+        if any(each.text is None for each in value):
+            raise ValueError("a feedback section is verbatim text")
+        return value
 
 
 class Workflow(Input):

@@ -1,7 +1,7 @@
 """The step kinds: plan then implement, reached through `kind`; their input, repeat framing and attribute files."""
 
 import pytest
-from doubles import WORKFLOW
+from doubles import FEEDBACK_OPENING, WORKFLOW
 
 from taskloop.attempt_types import AttemptKey, StepRules, Uncommitted
 from taskloop.check_repeat.feedback import Availability, FailedCheck, OutputTail
@@ -145,7 +145,7 @@ def test_implement_allows_latest_shelf_releases_and_stops_for_missing_capabiliti
     elif route == "failed_check":
         failed = FailedCheck(source=AttemptKey("check", "dispatch", 1), block=1, commit="a" * 40, name="test",
                              argv=("just", "test"), rc=1, output=OutputTail(availability=Availability.EMPTY))
-        text = failed_check_feedback(failed, text, "nonce")
+        text = failed_check_feedback(failed, text, "nonce", FEEDBACK_OPENING)
     for phrase in (
         "You may add or upgrade only shelf packages, and only to their most recent released version",
         "Do not add or upgrade any other dependency",
@@ -221,7 +221,7 @@ def test_failed_check_feedback_keeps_the_fixed_implement_guidance() -> None:
     text = task_text(TASK, "implement", CONTEXT, WORKFLOW)
     failed = FailedCheck(source=AttemptKey("check", "dispatch", 1), block=1, commit="a" * 40, name="test",
                          argv=("just", "test"), rc=1, output=OutputTail(availability=Availability.EMPTY))
-    feedback = failed_check_feedback(failed, text, "nonce")
+    feedback = failed_check_feedback(failed, text, "nonce", FEEDBACK_OPENING)
     assert feedback.endswith(text) and "Only with `implemented` should `message` contain a commit message" in feedback
     assert "`paths`" not in feedback and "paths list" not in feedback
     assert "the factory saves unfinished slot work" in feedback and SAVED_WORK in feedback

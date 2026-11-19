@@ -31,6 +31,7 @@ from taskloop.slots import Probe, SlotGit
 from taskloop.steps import failed_check_feedback
 from taskloop.task import TaskInspection, TaskReference, TaskScope
 from taskloop.tracker import ACTOR
+from taskloop.workflow_render import feedback_opening
 
 
 @dataclass(frozen=True)
@@ -67,7 +68,8 @@ class CheckRepeat:
             context = read_context(GitProfileFiles(request.checkout, self.checkouts), evidence.commit)
             original = refresh(original, context)
             key = AttemptKey(self.ids.hex(), self.ids.token(16), self.store.generation(state.checks.repo_id, free))
-            ref = self.files.put_input(key, failed_check_feedback(evidence, original, self.ids.token(16)))
+            opening = feedback_opening(self.store.workflow(previous).workflow.step)
+            ref = self.files.put_input(key, failed_check_feedback(evidence, original, self.ids.token(16), opening))
             admitted = self.store.admit(previous, evidence, key, ref, free, deadline_after(request.minutes, self.clock),
                                        self.engine, self.clock())
             if isinstance(admitted, AdmitRefused):

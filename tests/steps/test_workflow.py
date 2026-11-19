@@ -24,10 +24,13 @@ use = "input_context"
 compaction_token_limit = 1000
 [[step.implement.prompt]]
 use = "input_context"
+[[step.feedback]]
+text = "The check failed."
 """
 CONTEXT_ONLY = b'[[step.%b.prompt]]\nuse = "input_context"\n'
 PLAN = CONTEXT_ONLY % b"plan"
-IMPLEMENT = CONTEXT_ONLY % b"implement"
+FEEDBACK = b'[[step.feedback]]\ntext = "The check failed."\n'
+IMPLEMENT = CONTEXT_ONLY % b"implement" + FEEDBACK
 
 
 def refused(data: bytes) -> WorkflowRefused:
@@ -75,6 +78,8 @@ def test_a_text_section_may_not_hold_a_factory_block_name(name: str) -> None:
     b'[[step.plan.prompt]]\nuse = "task"\n' + IMPLEMENT,  # input_context never
     PLAN + IMPLEMENT + b'[[step.plan.prompt]]\ntext = "a"\nuse = "task"\n',  # both text and use
     PLAN + IMPLEMENT + b'[[step.plan.prompt]]\n',  # neither
+    PLAN + CONTEXT_ONLY % b"implement",  # no feedback section
+    PLAN + IMPLEMENT + b'[[step.feedback]]\nuse = "task"\n',  # a feedback section is verbatim text
     PLAN + IMPLEMENT + b'[[step.plan.prompt]]\ntext = "   "\n',  # empty text
     PLAN + IMPLEMENT + b"[step.plan.agent]\nharness = 'nope'\n",
     PLAN + IMPLEMENT + b"[step.plan.agent]\nmodel = 3\n",

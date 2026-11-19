@@ -3,7 +3,7 @@
 
 from taskloop.input_context import InputContext
 from taskloop.task import TaskInspection
-from taskloop.workflow import Renderer, StepTable
+from taskloop.workflow import Renderer, Steps, StepTable
 
 
 def render(table: StepTable, task: TaskInspection, context: InputContext, contract: str) -> str:
@@ -18,3 +18,8 @@ def render(table: StepTable, task: TaskInspection, context: InputContext, contra
             case None:
                 parts.append(section.text or "")
     return "\n\n".join([*parts, contract]) + "\n"
+
+
+def feedback_opening(steps: Steps) -> str:
+    """The failed-check input's workflow sections, verbatim and joined by blank lines; code appends the evidence."""
+    return "\n\n".join(each.text or "" for each in steps.feedback)

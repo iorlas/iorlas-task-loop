@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from git_porcelain import Repo
 
 from taskloop.admit import AdmitRefused, Admitted, Free, branched, free_slots
-from taskloop.admit_store import copied_pin, insert_attempt, issued, reserve, unheld
+from taskloop.admit_store import copied_pin, insert_attempt, issued, reserve, stored_pin, unheld
 from taskloop.agents.settings import encode_policy
 from taskloop.attempt_reads import AttemptRow, StoreConnection, StoreRefused, StoreUnavailable, as_text
 from taskloop.attempt_result import collect, succeeded
@@ -21,6 +21,7 @@ from taskloop.land_store import LandStore
 from taskloop.repo import RepoId
 from taskloop.slots import Probe, SlotGit
 from taskloop.step import Step, decode_step
+from taskloop.workflow_read import Pin, WorkflowRefusal
 
 
 @dataclass(frozen=True)
@@ -31,6 +32,14 @@ class CheckRepeatState:
 
 
 class CheckRepeatStore(StoreConnection):
+    def workflow(self, previous: AttemptKey) -> Pin:
+        """The workflow the repeated attempt was admitted with, from its stored bytes."""
+        with self._connection() as con:
+            try:
+                return stored_pin(con, previous.attempt_id)
+            except WorkflowRefusal:
+                raise StoreRefused("workflow") from None
+
     def state(self, previous: AttemptKey, source: AttemptKey) -> CheckRepeatState | None:
         """Current, done, still claimed, no hold or active/delivered land; the latest released failure below the cap."""
         attempts = AttemptStore(self.connect, self.begin)
