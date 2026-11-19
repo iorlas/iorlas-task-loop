@@ -93,7 +93,7 @@ def test_config_db_is_used_and_explicit_db_wins(tmp_path: Path, capsys: pytest.C
     initialized(explicit)
     config = tmp_path / "config.toml"
     config.write_text(f'db = "{configured}"\nartifacts = "{tmp_path / "artifacts"}"\n')
-    assert main(["--config", str(config), "drain", "--db", str(explicit), "--artifacts", str(tmp_path / "other")]) == 0
+    assert main(["--config", str(config), "drain", "--db", str(explicit)]) == 0
     capsys.readouterr()
     with sqlite3.connect(configured) as con:
         assert DrainStore(lambda: con, ids=NativeIds()).boundary().state is State.OPEN
@@ -166,4 +166,5 @@ def test_help_names_the_drain_surface(capsys: pytest.CaptureFixture[str]) -> Non
         main(["drain", "--help"])
     assert ended.value.code == 0
     help_text = capsys.readouterr().out
-    assert "--db" in help_text and "--artifacts" in help_text and "--json" in help_text
+    assert "--db" in help_text and "--json" in help_text and "--artifacts" not in help_text
+    assert "reopens it" in " ".join(help_text.split())

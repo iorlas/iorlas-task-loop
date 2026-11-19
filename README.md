@@ -42,7 +42,7 @@ Start with [First landed task](#first-landed-task-linux) for an ordered setup an
 - `tl step show TASK [--backlog KEY]` selects the explicit backlog, then the machine config's `backlog`, then the sole
   distinct backlog retained in `factory.db` (including ended attempts). With none or several, supply the flag or config
   default. `tl step list` lists all backlogs; its `hold cause` column shows the recorded or due reason after `next`.
-- `tl drain [--db PATH] [--artifacts PATH] [--json]` durably blocks new work across the resolved factory database and
+- `tl drain [--db PATH] [--json]` durably blocks new work across the resolved factory database and
   waits for existing entries, agents, setup, checks and synchronous operations to finish. Success verifies idle; it
   preserves claims, reservations, sessions and unlaunched attempts. Uncertainty exits 3 and Ctrl-C exits 130, leaving
   the fence in place. JSON writes progress and the final result as JSON Lines.

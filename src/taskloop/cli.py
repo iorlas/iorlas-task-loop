@@ -117,7 +117,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     tracker_located()  # before any bd call: the given tracker root decides the tracker, never an inherited BEADS_DIR
     parser = argparse.ArgumentParser(
         prog="tl",
-        description=f"Task-loop successor foundation. Step commands ({STEP_ONLY}).",
+        description=("Task loop runs agent work on tracker tasks in managed slots and lands the checked results. First run: "
+                     "`tl config show`, `tl slot adopt CHECKOUT`, `tl profile show`, then `tl step rounds`. "
+                     f"Command groups: config, slot, repo, profile, task, step, drain, version. {STEP_ONLY}"),
         epilog="Exit 0: success; 1: refusal or task/repo inspection error; 2: invalid syntax; "
                "3: no reliable result (profile unavailable or step unknown), safe to retry; "
                "130: abrupt rounds stop, interrupted land or interrupted drain.",
@@ -125,14 +127,19 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     parser.add_argument("--config", metavar="FILE", help="Machine config file (default ~/.config/task-loop/config.toml)")
     commands = parser.add_subparsers(dest="command")
-    repo = commands.add_parser("repo", help="Inspect a local repository", allow_abbrev=False)
+    repo = commands.add_parser("repo", help="Inspect a local repository", description="Inspect a local repository (read-only).",
+                               allow_abbrev=False)
     operations = repo.add_subparsers(dest="operation", required=True)
-    inspect = operations.add_parser("inspect", help="Inspect an explicit checkout root (readonly)", allow_abbrev=False)
+    inspect = operations.add_parser("inspect", help="Inspect an explicit checkout root (readonly)", allow_abbrev=False,
+                                    description="Print a checkout's repository identity: id, common directory, checkout path, origin. "
+                                    "Reads Git only; writes nothing.")
     inspect.add_argument("path", metavar="PATH", help="Explicit checkout root; subdirectories, files and bare repositories are unsupported")
     inspect.add_argument("--json", action="store_true", dest="json_output", help="Print JSON data; refusals are JSON on stderr")
     task = commands.add_parser("task", help="Read a task in an explicitly configured backlog", allow_abbrev=False)
     task_operations = task.add_subparsers(dest="operation", required=True)
-    show = task_operations.add_parser("show", help="Inspect a task without modifying the tracker", allow_abbrev=False)
+    show = task_operations.add_parser("show", help="Inspect a task without modifying the tracker", allow_abbrev=False,
+                                      description="Print a task as the tracker holds it: title, requirements, acceptance, "
+                                      "dependencies. Reads the tracker only; writes nothing.")
     show.add_argument("task_id", metavar="TASK_ID")
     show.add_argument("--backlog", required=True, help="Explicit logical backlog key; no identity is inferred")
     show.add_argument("--tracker-root", required=True, help="Explicit directory for the configured tracker")
@@ -140,7 +147,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     profile = commands.add_parser("profile", help="The repository profile .task-loop.json, read from Git", allow_abbrev=False)
     profile_show = profile.add_subparsers(dest="operation", required=True).add_parser(
         "show", help="Print the resolved profile: setup and checks at --at, required and target from --target (read-only)",
-        allow_abbrev=False)
+        allow_abbrev=False,
+        description="Print the repository profile `.task-loop.json` as the factory reads it from Git: setup and checks at --at, "
+        "required, target and land from --target. Reads Git only; writes nothing.")
     profile_show.add_argument("--checkout", default=".", metavar="PATH", help="The repository checkout (default: .)")
     profile_show.add_argument("--at", default="HEAD", metavar="REV", help="The commit under test (default: HEAD)")
     profile_show.add_argument("--target", default="main", metavar="REF", help="The target ref holding required and target "
@@ -148,8 +157,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     profile_show.add_argument("--json", action="store_true", dest="json_output", help="Print JSON data; refusals are JSON on stderr")
     cli_step.register(commands)
     cli_drain.register(commands)
-    commands.add_parser("version", help="Print the running package version", allow_abbrev=False).add_argument(
-        "--json", action="store_true", dest="json_output")
+    commands.add_parser("version", help="Print the running package version", allow_abbrev=False,
+                        description="Print the version of the installed package this command runs.").add_argument(
+        "--json", action="store_true", dest="json_output", help="Print JSON data")
     arguments = parser.parse_args(argv)
     if arguments.command is None:
         parser.print_help()
