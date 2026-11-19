@@ -111,7 +111,8 @@ def test_the_implement_contract_names_the_committed_plan_its_scope_and_the_answe
     text = task_text(TASK, "implement", CONTEXT, WORKFLOW)
     contract = text.rpartition(file_sections(Step.IMPLEMENT)[-1])[2]
     assert "`docs/design/tl-1/plan.md`, committed on this branch by the plan step." in contract
-    assert "at most 96 files of at most 1 MiB each" in contract and "anything under `.beads/`" in contract and GIT_WRITES in contract
+    assert "at most 96 files of at most 1 MiB each" in contract and GIT_WRITES in contract
+    assert "any path starting with `.beads/`, `.task-loop/`, `.task-loop.json`" in contract
     assert SAVED_WORK in contract and text.endswith(SAVED_WORK + "\n")
     assert (
         "In `explanation`, name each command you ran and how it ended, and every test file you added. If you could not finish, "

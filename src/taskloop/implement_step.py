@@ -32,7 +32,8 @@ DISPOSITIONS: Final = ("implemented", "unchanged", "incomplete", "needs_owner")
 # Each disposition's effect, stored with it: only `implemented` commits and only `unchanged` keeps B.
 EFFECT_OF: Final[dict[str, Effect]] = {"implemented": "commit", "unchanged": "keep", "incomplete": "none", "needs_owner": "none"}
 ARTIFACT_RULES: Final[tuple[Rule, ...]] = ()  # no artifact rule at X
-EXCLUDED: Final = (".beads/",)  # the tracker's files: never the agent's to commit
+# Never the agent's to commit: the tracker's files, and the workflow and profile that judge its own work (value 10).
+EXCLUDED: Final = (".beads/", ".task-loop/", ".task-loop.json")
 ANSWER_KEYS: Final = ("disposition", "message", "explanation")
 # Commit paths come from the slot; what the agent ran is reported in `explanation` only.
 ANSWER_SCHEMA: Final = {
@@ -123,7 +124,7 @@ def contract(task_id: str, rules: StepRules) -> str:
         "If the code already does what the plan "
         "asks, change nothing and answer `unchanged`. Otherwise change the files the plan needs and answer `implemented`. "
         f"You may add, change and delete plain files anywhere in the repository, at most {rules.max_paths} files of at most "
-        f"{rules.file_cap // MiB} MiB each, except: any path with a component starting with `.git`, anything under "
+        f"{rules.file_cap // MiB} MiB each, except: any path with a component starting with `.git`, any path starting with "
         f"`{'`, `'.join(rules.excluded)}`, executable files and symlinks. Do not edit `plan.md`, including status, progress "
         f"or \"As built\" sections. Other artifacts in the plan's own folder may change under the same rules; add no audit "
         f"artifact. {PLAN_HANDOFF} {step_text.GIT_WRITES} {DEPENDENCIES} With "
