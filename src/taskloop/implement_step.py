@@ -164,11 +164,11 @@ def feedback(found: Uncommitted, rules: StepRules, number: int, task: str, nonce
     return step_text.feedback(opening, found.listing, instructions, task, nonce)
 
 
-def failed_check_feedback(found: FailedCheck, task: str, nonce: str) -> str:
-    """A complete implement input; command output is evidence, never instructions or workflow state."""
+def failed_check_feedback(found: FailedCheck, task: str, nonce: str, opening: str) -> str:
+    """A complete implement input: the workflow's `opening` words, then the contract and the evidence the code appends;
+    command output is evidence, never instructions or workflow state."""
     return "\n".join([
-        "Failed check",
-        "The factory's check failed. Fix the reported failure and run the checks before answering.",
+        opening,
         PLAN_HANDOFF,
         COMMIT_SELECTION,
         f"Check: {found.name}",

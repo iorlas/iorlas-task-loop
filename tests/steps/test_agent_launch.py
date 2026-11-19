@@ -8,7 +8,7 @@ import pytest
 from any_agent import LaunchInputs, LaunchSpec, OpenCodeHarness, RunOutcome, Summary
 from any_agent.access import CodexSandbox
 from any_agent.testing import FakeRun
-from doubles import WORKFLOW, FixedIds
+from doubles import FEEDBACK_OPENING, WORKFLOW, FixedIds
 from test_attempt import ENTRY, KEY, PLAN, WORKER, AttemptSurroundings, app, database
 from test_attempt import surroundings as attempt_surroundings
 
@@ -122,7 +122,7 @@ def test_dispatched_step_inputs_carry_their_answer_contract(
     if failed_check:
         found = FailedCheck(source=AttemptKey("check", "dispatch", 1), block=1, commit="a" * 40, name="test",
                             argv=("just", "test"), rc=1, output=OutputTail(availability=Availability.EMPTY))
-        prompt = failed_check_feedback(found, initial, "nonce")
+        prompt = failed_check_feedback(found, initial, "nonce", FEEDBACK_OPENING)
     elif unrecorded is not None:
         prompt = operation.feedback(Uncommitted("uncommitted", ("?? widget.txt",)), rules, 1, initial, "nonce",
                                     unrecorded=unrecorded)

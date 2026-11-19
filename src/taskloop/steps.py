@@ -62,8 +62,8 @@ ORDER: Final[tuple[Built, ...]] = (*KINDS, CHECK)  # every built step, in the fi
 RULES: Final[tuple[Rule, ...]] = CHAIN_RULES + plan_step.ARTIFACT_RULES + implement_step.ARTIFACT_RULES
 
 
-def failed_check_feedback(found: FailedCheck, task: str, nonce: str) -> str:
-    return implement_step.failed_check_feedback(found, task, nonce)
+def failed_check_feedback(found: FailedCheck, task: str, nonce: str, opening: str) -> str:
+    return implement_step.failed_check_feedback(found, task, nonce, opening)
 
 
 def kind(step: str) -> StepKind:

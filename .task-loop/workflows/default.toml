@@ -172,3 +172,8 @@ This includes additions, deletions and repairs; do not rewrite repository files 
 The project interpreter is `.venv/bin/python`; use `uv run --frozen --no-sync python -I` for execution or inspection scripts, never for file edits. \
 Bare `python3` is the host's Python 3.12, not the project's Python 3.15. \
 Only if `apply_patch` is absent, report the tool gap in `explanation` only and retain heredoc edits with the bounded verification above."""
+
+[[step.feedback]]
+text = """\
+Failed check
+The factory's check failed. Fix the reported failure and run the checks before answering."""

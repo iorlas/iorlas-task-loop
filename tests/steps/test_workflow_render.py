@@ -6,7 +6,7 @@ from taskloop.step_text import GIT_WRITES
 from taskloop.steps import kind
 from taskloop.task import TaskInspection, TaskReference, TaskScope
 from taskloop.workflow import Workflow, load
-from taskloop.workflow_render import render
+from taskloop.workflow_render import feedback_opening, render
 
 WORKFLOW = load(b"""
 [[step.plan.prompt]]
@@ -21,6 +21,10 @@ text = "PLAN-LAST"
 use = "input_context"
 [[step.implement.prompt]]
 use = "task"
+[[step.feedback]]
+text = "FIRST WORDS"
+[[step.feedback]]
+text = "SECOND WORDS"
 """)
 TASK = TaskInspection(
     TaskReference(TaskScope("tasks"), "tl-1"), "Add a widget", "It must do X.", "- X works", (), "in_progress", "taskloop",
@@ -53,3 +57,8 @@ def test_the_workflow_cannot_remove_the_contract() -> None:
         text = found.input_text(WORKFLOW.table(step), TASK, found.rules("tl-1"), CONTEXT)
         assert GIT_WRITES in text  # appended by code, whatever the file says
         assert f"`{'planned' if step is Step.PLAN else 'implemented'}`" in text
+
+
+def test_the_feedback_opening_is_its_text_sections_in_file_order_joined_by_blank_lines() -> None:
+    assert isinstance(WORKFLOW, Workflow)
+    assert feedback_opening(WORKFLOW.step) == "FIRST WORDS\n\nSECOND WORDS"

@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 
 import pytest
-from doubles import WORKFLOW
+from doubles import FEEDBACK_OPENING, WORKFLOW
 from pydantic import ValidationError
 from test_steps import CONTEXT
 
@@ -22,7 +22,7 @@ TASK = TaskInspection(TaskReference(TaskScope("tasks"), "tl-1"), "Fix a widget",
 def prompt(files: EvidenceFiles, argv: tuple[str, ...] = ("pytest", "a file.py", "a'\"b", "é")) -> str:
     found = FailedCheck(source=KEY, block=1, commit="a" * 40, name="test", argv=argv, rc=1,
                         output=files.check_output(KEY, 1, "test"))
-    return failed_check_feedback(found, task_text(TASK, "implement", CONTEXT, WORKFLOW), "NONCE")
+    return failed_check_feedback(found, task_text(TASK, "implement", CONTEXT, WORKFLOW), "NONCE", FEEDBACK_OPENING)
 
 
 def test_failed_check_repeat_retains_the_original_implement_policy(tmp_path: Path) -> None:

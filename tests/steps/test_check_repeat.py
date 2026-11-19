@@ -1,5 +1,6 @@
 """Check-driven repeats through start and rounds, with real SQLite, admission, dispatch, factory commit and publication."""
 
+import hashlib
 import json
 from collections.abc import Generator
 from dataclasses import replace
@@ -8,7 +9,7 @@ from pathlib import Path
 import pytest
 from any_agent import Harness, LaunchSpec, RunHooks, RunOutcome
 from check_repeat_bench import ASSERTION, Repairing
-from doubles import MAIN_PROFILE, FixedIds, PinnedViews, put_workflow
+from doubles import MAIN_PROFILE, WORKFLOW_BYTES, FixedIds, PinnedViews, put_workflow
 from git_porcelain import Recorded
 from git_porcelain.testing import FakeRemote, FakeWorktree
 from hold_fixtures import event
@@ -89,6 +90,17 @@ def test_repair_sends_fresh_discussion_once_alongside_check_feedback(rig: Repair
     assert text.splitlines().count(DISCUSSION_BEGIN) == text.splitlines().count(BEGIN) == 1
     assert text.count("Decision after failed checks") == 1 and "Failed check\n" in text
     assert "No tracker discussion." not in text
+
+
+def test_the_repair_opens_with_the_feedback_words_of_the_workflow_the_attempt_was_admitted_with(rig: Repairing) -> None:
+    failed(rig)
+    stored = WORKFLOW_BYTES.replace(b"The factory's check failed.", b"PINNED REPAIR WORDS.")
+    digest = hashlib.sha256(stored).hexdigest()
+    rig.con.execute("INSERT INTO workflow_file VALUES (?,?)", (digest, stored))
+    rig.con.execute("UPDATE attempt SET workflow_digest=?", (digest,))
+    specs = repair_agent(rig)
+    assert isinstance(start(rig.starting(), rig.request()), Started)
+    assert specs[0].stdin.startswith("Failed check\nPINNED REPAIR WORDS.") and "Check: test" in specs[0].stdin
 
 
 def repair_agent(rig: Repairing, *, change: bool = False) -> list[LaunchSpec]:
