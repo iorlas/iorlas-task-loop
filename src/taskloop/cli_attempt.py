@@ -4,7 +4,7 @@ import argparse
 from collections.abc import Callable
 
 from taskloop import attempt_status, cli_composition, setup_timing
-from taskloop.cli_common import ARTIFACTS, DB, Parsers, add, backlog, common, group, views_for
+from taskloop.cli_common import ARTIFACTS, DB, Parsers, add, backlog, backlog_of, common, group, views_for
 from taskloop.machine_config import Loaded
 from taskloop.operations import Failed
 from taskloop.result_data import Result
@@ -46,7 +46,7 @@ def _setup_times(arguments: argparse.Namespace, loaded: Loaded) -> Result:
     with cli_composition.open_reads(loaded.settings.db.value, loaded.settings.artifacts.value, views_for(loaded)) as reads:
         if isinstance(reads, Failed):
             return reads
-        return setup_timing.report(SetupStore(reads.store.connect, reads.store.begin), arguments.backlog)
+        return setup_timing.report(SetupStore(reads.store.connect, reads.store.begin), backlog_of(arguments, loaded))
 
 
 OPERATIONS: dict[tuple[str, str], Callable[[argparse.Namespace, Loaded], Result]] = {

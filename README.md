@@ -25,7 +25,7 @@ Start with [First landed task](#first-landed-task-linux) for an ordered setup an
   objects, unreadable documentation and extraction or serialization failures explain themselves on stderr and exit
   nonzero with empty stdout. No tracker configuration is needed.
 - `tl repo show PATH [--json]` reports the local repository identity, common directory, selected checkout and origin.
-- `tl task show TASK_ID --backlog BACKLOG --tracker-root PATH [--json]` reads the explicitly configured Beads tracker,
+- `tl task show TASK_ID [--backlog BACKLOG] [--tracker-root PATH] [--json]` reads the explicitly configured Beads tracker,
   preserving requirements, acceptance and dependency relationships. The backlog key is supplied configuration; it is
   not inferred from Git. Missing, malformed and unavailable reads are distinct nonzero results; JSON errors go to stderr.
 - `tl config show [--slot-count N]` prints each effective machine setting and its source.
@@ -118,8 +118,9 @@ retry is safe), and 130 for an abrupt rounds stop or interrupted land or drain. 
 when a backend read is unavailable. Continuous rounds retry unknown results themselves.
 
 The machine config is `~/.config/task-loop/config.toml` or `--config FILE`; state defaults to
-`~/.local/state/task-loop`. Its optional `backlog = "KEY"` sets the default for `attempt show`; `config show` reports
-`unset` (JSON null) when absent. Other commands are rejected until their behavior is implemented. `tl <command> --help`
+`~/.local/state/task-loop`. Its optional `backlog = "KEY"` sets the default for every command with `--backlog`; `config show` reports
+`unset` (JSON null) when absent. A `[backlogs.KEY]` table may bind `tracker_root`, `checkout` (absolute paths) and `label`
+for that backlog; `--tracker-root`, `--checkout` and `--label` then override instead of being required. Other commands are rejected until their behavior is implemented. `tl <command> --help`
 is the reference; the design index links each slice's plan and implementation evidence. `tl plan` is no longer a command.
 Agent choices live in the machine config, independently for each built agent step. With no agent flags,
 `step start`, `rounds once` and `rounds start` use Codex with `gpt-6.1-sol`, high effort for plan and medium for implement. These effort defaults

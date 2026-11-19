@@ -11,11 +11,13 @@ from pathlib import Path
 
 from git_porcelain import GitReadFailure, GitTimeout, GitUnavailable, NotARepo
 
-from taskloop import cli_drain, cli_step
+from taskloop import cli_composition, cli_drain, cli_step
 from taskloop.attempt_types import DEFAULT_GIT_READ_SECONDS
+from taskloop.cli_common import ConfigMissing, backlog, backlog_of, tracker_root, tracker_root_of
 from taskloop.exit_codes import ExitCode, profile_exit_code
 from taskloop.git_views import GitProfileFiles, GitViews
 from taskloop.inspection_guide import PROFILE, REPO, TASK
+from taskloop.machine_config import ConfigRefused, Flags
 from taskloop.printable import block, one_line
 from taskloop.profile import Refused, Resolved, Unavailable, resolve
 from taskloop.repo import UnsupportedCheckout
@@ -45,8 +47,13 @@ def inspection_error_kind(error: GitUnavailable | UnsupportedCheckout | OSError)
 
 def show_task(arguments: argparse.Namespace) -> int:
     """Render the same scoped task inspection in human or structured form."""
+    loaded = cli_composition.load_config(arguments.config, Flags())
+    if isinstance(loaded, ConfigRefused):
+        return cli_step.refused(arguments, loaded)
     try:
-        result = inspect_tracker_task(arguments.task_id, arguments.backlog, arguments.tracker_root)
+        result = inspect_tracker_task(arguments.task_id, backlog_of(arguments, loaded), tracker_root_of(arguments, loaded))
+    except ConfigMissing as missing:
+        return cli_step.refused(arguments, missing.refused)
     except TaskInspectionError as error:
         if arguments.json_output:
             data: dict[str, object] = {"kind": error.kind, "message": str(error)}
@@ -143,8 +150,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                                       description="Print a task as the tracker holds it: title, requirements, acceptance, "
                                       "dependencies. Reads the tracker only; writes nothing (`tl attempt show` is the factory's read).")
     show.add_argument("task_id", metavar="TASK_ID")
-    show.add_argument("--backlog", required=True, help="Explicit logical backlog key; no identity is inferred")
-    show.add_argument("--tracker-root", required=True, help="Explicit directory for the configured tracker")
+    backlog(show)
+    tracker_root(show)
     show.add_argument("--json", action="store_true", dest="json_output", help="Print JSON data; refusals are JSON on stderr")
     profile = commands.add_parser("profile", help="The repository profile .task-loop.json, read from Git", allow_abbrev=False)
     profile_show = profile.add_subparsers(dest="operation", required=True).add_parser(

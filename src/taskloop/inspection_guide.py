@@ -9,6 +9,10 @@ CONFIG = {
     "relative_path": "A machine path is relative. Set the named path to an absolute path.",
     "count": "The slot count is invalid. Choose a positive supported slot count.",
     "interval": "The rounds interval is invalid. Choose an interval within the supported range.",
+    "backlog_missing": "No backlog is named for this task and the machine config sets no default backlog. "
+    "Name the backlog, or set the default backlog in the machine config.",
+    "binding_missing": "The backlog's tracker root, checkout or approval label is not given and the machine config has none for "
+    "it. Give the missing value, or add it to that backlog's entry in the machine config.",
 }
 PROFILE = {
     "missing": "The selected Git revision has no .task-loop.json. Commit a profile at the indicated revision before using it.",

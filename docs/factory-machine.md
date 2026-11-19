@@ -50,10 +50,20 @@ Start (one process, started by hand; nothing restarts it):
 
 1. `cd ~/.local/share/task-loop/checkouts/iorlas-task-loop`, with `MISE_TRUSTED_CONFIG_PATHS` set.
 2. `git fetch origin && git merge --ff-only origin/main`, then `just install`.
-3. Run `rounds start` with `--backlog tl --tracker-root ~/Workspaces/iorlas-task-loop --checkout <the checkout>
-   --model gpt-6.1-sol --effort high --label real-run-1 --max-running N --minutes 240`, in the
-   background, with output to `~/.local/state/task-loop/rounds.out`. After a `factory.db` discard, first run the same line once
-   as `rounds once` with `--retake-lapsed`; never leave that flag on the permanent line.
+3. Bind the backlog once in `~/.config/task-loop/config.toml`:
+
+   ```toml
+   backlog = "tl"
+
+   [backlogs.tl]
+   tracker_root = "~/Workspaces/iorlas-task-loop"
+   checkout = "~/.local/share/task-loop/checkouts/iorlas-task-loop"
+   label = "real-run-1"
+   ```
+
+   Then run `rounds start --model gpt-6.1-sol --effort high --max-running N --minutes 240`, in the
+   background (`--backlog`, `--tracker-root`, `--checkout` and `--label` override the config's values), with output to
+   `~/.local/state/task-loop/rounds.out`. After a `factory.db` discard, first run the same line once as `rounds once` with `--retake-lapsed`; never leave that flag on the permanent line.
 
 Stop: send SIGTERM to the confirmed python process id held in `factory.db.rounds-tl.lock`, then wait until no attempt
 entry process runs. Never stop a process by name.
