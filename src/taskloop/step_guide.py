@@ -19,7 +19,8 @@ HELD = ("The tracker claim stays held; the slot stays reserved until the step en
         "Between steps the lease is not renewed, so tracker maintenance can reclaim it after the lease and grace period "
         "expire. Rounds never renew or retake a lapsed claim: they skip an open task while factory.db retains its attempt.")
 ABANDON = "Abandoning frees the slot once its processes are proven stopped and its work is settled, and returns the claim."
-ROUNDS = ("Scheduling starts with a round immediately, then repeats at the configured interval and when a slot becomes free. "
+ROUNDS = ("Starting rounds also reopens a drain that completed (`tl drain`) when the running code matches. "
+          "Scheduling starts with a round immediately, then repeats at the configured interval and when a slot becomes free. "
           "Each round holds stopped tasks it took, advances completed claimed tasks, then starts approved ready tasks within "
           "the running-task limit (default 3). Under the automatic land profile read from origin's main, a round first lands "
           "one passed task it took; a conflict or failed re-check holds that task. The tracker is read only when a slot is free. "

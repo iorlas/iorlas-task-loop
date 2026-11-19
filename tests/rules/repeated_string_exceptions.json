@@ -160,10 +160,6 @@
     "unavailable": 4
   },
   "src/taskloop/cli_step.py": {
-    "--artifacts": 6,
-    "--backlog": 8,
-    "--checkout": 3,
-    "--db": 12,
     "--minutes": 3,
     "--root": 3,
     "TASK": 6,

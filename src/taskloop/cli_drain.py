@@ -15,9 +15,12 @@ from taskloop.machine_config import ConfigRefused, Flags
 
 
 def register(commands: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
-    parser = commands.add_parser("drain", help="Block new work, let existing executions finish, and verify idle", allow_abbrev=False)
+    parser = commands.add_parser(
+        "drain", help="Block new work, let existing executions finish, and verify idle", allow_abbrev=False,
+        description="Block new work, let existing executions finish, and verify the factory idle, before an upgrade or restart. "
+        "Writes a durable drain request in factory.db; schedules, signals and releases nothing. Retrying observes the same "
+        "request. A completed drain stays in force until `tl step rounds` is started again under matching code, which reopens it.")
     parser.add_argument("--db", metavar="PATH", help="Existing compatible factory.db (overrides machine config)")
-    parser.add_argument("--artifacts", metavar="PATH", help="Artifacts root (overrides machine config; drain reads no logs)")
     parser.add_argument("--json", dest="json_output", action="store_true", help="Print structured progress and final result")
 
 
@@ -25,7 +28,7 @@ def run(arguments: argparse.Namespace) -> int:
     def report(result: Result) -> None:
         print(json.dumps(data(result)) if arguments.json_output else human(result), flush=True)
 
-    loaded = load_config(arguments.config, Flags(db=arguments.db, artifacts=arguments.artifacts))
+    loaded = load_config(arguments.config, Flags(db=arguments.db))
     if isinstance(loaded, ConfigRefused):
         result = Result(conclusion=Conclusion.REFUSED, detail=f"Machine configuration refused: {loaded.reason}: {loaded.detail}")
     else:
