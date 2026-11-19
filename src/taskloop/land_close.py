@@ -57,29 +57,29 @@ def _by_hand(task: str, holder: str | None) -> str:
     """How the person closes the task by hand, from the assignee the close read (bd refuses a close by an actor other
     than the assignee unless forced: measured)."""
     if holder is None:
-        return f"another actor took it meanwhile: inspect it (`bd show {task}`), then close it by hand (`bd close {task} --force` " \
-            "while another actor holds it)"
+        return "another actor took it meanwhile: look at it in the tracker, then close it there by hand (the tracker refuses a close " \
+            "by an actor that does not hold the claim unless forced)"
     if not holder:
-        return f"it is unassigned (its claim lapsed): close it by hand with `bd close {task}`"
-    return f"it is assigned to {one_line(holder, 80)}: close it by hand with `bd close {task} --force` (bd refuses a close by an " \
-        "actor other than the assignee)"
+        return "it is unassigned (its claim lapsed): close it in the tracker by hand"
+    return f"it is assigned to {one_line(holder, 80)}: close it in the tracker by hand, forced (the tracker refuses a close by an " \
+        "actor other than the assignee unless forced)"
 
 
 def _refused(row: LandRow, answer: CloseAnswer) -> Failed:
     """A close that did not happen: the task stays open (and claimed, unless another actor holds it). Each refusal names
     what the person does; only `unavailable` is a plain rerun."""
-    task, on_main, rerun = row.task_id, _on_main(row), "a rerun of `tl step land` then records it `already_closed`"
+    task, on_main, rerun = row.task_id, _on_main(row), "landing the task again then records it `already_closed`"
     if answer.word == "claim_lost":
         return Failed("refused", "claim_lost", f"{on_main}, but {_by_hand(task, answer.assignee)}; {rerun}.")
     if answer.word == "blocked":
-        return Failed("refused", "blocked", f"{on_main}, but bd refuses to close {task} ({one_line(answer.detail, 300)}): close or "
-                      f"unblock what it names, or close it by hand with `bd close {task} --force`; a rerun of `tl step land` then "
+        return Failed("refused", "blocked", f"{on_main}, but the tracker refuses to close {task} ({one_line(answer.detail, 300)}): "
+                      f"close or unblock what it names, or close it in the tracker by hand, forced; landing the task again then "
                       "closes or records it.")
     if answer.word == "missing":
-        return Failed("refused", "task", f"{on_main}, but the tracker has no task {task}: inspect the tracker; a rerun of `tl step "
-                      "land` closes it once it is found.")
+        return Failed("refused", "task", f"{on_main}, but the tracker has no task {task}: look in the tracker; landing "
+                      "the task again closes it once it is found.")
     return Failed("unavailable", "tracker", f"{on_main}; the tracker could not close {task} ({answer.detail or 'no answer'}): "
-                  "rerun `tl step land` to close it (nothing else is repeated).")
+                  "land the task again to close it (nothing else is repeated).")
 
 
 def closed(lands: LandStore, close: Callable[[str, str, str], CloseAnswer], now: Callable[[], float], row: LandRow) -> LandRow | Failed:

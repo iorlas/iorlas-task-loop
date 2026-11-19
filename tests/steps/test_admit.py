@@ -746,7 +746,7 @@ def test_a_task_deleted_from_the_tracker_is_refused_by_name_with_the_command_tha
 
     found = read_task(deleted, "t-1", "tasks", "/tracker")
     assert isinstance(found, AdmitRefused) and found.reason == "task_missing"
-    assert "t-1 is gone from the tracker" in found.detail and "tl step release --abandon t-1" in found.detail
+    assert "t-1 is gone from the tracker" in found.detail and "abandoning the task clears its attempt" in found.detail
 
 
 def test_a_checkout_that_is_not_a_repository_is_a_refusal_naming_the_path_and_other_git_faults_stay_unavailable(tmp_path: Path) -> None:

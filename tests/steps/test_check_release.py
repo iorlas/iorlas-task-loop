@@ -285,7 +285,7 @@ def test_an_abandon_of_released_checks_with_a_pushable_or_delivered_land_candida
                       (bench.d, bench.x))
     bench.con.execute(f"UPDATE land_candidate SET validated_at=3{delivery}")
     found = bench.release(abandon=True)
-    assert isinstance(found, NotReleased) and found.word == word and "tl step land" in found.detail
+    assert isinstance(found, NotReleased) and found.word == word and "land the task again" in found.detail
     assert bench.stored() == ([], (30.0, bench.d, 0))
 
 
@@ -380,7 +380,7 @@ def test_an_abandon_of_a_pushable_or_delivered_candidate_holding_its_slot_is_ref
     if delivered:
         candidates.record_delivery(CANDIDATE, lands.x, 25)
     found = lands.candidate(abandon=True)
-    assert isinstance(found, NotReleased) and found.word == word and "tl step land" in found.detail
+    assert isinstance(found, NotReleased) and found.word == word and "land the task again" in found.detail
     assert candidate_columns(lands) == CANDIDATE_HELD and lands.holds == 0 and lands.head() == lands.x
     assert lands.candidate() == Released("s1", lands.d, True, "kept", False)
 
@@ -445,6 +445,6 @@ def test_the_abandon_of_a_released_pushable_or_delivered_candidate_is_refused_an
     assert release_word(lands.candidate(abandon=True)) == "refused:landing"
     candidates.record_delivery(CANDIDATE, lands.x, 25)
     found = lands.candidate(abandon=True)
-    assert isinstance(found, NotReleased) and found.word == "refused:landed" and "tl step land" in found.detail
+    assert isinstance(found, NotReleased) and found.word == "refused:landed" and "land the task again" in found.detail
     assert lands.candidate() == AlreadyReleased("s1", "kept", False)
     assert candidate_columns(lands) == ([], (30.0, lands.d, None))

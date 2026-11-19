@@ -284,7 +284,7 @@ def show_attempt(
             available = reads.store.backlogs()
             if len(available) != 1:
                 detail = f"Available backlogs: {', '.join(available)}." if available else "No backlogs are available."
-                return Failed("refused", "backlog", f"{detail} Select --backlog KEY or set the machine-config backlog.")
+                return Failed("refused", "backlog", f"{detail} Select a backlog key or set the machine-config backlog.")
             backlog = available[0]
         rows = reads.store.attempts(backlog, task_id)
         first = _first(rows) if rows else None

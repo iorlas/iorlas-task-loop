@@ -297,7 +297,7 @@ def test_the_abandon_of_a_pushable_or_delivered_candidate_is_refused_and_nothing
     assert isinstance(found, Failed) and found.word == f"refused:{word}" and implement.calls == [] and b.rows() == before
     assert LAND_GUIDE[word] in human("tl step release", found, None)
     closed = "nothing is left to abandon or finish" in found.detail  # worded from the stored close
-    assert closed is (word == "landed") and (word != "landed" or "rerun `tl step land`" not in found.detail)
+    assert closed is (word == "landed") and (word != "landed" or "land the task again" not in found.detail)
     assert b.con.execute("SELECT abandoned FROM checks_attempt").fetchone() == (0,)
 
 

@@ -244,7 +244,8 @@ def _rejected(repo: Repo, branch: str, x: str) -> NotPublished:
     try:
         relation = _relation(repo, x, t)
     except (MissingRevision, GitReadFailure):  # T is not in this repository
-        return _refused("remote_moved", f"`{REMOTE}`'s {branch} is at {t}, unknown here: `git fetch {REMOTE} {branch}`, then rerun.")
+        return _refused("remote_moved", f"`{REMOTE}`'s {branch} is at {t}, unknown here: "
+                                        "fetch that branch from the remote, then try again.")
     except GitUnavailable as error:
         return _unavailable("git", f"Git could not compare {x} with {t} ({type(error).__name__}): rerun.")
     words: dict[str, tuple[Literal["refused", "unavailable"], str, str]] = {

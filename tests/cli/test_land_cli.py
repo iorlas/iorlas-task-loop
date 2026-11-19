@@ -139,7 +139,7 @@ def test_a_land_prints_what_it_did_the_close_and_the_tracker_line(
     assert out.splitlines() == [
         f"pushed: tl-1 (backlog tasks) on origin main; {HOW['pushed']}",
         f"Candidate 1 ({row.key.attempt_id}): S {row.commit} onto origin main at {b.base}; same tree as X, no checks",
-        f"Pushed: origin main at {row.commit}", "Closed: closed", NOT_SYNCED, "Next: `git pull --ff-only` in your checkout.",
+        f"Pushed: origin main at {row.commit}", "Closed: closed", NOT_SYNCED, "Next: bring your checkout up to date with origin's main.",
     ]
     code, out, _ = run([*LAND, "--json"], found, capsys, monkeypatch)
     data = json.loads(out)
@@ -164,7 +164,7 @@ def test_a_land_whose_close_is_still_to_come_says_so_and_no_tracker_line(
     found = b.land()
     assert isinstance(found, Landed)
     code, out, _ = run(LAND, replace(found, row=replace(found.row, close=None, closed_at=None), how="delivered"), capsys, monkeypatch)
-    assert code == 0 and "Closed: not yet: rerun `tl step land` to close the task (the code is on main)." in out and NOT_SYNCED not in out
+    assert code == 0 and "Closed: not yet: land the task again to close it (the code is on main)." in out and NOT_SYNCED not in out
 
 
 def test_a_withdrawal_and_a_summary_exit_0_with_their_lines_and_keys(
@@ -174,7 +174,7 @@ def test_a_withdrawal_and_a_summary_exit_0_with_their_lines_and_keys(
     assert isinstance(summary, LandSummary)
     code, out, _ = run([*LAND, "--summary"], summary, capsys, monkeypatch)
     assert code == 0 and out.startswith("Checks: checks passed at X") and "same tree as X, no checks" in out
-    assert out.rstrip().endswith("Nothing was recorded, reserved, pushed or closed: `tl step land TASK` lands it.")
+    assert out.rstrip().endswith("Nothing was recorded, reserved, pushed or closed: landing the task lands it.")
     data = json.loads(run([*LAND, "--summary", "--json"], summary, capsys, monkeypatch)[1])
     assert (data["status"], data["state"], data["again"], data["added"]) == ("summary", "same_tree", False, [])
     b.repo.answer = Transient("connection reset")

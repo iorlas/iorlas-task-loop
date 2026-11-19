@@ -340,7 +340,7 @@ def read_task(tasks: Tasks, task_id: str, backlog: str, tracker_root: str) -> Ta
         if error.kind == "tracker_unavailable":
             return AdmitUnavailable("tracker", detail=why(error))
         if error.kind == "not_found":
-            gone = f"{task_id} is gone from the tracker; `tl step release --abandon {task_id}` clears its attempt"
+            gone = f"{task_id} is gone from the tracker; abandoning the task clears its attempt"
             return AdmitRefused("task_missing", detail=gone)
         return AdmitRefused("task", detail=f"{error.kind}: {why(error)}")
 
@@ -354,7 +354,7 @@ def checkout_repo(checkouts: Checkouts, path: Path) -> tuple[Repo, RepoId] | Adm
     except (UnsupportedCheckout, RuntimeError, OSError) as error:
         return AdmitRefused("checkout", detail=why(error))
     except NotARepo:  # a missing path or a directory outside any repository: the person's input, not a transient Git fault
-        return AdmitRefused("checkout", detail=f"{path} is not a Git repository checkout (--checkout names its root).")
+        return AdmitRefused("checkout", detail=f"{path} is not a Git repository checkout (the checkout must name its root).")
     except GitUnavailable as error:
         return AdmitUnavailable("git", detail=why(error))
 

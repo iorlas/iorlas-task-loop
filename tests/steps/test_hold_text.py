@@ -153,9 +153,9 @@ def test_an_entry_signal_log_does_not_prove_its_sender_or_an_agent_stop() -> Non
 
 
 @pytest.mark.parametrize(("reason", "says", "answer"), [
-    ("failed:run:timeout", "before its deadline (1970-01-01 00:15:00 UTC).", "To fix it, raise `--minutes` for the next run"),
-    ("failed:run:vendor_blip", "`--model` or `--effort` is not offered", "To fix it, correct `--model` or `--effort`"),
-    ("failed:run:bad_request", "rejected the request", "To fix it, correct `--model` or `--effort`"),
+    ("failed:run:timeout", "before its deadline (1970-01-01 00:15:00 UTC).", "To fix it, raise the minutes for the next run"),
+    ("failed:run:vendor_blip", "the model or effort setting is not offered", "To fix it, correct the model or effort"),
+    ("failed:run:bad_request", "rejected the request", "To fix it, correct the model or effort"),
     ("failed:run:secrets", "exposed a secret", "To fix it, find what printed it"),
     ("failed:run:hung", "printed nothing for too long", "To try again, restore"),
     ("failed:run:crash", "process crashed", "To try again, restore"),
@@ -186,7 +186,7 @@ def test_each_cause_class_names_its_cause_and_the_one_right_next_step(reason: st
 
 def test_the_next_step_reads_right_when_no_round_took_the_task() -> None:
     found = comment(replace(FACTS, reason="failed:run:timeout", labels="not_ours"), Returned("not_held"))
-    assert "To fix it, raise `--minutes` for the next run, then resolve its ownership with the current actor" in found
+    assert "To fix it, raise the minutes for the next run, then resolve its ownership with the current actor" in found
 
 
 def test_a_kept_slot_says_to_act_after_it_is_cleared_and_a_closed_cause_needs_no_edit_advice() -> None:

@@ -1,13 +1,15 @@
 """Public refusal coverage follows the producers, and asserts actual human presentation."""
 
 
+from itertools import pairwise
 from pathlib import Path
 
 import pytest
 import refusal_inventory
 from refusal_inventory import DYNAMIC_REASONS, REVIEWED_DYNAMIC, census, typed_reasons
 
-from taskloop.hold_guide import pending_guide
+from taskloop import check_release, hold_cause, land, land_check, prepare
+from taskloop.hold_guide import HOLD, ON_HOLD, pending_guide
 from taskloop.inspection_guide import CONFIG, PROFILE
 from taskloop.land_guide import CANDIDATE_RELEASE, LAND_GUIDE
 from taskloop.machine_config import ConfigRefused, Refusal
@@ -32,6 +34,32 @@ def test_every_public_reason_renders_explanation_and_action(context: str, reason
     expected = refusal_guide(reason, land=context == "land")
     assert expected in lines and len(expected.split()) >= 6
     assert as_data(result)["error"] == {"kind": "refused", "reason": reason, "message": detail or None}
+
+
+GIT_VERBS = {"add", "branch", "checkout", "commit", "fetch", "log", "pull", "push", "show", "status", "switch", "worktree"}
+TEXT_TABLES = (GUIDE, CHECKS_GUIDE, LAND_GUIDE, CANDIDATE_RELEASE, CONFIG, PROFILE, hold_cause.RULES, hold_cause.RUN,
+               hold_cause.STUCK, hold_cause.LAND)
+TEXT_CONSTANTS = (HOLD, ON_HOLD, land.SHOW, land.NEEDS_MINUTES.detail, check_release.LANDED, check_release.CLOSED,
+                  check_release.LANDING, land_check.RACED, prepare.HELD_SLOT, prepare.HELD_MAIN, prepare.HELD_OTHER,
+                  prepare.UNPUBLISHED)
+
+
+def _strings(value: object) -> list[str]:
+    if isinstance(value, str):
+        return [value]
+    if isinstance(value, dict):
+        return [text for each in value.values() for text in _strings(each)]
+    return [text for each in value for text in _strings(each)] if isinstance(value, tuple) else []
+
+
+def test_no_guide_or_message_asks_the_owner_to_run_a_command() -> None:
+    texts = [text for table in TEXT_TABLES for text in _strings(table)] + list(TEXT_CONSTANTS)
+    assert len(texts) > 100
+    for text in texts:
+        words = text.replace("`", " ").split()
+        pairs = list(pairwise(words))
+        assert "tl" not in words and "bd" not in words and not any(word.startswith("--") for word in words), text
+        assert not any(first == "git" and second in GIT_VERBS for first, second in pairs), text
 
 
 def test_a_removed_guide_and_a_new_producer_reason_fail_coverage(monkeypatch: pytest.MonkeyPatch) -> None:

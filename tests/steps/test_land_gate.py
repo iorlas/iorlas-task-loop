@@ -11,7 +11,7 @@ from git_porcelain.testing import FakeRemote, FakeRepo
 from land_bench import PROFILE, LandBench, bench
 
 from taskloop.land import Landed
-from taskloop.land_gate import ACCEPT, Gate, configuration, gate_of
+from taskloop.land_gate import Gate, configuration, gate_of
 from taskloop.land_push import Origin
 from taskloop.land_render import landed_lines
 from taskloop.land_summary import LandSummary, gate_lines, lines
@@ -69,7 +69,7 @@ def test_a_replaced_tool_configuration_is_flagged_with_the_diffstat_of_every_cha
     assert [(each.path, each.kind) for each in gate.changes] == [("ruff.toml", "M"), ("src/b.py", "A")]
     text = gate_lines(gate)
     assert text[0] == "Files changed: 2 (+2 -1)" and "  M ruff.toml +1 -1" in text and "Configuration changed: ruff.toml" in text
-    assert any(line.startswith(f"These change what decides a pass: rerun `tl step land` with {ACCEPT}") for line in text)
+    assert any(line.startswith("These change what decides a pass: land the task again, accepting gate changes") for line in text)
 
 
 @pytest.mark.parametrize(("change", "why"), [

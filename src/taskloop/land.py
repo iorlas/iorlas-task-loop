@@ -47,11 +47,13 @@ from taskloop.task import TaskInspection
 from taskloop.tracker import ACTOR
 
 BAR: Final = f"url.{PUSH_REFUSED}.pushinsteadof"  # the agent's push bar (`agent_credentials.push_bar`), as Git reads keys
-SHOW: Final = "`tl step show TASK` names the next step."
+SHOW: Final = "The task's status names the next step."
 
 
-NEEDS_MINUTES = Failed("refused", "minutes", "--minutes is required here: S must be validated (main moved, its required names changed, or "
-                       "a pending candidate resumes). Rerun with --minutes N; a candidate that origin's move superseded stays recorded so.")
+NEEDS_MINUTES = Failed("refused", "minutes", "A validation deadline in minutes is required here: S must be validated (main moved, "
+                       "its required names "
+                       "changed, or a pending candidate resumes). Land again with the minutes given; a candidate that origin's "
+                       "move superseded stays recorded so.")
 
 
 @dataclass(frozen=True)
@@ -110,7 +112,7 @@ def _not_checked(checks: ChecksRow | None, no_change: bool) -> Failed | None:
         return Failed("refused", "not_checked", f"The task's checks have not concluded and been released: {SHOW}")
     if checks.conclusion != "passed" and not no_change:
         return Failed("refused", "not_checked", f"The task's checks failed ({checks.reason}): they have to pass before it "
-                      "lands; run them again (`tl step start`) or give the task up.")
+                      "lands; run them again or give the task up.")
     return None
 
 
@@ -128,8 +130,8 @@ def _task(ports: LandPorts, request: LandRequest) -> _Task | Failed:
         return refused or Failed("refused", "not_checked")
     candidate = ports.lands.latest(checks.key.attempt_id)
     if candidate is not None and candidate.superseded == "abandoned":  # only `tl step release --abandon` marks it so
-        return Failed("refused", "abandoning", "The task's abandon stopped after its land candidate: rerun `tl step release "
-                      "--abandon` to finish it. Nothing was landed.")
+        return Failed("refused", "abandoning", "The task's abandon stopped after its land candidate: abandon the task again "
+                      "to finish it. Nothing was landed.")
     return _Task(key, checks, candidate)
 
 
@@ -225,8 +227,8 @@ def _made(ports: LandPorts, request: LandRequest, task: _Task, origin: Origin, n
     no_change = tree_s == tree_o
     if no_change != request.no_change:
         return Failed("refused", "no_change", f"origin's main at {o} already holds X's changes, so there is nothing to push: "
-                      "a person confirms that and records the task as landed (`tl step land --no-change`).") if no_change else Failed(
-            "refused", "changes", "There is something to land: drop --no-change.")
+                      "a person confirms that and records the task as landed with no change to push.") if no_change else Failed(
+            "refused", "changes", "There is something to land: land it as a change, not as a no-change landing.")
     refused = None if no_change else gated(ports.profiles, origin, request.accept, o, s)
     if refused is not None:
         return refused
@@ -252,15 +254,15 @@ def _no_change(ports: LandPorts, origin: Origin, current: LandRow | None, again:
     without a push (on origin: delivered; origin still at its O: `changes`, S is what to land; moved past it:
     superseded `moved`); then the no-change candidate (`changes` when S's tree is not O's)."""
     if current is not None and current.pending:
-        return Failed("refused", "landing", "A land candidate of the task is being validated: rerun `tl step land` without "
-                      "--no-change, or abandon. Nothing was recorded.")
+        return Failed("refused", "landing", "A land candidate of the task is being validated: land the task again as a change, "
+                      "or abandon it. Nothing was recorded.")
     if current is not None and current.pushable:
         seen = observed(ports.lands, ports.work.clock, origin, current)
         if isinstance(seen, (Delivered, Failed)):
             return Landed(seen.row, "already_pushed", release) if isinstance(seen, Delivered) else seen
         if seen == "at_origin":
             return Failed("refused", "changes", f"The validated candidate S ({current.commit}) onto origin's main is still "
-                          "to land: drop --no-change. Nothing was pushed.")
+                          "to land: land it as a change, not as a no-change landing. Nothing was pushed.")
         ports.lands.supersede(current.key, "moved", ports.work.clock())
     made = again()
     return made if isinstance(made, Failed) else Landed(made, "no_change", release)

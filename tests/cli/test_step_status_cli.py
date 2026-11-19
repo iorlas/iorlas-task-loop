@@ -205,7 +205,7 @@ def test_show_requires_a_selection_when_backlogs_are_empty_or_ambiguous(
     else:
         assert "tl step show: refused:backlog" in output.err
         detail = output.err
-    assert "--backlog KEY" in detail and "machine-config backlog" in detail
+    assert "Select a backlog key" in detail and "machine-config backlog" in detail
     assert ("alpha, zeta" if ambiguous else "No backlogs") in detail and not output.out
 
 
