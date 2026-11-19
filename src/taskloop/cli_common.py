@@ -14,7 +14,7 @@ def common(parser: argparse.ArgumentParser, *flags: str) -> None:
     helps = {
         DB: (PATH, "factory.db (overrides the machine config)"),
         ARTIFACTS: ("DIR", "Artifacts root (overrides the machine config)"),
-        "--root": ("DIR", "Slots root (overrides the machine config's slots_root)"),
+        "--slots-root": ("DIR", "Slots root (overrides the machine config's slots_root)"),
     }
     for flag in flags:
         parser.add_argument(flag, metavar=helps[flag][0], help=helps[flag][1])

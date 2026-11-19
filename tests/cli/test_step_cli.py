@@ -540,7 +540,7 @@ def test_adopt_takes_its_paths_and_count_from_flags_config_and_defaults(
     monkeypatch.setattr(cli_composition, "adopt", adopt)
     config = tmp_path / "scratch.toml"
     config.write_text("slot_count = 2\n")
-    assert main(["--config", str(config), "slot", "adopt", str(tmp_path / "repo"), "--root", str(tmp_path / "slots"), "--json"]) == 1
+    assert main(["--config", str(config), "slot", "adopt", str(tmp_path / "repo"), "--slots-root", str(tmp_path / "slots"), "--json"]) == 1
     assert calls == [(home / ".local/state/task-loop/factory.db", tmp_path / "repo", tmp_path / "slots", 2)]
     assert json.loads(capsys.readouterr().out) == {"slots": [
         {"name": "s1", "adopted": True, "reason": None, "path": str(tmp_path / "slots/id/s1")},
@@ -668,7 +668,7 @@ def test_rounds_flags_reach_the_opener_and_print_a_start_and_an_end(
     ] and output.err == ""
     config = tmp_path / "scratch.toml"
     config.write_text("round_seconds = 90\n")
-    assert main(["--config", str(config), *ROUNDS, "--every", "30", "--artifacts", str(art), "--json"]) == 0
+    assert main(["--config", str(config), *ROUNDS, "--round-seconds", "30", "--artifacts", str(art), "--json"]) == 0
     assert run.requests[-1] == cli_step.RoundsRequest("tasks", 30)
     assert [json.loads(line) for line in capsys.readouterr().out.splitlines()] == [
         {"status": "rounds", "backlog": "tasks", "every": 30, "log": str(art / "rounds.log"), "label": "auto", "max_running": 3},
@@ -716,10 +716,10 @@ def test_rounds_refuse_a_short_interval_before_opening_anything(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     run = stubbed(monkeypatch, Ended("tasks", "interrupted"))
-    assert main([*ROUNDS, "--every", "4", "--json"]) == 1
+    assert main([*ROUNDS, "--round-seconds", "4", "--json"]) == 1
     error = json.loads(capsys.readouterr().err)["error"]
     assert (error["kind"], error["reason"]) == ("refused", "interval") and run.opened == []
-    assert main([*ROUNDS, "--every", "4"]) == 1
+    assert main([*ROUNDS, "--round-seconds", "4"]) == 1
     assert CONFIG["interval"] in capsys.readouterr().err
 
 

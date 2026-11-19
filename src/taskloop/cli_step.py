@@ -50,7 +50,7 @@ def _register_rounds(commands: Parsers) -> None:
                       "returned, one comment: `bd list --label held`; adding the label back takes it again at plan) and remove "
                       "`held` once a held task is taken again"))
     rounds = add(scheduler, START, ROUNDS)
-    rounds.add_argument("--every", type=int, metavar="SECONDS", help="Seconds between regular rounds, at least 5 (overrides the "
+    rounds.add_argument("--round-seconds", type=int, metavar="SECONDS", help="Seconds between regular rounds, at least 5 (overrides the "
                         "machine config's round_seconds)")
     rounds.add_argument("--dash-host", type=ip_address, metavar="ADDRESS", default="127.0.0.1",
                         help="Dashboard bind address: IPv4 or IPv6 literal (default 127.0.0.1)")
@@ -65,14 +65,14 @@ def _register_rounds(commands: Parsers) -> None:
 def register(commands: Parsers) -> None:
     config = group(commands, "config", "Machine configuration")
     show = add(config, "show", "Print each effective setting, its source, and the config file")
-    common(show, DB, ARTIFACTS, "--root")
+    common(show, DB, ARTIFACTS, "--slots-root")
     _harness_flag(show)
-    show.add_argument("--count", type=int, help="Slot count (overrides the machine config's slot_count)")
+    show.add_argument("--slot-count", type=int, help="Slot count (overrides the machine config's slot_count)")
     slot = group(commands, "slot", "Managed slots (setup)")
     adopt = add(slot, "adopt", "Adopt worktrees made by hand with `git worktree add --detach <root>/<repo name>/sN`; creates factory.db")
     adopt.add_argument("checkout", metavar="CHECKOUT", help="The person's checkout of the repository")
-    adopt.add_argument("--count", type=int, help="Adopt s1..sN (overrides slot_count); adds slots only, retires none")
-    common(adopt, "--root", DB)
+    adopt.add_argument("--slot-count", type=int, help="Adopt s1..sN (overrides slot_count); adds slots only, retires none")
+    common(adopt, "--slots-root", DB)
     step = group(commands, STEP, f"Step attempts ({STEP_ONLY})")
     start = add(step, START, "Admit, relaunch or repeat the task's attempt (free slot, tracker claim), advance a done step, or "
                  "re-run failed checks on the same commit. The tracker claim stays held between steps; nothing renews it then")
@@ -270,8 +270,8 @@ OPERATIONS: dict[tuple[str, str], Callable[[argparse.Namespace, Loaded], Result]
 
 def run(arguments: argparse.Namespace) -> int:
     """Resolve the machine config (every command refuses a bad one), run the one operation, render it."""
-    flags = Flags(getattr(arguments, "db", None), getattr(arguments, "artifacts", None), getattr(arguments, "root", None),
-                  getattr(arguments, "count", None), getattr(arguments, "every", None))
+    flags = Flags(getattr(arguments, "db", None), getattr(arguments, "artifacts", None), getattr(arguments, "slots_root", None),
+                  getattr(arguments, "slot_count", None), getattr(arguments, "round_seconds", None))
     loaded = cli_composition.load_config(arguments.config, flags)
     if isinstance(loaded, ConfigRefused):
         result: Result = operations.refused_config(loaded)
