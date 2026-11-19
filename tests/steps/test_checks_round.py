@@ -411,7 +411,7 @@ def test_a_hold_kept_by_a_lingering_check_is_retried_each_round_logged_once_and_
 
 
 def _candidate(rig: Checking, *, slot: bool) -> AttemptKey:
-    """tl-1's land candidate 1 of its passed checks attempt, as `tl step land` inserts it: validated `same_tree` with no
+    """tl-1's land candidate 1 of its passed checks attempt, as `tl land run` inserts it: validated `same_tree` with no
     slot, or pending in s1 with its reservation (then concluded `passed` by the test)."""
     checks = rig.key("tl-1").attempt_id
     repo_id = rig.con.execute("SELECT repo_id FROM slot WHERE name='s1'").fetchone()[0]
@@ -437,7 +437,7 @@ def test_rounds_never_land_never_relaunch_and_never_release_a_land_s_slot(rig: C
     assert rig.next_words() == {"tl-1": ("check", "land")} and rig.round() == [LAND_LINE]
     key = _candidate(rig, slot=True)
     lands = land_store.LandStore(lambda: rig.con)
-    assert rig.next_words() == {"tl-1": ("check", "land")} and rig.round() == [LAND_LINE]  # pending: `tl step land` resumes it
+    assert rig.next_words() == {"tl-1": ("check", "land")} and rig.round() == [LAND_LINE]  # pending: `tl land run` resumes it
     lands.conclude(key, "passed", None, rig.now)
     reserved = rig.con.execute("SELECT slot,attempt_id FROM reservation").fetchall()
     assert rig.round(frozenset()) == [("tl-1", "check", "report", "release")] and rig.last.stopped == "no_free_slot"
@@ -489,7 +489,7 @@ def test_a_pending_hold_refuses_a_start_by_hand_and_never_abandons_a_passing_re_
 
 
 def test_a_task_waiting_for_its_land_keeps_the_last_free_slot_from_new_starts(rig: Checking) -> None:
-    """tl-8bh9.14.34: the one slot freed by tl-1's passed checks is left to `tl step land`, not refilled by tl-2's start."""
+    """tl-8bh9.14.34: the one slot freed by tl-1's passed checks is left to `tl land run`, not refilled by tl-2's start."""
     implemented(rig)
     rig.bodies = ["passed"]
     assert rig.round() == [("tl-1", "check", "advance", "started")]

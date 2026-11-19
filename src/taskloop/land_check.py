@@ -3,7 +3,7 @@ reservation, the foreground validation of a pending candidate in its slot, and t
 
 The insert is one write transaction: a slot's reservation (`admit.reserve` of the lowest observed-free slot still unheld,
 D its HEAD) and `land_store.insert` when S validates; no slot and `same_tree` (or `no_change`) otherwise. The validation,
-in the `tl step land` process, never through an entry: the slot's custody (`landing`, never waiting: `unavailable
+in the `tl land run` process, never through an entry: the slot's custody (`landing`, never waiting: `unavailable
 slot_busy`, also what a second concurrent land of the task meets), held to the release; under it the land process's
 identity written on the candidate (`LandStore.hold`, replacing a stored one only when it is gone); one claim renewal (lost
 concludes `failed claim_lost` after the reconcile), then the keep-alive around the shared validation (`validate.validate`

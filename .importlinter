@@ -651,8 +651,10 @@ source_modules =
     taskloop.claim
     taskloop.claim_lease
     taskloop.cli
+    taskloop.cli_common
     taskloop.cli_composition
     taskloop.cli_drain
+    taskloop.cli_land
     taskloop.cli_step
     taskloop.clock_jumps
     taskloop.command_conclusion

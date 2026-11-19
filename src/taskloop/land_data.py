@@ -1,5 +1,5 @@
 """The JSON shape of a land (tl-8bh9.14.8 section 14): a candidate (`tl step show`'s `land` key, null without one) and
-`tl step land`'s answers (`Landed`, `Withdrawn`, `LandSummary`). Additive to `result_data`'s shapes; no dispatch token,
+`tl land run`'s answers (`Landed`, `Withdrawn`, `LandSummary`). Additive to `result_data`'s shapes; no dispatch token,
 remote URL, Git output or log content. `synced` is always false: the land never shares the tracker (O4)."""
 
 from taskloop.command_conclusion import CommandConclusion, encode
@@ -48,7 +48,7 @@ def withdrawn_data(found: Withdrawn) -> dict[str, object]:
 
 
 def land_data(found: Landed | Withdrawn | LandSummary) -> dict[str, object]:
-    """`tl step land`'s answer: delivered (and closed), withdrawn, or the summary."""
+    """`tl land run`'s answer: delivered (and closed), withdrawn, or the summary."""
     if isinstance(found, Landed):
         return landed_data(found)
     return withdrawn_data(found) if isinstance(found, Withdrawn) else summary_data(found)

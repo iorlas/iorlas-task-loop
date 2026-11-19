@@ -1,5 +1,5 @@
 """The land's remote side (tl-8bh9.14.8 section 7): the fetch of origin's `main`, the one delivery rule, the push of S
-and `--withdraw`. Its Git writes are `fetch` (a remote-tracking ref, as the person's own `git fetch` writes it) and
+and `tl land withdraw`. Its Git writes are `fetch` (a remote-tracking ref, as the person's own `git fetch` writes it) and
 `push` (never forced); both run on the person's checkout through the `remotes` view (hooks off, bounded transport, the
 person's Git configuration and credentials).
 
@@ -16,7 +16,7 @@ other land, or its push won) is the race above, `remote_rejected` stays for a po
 expected old tip: Git's fast-forward rule accepts it only while origin's `main` is an ancestor of S. An S no longer in
 the repository (pruned) is superseded `gone` the same way.
 
-`--withdraw` reads origin by the same rule and never pushes: delivered is recorded, else the candidate is superseded
+`tl land withdraw` reads origin by the same rule and never pushes: delivered is recorded, else the candidate is superseded
 `withdrawn` (so the task's abandon is possible again). No Git output, remote URL or credential is kept or printed.
 """
 
@@ -228,7 +228,7 @@ def observed(lands: LandStore, clock: Callable[[], float], origin: Origin, row: 
 
 
 def withdraw(lands: LandStore, clock: Callable[[], float], origin: Origin, row: LandRow) -> Delivered | Withdrawn | Failed:
-    """`--withdraw`: delivered is recorded (nothing to withdraw), else the candidate is superseded `withdrawn`."""
+    """`tl land withdraw`: delivered is recorded (nothing to withdraw), else the candidate is superseded `withdrawn`."""
     found = observed(lands, clock, origin, row)
     if isinstance(found, (Delivered, Failed)):
         return found

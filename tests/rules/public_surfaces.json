@@ -739,8 +739,8 @@
     },
     "land.empty": {
       "argv": [
-        "step",
         "land",
+        "run",
         "tl-1",
         "--backlog",
         "tasks",
@@ -792,8 +792,8 @@
     },
     "land.full": {
       "argv": [
-        "step",
         "land",
+        "run",
         "tl-1",
         "--backlog",
         "tasks",
@@ -889,8 +889,8 @@
     },
     "land.summary": {
       "argv": [
-        "step",
         "land",
+        "run",
         "tl-1",
         "--backlog",
         "tasks",
@@ -984,8 +984,8 @@
     },
     "land.withdrawn": {
       "argv": [
-        "step",
         "land",
+        "run",
         "tl-1",
         "--backlog",
         "tasks",

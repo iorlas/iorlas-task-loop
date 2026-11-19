@@ -29,7 +29,7 @@ def assert_prose(text: str) -> None:
 
 @pytest.mark.parametrize("reason", LAND_GUIDE)
 def test_land_refusals_render_their_command_free_guide(reason: str) -> None:
-    lines = human("tl step land", Failed("refused", reason), None)
+    lines = human("tl land run", Failed("refused", reason), None)
     assert LAND_GUIDE[reason] in lines
     for text in lines[1:]:
         assert_prose(text)
@@ -61,7 +61,7 @@ def test_land_decisions_retain_delivery_and_retry_safety() -> None:
     assert_prose(restart("tl-1", "a" * 40))
     failed = Failed("unavailable", INTERRUPTED)
     assert exit_code(failed) == ExitCode.INTERRUPTED
-    assert "whole block" in human("tl step land", failed, None)[-2]
+    assert "whole block" in human("tl land run", failed, None)[-2]
 
 
 @pytest.mark.parametrize("reason", [event_reason(each) for each in events()])

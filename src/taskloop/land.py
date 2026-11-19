@@ -56,6 +56,9 @@ NEEDS_MINUTES = Failed("refused", "minutes", "A validation deadline in minutes i
                        "move superseded stays recorded so.")
 
 
+type Mode = Literal["land", "summary", "withdraw"]
+
+
 @dataclass(frozen=True)
 class LandRequest:
     """`minutes`: the validation's deadline from now, needed only when a block runs (`NEEDS_MINUTES`); `withdraw` gives up a validated,
@@ -65,7 +68,7 @@ class LandRequest:
     task_id: str
     checkout: Path
     minutes: int | None
-    mode: Literal["land", "summary", "withdraw"] = "land"
+    mode: Mode = "land"
     no_change: bool = False
     accept: bool = False  # `--accept-gate-changes`: S may change what decides a pass (`land_gate`)
 
@@ -75,7 +78,7 @@ type How = Literal["pushed", "already_pushed", "no_change", "delivered", "alread
 
 @dataclass(frozen=True)
 class Landed:
-    """The task's candidate delivered and, but from `--withdraw`, its task closed (`row.close`): `how` is `pushed` (this
+    """The task's candidate delivered and, but from `tl land withdraw`, its task closed (`row.close`): `how` is `pushed` (this
     call pushed S), `already_pushed` (origin was found to hold it), `no_change` (main already held X's changes),
     `delivered` (the delivery recorded before this call, the close made now) or `already_landed` (delivered and closed
     before this call: nothing called); `release` is the word of a slot release this call ran (None: none)."""
@@ -129,7 +132,7 @@ def _task(ports: LandPorts, request: LandRequest) -> _Task | Failed:
     if refused is not None or checks is None:
         return refused or Failed("refused", "not_checked")
     candidate = ports.lands.latest(checks.key.attempt_id)
-    if candidate is not None and candidate.superseded == "abandoned":  # only `tl step release --abandon` marks it so
+    if candidate is not None and candidate.superseded == "abandoned":  # only `tl step abandon` marks it so
         return Failed("refused", "abandoning", "The task's abandon stopped after its land candidate: abandon the task again "
                       "to finish it. Nothing was landed.")
     return _Task(key, checks, candidate)
@@ -167,7 +170,7 @@ def _origin(ports: LandPorts, request: LandRequest, task: _Task) -> Origin | Fai
 
 def _remote(origin: Origin, request: LandRequest, task: _Task) -> Failed | None:
     """Steps 6-7: `origin` exists (its URLs as the person configured them); origin has `main`; the branch rule, except
-    with `--no-change` (whatever the branch holds) and `--withdraw` (it pushes nothing: a moved branch must not block
+    with `--no-change` (whatever the branch holds) and `tl land withdraw` (it pushes nothing: a moved branch must not block
     giving the candidate up)."""
     try:
         origin.repo.remote_url(REMOTE)  # a presence check only: the URL is never kept, logged or printed
@@ -306,7 +309,7 @@ def _delivered(ports: LandPorts, request: LandRequest, task: _Task, origin: Orig
 
 
 def _withdrawn(ports: LandPorts, origin: Origin, candidate: LandRow | None, release: str | None) -> LandResult:
-    """`--withdraw`: the pushable candidate read against origin; delivered is `Landed`, else superseded `withdrawn`."""
+    """`tl land withdraw`: the pushable candidate read against origin; delivered is `Landed`, else superseded `withdrawn`."""
     if candidate is None or not candidate.pushable:
         return Failed("refused", "not_landing", "No validated, undelivered land candidate: nothing to withdraw.")
     found = withdraw(ports.lands, ports.work.clock, origin, candidate)
@@ -323,12 +326,12 @@ def _closing(ports: LandPorts, found: LandResult) -> LandResult:
 
 def _resumed(ports: LandPorts, request: LandRequest, task: _Task) -> LandResult:
     """Step 5 onwards: a held slot released first; closed answers, delivered goes to the close; then steps 6-8, the mode
-    and the close (`--withdraw` never writes the tracker)."""
+    and the close (`tl land withdraw` never writes the tracker)."""
     candidate, release = released(ports, task.candidate)
     if isinstance(candidate, Failed):
         return candidate
     task = _Task(task.implement, task.checks, candidate)
-    if candidate is not None and candidate.delivery is not None:  # `--withdraw` never writes the tracker
+    if candidate is not None and candidate.delivery is not None:  # `tl land withdraw` never writes the tracker
         found = Landed(candidate, "already_landed" if candidate.close is not None else "delivered", release)
         return found if candidate.close is not None or request.mode == "withdraw" else _closing(ports, found)
     origin = _origin(ports, request, task)
@@ -348,7 +351,7 @@ def _accepted(ports: LandPorts, origin: Origin, done: Landed) -> Landed:
 
 
 def _summary(ports: LandPorts, request: LandRequest, task: _Task) -> LandSummary | Failed:
-    """`--summary`: steps 6-7, the title, the fetch, the profile at O and S in Git objects only; facts, no record."""
+    """`tl land show`: steps 6-7, the title, the fetch, the profile at O and S in Git objects only; facts, no record."""
     origin = _origin(ports, request, task)
     if isinstance(origin, Failed):
         return origin

@@ -8,13 +8,13 @@ land's own modules are never imported: `entries-never-land`); `attempt_status` p
 | the latest candidate | `Next` |
 |---|---|
 | validated or superseded, still holding its slot (delivered or closed or not) | `release` |
-| superseded `abandoned` (the checks attempt not abandoned: an abandon stopped half way) | `release` (`--abandon` again) |
+| superseded `abandoned` (the checks attempt not abandoned: an abandon stopped half way) | `abandon` (`tl step abandon` again) |
 | pending, its land process unobservable | `unknown` |
 | none: the checks passed | `land` (failed checks: `done`, unchanged) |
 | pending (validating in its slot), pushable, failed, superseded, or delivered and not closed | `land` |
 | delivered and closed, its slot released | `landed` |
 
-A pending candidate holds its slot too, but `tl step land` (not a release) resumes it: `land`. A round lands it under `land: auto`
+A pending candidate holds its slot too, but `tl land run` (not a release) resumes it: `land`. A round lands it under `land: auto`
 (`round_land`); otherwise rounds only report `land`, `landed` and a land's `release`."""
 
 from collections.abc import Callable

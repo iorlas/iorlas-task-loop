@@ -24,7 +24,7 @@ from taskloop.tracker_client import CloseAnswer, Closed, tracker_claims
 
 
 class Died(BaseException):
-    """The `tl step land` process died (a crash, `kill -9`) right before the tracker's close."""
+    """The `tl land run` process died (a crash, `kill -9`) right before the tracker's close."""
 
 
 class LosingDelivery(LandStore):

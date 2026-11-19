@@ -85,7 +85,7 @@ def test_advance_refreshes_origin_and_records_its_tip_for_parking(factory: Facto
 def test_a_task_a_person_abandoned_is_restarted_by_a_round_while_it_carries_the_label(factory: Factory) -> None:
     factory.by_hand("tl-1")
     found = factory.store.attempt_of("tasks", "tl-1")
-    assert found is not None and factory.releaser().release(found[0], True)  # the person's `tl step release --abandon`
+    assert found is not None and factory.releaser().release(found[0], True)  # the person's `tl step abandon`
     assert factory.round() == [("tl-1", "plan", "start", "started")]  # the restart takes the one free slot first
     assert factory.current("tl-1") != found[0].attempt_id  # a fresh attempt: the one restart route, no `tl step start`
 

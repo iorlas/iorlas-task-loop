@@ -42,9 +42,9 @@ from taskloop.task_status import words as status_words
 
 
 def human(command: str, result: Result, db: Path | None) -> list[str]:
-    """`tl step land`'s answers and refusals are `land_render`'s; the rest (a land candidate's refused release too, with
+    """`tl land run`'s answers and refusals are `land_render`'s; the rest (a land candidate's refused release too, with
     its own guide) `_step_lines`'."""
-    if isinstance(result, Landed | Withdrawn | LandSummary) or (isinstance(result, Failed) and command == COMMAND):
+    if isinstance(result, Landed | Withdrawn | LandSummary) or (isinstance(result, Failed) and command.startswith(COMMAND)):
         return land_lines(command, result)
     return _step_lines(command, result, db)
 

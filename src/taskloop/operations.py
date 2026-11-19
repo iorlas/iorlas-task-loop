@@ -514,7 +514,7 @@ def release_task(
     (section 10) its latest one goes first (`checks`), and before it its latest land candidate while that holds its slot;
     settled, the first of them is all; an abandon then abandons the implement attempt, which returns the claim. A failure
     after the candidate's abandon (marked superseded `abandoned`) or the checks attempt's leaves `Next: release`
-    (`land_status.land_next`; `tl step land` refuses `abandoning`); rerunning `--abandon` finishes it. Once the implement
+    (`land_status.land_next`; `tl land run` refuses `abandoning`); rerunning `tl step abandon` finishes it. Once the implement
     attempt's claim is no longer `kept` and its latest checks attempt is released, those halves are done and not reported
     again: the answer is the implement attempt's (its claim as it is)."""
     try:

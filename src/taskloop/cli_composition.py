@@ -164,7 +164,7 @@ def open_next(database: Path, artifacts: Path, views: GitViews, tracker_root: st
               store: Store | None = None, registration: Store | None = None) -> Generator[RoundPorts | Failed]:
     """`tl rounds once`: the database guard first, then the tracker's read port at the explicit root (an unusable root
     refuses `tracker_root`), the start, commit, release, publish and hold ports on one shared writer (closed here; the
-    hold's abandon uses the release ports `tl step release --abandon` uses, its tracker writes `tracker_holds`), the reads
+    hold's abandon uses the release ports `tl step abandon` uses, its tracker writes `tracker_holds`), the reads
     the round log appended under the artifacts root, and the land's ports and profile reader (`land: auto`, `round_land`)."""
     owned = store is None
     store = store if store is not None else Store(SCHEMA)
@@ -187,7 +187,7 @@ def open_next(database: Path, artifacts: Path, views: GitViews, tracker_root: st
             holding = HoldPorts(HoldStore(lambda: store.shared_rw(database), store.begin_immediate), reader, tracker_holds(), releaser,
                                 open_checks_releaser(database, store, views), time.time, EvidenceFiles(artifacts),
                                 partial(current_view, reads))
-            with open_land(database, artifacts, views, store, registration) as lands:  # the land's ports, the ones `tl step land` opens
+            with open_land(database, artifacts, views, store, registration) as lands:  # the land's ports, the ones `tl land run` opens
                 landing = None if isinstance(lands, Failed) else Landing(land_mode(views.remotes), partial(_landed, lands))
                 yield RoundPorts(reads, _starting(reader, database, artifacts, store, views),
                                  open_factory_commit(database, store, views, artifacts), releaser,

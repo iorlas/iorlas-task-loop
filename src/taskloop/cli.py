@@ -121,7 +121,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         prog="tl",
         description=("Task loop runs agent work on tracker tasks in managed slots and lands the checked results. First run: "
                      "`tl config show`, `tl slot adopt CHECKOUT`, `tl profile show`, then `tl rounds start`. "
-                     f"Command groups: config, slot, repo, profile, task, step, rounds, drain, version. {STEP_ONLY}"),
+                     f"Command groups: config, slot, repo, profile, task, step, land, rounds, drain, version. {STEP_ONLY}"),
         epilog="Exit 0: success; 1: refusal or task/repo showion error; 2: invalid syntax; "
                "3: no reliable result (profile unavailable or step unknown), safe to retry; "
                "130: abrupt rounds stop, interrupted land or interrupted drain.",

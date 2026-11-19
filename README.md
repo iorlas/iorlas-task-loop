@@ -4,7 +4,7 @@ The successor task factory implements plan, implement and checks, task holds, ex
 read-only dashboard. It admits approved tasks into free slots, publishes agent results accepted by factory commit as `task/<id>` on
 `origin`, and runs the repository profile's checks. Before implementation and checks, it prepares the slot's
 environment and runs the profile's `setup` (Linux only); Codex agents work offline with that environment.
-Rounds advance tasks through checks. Land defaults to `manual`: the person delivers a checked task with `tl step land`.
+Rounds advance tasks through checks. Land defaults to `manual`: the person delivers a checked task with `tl land run`.
 With `land: auto` in the target profile read from origin's `main`, a round runs the same land operation for at most
 one task per round. Refusals about the task's change hold it with the recorded cause, preventing repeated attempts
 until the person answers. Other refusals leave it waiting; unavailable results can be retried.
@@ -32,7 +32,7 @@ Start with [First landed task](#first-landed-task-linux) for an ordered setup an
 - `tl profile show [--checkout PATH] [--at REV] [--target REF] [--json]` prints the repository profile: `setup` and
   checks at the commit `--at`, `required` and `target` from `--target` (read-only).
 - `tl slot adopt CHECKOUT [--count N]` adopts hand-made detached worktrees as slots and creates `factory.db`.
-- `tl step start|show|list|commit|release|publish` run, inspect, complete factory commit, release (`--abandon` returns the tracker
+- `tl step start|show|list|commit|release|abandon|publish` run, inspect, complete factory commit, release, abandon (returns the tracker
   claim) and publish one task's current attempt. `tl step start` on a done plan admits implementation; after implementation
   is accepted by factory commit it admits checks. Checks run the profile's commands in the factory, with results and logs available
   through `tl step show`. `tl rounds once` runs one
@@ -49,9 +49,9 @@ Start with [First landed task](#first-landed-task-linux) for an ordered setup an
 - `tl rounds start` repeats rounds in the foreground until Ctrl-C. `--retake-lapsed` on `rounds once` or `rounds start` is for recovery
   after discarding `factory.db`: it also takes the factory's expired claims absent from that database, assuming one
   factory on the tracker. Prefer one `rounds once` invocation for that recovery.
-- `tl step land TASK --backlog BACKLOG --checkout PATH` is the person's delivery command: squash the checked commit
+- `tl land run TASK --backlog BACKLOG --checkout PATH` is the person's delivery command: squash the checked commit
   onto origin's `main`, validate again when required, push without force, then close the task in the local tracker.
-  Use `--summary` to inspect first. Some lands require `--minutes N` for validation. Reruns reconcile unfinished actions;
+  Use `tl land show` to inspect first; `tl land withdraw` gives up a validated, undelivered candidate. Some lands require `--minutes N` for validation. Reruns reconcile unfinished actions;
   changes to what decides a pass require `--accept-gate-changes` when reported by land. Tracker synchronization remains
   the person's responsibility. Publishing a task branch does not land it.
 
@@ -313,10 +313,10 @@ In the original shell, where `task_id` is still set (otherwise set it to the ID 
 
 ```bash
 tl step show "$task_id" --backlog first-run
-tl step land "$task_id" --backlog first-run --checkout "$checkout" --summary
+tl land show "$task_id" --backlog first-run --checkout "$checkout"
 git -C "$checkout" diff "origin/main...task/$task_id"
 # Read the summary and diff before delivery.
-tl step land "$task_id" --backlog first-run --checkout "$checkout" --minutes 30
+tl land run "$task_id" --backlog first-run --checkout "$checkout" --minutes 30
 tl step show "$task_id" --backlog first-run
 tl task show "$task_id" --backlog first-run --tracker-root "$checkout"
 git -C "$checkout" pull --ff-only

@@ -7,18 +7,16 @@ from collections.abc import Callable
 from dataclasses import replace
 from ipaddress import ip_address
 from pathlib import Path
-from typing import Literal
 
 from pydantic import ValidationError
 
-from taskloop import attempt_status, cli_composition, dash_composition, land, operations, result_data, setup_timing
+from taskloop import attempt_status, cli_composition, cli_land, dash_composition, operations, result_data, setup_timing
 from taskloop.agents.settings import Overrides
+from taskloop.cli_common import ARTIFACTS, DB, PATH, Parsers, add, backlog, common, group, views_for
 from taskloop.composition import real_slots
 from taskloop.drain.models import Reason
 from taskloop.exit_codes import exit_code
-from taskloop.git_views import GitViews
 from taskloop.harness_choice import HarnessKind
-from taskloop.land_guide import INTERRUPTED
 from taskloop.machine_config import ConfigRefused, Effective, Flags, Loaded
 from taskloop.new_task import NewTask
 from taskloop.operations import Ended, Failed, Round, StartRequest
@@ -32,49 +30,27 @@ from taskloop.step_render import human
 from taskloop.tracker import leaked_claim
 from taskloop.workflow_read import DEFAULT
 
-type Parsers = argparse._SubParsersAction[argparse.ArgumentParser]
 DASH_PORT = 8765
 SCHEDULER, STEP, START = "rounds", "step", "start"
-COMMANDS = ("config", "slot", STEP, SCHEDULER)
-DB, ARTIFACTS = "--db", "--artifacts"  # flags shared by many commands
-PATH = "PATH"  # the metavar of a flag that takes a file or directory
-
-
-def _common(parser: argparse.ArgumentParser, *flags: str) -> None:
-    helps = {
-        DB: (PATH, "factory.db (overrides the machine config)"),
-        ARTIFACTS: ("DIR", "Artifacts root (overrides the machine config)"),
-        "--root": ("DIR", "Slots root (overrides the machine config's slots_root)"),
-    }
-    for flag in flags:
-        parser.add_argument(flag, metavar=helps[flag][0], help=helps[flag][1])
-    parser.add_argument("--json", action="store_true", dest="json_output", help="Print JSON data; refusals are JSON on stderr")
-
-
-def _backlog(parser: argparse.ArgumentParser, *, required: bool = True) -> None:
-    parser.add_argument("--backlog", metavar="KEY", required=required, help="The tracker backlog (key) the task belongs to")
+COMMANDS = ("config", "slot", STEP, SCHEDULER, cli_land.GROUP)
 
 
 def _binding(parser: argparse.ArgumentParser) -> None:
     """The three flags that bind a command to a tracker and a repository."""
-    _backlog(parser)
+    backlog(parser)
     parser.add_argument("--tracker-root", required=True, metavar=PATH, help="The directory of the task tracker (the only writer)")
     parser.add_argument("--checkout", required=True, metavar=PATH, help="Your checkout of the repository the tasks change")
 
 
-def _add(parsers: Parsers, name: str, text: str) -> argparse.ArgumentParser:
-    return parsers.add_parser(name, help=text, description=text, allow_abbrev=False)
-
-
 def _register_rounds(commands: Parsers) -> None:
-    scheduler = _group(commands, SCHEDULER, "Scheduling rounds over the whole backlog")
-    _round_flags(_add(scheduler, "once", "Run one scheduling round: settle existing attempts, advance claimed tasks whose "
+    scheduler = group(commands, SCHEDULER, "Scheduling rounds over the whole backlog")
+    _round_flags(add(scheduler, "once", "Run one scheduling round: settle existing attempts, advance claimed tasks whose "
                       "step is done to the next step (no label check), start approved ready tasks in the free slots left, publish "
                       "results accepted by factory commit, hold each task a round took that stopped "
                       "(its label removed, `held` added, the claim "
                       "returned, one comment: `bd list --label held`; adding the label back takes it again at plan) and remove "
                       "`held` once a held task is taken again"))
-    rounds = _add(scheduler, START, ROUNDS)
+    rounds = add(scheduler, START, ROUNDS)
     rounds.add_argument("--every", type=int, metavar="SECONDS", help="Seconds between regular rounds, at least 5 (overrides the "
                         "machine config's round_seconds)")
     rounds.add_argument("--dash-host", type=ip_address, metavar="ADDRESS", default="127.0.0.1",
@@ -87,89 +63,57 @@ def _register_rounds(commands: Parsers) -> None:
                      "refusals and abrupt end results go to stderr. Dashboard notices go to stderr with --json.")
 
 
-def _group(commands: Parsers, name: str, text: str) -> Parsers:
-    return _add(commands, name, text).add_subparsers(dest="operation", required=True)
-
-
 def register(commands: Parsers) -> None:
-    config = _group(commands, "config", "Machine configuration")
-    show = _add(config, "show", "Print each effective setting, its source, and the config file")
-    _common(show, DB, ARTIFACTS, "--root")
+    config = group(commands, "config", "Machine configuration")
+    show = add(config, "show", "Print each effective setting, its source, and the config file")
+    common(show, DB, ARTIFACTS, "--root")
     _harness_flag(show)
     show.add_argument("--count", type=int, help="Slot count (overrides the machine config's slot_count)")
-    slot = _group(commands, "slot", "Managed slots (setup)")
-    adopt = _add(slot, "adopt", "Adopt worktrees made by hand with `git worktree add --detach <root>/<repo name>/sN`; creates factory.db")
+    slot = group(commands, "slot", "Managed slots (setup)")
+    adopt = add(slot, "adopt", "Adopt worktrees made by hand with `git worktree add --detach <root>/<repo name>/sN`; creates factory.db")
     adopt.add_argument("checkout", metavar="CHECKOUT", help="The person's checkout of the repository")
     adopt.add_argument("--count", type=int, help="Adopt s1..sN (overrides slot_count); adds slots only, retires none")
-    _common(adopt, "--root", DB)
-    step = _group(commands, STEP, f"Step attempts ({STEP_ONLY})")
-    start = _add(step, START, "Admit, relaunch or repeat the task's attempt (free slot, tracker claim), advance a done step, or "
+    common(adopt, "--root", DB)
+    step = group(commands, STEP, f"Step attempts ({STEP_ONLY})")
+    start = add(step, START, "Admit, relaunch or repeat the task's attempt (free slot, tracker claim), advance a done step, or "
                  "re-run failed checks on the same commit. The tracker claim stays held between steps; nothing renews it then")
     start.add_argument("task_id", metavar="TASK")
     _binding(start)
     start.add_argument("--minutes", type=int, required=True, help="Deadline of the attempt (or of its repeat), from now")
     _harness_flag(start)
     _new_task_flags(start)
-    _common(start, DB, ARTIFACTS)
-    status = _add(step, "show", "The task's attempt, its entry, setup run, result and next action (read-only)")
+    common(start, DB, ARTIFACTS)
+    status = add(step, "show", "The task's attempt, its entry, setup run, result and next action (read-only)")
     status.add_argument("task_id", metavar="TASK")
     status.add_argument("--backlog", metavar="KEY", help="Task scope; defaults to the machine config's backlog, then the sole backlog "
                         "in factory.db")
-    _common(status, DB, ARTIFACTS)
-    listing = _add(step, "list", "Every task's current attempt with its next action (read-only)")
+    common(status, DB, ARTIFACTS)
+    listing = add(step, "list", "Every task's current attempt with its next action (read-only)")
     listing.add_argument("--stuck", action="store_true", help="Only attempts whose next action is stuck:*, hold or unknown")
-    _common(listing, DB, ARTIFACTS)
-    timing = _add(step, "setup-times", "Recent persisted implement setup times (read-only; no decision)")
-    _backlog(timing)
-    _common(timing, DB)
-    commit = _add(step, "commit", "Complete factory commit: obtain the result commit and judge the step's rules, "
+    common(listing, DB, ARTIFACTS)
+    timing = add(step, "setup-times", "Recent persisted implement setup times (read-only; no decision)")
+    backlog(timing)
+    common(timing, DB)
+    commit = add(step, "commit", "Complete factory commit: obtain the result commit and judge the step's rules, "
                   "then release a clean slot and publish an accepted result; an agent step's only, never the checks")
     commit.add_argument("task_id", metavar="TASK")
-    _backlog(commit)
-    _common(commit, DB, ARTIFACTS)
-    release = _add(step, "release", "Release the slot of a step that ended (parked where it was admitted, the claim kept); with --abandon, "
-                   "of any step whose entry and agent or checks are stopped, and return the tracker claim (a land candidate's slot "
-                   "first, then the check step's, then its implement step's claim)")
-    release.add_argument("task_id", metavar="TASK")
-    _backlog(release)
-    release.add_argument("--abandon", action="store_true", help="Throw the attempt away and give the task back; `tl step start` "
-                         "then admits a fresh attempt")
-    _common(release, DB)
-    publish = _add(step, "publish", "Push the step's commit accepted by factory commit to origin's task/<id> as you, "
+    backlog(commit)
+    common(commit, DB, ARTIFACTS)
+    release = add(step, "release", "Release the slot of a step that ended (parked where it was admitted, the claim kept)")
+    abandon = add(step, "abandon", "Abandon the task's attempt: release the slot of any step whose entry and agent or checks are "
+                  "stopped, throw the attempt away and return the tracker claim (a land candidate's slot first, then the check "
+                  "step's, then its implement step's claim); `tl step start` then admits a fresh attempt")
+    for parser in (release, abandon):
+        parser.add_argument("task_id", metavar="TASK")
+        backlog(parser)
+        common(parser, DB)
+    publish = add(step, "publish", "Push the step's commit accepted by factory commit to origin's task/<id> as you, "
                    "never forced; nothing merges or lands")
     publish.add_argument("task_id", metavar="TASK")
-    _backlog(publish)
-    _common(publish, DB, ARTIFACTS)
-    _land_flags(_add(step, "land", LAND))
+    backlog(publish)
+    common(publish, DB, ARTIFACTS)
+    cli_land.register(commands)
     _register_rounds(commands)
-
-
-LAND = ("Land the task's checked commit X yourself: fetch origin's main (O), squash X onto it as one commit S (Git objects only), "
-        "run every check again on S in a free slot, in this shell, only when main moved or its required names changed, push S "
-        "to origin's main as you (never forced), then close the task in your local tracker (never synced: `bd dolt push` is "
-        "yours). A rerun does only what is missing; under the profile's `land: auto` a round runs this same land by itself. "
-        "Your checkout and local main are never written. Exit 0 landed "
-        "(or already), 1 refused, 3 unknown (a rerun is safe), 130 interrupted by Ctrl-C (a rerun reconciles it)")
-
-
-def _land_flags(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("task_id", metavar="TASK")
-    _backlog(parser)
-    parser.add_argument("--checkout", required=True, help="Your checkout of the repository: its origin is fetched and pushed")
-    parser.add_argument("--minutes", type=int, help="Deadline of the validation of S, from now; needed when S must be validated (main "
-                        "moved or its required names changed) or a pending candidate resumes; not for --summary, --withdraw, "
-                        "--no-change or a same-tree land")
-    mode = parser.add_mutually_exclusive_group()
-    mode.add_argument("--summary", action="store_true", help="Print the land summary (the facts to read before landing); "
-                      "records, reserves, pushes and closes nothing")
-    mode.add_argument("--withdraw", action="store_true", help="Give up a validated, undelivered candidate (origin read "
-                      "first, nothing pushed) so the task can be abandoned")
-    parser.add_argument("--no-change", action="store_true", help="Accept that origin's main already holds X's changes: "
-                        "recorded and closed with no push")
-    parser.add_argument("--accept-gate-changes", action="store_true", help="Accept that S changes what decides a pass (a check's "
-                        "argv, timeout, setup or required names, a configuration file, a weakened test): without it the land "
-                        "refuses and lists them")
-    _common(parser, DB, ARTIFACTS)
 
 
 def _harness_flag(parser: argparse.ArgumentParser) -> None:
@@ -200,12 +144,7 @@ def _round_flags(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--retake-lapsed", action="store_true", help="After a factory.db discard only: also take the tasks "
                         "`taskloop` still holds in progress with an expired lease and no attempt here (assumes this is the one "
                         "factory on the tracker); run it once, with `tl rounds once`")
-    _common(parser, DB, ARTIFACTS)
-
-
-def views_for(loaded: Loaded) -> GitViews:
-    """The real Git views, bounded by the machine config's `git_read_seconds`."""
-    return GitViews(loaded.settings.git_read_seconds.value)
+    common(parser, DB, ARTIFACTS)
 
 
 def _start(arguments: argparse.Namespace, loaded: Loaded) -> Result:
@@ -309,29 +248,20 @@ def _commit(arguments: argparse.Namespace, loaded: Loaded) -> Result:
         return opened if isinstance(opened, Failed) else operations.commit_task(*opened, arguments.backlog, arguments.task_id)
 
 
-def _release(arguments: argparse.Namespace, loaded: Loaded) -> Result:
+def _release(arguments: argparse.Namespace, loaded: Loaded, *, abandon: bool = False) -> Result:
     with cli_composition.open_release(loaded.settings.db.value, views_for(loaded)) as opened:
         if isinstance(opened, Failed):
             return opened
-        return operations.release_task(*opened, arguments.backlog, arguments.task_id, abandon=arguments.abandon)
+        return operations.release_task(*opened, arguments.backlog, arguments.task_id, abandon=abandon)
+
+
+def _abandon(arguments: argparse.Namespace, loaded: Loaded) -> Result:
+    return _release(arguments, loaded, abandon=True)
 
 
 def _publish(arguments: argparse.Namespace, loaded: Loaded) -> Result:
     with cli_composition.open_publish(loaded.settings.db.value, views_for(loaded), loaded.settings.artifacts.value) as opened:
         return opened if isinstance(opened, Failed) else operations.publish_task(*opened, arguments.backlog, arguments.task_id)
-
-
-def _land(arguments: argparse.Namespace, loaded: Loaded) -> Result:
-    """The one land; a `KeyboardInterrupt` (Ctrl-C) anywhere in it is `unavailable:interrupted`, exit 130: the land's own
-    unwinding already stopped a running check's tree, and the rerun reconciles what is left (as the rounds' abrupt stop)."""
-    mode: Literal["land", "summary", "withdraw"] = "summary" if arguments.summary else "withdraw" if arguments.withdraw else "land"
-    request = land.LandRequest(arguments.backlog, arguments.task_id, Path(arguments.checkout), arguments.minutes, mode,
-                               arguments.no_change, arguments.accept_gate_changes)
-    try:
-        with cli_composition.open_land(loaded.settings.db.value, loaded.settings.artifacts.value, views_for(loaded)) as ports:
-            return ports if isinstance(ports, Failed) else land.land(ports, request)
-    except KeyboardInterrupt:
-        return Failed("unavailable", INTERRUPTED)
 
 
 def _adopt(arguments: argparse.Namespace, loaded: Loaded) -> Result:
@@ -366,7 +296,8 @@ OPERATIONS: dict[tuple[str, str], Callable[[argparse.Namespace, Loaded], Result]
     (STEP, "commit"): _commit,
     (STEP, "release"): _release,
     (STEP, "publish"): _publish,
-    (STEP, "land"): _land,
+    (STEP, "abandon"): _abandon,
+    **cli_land.OPERATIONS,
 }
 
 
