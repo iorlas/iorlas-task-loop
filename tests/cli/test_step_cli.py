@@ -79,6 +79,7 @@ ABANDONED = AttemptView(
 FAILED_SETUP = SetupShown(SetupRow(2, D, "f" * 64, 0, None, CommandConclusion.FAILED, 10.0, 11.0), Path("/a/d/setup-2.log"))
 RUNNING_SETUP = SetupShown(SetupRow(3, D, "f" * 64, 1, OwnedProcess(5, 5, "s", "b"), None, 10.0, None), Path("/a/d/setup-3.log"))
 RELEASE = ["step", "release", "tl-1", "--backlog", "tasks"]
+ABANDON = ["step", "abandon", "tl-1", "--backlog", "tasks"]
 FREED = {"status", "backlog", "task", "attempt_id", "slot", "parked", "reservation_removed", "claim", "abandoned", "checks", "land",
          "candidate"}
 X, T = "a" * 40, "b" * 40
@@ -243,7 +244,7 @@ CASES: list[tuple[list[str], Result, int, list[str], set[str]]] = [
      STATUS_KEYS | {"directory", "entry_log", "events_path", "setup", "failed_checks"}),
     (RELEASE, ReleasedTask("tasks", "tl-1", "attempt", Released("s1", D, True, "kept", False)), 0,
      ["released: attempt attempt for tl-1 (backlog tasks)\n", f"Slot s1 parked at {D}\nReservation of s1 removed\nClaim kept"], FREED),
-    ([*RELEASE, "--abandon"], ReleasedTask("tasks", "tl-1", "attempt", Released("s1", None, True, "not_held", True)), 0,
+    (ABANDON, ReleasedTask("tasks", "tl-1", "attempt", Released("s1", None, True, "not_held", True)), 0,
      ["Slot s1: no Git write", "Claim not held by the factory: it was reverted or belongs to another actor.",
       "Abandoned: the next approved admission starts a fresh attempt."], FREED),
     (RELEASE, ReleasedTask("tasks", "tl-1", "attempt", AlreadyReleased("s1", "unclaimed", True)), 0,
@@ -393,7 +394,7 @@ def test_release_flags_reach_the_operation_through_the_opener(
         yield AttemptStore(lambda: con), releases, checks
 
     monkeypatch.setattr(cli_composition, "open_release", opener)
-    assert main([*RELEASE, *(["--abandon"] if abandon else []), "--db", str(db), "--json"]) == 0
+    assert main([*(ABANDON if abandon else RELEASE), "--db", str(db), "--json"]) == 0
     con.close()
     assert opened == [db] and releases.calls == [(KEY, abandon)] and checks.calls == []  # no checks attempt: never called
     assert json.loads(capsys.readouterr().out)["abandoned"] is abandon
@@ -768,7 +769,7 @@ def test_a_running_agents_time_since_its_last_command_is_listed_and_shown(
     assert "Last command: 42 s ago\n" in capsys.readouterr().out
 
 
-LANDING = ["step", "land", "tl-1", "--backlog", "tasks", "--checkout", "/checkout", "--minutes", "20"]
+LANDING = ["land", "run", "tl-1", "--backlog", "tasks", "--checkout", "/checkout", "--minutes", "20"]
 
 
 @pytest.mark.parametrize(

@@ -95,7 +95,7 @@ REVIEWED_DYNAMIC = {
     ('check_repeat/store.py', 'AdmitRefused', 'Reason.DRAINING'),
     ('checks.py', '_refused', "f'expired:{check.name}'"),
     ('cli_composition.py', 'Failed', 'Reason.DRAINING'),
-    ('cli_step.py', 'Failed', 'INTERRUPTED'),
+    ('cli_land.py', 'Failed', 'INTERRUPTED'),
     ('land.py', 'Failed', "'task' if isinstance(read, AdmitRefused) else 'tracker'"),
     ('land.py', 'Failed', 'Reason.DRAINING'),
     ('land.py', 'Failed', 'checked.what'),

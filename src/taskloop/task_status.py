@@ -3,7 +3,7 @@ its release, hold and land) and, when the reader knows it, the admission facts (
 label, and what keeps a round from starting one). `tl step list`, the dashboard's board and drawer and the round's admission all call
 `task_status`, so they cannot disagree. Pure: values in, values out.
 
-A task whose attempt a person abandoned (`tl step release --abandon`, the claim returned, no hold) is `abandoned` until the tracker
+A task whose attempt a person abandoned (`tl step abandon`, the claim returned, no hold) is `abandoned` until the tracker
 lists it ready under the round's approval label; then the round restarts it fresh (`QUEUED`, one restart route, no `tl step start`
 by hand). A task a hold abandoned is `held` and is taken again only by the person's answer (`hold_status.reingests`)."""
 
@@ -22,7 +22,7 @@ class Status(StrEnum):
     RUNNING = "running"  # an agent step runs (plan, implement)
     CHECKING = "checking"  # the check step runs
     SETTLING = "settling"  # the factory moves it: starting, completing factory commit, repeating, releasing, publishing, advancing
-    WAITING_FOR_LAND = "waiting_for_land"  # checked and passed: the person's `tl step land`
+    WAITING_FOR_LAND = "waiting_for_land"  # checked and passed: the person's `tl land run`
     LANDING = "landing"  # a land is observed running
     LANDED = "landed"
     HELD = "held"  # a hold, due or recorded: waits for a person (its reason is the hold's)

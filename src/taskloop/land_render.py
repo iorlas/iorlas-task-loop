@@ -1,4 +1,4 @@
-"""The human rendering of `tl step land`'s answers (tl-8bh9.14.8 sections 7, 8, 10, 16): a land delivered and closed
+"""The human rendering of `tl land`'s answers (tl-8bh9.14.8 sections 7, 8, 10, 16): a land delivered and closed
 (`Landed`), a candidate given up (`Withdrawn`), the land summary (`LandSummary`), and a refusal or unknown with its land
 guide (`land_guide`, then `step_guide.GUIDE`). Fixed words around the operation's values; every stored or outside text is
 one printable line (`land_summary.one_line`). Nothing here decides, reads or writes; `land_data` is the one JSON shape."""
@@ -15,7 +15,7 @@ from taskloop.operations import Failed
 from taskloop.printable import one_line
 from taskloop.step_guide import refusal_guide
 
-COMMAND: Final = "tl step land"
+COMMAND: Final = "tl land "
 HOW: Final = {
     "pushed": "S pushed to origin's main by this land",
     "already_pushed": "origin's main was found to hold S: recorded, not pushed again",
@@ -44,7 +44,7 @@ def landed_lines(found: Landed) -> list[str]:
 
 
 def land_lines(command: str, found: Landed | Withdrawn | LandSummary | Failed) -> list[str]:
-    """`tl step land`'s answer, or a refusal of it."""
+    """`tl land`'s answer, or a refusal of it."""
     if isinstance(found, Landed):
         return landed_lines(found)
     if isinstance(found, Failed):
@@ -64,7 +64,7 @@ def summary_lines(found: LandSummary) -> list[str]:
 
 
 def failed_lines(command: str, found: Failed) -> list[str]:
-    """A refusal (exit 1) or unknown (exit 3) of `tl step land`: its word, its detail as printable lines, then each guide
+    """A refusal (exit 1) or unknown (exit 3) of `tl land`: its word, its detail as printable lines, then each guide
     once: the reason, its first word and the kind, each from the land's table before the step commands'."""
     detail = [one_line(line, 2000) for line in found.detail.split("\n") if one_line(line, 2000)]
     guides = dict.fromkeys([refusal_guide(found.reason, land=True),

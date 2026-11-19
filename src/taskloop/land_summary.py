@@ -7,7 +7,7 @@ control, format and line-separator characters become spaces, so no title or subj
 trailer; the trailers are always the message's last paragraph and only the factory writes them. No co-author trailer:
 author and committer are the person (their Git identity); the task branch keeps the agent's commits.
 
-**The summary** (`--summary`): facts, no judgment. The checks attempt for exactly X with each required name's result; the
+**The summary** (`tl land show`): facts, no judgment. The checks attempt for exactly X with each required name's result; the
 required names at O against the checks attempt's; each required check whose argv at X differs from its argv at O; the gate
 facts of S against O (`land_gate`: every changed file with its diffstat, checks, `setup` and `required` changed,
 configuration files, weakened tests); O and whether S's tree is X's, a conflict's paths, or no change; the message and the
@@ -202,7 +202,7 @@ def _joined(setup: tuple[Argv, ...]) -> str:
 
 
 def gate_lines(gate: Gate) -> list[str]:
-    """The gate facts as printed (`--summary` and the refusal of a land that needs `--accept-gate-changes`): every changed
+    """The gate facts as printed (`tl land show` and the refusal of a land that needs `--accept-gate-changes`): every changed
     file with its diffstat, then each fact that decides a pass, every outside text printable."""
     added, deleted = sum(each.added for each in gate.changes), sum(each.deleted for each in gate.changes)
     shown = [f"  {each.kind} {one_line(each.path, 200)} +{each.added} -{each.deleted}" for each in gate.changes[:FILES]]

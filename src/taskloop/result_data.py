@@ -136,7 +136,7 @@ def _slot_data(each: SlotView | Adopted | NotAdopted) -> dict[str, object]:
 
 
 def as_data(result: Result, *, admission: bool = False) -> dict[str, object]:
-    """`_step_data`'s shapes, and `tl step land`'s answers (`land_data`)."""
+    """`_step_data`'s shapes, and `tl land run`'s answers (`land_data`)."""
     if isinstance(result, Landed | Withdrawn | LandSummary):
         return land_data(result)
     return _step_data(result, admission=admission)

@@ -74,7 +74,7 @@ def test_a_pending_candidate_is_not_resumed_without_minutes(b: LandBench) -> Non
 
 
 def test_a_killed_land_s_running_check_holds_the_rerun_until_it_ended(b: LandBench) -> None:
-    """`kill -9` of `tl step land`: its check may still run in its own session; nothing is reset or run until it is gone,
+    """`kill -9` of `tl land run`: its check may still run in its own session; nothing is reset or run until it is gone,
     and the next land process replaces the dead one's identity under the slot's custody."""
     interrupted(b)
     pid = b.con.execute("SELECT pid FROM check_result WHERE conclusion IS NULL").fetchone()[0]
@@ -104,7 +104,7 @@ def test_a_second_land_while_the_first_holds_the_slot_is_slot_busy(
 
 @pytest.mark.parametrize("moved", [False, True], ids=["same_tree", "validated"])
 def test_a_concurrent_land_winning_the_insert_refuses_the_other_landing(tmp_path: Path, moved: bool) -> None:
-    """Another `tl step land` of the task runs to its end right before this one's insert: the insert's fence, or, when S
+    """Another `tl land run` of the task runs to its end right before this one's insert: the insert's fence, or, when S
     validates, the slot taken at the winner's generation read again as the winner's candidate: `landing` either way."""
     b = bench(tmp_path)
     if moved:

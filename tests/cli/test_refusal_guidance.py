@@ -27,10 +27,10 @@ def test_dynamic_forwarding_has_an_explicit_reviewed_upstream_domain() -> None:
 
 
 @pytest.mark.parametrize("context,reason", CASES)
-@pytest.mark.parametrize("detail", ["", "arbitrary detail mentioning `tl step release --abandon`"])
+@pytest.mark.parametrize("detail", ["", "arbitrary detail mentioning `tl step abandon`"])
 def test_every_public_reason_renders_explanation_and_action(context: str, reason: str, detail: str) -> None:
     result = Failed("refused", reason, detail)
-    lines = human(f"tl step {context if context == 'land' else 'start'}", result, None)
+    lines = human("tl land run" if context == "land" else "tl step start", result, None)
     expected = refusal_guide(reason, land=context == "land")
     assert expected in lines and len(expected.split()) >= 6
     assert as_data(result)["error"] == {"kind": "refused", "reason": reason, "message": detail or None}
@@ -80,7 +80,7 @@ def test_config_and_profile_collisions_have_different_remedies(reason: Refusal) 
 
 def test_checks_land_and_candidate_release_keep_their_overrides() -> None:
     assert CHECKS_GUIDE["unsettled"] in human("tl step release", Failed("unsettled", "unsettled", checks=True), None)
-    assert LAND_GUIDE["expired"] in human("tl step land", Failed("refused", "expired"), None)
+    assert LAND_GUIDE["expired"] in human("tl land run", Failed("refused", "expired"), None)
     assert CANDIDATE_RELEASE["entry_running"] in human(
         "tl step release", Failed("refused", "entry_running", land=True), None)
 

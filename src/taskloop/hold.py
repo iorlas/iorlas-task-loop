@@ -44,8 +44,8 @@ ROUND_WORDS: Final = frozenset({"advance", "publish"})  # the view's word while 
 
 @dataclass(frozen=True)
 class HoldPorts:
-    """The hold's store and reads, the tracker's hold writes, the abandon's release ports (as `tl step release
-    --abandon` uses them), the clock, the evidence reader and the task's status read now (`attempt_status.current_view`)."""
+    """The hold's store and reads, the tracker's hold writes, the abandon's release ports (as `tl step
+    abandon` uses them), the clock, the evidence reader and the task's status read now (`attempt_status.current_view`)."""
 
     store: HoldStore
     reader: AttemptStore
@@ -182,7 +182,7 @@ def _labels(ports: HoldPorts, view: AttemptView, row: HoldRow) -> _Labelled | Fa
 
 
 def _abandoned(ports: HoldPorts, view: AttemptView, row: HoldRow, move: Move, claim: Claim) -> HoldMove:
-    """5.1 steps 4 and 5: the abandon as `tl step release --abandon` runs it, then the comment (once) by its outcome: the
+    """5.1 steps 4 and 5: the abandon as `tl step abandon` runs it, then the comment (once) by its outcome: the
     claim returned, or kept by a refusal only the person clears; none after a transient refusal. The abandon acts on the
     task's current attempt, so A must still be it (a stale round snapshot, the task taken again meanwhile: `changed`)."""
     current = ports.reader.attempt_of(view.backlog, view.task_id)

@@ -140,7 +140,7 @@ ABANDON = ReleasedTask("tasks", "tl-1", "implement", Released("s0", None, False,
                        ReleasedTask("tasks", "tl-1", "checks", Released("s1", D, True, "kept", True)))
 
 
-RELEASE = ["step", "release", "tl-1", "--backlog", "tasks", "--abandon"]
+RELEASE = ["step", "abandon", "tl-1", "--backlog", "tasks"]
 
 
 def test_the_task_s_abandon_shows_the_checks_attempt_first_then_the_claim(

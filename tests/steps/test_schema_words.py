@@ -28,7 +28,7 @@ COMMANDS = {
     "show": ["step", "show", "tl-1", *BACKLOG],
     "start": ["step", "start", "tl-1", *BACKLOG, *CHOICES],
     "next": ["rounds", "once", *BACKLOG, "--label", "auto", *CHOICES],
-    "land_summary": ["step", "land", "tl-1", *BACKLOG, "--checkout", "/checkout", "--minutes", "20", "--summary"],
+    "land_summary": ["land", "show", "tl-1", *BACKLOG, "--checkout", "/checkout"],
 }
 VERSIONS = {"newer": SCHEMA.version + 1, "older": SCHEMA.version - 1, "unversioned": 0}
 

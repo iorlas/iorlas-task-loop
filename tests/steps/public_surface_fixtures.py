@@ -128,7 +128,7 @@ def step_cases() -> dict[str, tuple[list[str], Result]]:
                          "released.already": replace(released, result=AlreadyReleased("s1", "kept", True))}.items():
         cases[name] = (["step", "release", "tl-1", "--backlog", "tasks"], result)
     for name, result in land_cases().items():
-        cases[name] = (["step", "land", "tl-1", "--backlog", "tasks", "--checkout", str(PATH)], result)
+        cases[name] = (["land", "run", "tl-1", "--backlog", "tasks", "--checkout", str(PATH)], result)
     return cases
 
 
