@@ -31,7 +31,7 @@ def values(key: AttemptKey = KEY) -> dict[str, object]:
         "deadline": 100, "number": 1, "seq": 1, "slot_head": FREE.head, "previous_attempt_id": None,
         "repeat_reason": None, "repeat_listing": None, "after_commit": None, "label": "approved",
         "harness": "codex", "provider": "openai", "compaction_token_limit": 12000,
-        "engine_digest": ENGINE, "workflow_digest": PIN_DIGEST, "workflow_sha": PIN_SHA,
+        "engine_digest": ENGINE, "declared_start": 0, "workflow_digest": PIN_DIGEST, "workflow_sha": PIN_SHA,
         "admitted_at": 1.0,
     }
 

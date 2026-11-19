@@ -42,6 +42,7 @@ from taskloop.drain.store import DrainStore
 from taskloop.hold import HoldPorts, clear_holds, hold_task
 from taskloop.hold_status import MAIN_MOVED
 from taskloop.ids import Ids
+from taskloop.new_task import NewTask
 from taskloop.operations import (
     UNKNOWN_KINDS,
     AgentRelease,
@@ -107,6 +108,7 @@ class NextRequest:
     quiet: Quiet | None = None
     max_running: int = 3  # in-flight tasks of the backlog (`in_flight`) at which nothing new starts
     retake: bool = False  # admit the factory's own lapsed claims that have no attempt here (after a factory.db discard)
+    new: NewTask = field(default_factory=NewTask)  # for the tasks a round admits fresh
 
 
 @dataclass(frozen=True)
@@ -147,6 +149,7 @@ def _request(request: NextRequest, task_id: str) -> StartRequest:
         request.overrides,
         request.minutes,
         request.label,
+        request.new,
     )
 
 

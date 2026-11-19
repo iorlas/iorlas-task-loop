@@ -71,7 +71,15 @@ class Agent(Input):
     harness: HarnessKind | None = None
     model: str | None = None
     effort: str | None = None
-    compaction_token_limit: int | None = None
+    compaction_token_limit: int | None = Field(default=None, strict=True, gt=0)
+
+    @field_validator("model", "effort")
+    @classmethod
+    def word(cls, value: str | None) -> str | None:
+        """One printable word, so an empty or odd value is refused at load and never silently ignored."""
+        if value is not None and (not value or value.startswith("-") or not value.isprintable() or any(c.isspace() for c in value)):
+            raise ValueError("must be one printable word that does not start with '-'")
+        return value
 
 
 class StepTable(Input):
@@ -106,7 +114,11 @@ class Workflow(Input):
     step: Steps
 
     def table(self, step: Step) -> StepTable:
-        return self.step.plan if step is Step.PLAN else self.step.implement
+        match step:
+            case Step.PLAN:
+                return self.step.plan
+            case Step.IMPLEMENT:
+                return self.step.implement
 
 
 @dataclass(frozen=True)

@@ -17,7 +17,7 @@ class UnhashedFile(Exception):
 
 def engine_digest(files: Iterable[tuple[str, str | None]]) -> str:
     """The digest of `(path, hash)` pairs; a `None` hash raises `UnhashedFile`."""
-    kept = sorted(each for each in files if ".dist-info/" not in each[0] and not each[0].startswith(".."))
+    kept = sorted({each for each in files if ".dist-info/" not in each[0] and not each[0].startswith("..")})  # a repeat counts once
     for path, digest in kept:
         if digest is None:
             raise UnhashedFile(path)

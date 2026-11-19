@@ -37,6 +37,7 @@ from taskloop.factory_schema import SCHEMA
 from taskloop.git_views import GitViews
 from taskloop.harness_choice import HarnessKind, Provider
 from taskloop.ids import NativeIds
+from taskloop.new_task import NewTask
 from taskloop.plan_reuse import PlanMetadata
 from taskloop.slot_lock import custody
 from taskloop.slot_release import NotReleased, Released, SlotRelease
@@ -254,7 +255,7 @@ def test_a_named_workflow_is_the_file_read_at_the_source_commit_and_pinned(
                             ".task-loop/workflows/variant.toml": variant.decode()})
     repo = FakeRepo.clone(remote, tmp_path / "variant")
     slots(factory, repo, root, 1)
-    wanted = replace(request(tmp_path, repo), overrides=Overrides(workflow="variant"))
+    wanted = replace(request(tmp_path, repo), new=NewTask(workflow="variant"))
     assert isinstance(admission(factory, tmp_path, Tracker(factory, tmp_path / "artifacts"), repo).admit(wanted), Admitted)
     stored = factory.execute("SELECT workflow_digest FROM attempt").fetchone()[0]
     assert stored == hashlib.sha256(variant).hexdigest()
@@ -289,7 +290,7 @@ def test_starting_at_implement_admits_it_from_the_committed_plan_with_no_databas
 ) -> None:
     repo = committed_plan(tmp_path)
     slots(factory, repo, root, 1)
-    wanted = replace(request(tmp_path, repo), overrides=Overrides(start=Step.IMPLEMENT))
+    wanted = replace(request(tmp_path, repo), new=NewTask(start=Step.IMPLEMENT))
     tracker = Tracker(factory, tmp_path / "artifacts")
     tracker.step = Step.IMPLEMENT
     assert isinstance(admission(factory, tmp_path, tracker, repo).admit(wanted), Admitted)
@@ -302,7 +303,7 @@ def test_starting_at_implement_without_a_valid_committed_plan_is_refused_as_plan
 ) -> None:
     repo = committed_plan(tmp_path, valid=False)
     slots(factory, repo, root, 1)
-    wanted = replace(request(tmp_path, repo), overrides=Overrides(start=Step.IMPLEMENT))
+    wanted = replace(request(tmp_path, repo), new=NewTask(start=Step.IMPLEMENT))
     refused = admission(factory, tmp_path, Tracker(factory, tmp_path / "artifacts"), repo).admit(wanted)
     assert isinstance(refused, AdmitRefused) and refused.reason == "plan"
     assert factory.execute("SELECT count(*) FROM attempt").fetchone() == (0,)
@@ -312,7 +313,7 @@ def test_an_unknown_named_workflow_refuses_the_admission_as_workflow(
     factory: sqlite3.Connection, repo: FakeRepo, root: Path, tmp_path: Path
 ) -> None:
     slots(factory, repo, root, 1)
-    wanted = replace(request(tmp_path, repo), overrides=Overrides(workflow="absent"))
+    wanted = replace(request(tmp_path, repo), new=NewTask(workflow="absent"))
     refused = admission(factory, tmp_path, Tracker(factory, tmp_path / "artifacts"), repo).admit(wanted)
     assert isinstance(refused, AdmitRefused) and refused.reason == "workflow"
     assert factory.execute("SELECT count(*) FROM attempt").fetchone() == (0,)

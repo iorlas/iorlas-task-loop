@@ -54,7 +54,7 @@ _UNDEFINED = encode(CommandConclusion.UNDEFINED)
 # This is also the runtime's persisted-state compatibility version: increment it for incompatible changes to the
 # interpretation of execution state, even without a DDL change. Compatible code changes keep it and resume normally.
 SCHEMA = Schema(
-    version=34,
+    version=35,
     name="factory",
     steps={},
     ddl=f"""
@@ -142,6 +142,7 @@ CREATE TABLE attempt (
  harness TEXT NOT NULL DEFAULT '{HarnessKind.CODEX}' CHECK(harness IN ({_HARNESSES})),
  provider TEXT NOT NULL DEFAULT '{Provider.OPENAI}' CHECK(provider IN ({_PROVIDERS})),
  engine_digest TEXT NOT NULL CHECK(length(engine_digest)=64 AND engine_digest NOT GLOB '*[^0-9a-f]*'),
+ declared_start INTEGER NOT NULL DEFAULT 0 CHECK(declared_start IN (0,1)),
  workflow_digest TEXT NOT NULL REFERENCES workflow_file(digest),
  workflow_sha TEXT NOT NULL CHECK(length(workflow_sha) IN (40,64) AND workflow_sha NOT GLOB '*[^0-9a-f]*'),
  admitted_at REAL NOT NULL, ended_at REAL CHECK(ended_at IS NULL OR phase='captured'),
@@ -150,6 +151,7 @@ CREATE TABLE attempt (
  CHECK(((number = 1 AND step <> '{Step.PLAN}') OR source_checks_id IS NOT NULL) = (after_commit IS NOT NULL)),
  CHECK((repeat_reason IS '{CheckRepeatReason.FAILED_CHECK.value}') = (source_checks_id IS NOT NULL)),
  CHECK(source_checks_id IS NULL OR step='{Step.IMPLEMENT}'),
+ CHECK(declared_start=0 OR (step='{Step.IMPLEMENT}' AND number=1 AND source_checks_id IS NULL)),
  CHECK(phase='admitted' OR base_commit IS NOT NULL), CHECK(end_commit IS NULL OR phase='captured'),
  UNIQUE(adapter, backlog, task_id, seq)
 );
@@ -301,7 +303,7 @@ RESERVATION = "slot,repo_id,generation,attempt_id"
 ATTEMPT_ADMITTED = (
     "attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,input_digest,"
     "schema_version,model,effort,access_policy,deadline,number,previous_attempt_id,repeat_reason,repeat_listing,seq,slot_head,"
-    "after_commit,label,harness,provider,source_checks_id,compaction_token_limit,repair_context,engine_digest,workflow_digest,workflow_sha,admitted_at"
+    "after_commit,label,harness,provider,source_checks_id,compaction_token_limit,repair_context,engine_digest,workflow_digest,workflow_sha,declared_start,admitted_at"
 )
 ATTEMPT_LOADED = (
     "backlog,task_id,repo_id,slot,input_path,input_digest,model,effort,access_policy,deadline,entry_pid,entry_start,entry_boot,"

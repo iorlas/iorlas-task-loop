@@ -79,6 +79,11 @@ def pin_columns(con: sqlite3.Connection, pin: Pin) -> dict[str, object]:
     """Store the pin's bytes (once, keyed by their sha256) and name them for a new attempt row, inside the caller's write
     transaction; a task keeps the exact file it was admitted with."""
     con.execute("INSERT OR IGNORE INTO workflow_file (digest, content) VALUES (?, ?)", (pin.digest, pin.content))
+    return named_pin(pin)
+
+
+def named_pin(pin: Pin) -> dict[str, object]:
+    """The attempt columns that name a pin whose bytes are already stored (an advance reads them from there)."""
     return dict(zip(PIN, (pin.digest, pin.sha), strict=True))
 
 

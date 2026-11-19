@@ -182,6 +182,7 @@ class AttemptLoads(StoreConnection, ABC):
             as_nullable_text(row[26]),
             as_nullable_text(row[28]),
             None if row[33] is None else RepairContext.model_validate_json(as_text(row[33])),
+            bool(as_int(row[34])),
         )
         pid, pgid, began, boot = row[15:19]
         worker = None if pid is None else Worker(pid=as_int(pid), pgid=as_int(pgid), start=as_text(began), boot=as_text(boot))

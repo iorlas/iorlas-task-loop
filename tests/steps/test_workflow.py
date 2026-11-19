@@ -83,6 +83,9 @@ def test_a_text_section_may_not_hold_a_factory_block_name(name: str) -> None:
     PLAN + IMPLEMENT + b'[[step.plan.prompt]]\ntext = "   "\n',  # empty text
     PLAN + IMPLEMENT + b"[step.plan.agent]\nharness = 'nope'\n",
     PLAN + IMPLEMENT + b"[step.plan.agent]\nmodel = 3\n",
+    PLAN + IMPLEMENT + b'[step.plan.agent]\nmodel = ""\n',  # empty: refused, never silently ignored
+    PLAN + IMPLEMENT + b"[step.plan.agent]\neffort = 'two words'\n",
+    PLAN + IMPLEMENT + b"[step.implement.agent]\ncompaction_token_limit = 0\n",
 ])
 def test_a_wrong_shape_or_value_is_bad_value(data: bytes) -> None:
     assert refused(data).reason in (Reason.BAD_VALUE, Reason.UNKNOWN_KEY)  # a missing kind is a missing key, not an unknown one

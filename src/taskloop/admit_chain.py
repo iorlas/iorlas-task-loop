@@ -30,7 +30,7 @@ from taskloop.admit_store import (
     current,
     insert_attempt,
     issued,
-    pin_columns,
+    named_pin,
     reserve,
     stored_pin,
     task_of,
@@ -155,7 +155,7 @@ class ChainAdmission:
             "repeat_reason": request.reason, "repeat_listing": json.dumps(request.listing), "seq": row.seq + 1,
             "slot_head": row.slot_head, "step": row.step,
             "harness": row.harness, "provider": row.provider, "engine_digest": self.engine, "admitted_at": self.clock(),
-            **copied_pin(con, previous.attempt_id), "compaction_token_limit": row.compaction_token_limit,
+            **copied_pin(con, previous.attempt_id), "declared_start": 0, "compaction_token_limit": row.compaction_token_limit,
             "after_commit": None, "label": row.label,  # a repeat starts at E, the chain's own
         }, request.content_digest)
         if not transfer(con, previous, key, row.repo_id, row.slot):
@@ -186,7 +186,6 @@ class _Ready:
     task: TaskInspection
     free: tuple[Free, ...]
     earlier: EarlierAttempt | None = None
-    pin: Pin | None = None
 
 
 class NextAdmission:
@@ -222,8 +221,8 @@ class NextAdmission:
             discussion = self.discussion(ready.task, found.tracker_root)
             reader = AttemptStore(self.connect, self.begin)
             earlier = reader.earlier_for(request.previous)
-            ready = replace(ready, earlier=earlier, pin=pin)
-            request = replace(request, setting=choose(request.setting, pin.workflow.table(ready.step).agent, request.overrides))
+            ready = replace(ready, earlier=earlier)
+            setting = choose(request.setting, pin.workflow.table(ready.step).agent, request.overrides)
             text = EarlierInput(reader, self.files, HoldStore(self.connect, self.begin)).attach(
                 task_text(ready.task, ready.step, context, pin.workflow, discussion.text), earlier,
                 partial(commit_names, self.checkouts(request.checkout), request.checkout))
@@ -234,13 +233,13 @@ class NextAdmission:
             return AdmitRefused("workflow" if isinstance(error, WorkflowRefusal) else "input", detail=why(error))
         except ValueError as error:  # the workflow's or a flag's agent choice is invalid
             return AdmitRefused("choices", detail=why(error))
-        return self._advanced(ready, request, key, ref)
+        return self._advanced(ready, request, key, ref, pin, setting)
 
     def _advanced(
-        self, ready: _Ready, request: NextStepRequest, key: AttemptKey, ref: FileRef
+        self, ready: _Ready, request: NextStepRequest, key: AttemptKey, ref: FileRef, pin: Pin, setting: AgentSetting
     ) -> Admitted | AdmitRefused | AdmitUnavailable:
         try:
-            return self._advance(ready, request, key, ref)
+            return self._advance(ready, request, key, ref, pin, setting)
         except sqlite3.IntegrityError as error:  # caught after the rollback; every constraint is pre-checked: a schema mismatch
             return AdmitRefused("constraint", detail=why(error))
         except (sqlite3.Error, StoreUnavailable) as error:
@@ -294,13 +293,13 @@ class NextAdmission:
         free = views if not isinstance(views, tuple) else branched(repo, found.task_id, views)
         return free if not isinstance(free, tuple) else _containing(repo, found, free)
 
-    def _advance(self, ready: _Ready, request: NextStepRequest, key: AttemptKey, ref: FileRef) -> Admitted | AdmitRefused:
+    def _advance(
+        self, ready: _Ready, request: NextStepRequest, key: AttemptKey, ref: FileRef, pin: Pin, setting: AgentSetting
+    ) -> Admitted | AdmitRefused:
         """Under the write lock: the task's current attempt is still `previous` and done; the lowest observed-free slot
         still unheld; then the reservation, the slot's counter and attempt 1 of the next step starting after the previous
         X."""
-        con, found, step, free, pin = ready.con, ready.found, ready.step, ready.free, ready.pin
-        if pin is None:
-            raise StoreUnavailable("The advance's workflow was not read.")
+        con, found, step, free = ready.con, ready.found, ready.step, ready.free
         repo_id, generation = RepoId(found.repo_id), key.reservation_generation
         with self.begin(con):
             if blocked(con):
@@ -333,10 +332,10 @@ class NextAdmission:
                     "input_path": ref.path,
                     "input_digest": ref.digest,
                     "schema_version": 1,
-                    "model": request.setting.model,
-                    "effort": request.setting.effort,
-                    "compaction_token_limit": request.setting.compaction_token_limit,
-                    "access_policy": encode_policy(request.setting.access),
+                    "model": setting.model,
+                    "effort": setting.effort,
+                    "compaction_token_limit": setting.compaction_token_limit,
+                    "access_policy": encode_policy(setting.access),
                     "deadline": request.deadline,
                     "number": 1,
                     "previous_attempt_id": None,
@@ -346,9 +345,9 @@ class NextAdmission:
                     "slot_head": head,
                     "after_commit": row.end_commit,
                     "label": row.label,
-                    "harness": request.setting.harness,
-                    "provider": request.setting.provider, "engine_digest": self.engine, "admitted_at": self.clock(),
-                    **pin_columns(con, pin),
+                    "harness": setting.harness,
+                    "provider": setting.provider, "engine_digest": self.engine, "admitted_at": self.clock(),
+                    **named_pin(pin), "declared_start": 0,
                 },
             )
         return Admitted(key, name)
