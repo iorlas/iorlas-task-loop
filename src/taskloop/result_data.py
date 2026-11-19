@@ -5,6 +5,7 @@ from pathlib import Path
 
 from taskloop.agents.config import display
 from taskloop.agents.stop_text import stop_text
+from taskloop.attempt_export import AttemptExport
 from taskloop.attempt_reads import PublishedRow, ReleaseRow
 from taskloop.attempt_result import succeeded
 from taskloop.attempt_status import AttemptView, Listed, Shown
@@ -29,7 +30,9 @@ from taskloop.operations import (
     Started,
 )
 from taskloop.publish import publish_word
+from taskloop.rows_render import Rows, records
 from taskloop.setup_timing import SetupTimingReport
+from taskloop.slot_list import SlotList
 from taskloop.slot_release import Released, release_word
 from taskloop.slots import Adopted, NotAdopted, SlotView
 from taskloop.task_status import task_status, words
@@ -39,7 +42,8 @@ from taskloop.task_status import task_status, words
 type StepResult = (
     Started | Shown | Listed | CommittedTask | ReleasedTask | PublishedTask | Adoption | Loaded | Round | Ended | Failed | SetupTimingReport
 )
-type Result = StepResult | Landed | Withdrawn | LandSummary
+type Shaped = StepResult | Landed | Withdrawn | LandSummary
+type Result = Shaped | Rows
 
 
 def _entry_data(entry: EntryIdentity | None) -> dict[str, object] | None:
@@ -135,11 +139,16 @@ def _slot_data(each: SlotView | Adopted | NotAdopted) -> dict[str, object]:
             return {"name": each.name, "adopted": False, "reason": each.reason, "path": None if each.path is None else str(each.path)}
 
 
-def as_data(result: Result, *, admission: bool = False) -> dict[str, object]:
+def as_data(result: Shaped, *, admission: bool = False) -> dict[str, object]:
     """`_step_data`'s shapes, and `tl land run`'s answers (`land_data`)."""
     if isinstance(result, Landed | Withdrawn | LandSummary):
         return land_data(result)
     return _step_data(result, admission=admission)
+
+
+def as_json(result: Result, *, admission: bool = False) -> dict[str, object] | list[dict[str, object]]:
+    """What `--json` prints: `as_data`'s object, or a JSON array of row objects for the export and the slot list."""
+    return records(result) if isinstance(result, AttemptExport | SlotList) else as_data(result, admission=admission)
 
 
 def _step_data(result: StepResult, *, admission: bool) -> dict[str, object]:

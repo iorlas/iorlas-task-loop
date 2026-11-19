@@ -3,7 +3,9 @@ here decides, reads or writes; `result_data.as_data` is the one JSON shape."""
 
 from pathlib import Path
 
+from taskloop import rows_render
 from taskloop.agents.config import display
+from taskloop.attempt_export import AttemptExport
 from taskloop.attempt_status import Listed, Shown
 from taskloop.attempt_types import ATTEMPTS
 from taskloop.command_conclusion import encode
@@ -34,6 +36,7 @@ from taskloop.result_data import Result, StepResult
 from taskloop.round_guide import automatic_guide
 from taskloop.setup_timing import SetupTimingReport
 from taskloop.show_render import last_command, setup_times, show_lines
+from taskloop.slot_list import SlotList
 from taskloop.slot_release import Released, is_released, release_word
 from taskloop.slots import Adopted
 from taskloop.step_guide import GUIDE, HELD, NEEDS_OWNER, STEP_ONLY, discard, guide, refusal_guide
@@ -44,6 +47,8 @@ from taskloop.task_status import words as status_words
 def human(command: str, result: Result, db: Path | None) -> list[str]:
     """`tl land run`'s answers and refusals are `land_render`'s; the rest (a land candidate's refused release too, with
     its own guide) `_step_lines`'."""
+    if isinstance(result, AttemptExport | SlotList):
+        return rows_render.lines(result)
     if isinstance(result, Landed | Withdrawn | LandSummary) or (isinstance(result, Failed) and command.startswith(COMMAND)):
         return land_lines(command, result)
     return _step_lines(command, result, db)

@@ -10,7 +10,7 @@ from pathlib import Path
 
 from pydantic import ValidationError
 
-from taskloop import cli_attempt, cli_composition, cli_land, dash_composition, operations, result_data
+from taskloop import cli_attempt, cli_composition, cli_land, dash_composition, operations, result_data, slot_list
 from taskloop.agents.settings import Overrides
 from taskloop.cli_common import (
     ARTIFACTS,
@@ -40,6 +40,7 @@ from taskloop.operations import Ended, Failed, Round, StartRequest
 from taskloop.result_data import Result
 from taskloop.round import NextRequest, run_round
 from taskloop.rounds import RoundsRequest, run_rounds
+from taskloop.slot_list_store import SlotListStore
 from taskloop.step import Step, encode_step
 from taskloop.step_guide import ROUNDS, STEP_ONLY
 from taskloop.step_render import human
@@ -48,7 +49,8 @@ from taskloop.workflow_read import DEFAULT
 
 DASH_PORT = 8765
 SCHEDULER, STEP, START = "rounds", "step", "start"
-COMMANDS = ("config", "slot", STEP, cli_attempt.GROUP, SCHEDULER, cli_land.GROUP)
+SLOTS = "slot"
+COMMANDS = ("config", SLOTS, STEP, cli_attempt.GROUP, SCHEDULER, cli_land.GROUP)
 
 
 def _binding(parser: argparse.ArgumentParser) -> None:
@@ -85,11 +87,13 @@ def register(commands: Parsers) -> None:
     common(show, DB, ARTIFACTS, "--slots-root")
     _harness_flag(show)
     show.add_argument("--slot-count", type=int, help="Slot count (overrides the machine config's slot_count)")
-    slot = group(commands, "slot", "Managed slots (setup)")
+    slot = group(commands, SLOTS, "Managed slots: adopt them, list them")
     adopt = add(slot, "adopt", "Adopt worktrees made by hand with `git worktree add --detach <root>/<repo name>/sN`; creates factory.db")
     adopt.add_argument("checkout", metavar="CHECKOUT", help="The person's checkout of the repository")
     adopt.add_argument("--slot-count", type=int, help="Adopt s1..sN (overrides slot_count); adds slots only, retires none")
     common(adopt, "--slots-root", DB)
+    common(add(slot, "list", "List the adopted slots from factory.db: name, path, repository id and whether a reservation holds it "
+               "(free, or held with the holding attempt; read-only, no Git)"), DB)
     step = group(commands, STEP, f"Step attempts ({STEP_ONLY})")
     start = add(step, START, "Admit, relaunch or repeat the task's attempt (free slot, tracker claim), advance a done step, or "
                  "re-run failed checks on the same commit. The tracker claim stays held between steps; nothing renews it then")
@@ -276,9 +280,15 @@ def _configuration(arguments: argparse.Namespace, loaded: Loaded) -> Loaded | Fa
     return replace(loaded, settings=replace(loaded.settings, agents=settings, agent_sources=sources))
 
 
+def _slots(_arguments: argparse.Namespace, loaded: Loaded) -> Result:
+    with cli_composition.open_reads(loaded.settings.db.value, loaded.settings.artifacts.value, views_for(loaded)) as reads:
+        return reads if isinstance(reads, Failed) else slot_list.list_slots(SlotListStore(reads.store.connect, reads.store.begin))
+
+
 OPERATIONS: dict[tuple[str, str], Callable[[argparse.Namespace, Loaded], Result]] = {
     ("config", "show"): _configuration,
-    ("slot", "adopt"): _adopt,
+    (SLOTS, "adopt"): _adopt,
+    (SLOTS, "list"): _slots,
     (STEP, START): _start,
     (SCHEDULER, "once"): _next,
     (SCHEDULER, START): _rounds,
@@ -318,7 +328,7 @@ def run(arguments: argparse.Namespace) -> int:
     stream = sys.stderr if failed else sys.stdout
     if arguments.json_output:
         admission = (arguments.command, arguments.operation) == (STEP, START)  # the one command whose refusals carry slots
-        print(json.dumps(result_data.as_data(result, admission=admission)), file=stream)
+        print(json.dumps(result_data.as_json(result, admission=admission)), file=stream)
     else:
         if isinstance(result, Failed) and result.claim_leaked:
             print(leaked_claim(arguments.task_id), file=sys.stderr)
