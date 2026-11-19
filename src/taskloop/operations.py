@@ -16,7 +16,7 @@ claim it returns). A land candidate of that checks attempt still holding its slo
 
 import sqlite3
 from collections.abc import Callable
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Final, Literal, Protocol
 
@@ -51,15 +51,15 @@ from taskloop.hold_store import HoldStore
 from taskloop.land_store import LandRow, LandStore
 from taskloop.launch import AlreadyRunning, Launched, LaunchRefused, LaunchResult, LaunchUnavailable, LaunchUncertain
 from taskloop.machine_config import ConfigRefused
+from taskloop.new_task import NewTask
+from taskloop.operation_failure import Failed, FailureKind
 from taskloop.publish import BranchPublished, NotPublished, PublishResult, publish_word
 from taskloop.slot_release import AlreadyReleased, NotReleased, Released, ReleaseResult, release_word
-from taskloop.slots import Adopted, NotAdopted, SlotView
+from taskloop.slots import Adopted, NotAdopted
 from taskloop.step_text import unsafe_details
 from taskloop.steps import CHECK, following
 
 type Clock = Callable[[], float]
-type FailureKind = Literal["refused", "unavailable", "uncertain", "rejected", "not_applicable", "unsettled",
-                          "uncommitted", "waiting", "defect"]
 WAITING: Final[FailureKind] = "waiting"
 UNCOMMITTED: Final[FailureKind] = "uncommitted"
 UNKNOWN_KINDS: Final = ("unavailable", "uncertain", "unsettled", UNCOMMITTED, WAITING)  # re-running is safe: exit 3
@@ -108,28 +108,6 @@ class Publish(Protocol):
     def publish(self, key: AttemptKey) -> PublishResult: ...
 
 
-@dataclass(frozen=True)
-class Failed:
-    """Every refusal and unknown in one shape; `detail` is diagnostic only. `admitted`: this start admitted the attempt
-    before its launch failed, so the tracker claim and the slot are held (re-running `tl step start` retries the launch).
-    `checks`: a checks attempt's refusal (its words are guided by `step_guide.CHECKS_GUIDE` where they differ); `land`: a
-    land candidate's (guided by `land_guide.LAND_GUIDE` first)."""
-
-    kind: FailureKind
-    reason: str
-    detail: str = ""
-    claim_leaked: bool = False
-    slots: tuple[SlotView, ...] = ()
-    admitted: bool = False
-    checks: bool = False
-    land: bool = False
-    config: ConfigRefused | None = None
-
-    @property
-    def word(self) -> str:
-        return f"{self.kind}:{self.reason}"
-
-
 class Repeat(Protocol):
     def repeat(self, backlog: str, task_id: str, current: AttemptKey, entry: EntryIdentity | None, minutes: int) -> Started | Failed: ...
 
@@ -171,6 +149,7 @@ class StartRequest:
     overrides: Overrides
     minutes: int
     label: str | None = None  # the round's approval label, stored on a fresh admission; None: `tl step start` by hand
+    new: NewTask = field(default_factory=NewTask)  # applies to a fresh admission only
 
 
 @dataclass(frozen=True)
@@ -351,6 +330,8 @@ def _start(ports: StartPorts, request: StartRequest, advancing: str | None, reru
                   or (isinstance(found, CheckRepeatTarget) and found.previous.attempt_id == advancing))
         if advancing is not None and not wanted:
             found = _not_advanced(found)
+        if advancing is None and request.new.given and isinstance(found, (tuple, _Relaunch, _Advance, CheckRepeatTarget)):
+            found = Failed("refused", "choices", "--from and --workflow apply to a task's first attempt; this task is under way")
         if isinstance(found, (Started, Failed)):
             return found
         if isinstance(found, CheckRepeatTarget):
@@ -468,15 +449,14 @@ def _not_advanced(found: _Found) -> Failed:
 
 
 def _admit(ports: StartPorts, request: StartRequest, advance: _Advance | None) -> tuple[AttemptKey, bool] | Failed:
-    """The new attempt's key (a fresh admission, or the next step's after `advance`), or the winner's after
-    `task_attempted`; StoreUnavailable propagates."""
+    """The new attempt's key (a fresh admission or the next step's), or the winner's after `task_attempted`; StoreUnavailable propagates."""
     deadline = deadline_after(request.minutes, ports.clock)
     checks = advance is not None and advance.step == CHECK
     if advance is not None and checks:
         admitted = ports.checks.admission.admit_checks(ChecksRequest(advance.previous, request.checkout, deadline, advance.number))
     elif advance is None:
-        admitted = ports.admission.admit(AdmitRequest(request.task_id, request.backlog, request.tracker_root,
-                                                    request.checkout, request.settings, deadline, request.label, request.overrides))
+        admitted = ports.admission.admit(AdmitRequest(request.task_id, request.backlog, request.tracker_root, request.checkout,
+                                                      request.settings, deadline, request.label, request.overrides, request.new))
     else:
         admitted = ports.advance.admit_next(NextStepRequest(advance.previous, request.checkout,
                                                             request.settings.for_step(advance.step), deadline, request.overrides))

@@ -31,6 +31,7 @@ from taskloop.hold_store import HoldStore
 from taskloop.ids import Ids
 from taskloop.input_context import InputError
 from taskloop.input_context import read as read_context
+from taskloop.new_task import NewTask
 from taskloop.plan_reuse import ReuseDecision
 from taskloop.prepare import held_refusal, refreshed_sources, refusal_detail
 from taskloop.repo import RepoId, UnsupportedCheckout, inspect_repo
@@ -40,7 +41,7 @@ from taskloop.slots_store import SlotsStore
 from taskloop.task import TaskInspection, TaskInspectionError
 from taskloop.task_content import TaskContentDigest
 from taskloop.task_input import task_text
-from taskloop.workflow_read import DEFAULT, Pin, WorkflowRefusal, read_workflow
+from taskloop.workflow_read import Pin, WorkflowRefusal, read_workflow
 
 type Claim = Callable[[str, str], bool]  # (tracker root, task id): True taken, False held elsewhere, BdError unknown
 type Unclaim = Callable[[str, str], bool]  # fenced to this actor's own claim; False: not released
@@ -68,6 +69,7 @@ class AdmitRequest:
     deadline: float
     label: str | None  # the approval label a round ingests the task under, stored on the attempt; None: started by hand
     overrides: Overrides = field(default_factory=Overrides)
+    new: NewTask = field(default_factory=NewTask)  # a fresh admission only
 
 
 @dataclass(frozen=True)
@@ -100,11 +102,16 @@ class _Prepared:
     task: TaskInspection
     repo: Repo
     repo_id: RepoId
-    earlier: EarlierAttempt | None = None
-    content_digest: TaskContentDigest | None = None
-    selection: Selection | None = None
-    setting: AgentSetting | None = None
-    pin: Pin | None = None
+
+
+@dataclass(frozen=True)
+class _Chosen:
+    """What the input phase decided; built only when all of it is known, so the commit never meets a half-built choice."""
+    earlier: EarlierAttempt | None
+    content_digest: TaskContentDigest
+    selection: Selection
+    setting: AgentSetting
+    pin: Pin
 
 
 def why(error: BaseException) -> str:
@@ -149,11 +156,11 @@ class AttemptAdmission:
         inputs = self._input(prepared, free, con)
         if not isinstance(inputs, tuple):
             return inputs
-        prepared, key, ref = inputs
-        return self._claimed(con, prepared, free, key, ref)
+        chosen, key, ref = inputs
+        return self._claimed(con, prepared, chosen, free, key, ref)
 
     def _input(self, prepared: _Prepared, free: tuple[Free, ...], con: sqlite3.Connection
-               ) -> tuple[_Prepared, AttemptKey, FileRef] | AdmitRefused | AdmitUnavailable:
+               ) -> tuple[_Chosen, AttemptKey, FileRef] | AdmitRefused | AdmitUnavailable:
         request = prepared.request
         try:
             generation = issued(con, prepared.repo_id, tuple(each.name for each in free)) + 1
@@ -161,18 +168,17 @@ class AttemptAdmission:
             earlier = reader.earlier(str(prepared.repo_id), request.backlog, request.task_id, prepared.request.tracker_root)
             key = AttemptKey(self.ids.hex(), self.ids.token(16), generation)  # the key names the evidence directory
             files = GitProfileFiles(request.checkout, self.checkouts)
-            context, pin = read_context(files, free[0].source), read_workflow(files, free[0].source, request.overrides.workflow or DEFAULT)
+            context, pin = read_context(files, free[0].source), read_workflow(files, free[0].source, request.new.workflow)
             discussion = self.discussion(prepared.task, prepared.request.tracker_root)
             selection = ResumePlans(reader, self.checkouts).select(
                 str(prepared.repo_id), request.backlog, request.task_id, prepared.request.tracker_root,
-                request.checkout, free[0].source, discussion.digest, start=request.overrides.start)
+                request.checkout, free[0].source, discussion.digest, start=request.new.start)
             if selection.decision is ReuseDecision.UNAVAILABLE:
                 return AdmitUnavailable("git", detail=selection.explanation)
             if selection.declared and selection.decision is not ReuseDecision.REUSE:
                 return AdmitRefused("plan", detail=selection.explanation)
-            prepared = replace(prepared, earlier=earlier, content_digest=discussion.digest, selection=selection, pin=pin,
-                               setting=choose(request.settings.for_step(selection.step), pin.workflow.table(selection.step).agent,
-                                              request.overrides))
+            setting = choose(request.settings.for_step(selection.step), pin.workflow.table(selection.step).agent, request.overrides)
+            chosen = _Chosen(earlier, discussion.digest, selection, setting, pin)
             text = EarlierInput(reader, self.files, HoldStore(self.connect, self.begin)).attach(
                 task_text(prepared.task, selection.step, context, pin.workflow, discussion.text), earlier,
                 partial(commit_names, prepared.repo, request.checkout))
@@ -183,7 +189,7 @@ class AttemptAdmission:
             return AdmitRefused("workflow" if isinstance(error, WorkflowRefusal) else "input", detail=why(error))
         except ValueError as error:
             return AdmitRefused("choices", detail=why(error))
-        return prepared, key, ref
+        return chosen, key, ref
 
     def _prepare(self, request: AdmitRequest) -> _Prepared | AdmitRefused | AdmitUnavailable:
         refused = deadline_refusal(self.clock, request.deadline)
@@ -213,7 +219,8 @@ class AttemptAdmission:
         free = free_slots(con, prepared.repo, SlotGit(self.checkouts, self.slot_files), prepared.repo_id, self.probe)
         return (con, free) if isinstance(free, tuple) else free
 
-    def _claimed(self, con: sqlite3.Connection, prepared: _Prepared, free: tuple[Free, ...], key: AttemptKey, ref: FileRef) -> AdmitResult:
+    def _claimed(self, con: sqlite3.Connection, prepared: _Prepared, chosen: _Chosen, free: tuple[Free, ...],
+                 key: AttemptKey, ref: FileRef) -> AdmitResult:
         request, owner = prepared.request, self.me()
         if owner is None:
             return AdmitUnavailable("store", detail="The admission owner's identity cannot be established")
@@ -225,14 +232,14 @@ class AttemptAdmission:
             return AdmitRefused("task_attempted", detail="Another admission already owns this task's pending claim.")
         if action is None:
             return AdmitRefused(Reason.DRAINING, detail=BLOCKED)
-        result = self._claim_then_admit(con, prepared, free, key, ref)
+        result = self._claim_then_admit(con, prepared, chosen, free, key, ref)
         if isinstance(result, Admitted) or not result.claim_leaked:
             drain.finish(action)
         else:
             drain.uncertain(action)
         return result
 
-    def _claim_then_admit(self, con: sqlite3.Connection, prepared: _Prepared, free: tuple[Free, ...], key: AttemptKey,
+    def _claim_then_admit(self, con: sqlite3.Connection, prepared: _Prepared, chosen: _Chosen, free: tuple[Free, ...], key: AttemptKey,
                          ref: FileRef) -> AdmitResult:
         """Claim outside any transaction, then commit; a pre-commit failure after a claim is compensated by `_compensate`."""
         request = prepared.request
@@ -244,7 +251,7 @@ class AttemptAdmission:
         if not taken:
             return AdmitRefused("claimed_elsewhere")
         try:
-            result = self._commit(con, prepared, free, key, ref)
+            result = self._commit(con, prepared, chosen, free, key, ref)
         except sqlite3.IntegrityError as error:  # caught after the rollback; every constraint is pre-checked, so it means a schema mismatch
             result = AdmitRefused("constraint", detail=why(error))
         except (sqlite3.Error, StoreUnavailable) as error:
@@ -268,29 +275,26 @@ class AttemptAdmission:
         except BdError:
             return True
 
-    def _commit(
-        self, con: sqlite3.Connection, prepared: _Prepared, free: tuple[Free, ...], key: AttemptKey, ref: FileRef
-    ) -> Admitted | AdmitRefused:
+    def _commit(self, con: sqlite3.Connection, prepared: _Prepared, chosen: _Chosen, free: tuple[Free, ...],
+                key: AttemptKey, ref: FileRef) -> Admitted | AdmitRefused:
         """Recheck task and plan evidence under the write lock, then reserve a slot and insert the attempt."""
         request, repo_id, generation = prepared.request, prepared.repo_id, key.reservation_generation
-        selection, setting, pin = prepared.selection, prepared.setting, prepared.pin
-        if selection is None or setting is None or pin is None:
-            raise StoreUnavailable("The admission choices were not prepared.")
+        selection, setting, pin = chosen.selection, chosen.setting, chosen.pin
         with self.begin(con):
             if blocked(con):
                 return AdmitRefused(Reason.DRAINING, detail=BLOCKED)
             if task_attempted(con, request.backlog, request.task_id):
                 return AdmitRefused("task_attempted")
             if AttemptStore(lambda: con).earlier(str(repo_id), request.backlog, request.task_id,
-                                               request.tracker_root) != prepared.earlier:
+                                               request.tracker_root) != chosen.earlier:
                 return AdmitRefused("task_attempted", detail="The earlier attempt changed while the input was being prepared.")
             if not ResumePlans(AttemptStore(lambda: con), self.checkouts).unchanged(
-                    selection, str(repo_id), request.backlog, request.task_id, request.tracker_root, prepared.content_digest):
+                    selection, str(repo_id), request.backlog, request.task_id, request.tracker_root, chosen.content_digest):
                 return AdmitRefused("task_attempted", detail="The plan evidence changed while the input was being prepared.")
-            chosen = next((slot for each in free if (slot := unheld(con, repo_id, each, generation)) is not None), None)
-            if chosen is None:
+            taken = next((slot for each in free if (slot := unheld(con, repo_id, each, generation)) is not None), None)
+            if taken is None:
                 return AdmitRefused("no_free_slot")
-            name, head = chosen
+            name, head = taken
             reserve(con, repo_id, name, key)
             insert_attempt(
                 con,
@@ -321,9 +325,9 @@ class AttemptAdmission:
                     "label": request.label,
                     "harness": setting.harness,
                     "provider": setting.provider, "engine_digest": self.engine, "admitted_at": self.clock(),
-                    **pin_columns(con, pin),
+                    **pin_columns(con, pin), "declared_start": int(selection.declared),
                 },
-                prepared.content_digest,
+                chosen.content_digest,
             )
         return Admitted(key, name)
 

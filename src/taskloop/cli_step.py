@@ -20,6 +20,7 @@ from taskloop.git_views import GitViews
 from taskloop.harness_choice import HarnessKind
 from taskloop.land_guide import INTERRUPTED
 from taskloop.machine_config import ConfigRefused, Effective, Flags, Loaded
+from taskloop.new_task import NewTask
 from taskloop.operations import Ended, Failed, Round, StartRequest
 from taskloop.result_data import Result
 from taskloop.round import NextRequest, run_round
@@ -29,6 +30,7 @@ from taskloop.step import Step, encode_step
 from taskloop.step_guide import ROUNDS, STEP_ONLY
 from taskloop.step_render import human
 from taskloop.tracker import leaked_claim
+from taskloop.workflow_read import DEFAULT
 
 type Parsers = argparse._SubParsersAction[argparse.ArgumentParser]
 DASH_PORT = 8765
@@ -158,8 +160,8 @@ def _harness_flag(parser: argparse.ArgumentParser) -> None:
 def _new_task_flags(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--from", dest="start_step", type=Step, choices=[Step.IMPLEMENT], default=None, help="Start a new task at "
                         "implement from the plan committed at its source commit (refused when none is valid), not at plan")
-    parser.add_argument("--workflow", default=None, metavar="NAME", help="Take a new task's prompts and agent choice from "
-                        ".task-loop/workflows/NAME.toml at its source commit (default: `default`); a task keeps the file it started with")
+    parser.add_argument("--workflow", default=DEFAULT, metavar="NAME", help="Take a new task's prompts and agent choice from "
+                        ".task-loop/workflows/NAME.toml at its source commit; a task keeps the file it started with")
 
 
 def _round_flags(parser: argparse.ArgumentParser) -> None:
@@ -187,19 +189,23 @@ def views_for(loaded: Loaded) -> GitViews:
 
 def _start(arguments: argparse.Namespace, loaded: Loaded) -> Result:
     request = StartRequest(arguments.task_id, arguments.backlog, arguments.tracker_root, Path(arguments.checkout), loaded.settings.agents,
-                           _overrides(arguments), arguments.minutes)
+                           _overrides(arguments), arguments.minutes, new=_new_task(arguments))
     with cli_composition.open_start(loaded.settings.db.value, loaded.settings.artifacts.value, views_for(loaded)) as ports:
         return ports if isinstance(ports, Failed) else operations.start(ports, request)
 
 
 def _overrides(arguments: argparse.Namespace) -> Overrides:
-    return Overrides(harness=arguments.harness, model=arguments.model, effort=arguments.effort, start=arguments.start_step,
-                     workflow=arguments.workflow)
+    return Overrides(harness=arguments.harness, model=arguments.model, effort=arguments.effort)
+
+
+def _new_task(arguments: argparse.Namespace) -> NewTask:
+    return NewTask(start=arguments.start_step, workflow=arguments.workflow)
 
 
 def _next_request(arguments: argparse.Namespace, loaded: Loaded) -> NextRequest:
     return NextRequest(arguments.backlog, arguments.tracker_root, Path(arguments.checkout), arguments.label, loaded.settings.agents,
-                       _overrides(arguments), arguments.minutes, max_running=arguments.max_running, retake=arguments.retake_lapsed)
+                       _overrides(arguments), arguments.minutes, max_running=arguments.max_running, retake=arguments.retake_lapsed,
+                       new=_new_task(arguments))
 
 
 def _next(arguments: argparse.Namespace, loaded: Loaded) -> Result:

@@ -136,6 +136,7 @@ class Admission:
     after_commit: str | None = None  # attempt 1 of a later step: the previous step's published X, which it starts from
     source_checks_id: str | None = None  # a clean-slot repeat after failed checks; never a dirty-slot takeover
     repair: RepairContext | None = None
+    declared_start: bool = False  # the run named implement as the start: the plan is the one committed at `after_commit`
 
 
 @dataclass(frozen=True)

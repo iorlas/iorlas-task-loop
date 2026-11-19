@@ -114,7 +114,7 @@ class CheckRepeatStore(StoreConnection):
                 "model": choices.model, "effort": choices.effort, "access_policy": encode_policy(choices.access),
                 "compaction_token_limit": choices.compaction_token_limit,
                 "harness": choices.harness, "provider": choices.provider, "deadline": deadline,
-                "engine_digest": engine, "admitted_at": admitted_at, **copied_pin(con, previous.attempt_id),
+                "engine_digest": engine, "admitted_at": admitted_at, **copied_pin(con, previous.attempt_id), "declared_start": 0,
                 "number": row.number + 1, "seq": row.seq + 1, "previous_attempt_id": previous.attempt_id,
                 "repeat_reason": CheckRepeatReason.FAILED_CHECK.value, "repeat_listing": None,
                 "source_checks_id": source.key.attempt_id, "slot_head": head, "after_commit": source.commit, "label": row.label,

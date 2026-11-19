@@ -10,6 +10,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[2]
 EDGE_MODULES = frozenset({
     "src/taskloop/agents/settings.py",
+    "src/taskloop/new_task.py",
     "src/taskloop/plan_content.py",
     "src/taskloop/answer_failures.py",
     "src/taskloop/dash_model.py",

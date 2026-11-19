@@ -21,7 +21,9 @@ from taskloop.attempt_types import SlotFiles
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.factory_schema import SCHEMA
 from taskloop.harness_choice import HarnessKind
+from taskloop.new_task import NewTask
 from taskloop.plan_reuse import PlanMetadata
+from taskloop.step import Step
 
 
 @pytest.fixture
@@ -59,9 +61,10 @@ def resumable(
     factory.con.close()
 
 
-def request(factory: Factory, settings: StepSettings | None = None, overrides: Overrides | None = None) -> AdmitRequest:
+def request(factory: Factory, settings: StepSettings | None = None, overrides: Overrides | None = None,
+            new: NewTask | None = None) -> AdmitRequest:
     return AdmitRequest("tl-1", "tasks", "/tracker", factory.slot.repo.path,
-                        settings or StepSettings(), factory.now + 100, "auto", overrides or Overrides())
+                        settings or StepSettings(), factory.now + 100, "auto", overrides or Overrides(), new or NewTask())
 
 
 def steps(factory: Factory) -> list[tuple[str, int, int]]:
@@ -185,6 +188,21 @@ def test_entry_rechecks_after_database_reopen_before_setup_and_dispatch(
         assert factory.ran[-1].startswith("unavailable:" if change in ("tracker_down", "git_down") else "refused:")
         assert reopened.execute("SELECT phase FROM attempt WHERE attempt_id=?", (admitted.key.attempt_id,)).fetchone() == ("admitted",)
         assert reopened.execute("SELECT count(*) FROM setup_run").fetchone() == before
+
+
+@pytest.mark.parametrize(("declared", "expected"), [(False, "refused:"), (True, "collected:needs_owner")])
+def test_a_declared_start_is_judged_at_entry_by_the_committed_plan_alone(resumable: Factory, declared: bool, expected: str) -> None:
+    """Changed task content refuses an inferred implement start; a start the run named rests on the committed plan, as at admission."""
+    factory = resumable
+    wanted = request(factory, new=NewTask(start=Step.IMPLEMENT) if declared else None)
+    admitted = factory.starting().admission.admit(wanted)
+    assert isinstance(admitted, Admitted)
+    row = factory.con.execute("SELECT declared_start FROM attempt WHERE attempt_id=?", (admitted.key.attempt_id,)).fetchone()
+    assert row == (int(declared),)
+    factory.tracker.beads["tl-1"] = replace(factory.tracker.beads["tl-1"], description="Changed after admission")
+    factory.merge_before_dispatch = True
+    factory.launch("tasks", "tl-1", 30)
+    assert factory.ran[-1].startswith(expected)
 
 
 @pytest.mark.parametrize("change", ["metadata", "cited", "deleted", "artifact", "failed_plan"])

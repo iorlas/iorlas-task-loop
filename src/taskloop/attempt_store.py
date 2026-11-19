@@ -74,7 +74,8 @@ class AttemptLoads(LoadDecoding):
         return con.execute(
             f"""SELECT {prefixed("p", ATTEMPT_LOADED)},
             (SELECT path FROM slot WHERE name=p.slot AND repo_id=p.repo_id),
-            (SELECT coalesce(q.end_commit, q.base_commit) FROM attempt q WHERE q.attempt_id=p.previous_attempt_id),p.repair_context
+            (SELECT coalesce(q.end_commit, q.base_commit) FROM attempt q WHERE q.attempt_id=p.previous_attempt_id),p.repair_context,
+            p.declared_start
             FROM attempt p WHERE p.attempt_id=? AND p.dispatch_token=? AND p.generation=?""",
             astuple(key),
         ).fetchone()

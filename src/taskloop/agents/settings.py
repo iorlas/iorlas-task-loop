@@ -137,29 +137,11 @@ class Overrides(Input):
     harness: HarnessKind | None = None
     model: str | None = None
     effort: str | None = None
-    start: Step | None = None  # the step a new task starts at: None is the first (plan); implement needs a committed plan
-    workflow: str | None = None  # the file `.task-loop/workflows/<workflow>.toml` of a task's first step; None is the default one
 
     @field_validator("model", "effort")
     @classmethod
     def word(cls, value: str | None) -> str | None:
         return None if value is None else identifier(value)
-
-    @field_validator("start")
-    @classmethod
-    def implement_only(cls, value: Step | None) -> Step | None:
-        if value is Step.PLAN:
-            raise ValueError("a task starts at the plan step by default; only implement can be named")
-        return value
-
-    @field_validator("workflow")
-    @classmethod
-    def file_name(cls, value: str | None) -> str | None:
-        """A plain lowercase file name: letters, digits, `-` and `_`, so it can never name a path, a ref or a flag."""
-        if value is not None and not (value.isascii() and value.replace("-", "").replace("_", "").isalnum()
-                                      and value == value.lower() and value[0].isalnum()):
-            raise ValueError("a workflow is a plain file name of lowercase letters, digits, '-' and '_'")
-        return value
 
 
 class StepSettings(Input):
@@ -187,8 +169,10 @@ def choose(machine: AgentSetting, workflow: Agent, flags: Overrides) -> AgentSet
     if workflow.harness is not None and workflow.harness is not machine.harness:
         raise ValueError(f"The workflow names harness {workflow.harness}, but the machine configuration sets {machine.harness}")
     named = AgentSetting(
-        harness=machine.harness, model=workflow.model or machine.model, effort=workflow.effort or machine.effort, access=machine.access,
-        compaction_token_limit=workflow.compaction_token_limit or machine.compaction_token_limit,
+        harness=machine.harness, model=machine.model if workflow.model is None else workflow.model,
+        effort=machine.effort if workflow.effort is None else workflow.effort, access=machine.access,
+        compaction_token_limit=(machine.compaction_token_limit if workflow.compaction_token_limit is None
+                                else workflow.compaction_token_limit),
     )
     return apply(named, flags)
 

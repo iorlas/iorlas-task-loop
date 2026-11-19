@@ -39,7 +39,8 @@ from taskloop.earlier_input import START
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.ids import NativeIds
 from taskloop.launch import Launched, LaunchResult
-from taskloop.operations import CommittedTask, Started, StartPorts, StartRequest, commit_task, start
+from taskloop.new_task import NewTask
+from taskloop.operations import CommittedTask, Failed, Started, StartPorts, StartRequest, commit_task, start
 from taskloop.publish import BranchPublish, NotPublished, PublishResult
 from taskloop.slot_lock import custody, hold
 from taskloop.slot_release import NotReleased, Released, SlotRelease
@@ -466,6 +467,19 @@ def test_step_start_on_a_done_plan_admits_and_launches_implement(
         ports, StartRequest("tl-1", "tasks", "/tracker", slot.repo.path, StepSettings(), Overrides(model="chosen", effort="high"), 1)
     )
     assert isinstance(again, Started) and again.attempt_id == started.attempt_id and again.status == "relaunched"
+
+
+def test_new_task_options_on_a_task_under_way_are_refused_not_ignored(
+    registered: sqlite3.Connection, planned: str, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles
+) -> None:
+    never = Never()
+    ports = StartPorts(AttemptStore(lambda: registered), never, Launcher(), lambda: 10, never,
+                       advancing(registered, tmp_path, checkouts, slot_files), NO_CHECKS)
+    request = StartRequest("tl-1", "tasks", "/tracker", slot.repo.path, StepSettings(), Overrides(), 1, new=NewTask(workflow="variant"))
+    refused = start(ports, request)
+    assert isinstance(refused, Failed) and (refused.kind, refused.reason) == ("refused", "choices")
+    assert registered.execute("SELECT count(*) FROM attempt").fetchone() == (1,)
+    assert isinstance(start(ports, replace(request, new=NewTask())), Started)  # the same start without them advances
 
 
 V11 = "INSERT INTO attempt (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,"

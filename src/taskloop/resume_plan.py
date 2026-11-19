@@ -8,7 +8,7 @@ from git_porcelain import GitUnavailable
 from taskloop.attempt_loads import PlanEvidence
 from taskloop.attempt_reads import StoreUnavailable
 from taskloop.attempt_store import AttemptStore
-from taskloop.attempt_types import AttemptRecord, AttemptResult, Checkouts
+from taskloop.attempt_types import Admission, AttemptRecord, AttemptResult, Checkouts
 from taskloop.discussion import RefreshDiscussion
 from taskloop.input_context import InputError
 from taskloop.plan_reuse import ReuseDecision, evaluate
@@ -44,7 +44,7 @@ class ResumePlans:
     def required(self, record: AttemptRecord) -> bool:
         admission = record.admission
         return (admission.step == Step.IMPLEMENT and record.start is None and admission.source_checks_id is None
-                and self.store.previous_abandoned(admission.key))
+                and (admission.declared_start or self.store.previous_abandoned(admission.key)))
 
     def select(
         self, repo_id: str, backlog: str, task_id: str, tracker_root: str, root: Path, source: str,
@@ -76,6 +76,8 @@ class ResumePlans:
             return None
         if base.head != admission.after_commit:
             return AttemptResult("refused", "branch_moved", explanation="The selected plan source changed before entry.")
+        if admission.declared_start:  # the run named its start: only the committed plan counts, as at admission
+            return self._declared(admission, base)
         if discussion is None:
             return AttemptResult("unavailable", "input", explanation="Task-content validation is unavailable.")
         try:
@@ -87,7 +89,16 @@ class ResumePlans:
                                    Path(admission.slot_path), base.head, snapshot.digest, git_dir=base.gitdir)
         except (InputError, OSError) as error:
             return AttemptResult("unavailable", "input", explanation=str(error))
-        if selected.decision is ReuseDecision.REUSE:
+        return self._judged(selected.decision, selected.explanation)
+
+    def _declared(self, admission: Admission, base: Prepared) -> AttemptResult | None:
+        path = f"docs/design/{admission.task.task_id}/plan.md"
+        result = evaluate(self.checkouts, Path(admission.slot_path), path, source=base.head, git_dir=base.gitdir)
+        return self._judged(result.decision, result.explanation)
+
+    @staticmethod
+    def _judged(decision: ReuseDecision, explanation: str) -> AttemptResult | None:
+        """None when the committed plan is still the one to implement, else the entry's refusal."""
+        if decision is ReuseDecision.REUSE:
             return None
-        status = "unavailable" if selected.decision is ReuseDecision.UNAVAILABLE else "refused"
-        return AttemptResult(status, "input", explanation=selected.explanation)
+        return AttemptResult("unavailable" if decision is ReuseDecision.UNAVAILABLE else "refused", "input", explanation=explanation)

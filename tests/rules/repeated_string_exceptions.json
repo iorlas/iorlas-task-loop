@@ -421,15 +421,14 @@
     "explanation": 3
   },
   "src/taskloop/operations.py": {
-    "": 12,
+    "": 11,
     "abandoned": 3,
     "absent": 3,
     "already_dispatched": 4,
     "refused": 20,
     "release": 3,
     "store": 6,
-    "unavailable": 11,
-    "uncertain": 3
+    "unavailable": 10
   },
   "src/taskloop/owned_processes.py": {
     "gone": 3,
