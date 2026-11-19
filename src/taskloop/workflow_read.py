@@ -12,6 +12,12 @@ DIRECTORY: Final = ".task-loop/workflows/"
 DEFAULT: Final = "default"
 
 
+def plain_name(value: str) -> bool:
+    """A plain lowercase file name: letters, digits, `-` and `_`, so it can never name a path, a ref or a flag."""
+    plain = value.replace("-", "").replace("_", "").isalnum() and value.isascii() and value == value.lower()
+    return plain and value[0].isalnum()
+
+
 class WorkflowRefusal(Exception):
     """The file at the commit is missing or unusable; `refused` says why."""
 

@@ -1,5 +1,11 @@
 """Context-specific remedies for configuration, adoption and read-only inspections."""
 
+from typing import Final
+
+from taskloop.workflow import Reason
+
+UNAVAILABLE: Final = "unavailable"  # the workflow could not be read from Git: not a refusal reason of the file
+
 CONFIG = {
     "missing": "The explicitly selected machine config is missing. Restore that file or select an existing config path.",
     "unreadable": "The machine config cannot be read. Check its path and read permissions.",
@@ -26,6 +32,25 @@ PROFILE = {
     "required_undefined": "A required check has no definition. Define it in both the target and checked profiles before using them.",
     "not_a_file": "The committed profile is not a regular file. Replace it with a plain .task-loop.json file at the indicated side.",
     "unavailable": "Git could not read the profile. Check access to the checkout and selected revisions, then inspect again.",
+}
+WORKFLOW: dict[str, str] = {
+    Reason.MISSING: "The selected Git revision has no such workflow file. Commit one at the indicated revision, or name a workflow "
+    "file that exists there.",
+    Reason.NOT_A_FILE: "The committed workflow is not a regular file. Replace it with a plain workflow file at the indicated revision.",
+    Reason.TOO_LARGE: "The committed workflow exceeds the supported size. Shorten it and commit the correction.",
+    Reason.NOT_TOML: "The committed workflow is not valid TOML. Correct its syntax and commit the correction.",
+    Reason.UNKNOWN_KEY: "The committed workflow contains an unsupported key. Remove or correct the named key and commit the correction.",
+    Reason.UNKNOWN_KIND: "The committed workflow has a step table the factory does not run. Keep only the plan and implement tables "
+    "and the feedback sections.",
+    Reason.UNKNOWN_RENDERER: "A prompt section names a renderer the factory does not have. Use the task or input context renderer, "
+    "or verbatim text.",
+    Reason.RESERVED_MARKER: "A text section holds the name of a factory data block. Reword that section so it does not contain it.",
+    Reason.BAD_VALUE: "A workflow value is invalid. Correct the named key and commit the correction.",
+    UNAVAILABLE: "Git could not read the workflow. Check access to the checkout and the selected revision, then read again.",
+}
+WORKFLOW_INIT = {
+    "exists": "That workflow file is already there and was left unchanged. Edit it in place, or choose another workflow name.",
+    "unwritable": "The starter could not be written. Check that the checkout exists and that its folders can be written.",
 }
 REPO = {
     "not_a_repo": "The path is not a Git repository. Select an existing checkout root.",

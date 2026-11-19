@@ -657,6 +657,7 @@ source_modules =
     taskloop.cli_drain
     taskloop.cli_land
     taskloop.cli_step
+    taskloop.cli_workflow
     taskloop.clock_jumps
     taskloop.command_conclusion
     taskloop.command_sink
@@ -845,6 +846,7 @@ source_modules =
     taskloop.workflow
     taskloop.workflow_read
     taskloop.workflow_render
+    taskloop.workflow_starter
 forbidden_modules = sqlite3
 as_packages = False
 allow_indirect_imports = True
