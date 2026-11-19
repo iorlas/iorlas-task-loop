@@ -46,6 +46,9 @@ REFUSALS = {
     "permissions and free space before starting work.",
     "workflow": "The workflow file could not be used at the task's source commit. Inspect the supplied detail, then correct or add "
     "`.task-loop/workflows/default.toml` on the task branch or on main before approving new work.",
+    "plan": "The run named the implement step as its start, but the source commit holds no valid committed plan for this task: "
+    "the plan, its metadata or the files it cites are missing or changed. Commit a valid plan on the task branch or on main, or "
+    "start the task at the plan step.",
     "claimed_elsewhere": "Another actor holds the tracker claim. Leave its work intact and wait for that actor's decision.",
     "constraint": "Admission conflicted with a retained reservation or task. Inspect the current attempt and "
     "slots before deciding which work may proceed.",

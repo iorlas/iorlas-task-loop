@@ -18,6 +18,7 @@ from beads_client.testing import FakeTaskReadClient, Script
 from doubles import ENGINE, WORKFLOW, WORKFLOW_BYTES, WORKFLOW_FILES, WORKFLOW_PATH, FakeSlotFiles, FixedIds, PinnedViews
 from git_porcelain import GitTimeout, NotARepo, Repo
 from git_porcelain.testing import FakeRemote, FakeRepo
+from plan_fixtures import PLAN_TEXT
 from sqlite_store import Store, begin_immediate
 
 from taskloop.admit import AdmitRefused, AdmitRequest, AdmitResult, Admitted, AdmitUnavailable, AttemptAdmission, checkout_repo, read_task
@@ -36,6 +37,7 @@ from taskloop.factory_schema import SCHEMA
 from taskloop.git_views import GitViews
 from taskloop.harness_choice import HarnessKind, Provider
 from taskloop.ids import NativeIds
+from taskloop.plan_reuse import PlanMetadata
 from taskloop.slot_lock import custody
 from taskloop.slot_release import NotReleased, Released, SlotRelease
 from taskloop.slots import SlotGit, adopt, folder_name
@@ -82,6 +84,7 @@ class Tracker:
         self.con, self.files, self.claimed, self.released = con, SpyFiles(artifacts), claim, unclaim
         self.calls: list[str] = []
         self.during: Callable[[], object] = lambda: None
+        self.step = Step.PLAN  # the step whose input the claim finds written
 
     def claim(self, tracker_root: str, task_id: str) -> bool:
         assert not self.con.in_transaction, "the claim must be outside any transaction"
@@ -90,8 +93,8 @@ class Tracker:
         bead = TASKS.show(task_id)
         assert bead is not None
         prompt = self.files.read(self.files.inputs[-1])
-        assert prompt.startswith(WORKFLOW.table(Step.PLAN).prompt[0].text or "?")
-        assert prompt.index(bead.title) < prompt.index(PLAN_WARNING)
+        assert prompt.startswith(WORKFLOW.table(self.step).prompt[0].text or "?")
+        assert self.step is not Step.PLAN or prompt.index(bead.title) < prompt.index(PLAN_WARNING)
         self.calls.append("claim:" + task_id)
         self.during()
         if isinstance(self.claimed, BdError):
@@ -269,6 +272,40 @@ def test_the_workflow_agent_keys_set_the_stored_choice_and_a_flag_still_wins(
     wanted = replace(request(tmp_path, repo), overrides=Overrides(effort="max"))
     assert isinstance(admission(factory, tmp_path, Tracker(factory, tmp_path / "artifacts"), repo).admit(wanted), Admitted)
     assert factory.execute("SELECT model,effort,compaction_token_limit FROM attempt").fetchall() == [("wf-model", "max", 5000)]
+
+
+def committed_plan(tmp_path: Path, *, valid: bool = True) -> FakeRepo:
+    """A repository whose origin `main` commits a plan for `tl-1` and its metadata (cited path `README`), none of it in the database."""
+    remote = FakeRemote("https://example.invalid/plan.git")
+    prepared = remote.advance("main", {"README": "one", ".task-loop.json": "{}", **WORKFLOW_FILES})
+    files = {"docs/design/tl-1/plan.md": PLAN_TEXT,
+             "docs/design/tl-1/plan-metadata.json": PlanMetadata(prepared_commit=prepared, cited_paths=("README",)).model_dump_json()}
+    remote.advance("main", files if valid else {"docs/design/tl-1/plan.md": PLAN_TEXT})
+    return FakeRepo.clone(remote, tmp_path / "planned")
+
+
+def test_starting_at_implement_admits_it_from_the_committed_plan_with_no_database_plan(
+    factory: sqlite3.Connection, root: Path, tmp_path: Path
+) -> None:
+    repo = committed_plan(tmp_path)
+    slots(factory, repo, root, 1)
+    wanted = replace(request(tmp_path, repo), overrides=Overrides(start=Step.IMPLEMENT))
+    tracker = Tracker(factory, tmp_path / "artifacts")
+    tracker.step = Step.IMPLEMENT
+    assert isinstance(admission(factory, tmp_path, tracker, repo).admit(wanted), Admitted)
+    step, number, after = factory.execute("SELECT step,number,after_commit FROM attempt").fetchone()
+    assert (step, number) == ("implement", 1) and after == repo.refs(["refs/remotes/origin/"])[0].sha
+
+
+def test_starting_at_implement_without_a_valid_committed_plan_is_refused_as_plan(
+    factory: sqlite3.Connection, root: Path, tmp_path: Path
+) -> None:
+    repo = committed_plan(tmp_path, valid=False)
+    slots(factory, repo, root, 1)
+    wanted = replace(request(tmp_path, repo), overrides=Overrides(start=Step.IMPLEMENT))
+    refused = admission(factory, tmp_path, Tracker(factory, tmp_path / "artifacts"), repo).admit(wanted)
+    assert isinstance(refused, AdmitRefused) and refused.reason == "plan"
+    assert factory.execute("SELECT count(*) FROM attempt").fetchone() == (0,)
 
 
 def test_an_unknown_named_workflow_refuses_the_admission_as_workflow(

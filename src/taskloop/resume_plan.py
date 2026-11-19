@@ -23,6 +23,7 @@ class Selection:
     decision: ReuseDecision
     explanation: str
     plan: PlanEvidence | None = None
+    declared: bool = False  # the run named its start step: the database holds no evidence the decision rests on
 
     @property
     def step(self) -> Step:
@@ -37,7 +38,7 @@ class ResumePlans:
     def unchanged(self, selection: Selection, repo_id: str, backlog: str, task_id: str, tracker: str,
                   digest: TaskContentDigest | None) -> bool:
         plan = self.store.latest_plan(repo_id, backlog, task_id, tracker)
-        return (plan == selection.plan and (selection.decision is not ReuseDecision.REUSE
+        return (plan == selection.plan and (selection.declared or selection.decision is not ReuseDecision.REUSE
                 or (plan is not None and self.content.read(plan.key.attempt_id) == digest)))
 
     def required(self, record: AttemptRecord) -> bool:
@@ -47,9 +48,14 @@ class ResumePlans:
 
     def select(
         self, repo_id: str, backlog: str, task_id: str, tracker_root: str, root: Path, source: str,
-        digest: TaskContentDigest, *, git_dir: Path | None = None,
+        digest: TaskContentDigest, *, git_dir: Path | None = None, start: Step | None = None,
     ) -> Selection:
+        """Plan again or implement the committed plan. `start=IMPLEMENT` names the choice: only the plan committed at `source`
+        counts (the database's plan evidence is not read for it), so the decision is REUSE or a refusal the caller reports."""
         plan = self.store.latest_plan(repo_id, backlog, task_id, tracker_root)
+        if start is Step.IMPLEMENT:
+            result = evaluate(self.checkouts, root, f"docs/design/{task_id}/plan.md", source=source, git_dir=git_dir)
+            return Selection(result.decision, result.explanation, plan, declared=True)
         if plan is None or self.content.read(plan.key.attempt_id) != digest:
             return Selection(ReuseDecision.PLAN, "No successful plan matches the current task content.", plan)
         path = f"docs/design/{task_id}/plan.md"

@@ -152,6 +152,8 @@ def _harness_flag(parser: argparse.ArgumentParser) -> None:
         parser.add_argument(flag, default=None, help="Override this field of each newly admitted step (flag > machine config > default)")
     parser.add_argument("--harness", type=HarnessKind, choices=list(HarnessKind), default=None,
                         help="Override each newly admitted step's configured harness")
+    parser.add_argument("--from", dest="start_step", type=Step, choices=[Step.IMPLEMENT], default=None, help="Start a new task at "
+                        "implement from the plan committed at its source commit (refused when none is valid), not at plan")
     parser.add_argument("--workflow", default=None, metavar="NAME", help="Take a new task's prompts and agent choice from "
                         ".task-loop/workflows/NAME.toml at its source commit (default: `default`); a task keeps the file it started with")
 
@@ -186,7 +188,8 @@ def _start(arguments: argparse.Namespace, loaded: Loaded) -> Result:
 
 
 def _overrides(arguments: argparse.Namespace) -> Overrides:
-    return Overrides(harness=arguments.harness, model=arguments.model, effort=arguments.effort, workflow=arguments.workflow)
+    return Overrides(harness=arguments.harness, model=arguments.model, effort=arguments.effort, start=arguments.start_step,
+                     workflow=arguments.workflow)
 
 
 def _next_request(arguments: argparse.Namespace, loaded: Loaded) -> NextRequest:
