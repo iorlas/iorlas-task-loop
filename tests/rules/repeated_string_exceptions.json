@@ -162,7 +162,6 @@
   "src/taskloop/cli_step.py": {
     "TASK": 4,
     "config": 3,
-    "slot": 3,
     "task_id": 4
   },
   "src/taskloop/dash_board.py": {

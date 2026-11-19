@@ -9,7 +9,7 @@ from public_surface_cases import cli_cases
 from public_surfaces import api_surfaces, assert_snapshot, collect, render
 
 from taskloop import result_data
-from taskloop.result_data import Result
+from taskloop.result_data import Shaped
 
 SNAPSHOT = Path(__file__).with_name("public_surfaces.json")
 
@@ -85,7 +85,7 @@ def test_cli_json_drift_requires_refresh(monkeypatch: pytest.MonkeyPatch, change
     baseline = render(cli_cases())
     original = result_data.as_data
 
-    def altered(result: Result, *, admission: bool = False) -> dict[str, object]:
+    def altered(result: Shaped, *, admission: bool = False) -> dict[str, object]:
         data = original(result, admission=admission)
         match change:
             case "add":

@@ -6,8 +6,9 @@ from taskloop.cli import main
 
 COMMANDS = [
     ["repo", "show"], ["task", "show"], ["profile", "show"], ["workflow", "show"], ["workflow", "init"], ["drain"], ["version"],
-    ["config", "show"], ["slot", "adopt"],
-    ["step", "start"], ["attempt", "show"], ["attempt", "list"], ["attempt", "setup-times"], ["step", "commit"], ["step", "release"],
+    ["config", "show"], ["slot", "adopt"], ["slot", "list"],
+    ["step", "start"], ["attempt", "show"], ["attempt", "list"], ["attempt", "setup-times"], ["attempt", "export"],
+    ["step", "commit"], ["step", "release"],
     ["rounds", "once"], ["rounds", "start"], ["step", "publish"], ["step", "abandon"],
     ["land", "run"], ["land", "show"], ["land", "withdraw"],
 ]

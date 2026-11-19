@@ -7,6 +7,8 @@ from git_porcelain import Change
 from hold_fixtures import event
 
 from taskloop.agents.stop_models import AgentStop, Identity, StopCause, StopPhase, StopProof, Survivor
+from taskloop.attempt_export import AttemptExport
+from taskloop.attempt_export_store import ExportRow
 from taskloop.attempt_reads import PublishedRow, ReleaseRow
 from taskloop.attempt_result import CommittedStatus
 from taskloop.attempt_status import AttemptView, Listed, SetupShown, Shown
@@ -28,6 +30,8 @@ from taskloop.publish import BranchPublished
 from taskloop.result_data import Result
 from taskloop.setup_store import SetupRow, SetupSample
 from taskloop.setup_timing import SetupTimingReport
+from taskloop.slot_list import SlotList
+from taskloop.slot_list_store import SlotHold, SlotRow
 from taskloop.slot_release import AlreadyReleased, Released
 from taskloop.slots import Adopted, NotAdopted, SlotView
 from taskloop.task_event_cause import ChecksCause, FailedCheck
@@ -109,6 +113,12 @@ def step_cases() -> dict[str, tuple[list[str], Result]]:
                              SetupTimingReport(backlog="tasks", rows=(SetupSample(
                                  attempt_id="attempt", task_id="tl-1", repo_id="repo", run=1,
                                  started_at=10.0, ended_at=11.0, conclusion=CommandConclusion.PASSED),), sample_count=1)),
+        "export.empty": (["attempt", "export"], AttemptExport(())),
+        "export.full": (["attempt", "export"], AttemptExport((ExportRow(
+            "tl-1", "plan", 1, None, "engine", "workflow", "sha", "codex", "m", "high", None, "input", 1.0, None, None,
+            None, None, "valid", None, 0, None, None, None, None, None, None, None, None, None, None),))),
+        "slot-list": (["slot", "list"], SlotList((SlotRow("s1", "/slots/s1", "repo", SlotHold.HELD, "attempt"),
+                                                  SlotRow("s2", "/slots/s2", "repo", SlotHold.FREE, None)))),
         "start.empty": (["step", "start", "tl-1", "--backlog", "tasks", *START_FLAGS],
                         Started("started", "tasks", "tl-1", "attempt", False)),
     }

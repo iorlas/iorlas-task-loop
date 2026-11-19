@@ -627,6 +627,8 @@ source_modules =
     taskloop.answer_repair_store
     taskloop.attempt
     taskloop.attempt_entry
+    taskloop.attempt_export
+    taskloop.attempt_export_store
     taskloop.attempt_loads
     taskloop.attempt_reads
     taskloop.attempt_result
@@ -792,6 +794,7 @@ source_modules =
     taskloop.round_trail
     taskloop.rounds
     taskloop.rounds_lock
+    taskloop.rows_render
     taskloop.selection
     taskloop.session
     taskloop.setup_store
@@ -816,6 +819,8 @@ source_modules =
     taskloop.show_render
     taskloop.slot_env
     taskloop.slot_files
+    taskloop.slot_list
+    taskloop.slot_list_store
     taskloop.slot_lock
     taskloop.slot_park
     taskloop.slot_release

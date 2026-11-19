@@ -737,6 +737,61 @@
         }
       ]
     },
+    "export.empty": {
+      "argv": [
+        "attempt",
+        "export"
+      ],
+      "exit": 0,
+      "stderr": [],
+      "stdout": [
+        []
+      ]
+    },
+    "export.full": {
+      "argv": [
+        "attempt",
+        "export"
+      ],
+      "exit": 0,
+      "stderr": [],
+      "stdout": [
+        [
+          {
+            "admitted_at": 1.0,
+            "answer_kind": "valid",
+            "c_cached": null,
+            "c_in": null,
+            "c_out": null,
+            "compaction_token_limit": null,
+            "disposition": null,
+            "effect": null,
+            "effort": "high",
+            "ended_at": null,
+            "engine_digest": "engine",
+            "harness": "codex",
+            "input_digest": "input",
+            "latest_checks_conclusion": null,
+            "latest_checks_reason": null,
+            "model": "m",
+            "number": 1,
+            "rc": null,
+            "repeat_reason": null,
+            "step": "plan",
+            "t_cached": null,
+            "t_in": null,
+            "t_out": null,
+            "task_id": "tl-1",
+            "timed_out": 0,
+            "turns": null,
+            "usage_incomplete": null,
+            "wall_seconds": null,
+            "workflow_digest": "workflow",
+            "workflow_sha": "sha"
+          }
+        ]
+      ]
+    },
     "land.empty": {
       "argv": [
         "land",
@@ -2033,6 +2088,32 @@
         }
       ],
       "stdout": []
+    },
+    "slot-list": {
+      "argv": [
+        "slot",
+        "list"
+      ],
+      "exit": 0,
+      "stderr": [],
+      "stdout": [
+        [
+          {
+            "attempt_id": "attempt",
+            "name": "s1",
+            "path": "/slots/s1",
+            "repo_id": "repo",
+            "state": "held"
+          },
+          {
+            "attempt_id": null,
+            "name": "s2",
+            "path": "/slots/s2",
+            "repo_id": "repo",
+            "state": "free"
+          }
+        ]
+      ]
     },
     "slots": {
       "argv": [
