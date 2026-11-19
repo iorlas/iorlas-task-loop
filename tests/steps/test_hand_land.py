@@ -70,12 +70,12 @@ def snapshot(reads: StatusPorts, b: LandBench) -> None:
     assert board.tasks[0].status_note == detail.task.status_note == note
     assert board.tasks[0].land == detail.task.land == status.land
     data = as_data(listed)
-    assert note in "\n".join(human("tl step list", listed, None))
+    assert note in "\n".join(human("tl attempt list", listed, None))
     assert f'"status_note": "{note}"' in json.dumps(data)
     shown = show_attempt(reads, b.root / "art", "tasks", "tl-1")
     assert isinstance(shown, Shown)
     assert as_data(shown)["status_note"] == note
-    assert f"Status: {note}" in human("tl step show", shown, None)
+    assert f"Status: {note}" in human("tl attempt show", shown, None)
 
 
 @pytest.mark.parametrize("label", [None, "auto"])

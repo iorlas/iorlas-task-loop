@@ -191,25 +191,25 @@ CASES: list[tuple[list[str], Result, int, list[str], set[str]]] = [
      ADMISSION_ERROR),
     (START, Failed("unavailable", "tracker", claim_leaked=True), 3, ["unavailable:tracker"], ADMISSION_ERROR),
     (START, Failed("uncertain", "launch"), 3, ["tl step start: uncertain:launch"], ADMISSION_ERROR),
-    (["step", "show", "tl-1", "--backlog", "tasks"], Shown(STATUS, Path("/a/d"), Path("/a/d/entry.log"), EVENTS), 0,
+    (["attempt", "show", "tl-1", "--backlog", "tasks"], Shown(STATUS, Path("/a/d"), Path("/a/d/entry.log"), EVENTS), 0,
      ["Step: plan", "Phase: captured", "Result: pending commit", "Setup: none\nDirectory: /a/d", "Entry log: /a/d/entry.log",
       "Next: commit", "The result is captured and awaits factory commit before it can be accepted."],
      STATUS_KEYS | {"directory", "entry_log", "events_path", "setup", "failed_checks"}),
-    (["step", "show", "tl-1", "--backlog", "tasks"], Shown(REPEAT, Path("/a/d"), Path("/a/d/entry.log"), EVENTS), 0,
+    (["attempt", "show", "tl-1", "--backlog", "tasks"], Shown(REPEAT, Path("/a/d"), Path("/a/d/entry.log"), EVENTS), 0,
      ["Worker: last known pid 42, process group 41 (not checked)", "Result: pending repeat", "Uncommitted: uncommitted",
       "  ?? docs/design/tl-1/note.md", "  +3 more", f"Next: repeat\n{step_guide.GUIDE['repeat']}",
       "Attempt: attempt (2 of at most 3; repeats first, uncommitted)\nEarlier: first repeated (uncommitted)\nSlot: s1"],
      STATUS_KEYS | {"directory", "entry_log", "events_path", "setup", "failed_checks"}),
-    (["step", "show", "tl-1", "--backlog", "tasks"], Shown(STATUS, Path("/a/d"), Path("/a/d/entry.log"), EVENTS, FAILED_SETUP), 0,
+    (["attempt", "show", "tl-1", "--backlog", "tasks"], Shown(STATUS, Path("/a/d"), Path("/a/d/entry.log"), EVENTS, FAILED_SETUP), 0,
      [f"Deadline passed: no\nSetup: run 2 failed at {D}; log /a/d/setup-2.log; started 1970-01-01 00:00:10 UTC; "
       "ended 1970-01-01 00:00:11 UTC; duration unavailable (no usable recorded duration)\nDirectory"],
      STATUS_KEYS | {"directory", "entry_log", "events_path", "setup", "failed_checks"}),
-    (["step", "show", "tl-1", "--backlog", "tasks"], Shown(STATUS, Path("/a/d"), Path("/a/d/entry.log"), EVENTS, RUNNING_SETUP), 0,
+    (["attempt", "show", "tl-1", "--backlog", "tasks"], Shown(STATUS, Path("/a/d"), Path("/a/d/entry.log"), EVENTS, RUNNING_SETUP), 0,
      [f"Setup: run 3 unfinished at {D}; log /a/d/setup-3.log"],
      STATUS_KEYS | {"directory", "entry_log", "events_path", "setup", "failed_checks"}),
-    (["step", "list", "--stuck"], Listed((STATUS,)), 0,
+    (["attempt", "list", "--stuck"], Listed((STATUS,)), 0,
      ["task\tbacklog\tstep\tattempt\tslot", "pending commit\tsettling\tcommit"], {"attempts"}),
-    (["step", "show", "tl-1", "--backlog", "tasks"], Shown(STATUS, Path("/a/d"), Path("/a/d/entry.log"), EVENTS), 0,
+    (["attempt", "show", "tl-1", "--backlog", "tasks"], Shown(STATUS, Path("/a/d"), Path("/a/d/entry.log"), EVENTS), 0,
      ["Attempt: attempt (1 of at most 3)\nSlot: s1"], STATUS_KEYS | {"directory", "entry_log", "events_path", "setup", "failed_checks"}),
     (["step", "commit", "tl-1", "--backlog", "tasks"], CommittedTask(
         CommittedStatus.REUSED, "tasks", "tl-1", "attempt", "released", "published"), 0,
@@ -235,10 +235,10 @@ CASES: list[tuple[list[str], Result, int, list[str], set[str]]] = [
     (PUBLISH, Failed("refused", "not_committed"), 1, [step_guide.GUIDE["not_committed"]], ERROR),
     (PUBLISH, Failed("unavailable", "git"), 3, [step_guide.GUIDE["git"]], ERROR),
     (PUBLISH, Failed("unavailable", "remote"), 3, ["tl step publish: unavailable:remote", step_guide.GUIDE["remote"]], ERROR),
-    (["step", "show", "tl-1", "--backlog", "tasks"], Shown(DONE, Path("/a/d"), Path("/a/d/entry.log"), EVENTS), 0,
+    (["attempt", "show", "tl-1", "--backlog", "tasks"], Shown(DONE, Path("/a/d"), Path("/a/d/entry.log"), EVENTS), 0,
      [f"Published: task/tl-1 at {X} on origin, 1970-01-01 00:00:40 UTC\n", "Next: done"],
      STATUS_KEYS | {"directory", "entry_log", "events_path", "setup", "failed_checks"}),
-    (["step", "show", "tl-1", "--backlog", "tasks"], Shown(ABANDONED, Path("/a/d"), Path("/a/d/entry.log"), EVENTS), 0,
+    (["attempt", "show", "tl-1", "--backlog", "tasks"], Shown(ABANDONED, Path("/a/d"), Path("/a/d/entry.log"), EVENTS), 0,
      ["Earlier: first abandoned", f"Released: 1970-01-01 00:00:30 UTC, slot parked at {D}; claim unclaimed; abandoned",
       f"Next: start\n{step_guide.GUIDE['abandoned']}"],
      STATUS_KEYS | {"directory", "entry_log", "events_path", "setup", "failed_checks"}),
@@ -320,16 +320,17 @@ def test_every_next_step_renders_with_its_guidance(
 ) -> None:
     shown = Shown(AttemptView("tasks", "tl-1", "plan", "a", "s1", "admitted", "none", AttemptResult("pending", "admitted"), False,
                               next_word), Path("/d"), Path("/d/entry.log"), EVENTS)
-    monkeypatch.setitem(cli_step.OPERATIONS, ("step", "show"), lambda _arguments, _loaded: shown)
-    assert main(["step", "show", "tl-1", "--backlog", "tasks"]) == 0
+    monkeypatch.setitem(cli_step.OPERATIONS, ("attempt", "show"), lambda _arguments, _loaded: shown)
+    assert main(["attempt", "show", "tl-1", "--backlog", "tasks"]) == 0
     assert f"Next: {next_word}\n{step_guide.GUIDE[next_word]}" in capsys.readouterr().out
 
 
 def test_an_implement_attempt_shows_the_plan_it_advanced_from(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
     view = AttemptView("tasks", "tl-1", "implement", "i", "s1", "admitted", "none", AttemptResult("pending", "admitted"), False,
                        "start", earlier=(("r", "uncommitted"), ("p", "advanced"), ("q", "abandoned")))
-    monkeypatch.setitem(cli_step.OPERATIONS, ("step", "show"), lambda _arguments, _loaded: Shown(view, Path("/d"), Path("/d/e"), EVENTS))
-    assert main(["step", "show", "tl-1", "--backlog", "tasks"]) == 0
+    shown = Shown(view, Path("/d"), Path("/d/e"), EVENTS)
+    monkeypatch.setitem(cli_step.OPERATIONS, ("attempt", "show"), lambda _arguments, _loaded: shown)
+    assert main(["attempt", "show", "tl-1", "--backlog", "tasks"]) == 0
     out = capsys.readouterr().out
     assert "Step: implement\n" in out and "Earlier: r repeated (uncommitted)\nEarlier: p advanced\nEarlier: q abandoned\n" in out
 
@@ -338,8 +339,8 @@ def test_an_implement_attempt_shows_the_plan_it_advanced_from(monkeypatch: pytes
 def test_every_entry_state_renders(entry: EntryState, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
     view = AttemptView("tasks", "tl-1", "plan", "a", "s1", "admitted", entry, AttemptResult("pending", "admitted"), False, "unknown")
     listed = Listed((view,))
-    monkeypatch.setitem(cli_step.OPERATIONS, ("step", "list"), lambda _arguments, _loaded: listed)
-    assert main(["step", "list", "--json"]) == 0
+    monkeypatch.setitem(cli_step.OPERATIONS, ("attempt", "list"), lambda _arguments, _loaded: listed)
+    assert main(["attempt", "list", "--json"]) == 0
     assert json.loads(capsys.readouterr().out)["attempts"][0]["entry"] == entry
 
 
@@ -347,9 +348,9 @@ def test_every_entry_state_renders(entry: EntryState, monkeypatch: pytest.Monkey
 def test_every_failure_kind_has_its_exit_code(
     kind: FailureKind, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    monkeypatch.setitem(cli_step.OPERATIONS, ("step", "list"), lambda _arguments, _loaded: Failed(kind, "choices"))
-    assert main(["step", "list"]) == (3 if kind in ("unavailable", "uncertain", "unsettled", "uncommitted", "waiting") else 1)
-    assert capsys.readouterr().err.startswith("tl step list: ")
+    monkeypatch.setitem(cli_step.OPERATIONS, ("attempt", "list"), lambda _arguments, _loaded: Failed(kind, "choices"))
+    assert main(["attempt", "list"]) == (3 if kind in ("unavailable", "uncertain", "unsettled", "uncommitted", "waiting") else 1)
+    assert capsys.readouterr().err.startswith("tl attempt list: ")
 
 
 def test_removed_commit_spelling_fails_parsing_before_opening(
@@ -466,19 +467,19 @@ def test_a_repeat_shows_the_setup_of_the_attempt_whose_environment_it_keeps(tmp_
             model,effort,access_policy,deadline,2,2,slot_head,'attempt','uncommitted',engine_digest,workflow_digest,workflow_sha,
             admitted_at FROM attempt WHERE attempt_id='attempt'""")
     con.close()
-    assert main(["step", "show", "tl-1", "--backlog", "tasks", "--db", str(db), "--artifacts", str(art), "--json"]) == 0
+    assert main(["attempt", "show", "tl-1", "--backlog", "tasks", "--db", str(db), "--artifacts", str(art), "--json"]) == 0
     shown = json.loads(capsys.readouterr().out)
     assert shown["attempt_id"] == "second" and shown["setup"]["attempt_id"] == "attempt"
     assert (shown["setup"]["started_at"], shown["setup"]["ended_at"], shown["setup"]["duration_seconds"]) == (1, 2, 1)
     assert shown["setup"]["log"] != f"{shown['directory']}/setup-1.log" and shown["setup"]["log"].endswith("/setup-1.log")
-    assert main(["step", "show", "tl-1", "--backlog", "tasks", "--db", str(db), "--artifacts", str(art)]) == 0
+    assert main(["attempt", "show", "tl-1", "--backlog", "tasks", "--db", str(db), "--artifacts", str(art)]) == 0
     assert f"Setup: run 1 passed at {'d' * 40} (attempt attempt's, which this repeat keeps); log" in capsys.readouterr().out
 
 
 def test_the_real_read_paths_write_nothing_and_never_print_the_token(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     db, art = tmp_path / "factory.db", tmp_path / "art"
     admitted(db)
-    assert main(["step", "show", "tl-1", "--backlog", "tasks", "--db", str(db), "--artifacts", str(art), "--json"]) == 0
+    assert main(["attempt", "show", "tl-1", "--backlog", "tasks", "--db", str(db), "--artifacts", str(art), "--json"]) == 0
     shown = json.loads(capsys.readouterr().out)
     assert (shown["step"], shown["phase"], shown["entry"], shown["next"]) == ("plan", "admitted", "none", "stuck:expired_admitted")
     assert set(shown) == STATUS_KEYS | {"directory", "entry_log", "events_path", "setup", "failed_checks"}
@@ -489,17 +490,17 @@ def test_the_real_read_paths_write_nothing_and_never_print_the_token(tmp_path: P
         con.execute("INSERT INTO setup_run (attempt_id,run,dispatch_token,generation,commit_sha,digest,started_at,ended_at,conclusion,rc) "
                     "VALUES ('attempt',1,?,1,?,?,1,2,'passed',0)", (KEY.dispatch_token, "d" * 40, "f" * 64))
     con.close()
-    assert main(["step", "show", "tl-1", "--backlog", "tasks", "--db", str(db), "--artifacts", str(art), "--json"]) == 0
+    assert main(["attempt", "show", "tl-1", "--backlog", "tasks", "--db", str(db), "--artifacts", str(art), "--json"]) == 0
     setup = json.loads(capsys.readouterr().out)["setup"]
     assert setup == {"run": 1, "conclusion": "passed", "commit": "d" * 40, "log": f"{shown['directory']}/setup-1.log",
                      "attempt_id": None, "started_at": 1.0, "ended_at": 2.0, "duration_seconds": 1.0}
-    assert main(["step", "list", "--stuck", "--db", str(db)]) == 0
+    assert main(["attempt", "list", "--stuck", "--db", str(db)]) == 0
     listed = capsys.readouterr().out
     head = "task\tbacklog\tstep\tattempt\tslot\tphase\tentry\tresult\tstatus\tnext\thold cause\tlast command"
     assert listed.startswith(f"{head}\ntl-1\ttasks\tplan\t1/3\ts1\t")
-    assert main(["step", "list", "--db", str(db), "--json"]) == 0
+    assert main(["attempt", "list", "--db", str(db), "--json"]) == 0
     assert [each["step"] for each in json.loads(capsys.readouterr().out)["attempts"]] == ["plan"]
-    assert main(["step", "show", "tl-1", "--backlog", "tasks", "--db", str(db), "--artifacts", str(art)]) == 0
+    assert main(["attempt", "show", "tl-1", "--backlog", "tasks", "--db", str(db), "--artifacts", str(art)]) == 0
     assert "Task: tl-1 (backlog tasks)\nStep: plan\nAttempt: attempt (1 of at most 3)\n" in capsys.readouterr().out
     assert "stuck:expired_admitted: Nothing ran; rounds only report it." in listed
     assert f"discard {db} and its" in listed
@@ -514,7 +515,8 @@ def test_the_real_read_paths_write_nothing_and_never_print_the_token(tmp_path: P
 
 
 @pytest.mark.parametrize(
-    "argv", [["step", "show", "tl-1", "--backlog", "tasks"], ["step", "list"], ["step", "commit", "tl-1", "--backlog", "b"], START, PUBLISH]
+    "argv", [["attempt", "show", "tl-1", "--backlog", "tasks"], ["attempt", "list"], ["step", "commit", "tl-1", "--backlog", "b"],
+             START, PUBLISH]
 )
 def test_without_a_factory_database_every_step_command_refuses_and_creates_none(
     argv: list[str], tmp_path: Path, home: Path, capsys: pytest.CaptureFixture[str]
@@ -761,11 +763,12 @@ def test_a_running_agents_time_since_its_last_command_is_listed_and_shown(
 ) -> None:
     view = AttemptView("tasks", "tl-1", "plan", "a", "s1", "registered", "running", AttemptResult("pending", "registered"), False,
                        "wait", last_command=42)
-    monkeypatch.setitem(cli_step.OPERATIONS, ("step", "list"), lambda _arguments, _loaded: Listed((view,)))
-    monkeypatch.setitem(cli_step.OPERATIONS, ("step", "show"), lambda _arguments, _loaded: Shown(view, Path("/d"), Path("/d/e"), EVENTS))
-    assert main(["step", "list"]) == 0
+    monkeypatch.setitem(cli_step.OPERATIONS, ("attempt", "list"), lambda _arguments, _loaded: Listed((view,)))
+    shown = Shown(view, Path("/d"), Path("/d/e"), EVENTS)
+    monkeypatch.setitem(cli_step.OPERATIONS, ("attempt", "show"), lambda _arguments, _loaded: shown)
+    assert main(["attempt", "list"]) == 0
     assert capsys.readouterr().out.splitlines()[1].endswith("\twait\t-\t42 s ago")
-    assert main(["step", "show", "tl-1", "--backlog", "tasks"]) == 0
+    assert main(["attempt", "show", "tl-1", "--backlog", "tasks"]) == 0
     assert "Last command: 42 s ago\n" in capsys.readouterr().out
 
 
@@ -774,7 +777,7 @@ LANDING = ["land", "run", "tl-1", "--backlog", "tasks", "--checkout", "/checkout
 
 @pytest.mark.parametrize(
     ("argv", "opener"),
-    [(START, "open_start"), (NEXT, "open_next"), (ROUNDS, "open_rounds"), (["step", "list"], "open_reads"),
+    [(START, "open_start"), (NEXT, "open_next"), (ROUNDS, "open_rounds"), (["attempt", "list"], "open_reads"),
      (["step", "commit", "tl-1", "--backlog", "tasks"], "open_commit"), (RELEASE, "open_release"), (PUBLISH, "open_publish"),
      (LANDING, "open_land"), (["slot", "adopt", "/checkout"], "adopt")],
 )

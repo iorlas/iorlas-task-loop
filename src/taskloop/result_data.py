@@ -78,7 +78,7 @@ def _hold_data(row: HoldRow | None) -> dict[str, object] | None:
 
 def _checks_data(checks: ChecksView | None) -> dict[str, object] | None:
     """A checks attempt's own facts (tl-8bh9.14.6 section 9): X, the target and the required names, the profile digest,
-    the counted refusals and its latest block's results (`log`: `tl step show` only)."""
+    the counted refusals and its latest block's results (`log`: `tl attempt show` only)."""
     if checks is None:
         return None
     row, required = checks.row, dict(checks.row.required)
@@ -182,7 +182,7 @@ def rounds_data(backlog: str, every: int, log: str, label: str, max_running: int
 
 
 def _rows_data(result: Listed | Round | Ended | SetupTimingReport) -> dict[str, object]:
-    """`tl step list`: every current attempt; `tl rounds once`: each move in the order performed and `stopped`, the word that
+    """`tl attempt list`: every current attempt; `tl rounds once`: each move in the order performed and `stopped`, the word that
     ended admission early, or null; `tl rounds start`: why the rounds ended."""
     if isinstance(result, SetupTimingReport):
         return result.model_dump(mode="json")

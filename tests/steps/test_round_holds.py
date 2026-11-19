@@ -192,7 +192,7 @@ def test_the_round_s_label_is_stored_on_its_admissions_and_advances_and_none_on_
 @pytest.mark.parametrize("step", ["plan", "implement"])
 def test_show_of_a_hand_started_needs_owner_prints_the_agent_s_question_and_a_next_action_of_the_step(
         factory: Factory, step: str, tmp_path: Path) -> None:
-    """tl-8bh9.14.66: nothing is held or commented for a hand-started step, so `tl step show` carries the explanation."""
+    """tl-8bh9.14.66: nothing is held or commented for a hand-started step, so `tl attempt show` carries the explanation."""
     if step == "implement":
         factory.by_hand("tl-1")  # the plan; the next start advances to implement
     asks(factory, "tl-1", step)

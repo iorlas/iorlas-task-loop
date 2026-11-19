@@ -53,7 +53,7 @@ def view(b: LandBench) -> AttemptView:
 
 
 def lines(b: LandBench, alive: set[EntryIdentity] | None = None) -> list[str]:
-    return human("tl step show", shown(b, alive), b.root / "factory.db")
+    return human("tl attempt show", shown(b, alive), b.root / "factory.db")
 
 
 def land_lines(found: list[str]) -> list[str]:

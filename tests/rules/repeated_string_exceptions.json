@@ -160,12 +160,10 @@
     "unavailable": 4
   },
   "src/taskloop/cli_step.py": {
-    "TASK": 5,
+    "TASK": 4,
     "config": 3,
-    "show": 4,
     "slot": 3,
-    "store_true": 3,
-    "task_id": 5
+    "task_id": 4
   },
   "src/taskloop/dash_board.py": {
     "held": 5,

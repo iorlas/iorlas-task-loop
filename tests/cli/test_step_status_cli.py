@@ -47,9 +47,9 @@ def test_status_composition_observes_worker_groups_without_writing(
     before, rows = db.read_bytes(), list(factory.iterdump())
     expected = {Seen.ALIVE: "wait", Seen.UNKNOWN: "unknown", Seen.GONE: "start"}[seen]
     for _ in range(2):
-        assert main(["step", "show", "tl-1", "--db", str(db), "--artifacts", str(artifacts), "--json"]) == 0
+        assert main(["attempt", "show", "tl-1", "--db", str(db), "--artifacts", str(artifacts), "--json"]) == 0
         assert json.loads(capsys.readouterr().out)["next"] == expected
-        assert main(["step", "list", "--db", str(db), "--json"]) == 0
+        assert main(["attempt", "list", "--db", str(db), "--json"]) == 0
         assert json.loads(capsys.readouterr().out)["attempts"][0]["next"] == expected
     assert calls == [8] * 4
     assert db.read_bytes() == before and list(factory.iterdump()) == rows and not artifacts.exists()
@@ -107,7 +107,7 @@ def test_show_reports_persisted_answer_failure_without_artifacts(
         )
     db, artifacts = tmp_path / "factory.db", tmp_path / "artifacts"
     before = db.read_bytes()
-    assert main(["step", "show", "tl-1", "--db", str(db), "--artifacts", str(artifacts),
+    assert main(["attempt", "show", "tl-1", "--db", str(db), "--artifacts", str(artifacts),
                  *(["--json"] if structured else [])]) == 0
     output = capsys.readouterr()
     assert not output.err
@@ -136,7 +136,7 @@ def test_show_defaults_to_one_distinct_backlog_and_writes_nothing(
     attempt(factory, "second", "tasks", seq=2)
     db, artifacts = tmp_path / "factory.db", tmp_path / "artifacts"
     before = db.read_bytes()
-    assert main(["step", "show", "tl-1", "--db", str(db), "--artifacts", str(artifacts),
+    assert main(["attempt", "show", "tl-1", "--db", str(db), "--artifacts", str(artifacts),
                  *(["--json"] if structured else [])]) == 0
     output = capsys.readouterr()
     assert not output.err
@@ -161,7 +161,7 @@ def test_show_prefers_the_explicit_backlog_then_the_machine_config(
 ) -> None:
     attempt(factory, "a", "alpha")
     attempt(factory, "z", "zeta")
-    assert main([*config(tmp_path, chosen), "step", "show", "tl-1", "--db", str(tmp_path / "factory.db"),
+    assert main([*config(tmp_path, chosen), "attempt", "show", "tl-1", "--db", str(tmp_path / "factory.db"),
                  *(["--backlog", explicit] if explicit is not None else []), *(["--json"] if structured else [])]) == 0
     output = capsys.readouterr()
     assert not output.err
@@ -178,7 +178,7 @@ def test_a_selected_backlog_without_the_task_refuses_absent_without_falling_thro
     attempt(factory, "a", "alpha", "tl-other")
     attempt(factory, "z", "zeta")
     flags = ["--backlog", "alpha"] if explicit else []
-    assert main([*config(tmp_path, "zeta" if explicit else "alpha"), "step", "show", "tl-1", *flags,
+    assert main([*config(tmp_path, "zeta" if explicit else "alpha"), "attempt", "show", "tl-1", *flags,
                  "--db", str(tmp_path / "factory.db"), "--json"]) == 1
     output = capsys.readouterr()
     error = json.loads(output.err)["error"]
@@ -195,7 +195,7 @@ def test_show_requires_a_selection_when_backlogs_are_empty_or_ambiguous(
         attempt(factory, "z", "zeta")
         release(factory, "z")  # Ended attempts still make the selection ambiguous.
         attempt(factory, "a", "alpha", "tl-other")  # TASK's uniqueness is irrelevant.
-    assert main(["step", "show", "tl-1", "--db", str(tmp_path / "factory.db"),
+    assert main(["attempt", "show", "tl-1", "--db", str(tmp_path / "factory.db"),
                  *(["--json"] if structured else [])]) == 1
     output = capsys.readouterr()
     if structured:
@@ -203,7 +203,7 @@ def test_show_requires_a_selection_when_backlogs_are_empty_or_ambiguous(
         assert (error["kind"], error["reason"]) == ("refused", "backlog")
         detail = error["message"]
     else:
-        assert "tl step show: refused:backlog" in output.err
+        assert "tl attempt show: refused:backlog" in output.err
         detail = output.err
     assert "Select a backlog key" in detail and "machine-config backlog" in detail
     assert ("alpha, zeta" if ambiguous else "No backlogs") in detail and not output.out
@@ -240,7 +240,7 @@ def test_list_shows_recorded_and_due_hold_causes_without_changing_stuck_membersh
     db = tmp_path / "factory.db"
     before = db.read_bytes()
     flags = ["--stuck"] if stuck else []
-    assert main(["step", "list", "--db", str(db), *flags]) == 0
+    assert main(["attempt", "list", "--db", str(db), *flags]) == 0
     output = capsys.readouterr()
     lines = output.out.splitlines()
     header = lines[0].split("\t")
@@ -255,7 +255,7 @@ def test_list_shows_recorded_and_due_hold_causes_without_changing_stuck_membersh
     assert {task: (row["next"], row["hold cause"]) for task, row in rows.items()} == expected
     assert rows["tl-1"]["result"] == "pending admitted"  # The stored cause survives a different current result.
     assert all(row["last command"] == "-" for row in rows.values()) and not output.err
-    assert main(["step", "list", "--db", str(db), *flags, "--json"]) == 0
+    assert main(["attempt", "list", "--db", str(db), *flags, "--json"]) == 0
     listed = {row["task"]: row for row in json.loads(capsys.readouterr().out)["attempts"]}
     assert set(listed) == set(expected)
     assert listed["tl-1"]["hold"]["reason"] == "failed:needs_owner"
@@ -270,7 +270,7 @@ def test_show_without_a_backlog_still_refuses_a_missing_database_without_creatin
 ) -> None:
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
     missing = tmp_path / "missing.db"
-    assert main(["step", "show", "tl-1", "--db", str(missing), "--json"]) == 1
+    assert main(["attempt", "show", "tl-1", "--db", str(missing), "--json"]) == 1
     error = json.loads(capsys.readouterr().err)["error"]
     assert (error["kind"], error["reason"]) == ("refused", "database")
     assert not missing.exists() and not (tmp_path / "home").exists()

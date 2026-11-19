@@ -74,8 +74,8 @@ def test_a_removed_guide_and_a_new_producer_reason_fail_coverage(monkeypatch: py
 @pytest.mark.parametrize("reason", ["missing", "unknown_key"])
 def test_config_and_profile_collisions_have_different_remedies(reason: Refusal) -> None:
     result = refused_config(ConfigRefused(reason, "detail"))
-    assert CONFIG[reason] in human("tl step show", result, None)
-    assert PROFILE[reason] not in human("tl step show", result, None)
+    assert CONFIG[reason] in human("tl attempt show", result, None)
+    assert PROFILE[reason] not in human("tl attempt show", result, None)
 
 
 def test_checks_land_and_candidate_release_keep_their_overrides() -> None:

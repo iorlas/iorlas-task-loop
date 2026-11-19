@@ -1,4 +1,4 @@
-"""The `tl step show` lines of one view: an agent attempt's, or (tl-8bh9.14.6 section 9) a checks attempt's with its
+"""The `tl attempt show` lines of one view: an agent attempt's, or (tl-8bh9.14.6 section 9) a checks attempt's with its
 `Check:` lines and (tl-8bh9.14.8 section 14) its latest land candidate's `Land` lines, then a hold's `Hold` lines
 (tl-8bh9.14.9 section 10). Fixed words around the status
 values; nothing here decides, reads or writes (`step_render` places them). Every stored text a `Land` line shows (the

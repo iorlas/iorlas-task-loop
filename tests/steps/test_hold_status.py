@@ -1,7 +1,7 @@
 """A hold in the status (tl-8bh9.14.9 sections 3, 7.2 and 10): section 3's cause rule row by row (a hand-started task
 never), the `hold` and `on_hold` words over every other word but `unknown`, the eligibility rule of a re-ingestion, the
-hold looked up by the agent attempt (the swapped checks view's `after`), `tl step list --stuck`, the JSON's additive keys
-and the `Hold` lines and guides of `tl step show` and `tl step list`."""
+hold looked up by the agent attempt (the swapped checks view's `after`), `tl attempt list --stuck`, the JSON's additive keys
+and the `Hold` lines and guides of `tl attempt show` and `tl attempt list`."""
 
 import sqlite3
 from dataclasses import replace
@@ -317,7 +317,7 @@ def test_list_stuck_reads_the_leftovers_of_a_round_taken_attempt_so_a_due_repeat
 
 
 def test_a_moved_head_shows_the_refs_the_agent_made_but_stays_next_commit_not_a_repeat(factory: sqlite3.Connection) -> None:
-    """`tl step show` prints `Uncommitted:` from the attempt's leftovers: `head_moved` carries its listing there too, though
+    """`tl attempt show` prints `Uncommitted:` from the attempt's leftovers: `head_moved` carries its listing there too, though
     it is no repeatable leftover (the next action stays `commit`)."""
     plan(factory)
     factory.execute("UPDATE attempt SET phase='captured',base_commit=?", (D,))

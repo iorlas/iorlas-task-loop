@@ -29,7 +29,7 @@ BUILT = ("Steps built: plan, implement and check. Committed results are publishe
 
 
 def test_step_help_names_the_steps_built_once_and_each_command_help_does_not_repeat_it(capsys: pytest.CaptureFixture[str]) -> None:
-    for arguments in (["step", "-h"], ["step", "start", "-h"], ["step", "show", "-h"], ["step", "list", "-h"],
+    for arguments in (["step", "-h"], ["step", "start", "-h"], ["attempt", "show", "-h"], ["attempt", "list", "-h"],
                       ["step", "commit", "-h"], ["step", "release", "-h"],
                       ["step", "abandon", "-h"], ["land", "-h"], ["land", "run", "-h"]):
         with pytest.raises(SystemExit) as result:

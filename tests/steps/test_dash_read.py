@@ -1,4 +1,4 @@
-"""The dashboard's read model (board and task detail) over the same factory.db reads as `tl step list`: display only."""
+"""The dashboard's read model (board and task detail) over the same factory.db reads as `tl attempt list`: display only."""
 
 import json
 import os

@@ -91,10 +91,10 @@ def step_cases() -> dict[str, tuple[list[str], Result]]:
     cases: dict[str, tuple[list[str], Result]] = {
         "config": (["config", "show"], LOADED),
         "slots": (["slot", "adopt", str(PATH)], Adoption((Adopted("s1", PATH), NotAdopted("s2", "inside_checkout", PATH)))),
-        "show.empty": (["step", "show", "tl-1", "--backlog", "tasks"], empty),
-        "show.full": (["step", "show", "tl-1", "--backlog", "tasks"], full),
-        "list.empty": (["step", "list"], Listed(())),
-        "list.full": (["step", "list"], Listed((full.view,))),
+        "show.empty": (["attempt", "show", "tl-1", "--backlog", "tasks"], empty),
+        "show.full": (["attempt", "show", "tl-1", "--backlog", "tasks"], full),
+        "list.empty": (["attempt", "list"], Listed(())),
+        "list.full": (["attempt", "list"], Listed((full.view,))),
         "round.empty": (["rounds", "once", "--backlog", "tasks", *ROUND_FLAGS], Round("tasks", ())),
         "round.full": (["rounds", "once", "--backlog", "tasks", *ROUND_FLAGS],
                        Round("tasks", (Move("tl-1", "start", "started", "attempt", "detail"),), "capacity", False)),
@@ -103,9 +103,9 @@ def step_cases() -> dict[str, tuple[list[str], Result]]:
                          CommittedStatus.COMMITTED, "tasks", "tl-1", "attempt", "released", "published")),
         "published": (["step", "publish", "tl-1", "--backlog", "tasks"],
                       PublishedTask("tasks", "tl-1", "attempt", BranchPublished("commit", "remote"))),
-        "setup-times": (["step", "setup-times", "--backlog", "tasks"],
+        "setup-times": (["attempt", "setup-times", "--backlog", "tasks"],
                         SetupTimingReport(backlog="tasks", rows=(), sample_count=0)),
-        "setup-times.full": (["step", "setup-times", "--backlog", "tasks"],
+        "setup-times.full": (["attempt", "setup-times", "--backlog", "tasks"],
                              SetupTimingReport(backlog="tasks", rows=(SetupSample(
                                  attempt_id="attempt", task_id="tl-1", repo_id="repo", run=1,
                                  started_at=10.0, ended_at=11.0, conclusion=CommandConclusion.PASSED),), sample_count=1)),
@@ -118,7 +118,8 @@ def step_cases() -> dict[str, tuple[list[str], Result]]:
     for kind in ("refused", "unavailable"):
         for operation in ("start", "show"):
             cases[f"{operation}.{kind}"] = (
-                ["step", operation, "tl-1", "--backlog", "tasks", *(START_FLAGS if operation == "start" else [])],
+                [("attempt" if operation == "show" else "step"), operation, "tl-1", "--backlog", "tasks",
+                 *(START_FLAGS if operation == "start" else [])],
                 Failed(kind, "choices", "Operation refused", True, (SlotView("s1", PATH, "held", attempt_id="attempt"),), True),
             )
     for reason in ("interrupted", "drained", "unavailable"):

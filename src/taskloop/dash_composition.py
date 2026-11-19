@@ -1,4 +1,4 @@
-"""The dashboard's wiring: the real ports behind `dash_server` (the same read-only factory.db opening as `tl step list`, the
+"""The dashboard's wiring: the real ports behind `dash_server` (the same read-only factory.db opening as `tl attempt list`, the
 evidence files, the cached tracker reads and the round log), started and stopped around the rounds."""
 
 import time

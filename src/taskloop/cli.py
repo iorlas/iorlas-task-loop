@@ -121,7 +121,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         prog="tl",
         description=("Task loop runs agent work on tracker tasks in managed slots and lands the checked results. First run: "
                      "`tl config show`, `tl slot adopt CHECKOUT`, `tl profile show`, then `tl rounds start`. "
-                     f"Command groups: config, slot, repo, profile, task, step, land, rounds, drain, version. {STEP_ONLY}"),
+                     f"Command groups: config, slot, repo, profile, task, step, attempt, land, rounds, drain, version. {STEP_ONLY}"),
         epilog="Exit 0: success; 1: refusal or task/repo showion error; 2: invalid syntax; "
                "3: no reliable result (profile unavailable or step unknown), safe to retry; "
                "130: abrupt rounds stop, interrupted land or interrupted drain.",
@@ -139,9 +139,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     repo_show.add_argument("--json", action="store_true", dest="json_output", help="Print JSON data; refusals are JSON on stderr")
     task = commands.add_parser("task", help="Read a task in an explicitly configured backlog", allow_abbrev=False)
     task_operations = task.add_subparsers(dest="operation", required=True)
-    show = task_operations.add_parser(SHOW, help="Inspect a task without modifying the tracker", allow_abbrev=False,
+    show = task_operations.add_parser(SHOW, help="Inspect a task as the tracker holds it, without modifying it", allow_abbrev=False,
                                       description="Print a task as the tracker holds it: title, requirements, acceptance, "
-                                      "dependencies. Reads the tracker only; writes nothing.")
+                                      "dependencies. Reads the tracker only; writes nothing (`tl attempt show` is the factory's read).")
     show.add_argument("task_id", metavar="TASK_ID")
     show.add_argument("--backlog", required=True, help="Explicit logical backlog key; no identity is inferred")
     show.add_argument("--tracker-root", required=True, help="Explicit directory for the configured tracker")

@@ -1,5 +1,5 @@
-"""The step surface for a task in its check step (S6d, tl-8bh9.14.6 section 9): `tl step show` lines and JSON of a checks
-attempt (its `Check:` lines, `Result:`, the moved `main`, the counted refusals), the `tl step list` row, the start and
+"""The step surface for a task in its check step (S6d, tl-8bh9.14.6 section 9): `tl attempt show` lines and JSON of a checks
+attempt (its `Check:` lines, `Result:`, the moved `main`, the counted refusals), the `tl attempt list` row, the start and
 the task's abandon (checks first), each through `main` with the operation stubbed."""
 
 import json
@@ -48,7 +48,7 @@ VIEW = AttemptView(
 )
 SETUP = SetupShown(SetupRow(1, X, "f" * 64, 0, None, CommandConclusion.PASSED, 1.0, 2.0), LOGS / "setup-1.log")
 SHOWN = Shown(VIEW, LOGS, LOGS / "entry.log", EVENTS, SETUP)
-SHOW = ["step", "show", "tl-1", "--backlog", "tasks"]
+SHOW = ["attempt", "show", "tl-1", "--backlog", "tasks"]
 
 
 def run(argv: list[str], result: Result, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch) -> str:
@@ -120,11 +120,11 @@ def test_show_json_adds_the_checks_facts_and_results(capsys: pytest.CaptureFixtu
 
 def test_list_shows_the_check_step_s_row_and_json(capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch) -> None:
     listed = Listed((_with(ChecksView(ROW, RESULTS)),))
-    out = run(["step", "list"], listed, capsys, monkeypatch)
+    out = run(["attempt", "list"], listed, capsys, monkeypatch)
     row = "tl-1\ttasks\tcheck\t2\ts1\tconcluded\tgone\tcollected failed:test:failed\tneeds a person (failed:test:failed)\tdone\t-\t-"
     assert row in out.splitlines()
-    data = json.loads(run(["step", "list", "--json"], listed, capsys, monkeypatch))
-    assert data["attempts"][0]["checks"]["results"][0]["log"] is None  # logs are `tl step show`'s
+    data = json.loads(run(["attempt", "list", "--json"], listed, capsys, monkeypatch))
+    assert data["attempts"][0]["checks"]["results"][0]["log"] is None  # logs are `tl attempt show`'s
 
 
 def test_a_checks_start_names_its_step(capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch) -> None:
@@ -169,7 +169,7 @@ def test_a_checks_view_gets_its_own_guide_never_the_agent_s(
     assert "Rounds relaunch the checks entry" in CHECKS_GUIDE["start"] and "Two consecutive counted refusals" in CHECKS_GUIDE["start"]
     assert "until the deadline; past it every round's relaunch counts" in CHECKS_GUIDE["start"]
     assert "verify the entry identity" in CHECKS_GUIDE["stuck:hung"]
-    listed = run(["step", "list", "--stuck"], Listed((replace(view, next="stuck:hung"),)), capsys, monkeypatch)
+    listed = run(["attempt", "list", "--stuck"], Listed((replace(view, next="stuck:hung"),)), capsys, monkeypatch)
     assert f"stuck:hung: {CHECKS_GUIDE['stuck:hung']}" in listed.splitlines()
 
 

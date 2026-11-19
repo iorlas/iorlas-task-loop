@@ -24,8 +24,8 @@ from taskloop.slots import SlotGit
 BACKLOG = ["--backlog", "tasks"]
 CHOICES = ["--tracker-root", "/tracker", "--checkout", "/checkout", "--model", "m", "--effort", "high", "--minutes", "30"]
 COMMANDS = {
-    "list": ["step", "list"],
-    "show": ["step", "show", "tl-1", *BACKLOG],
+    "list": ["attempt", "list"],
+    "show": ["attempt", "show", "tl-1", *BACKLOG],
     "start": ["step", "start", "tl-1", *BACKLOG, *CHOICES],
     "next": ["rounds", "once", *BACKLOG, "--label", "auto", *CHOICES],
     "land_summary": ["land", "show", "tl-1", *BACKLOG, "--checkout", "/checkout"],
@@ -83,7 +83,7 @@ def test_another_schema_version_is_refused_schema_and_nothing_is_written(
     version = VERSIONS.get(direction, SCHEMA.version)
     path = database(folder, version)
     before = digest(path)
-    artifacts = [] if command == "list" else ["--artifacts", str(tmp_path / "art")]  # `step list` reads no artifacts
+    artifacts = [] if command == "list" else ["--artifacts", str(tmp_path / "art")]  # `attempt list` reads no artifacts
     assert main([*COMMANDS[command], "--db", str(path), *artifacts, "--json"]) == 1
     error = json.loads(capsys.readouterr().err)["error"]
     assert (error["kind"], error["reason"]) == ("refused", "schema")

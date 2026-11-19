@@ -572,7 +572,7 @@ def publish_task(reader: AttemptStore, publisher: Publish, backlog: str, task_id
 
 
 def commit_failure(result: Rejected | NotApplicable | CommitRefused | Uncommitted | CommitWaiting) -> Failed:
-    """Uncommitted files carry their listing (`bounded` where it was read) as the detail, as `tl step show` prints it."""
+    """Uncommitted files carry their listing (`bounded` where it was read) as the detail, as `tl attempt show` prints it."""
     if isinstance(result, (Uncommitted, CommitRefused)):
         details = ((unsafe_details(result),) if isinstance(result, Uncommitted) else
                    ("Contradictory retained facts: inconsistent verdict or end commit.",) if result.reason == "inconsistent" else ())
