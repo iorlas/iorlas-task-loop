@@ -4,7 +4,7 @@ Round 4 (2026-11-15): the owner delegated the remaining choices to the independe
 verdicts, checked against the code, are applied below. They are still proposals until the owner's yes on the words in
 section 6.
 
-Status: PROPOSED, 2026-11-15. Nothing here is built. Parent task: tl-8bh9.14.117 (step prompts and agent as step data).
+Status: BUILT 2026-11-19 (PRs #818-#828) except `max_attempts` (bead tl-7125.4.2, deferred: see its notes). Decisions below are the record; where the code differs, the code and the glossary rows `workflow` and `engine_digest` win (e.g. `--workflow NAME` without `@sha`, decision 6; `--from implement` is `Overrides.start`; `[[step.feedback]]` is built). Parent task: tl-8bh9.14.117 (step prompts and agent as step data).
 Purpose: let the owner measure workflow changes (noise of an unchanged workflow, then A/B variants, then a regression
 check on other tickets) by making the workflow a Git-versioned file whose content, and the engine that ran it, are recorded
 on every attempt. The owner decided the order: this comes first. Inputs: seven independent reviews by Fable (transitions,
@@ -134,7 +134,7 @@ The A/A test needs no workflow file: an unchanged engine is the same workflow. S
   are replaced (decision 16). No behaviour change, no schema bump.
 - **B2. Workflow file.** Loader, models, the stored-file table and the attempt's `workflow_digest` and `workflow_sha` (its
   own bump), digest and pin by value, the split of contract from prose and the repo's own `default.toml` (a new baseline:
-  decision 3a), `--workflow NAME@sha`, the two renderers, glossary edits, contract and loader tests, deletion of the prose
+  decision 3a), `--workflow NAME` (no `@sha`, decision 6), the two renderers, glossary edits, contract and loader tests, deletion of the prose
   constants and their substring tests.
 - **C. Loop levers.** `--from implement` first (decision 5), then `attempts` and `[[step.feedback]]`.
 - **Separate small gate fix.** Exclude `.task-loop/` and `.task-loop.json` from implement writes (decision 13); it does
