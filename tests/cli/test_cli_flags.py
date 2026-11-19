@@ -205,7 +205,7 @@ def test_count_selects_effective_setting_and_reaches_adoption(
     monkeypatch.setattr(cli_composition, "adopt", adopt)
     config = tmp_path / "config.toml"
     config.write_text("" if configured is None else f"slot_count = {configured}\n")
-    flags = [] if explicit is None else ["--count", str(explicit)]
+    flags = [] if explicit is None else ["--slot-count", str(explicit)]
     assert main(["--config", str(config), "config", "show", *flags, "--json"]) == 0
     assert json.loads(capsys.readouterr().out)["settings"]["slot_count"] == {"value": expected, "source": source}
     assert main(["--config", str(config), "slot", "adopt", "/checkout", *flags, "--json"]) == 0
@@ -224,11 +224,11 @@ def test_invalid_count_refuses_before_adoption(
     monkeypatch.setattr(cli_composition, "adopt", unexpected_adoption)
     if count == "two":
         with pytest.raises(SystemExit) as ended:
-            main([*command, "--count", count, "--json"])
+            main([*command, "--slot-count", count, "--json"])
         assert ended.value.code == 2
         assert "invalid int value" in capsys.readouterr().err
     else:
-        assert main([*command, "--count", count, "--json"]) == 1
+        assert main([*command, "--slot-count", count, "--json"]) == 1
         output = capsys.readouterr()
         assert output.out == ""
         assert json.loads(output.err)["error"]["reason"] == "count"
@@ -312,3 +312,13 @@ def test_round_commands_work_without_agent_flags_and_keep_a_configuration_snapsh
     assert request.settings.implement.model == "configured"
     config.unlink()
     assert request.settings.implement.model == "configured"
+
+
+OLD = [["config", "show", "--root", "x"], ["config", "show", "--count", "2"], ["rounds", "start", "--every", "9"]]
+
+
+@pytest.mark.parametrize("old", OLD)
+def test_the_old_flag_spellings_are_refused(old: list[str], capsys: pytest.CaptureFixture[str]) -> None:
+    with pytest.raises(SystemExit) as ended:
+        main(old)
+    assert ended.value.code == 2

@@ -28,10 +28,10 @@ Start with [First landed task](#first-landed-task-linux) for an ordered setup an
 - `tl task show TASK_ID --backlog BACKLOG --tracker-root PATH [--json]` reads the explicitly configured Beads tracker,
   preserving requirements, acceptance and dependency relationships. The backlog key is supplied configuration; it is
   not inferred from Git. Missing, malformed and unavailable reads are distinct nonzero results; JSON errors go to stderr.
-- `tl config show [--count N]` prints each effective machine setting and its source.
+- `tl config show [--slot-count N]` prints each effective machine setting and its source.
 - `tl profile show [--checkout PATH] [--at REV] [--target REF] [--json]` prints the repository profile: `setup` and
   checks at the commit `--at`, `required` and `target` from `--target` (read-only).
-- `tl slot adopt CHECKOUT [--count N]` adopts hand-made detached worktrees as slots and creates `factory.db`.
+- `tl slot adopt CHECKOUT [--slot-count N]` adopts hand-made detached worktrees as slots and creates `factory.db`.
 - `tl step start|show|list|commit|release|abandon|publish` run, inspect, complete factory commit, release, abandon (returns the tracker
   claim) and publish one task's current attempt. `tl step start` on a done plan admits implementation; after implementation
   is accepted by factory commit it admits checks. Checks run the profile's commands in the factory, with results and logs available
@@ -272,7 +272,7 @@ printf %s "$HOME/.tls/task-loop/.t/s1" | wc -c
 mkdir -p "$HOME/.tls/task-loop"
 git -C "$checkout" worktree add --detach "$HOME/.tls/task-loop/s1" origin/main
 tl config show
-tl slot adopt "$checkout" --count 1
+tl slot adopt "$checkout" --slot-count 1
 ```
 
 Expect `s1 adopted` with the created worktree's path. Adoption creates `factory.db`; it does not create the worktree.

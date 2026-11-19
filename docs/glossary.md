@@ -254,9 +254,9 @@ The meaning of each flag as `tl <command> --help` gives it. Every step runs thro
 | `--checkout PATH` | `step start\|land`, `rounds once\|start`, `profile show` | The person's checkout of the repository; required for these step commands, default `.` for `profile show`. Land fetches and pushes its `origin` using that checkout's Git configuration. |
 | `--at REV` | `profile show` | The commit under test whose `setup` and checks are read (default `HEAD`). |
 | `--target REF` | `profile show` | The target ref whose `required` and `target` are read (default `main`). |
-| `--root DIR` | `config show`, `slot adopt` | The slots root (config `slots_root`); slots live at `<root>/<repo name>/sN`, the repo name being the origin's last path part (the repo key joins it only when another repository already uses that name). |
-| `--count N` | `config show`, `slot adopt` | Slot count s1..sN (config `slot_count`). |
-| `--every SECONDS` | `rounds start` | Seconds between rounds, at least 5 (config `round_seconds`). |
+| `--slots-root DIR` | `config show`, `slot adopt` | The slots root (config `slots_root`); slots live at `<root>/<repo name>/sN`, the repo name being the origin's last path part (the repo key joins it only when another repository already uses that name). |
+| `--slot-count N` | `config show`, `slot adopt` | Slot count s1..sN (config `slot_count`). |
+| `--round-seconds SECONDS` | `rounds start` | Seconds between rounds, at least 5 (config `round_seconds`). |
 | `--dash-port PORT` | `rounds start` | Serve the read-only dashboard on `127.0.0.1` during rounds (default 8765; 0 selects a free port). `--no-dashboard` serves none; startup failure warns while rounds continue. |
 | config `git_read_seconds` | commands that read the machine config | Seconds a Git read may take, 30 to 86400, default 600; a longer read is `unavailable:git`. An attempt's entry process does not read the config: the launcher passes the value in its argv. No flag. |
 | `TASKLOOP_ENV_PASS` | the factory process's own environment | Comma-separated variable names added to the allow-listed environment an agent and the checks get (PATH, HOME, USER, LOGNAME, SHELL, locale, TERM, TZ, TMPDIR, CODEX_HOME, proxy and CA names, `XDG_*_HOME`, `MISE_*`). Every other variable is dropped, e.g. `UV_INDEX_URL`, `DATABASE_URL`. |

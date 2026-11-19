@@ -51,8 +51,9 @@ Start (one process, started by hand; nothing restarts it):
 1. `cd ~/.local/share/task-loop/checkouts/iorlas-task-loop`, with `MISE_TRUSTED_CONFIG_PATHS` set.
 2. `git fetch origin && git merge --ff-only origin/main`, then `just install`.
 3. Run `rounds start` with `--backlog tl --tracker-root ~/Workspaces/iorlas-task-loop --checkout <the checkout>
-   --model gpt-6.1-sol --effort high --label real-run-1 --max-running N --minutes 240 --retake-lapsed`, in the
-   background, with output to `~/.local/state/task-loop/rounds.out`.
+   --model gpt-6.1-sol --effort high --label real-run-1 --max-running N --minutes 240`, in the
+   background, with output to `~/.local/state/task-loop/rounds.out`. After a `factory.db` discard, first run the same line once
+   as `rounds once` with `--retake-lapsed`; never leave that flag on the permanent line.
 
 Stop: send SIGTERM to the confirmed python process id held in `factory.db.rounds-tl.lock`, then wait until no attempt
 entry process runs. Never stop a process by name.
@@ -67,7 +68,7 @@ container cannot be seen from an agent session, so the log is the evidence.
    only state that moves; it syncs through the Git remote.
 3. On the new machine: clone the repository, install the tools from the table above, and pull the tracker with
    `bd dolt pull`. Do not copy `factory.db`: it is disposable, and a fresh one starts from Git and the tracker.
-4. Run `tl slot adopt <checkout> --count N` in the factory checkout, then start rounds.
+4. Run `tl slot adopt <checkout> --slot-count N` in the factory checkout, then start rounds.
 5. Leave the old machine's slots, worktrees, artifacts and old homes in place. Nothing is deleted by a move.
 
 Only one machine writes beads at a time. A second writer needs a merge of the tracker, which is not supported.
