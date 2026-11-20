@@ -14,3 +14,4 @@ __pycache__/
 .venv/
 .testmondata*
 .claude/worktrees/
+.beads/hooks/
