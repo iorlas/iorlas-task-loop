@@ -33,9 +33,11 @@ Start with [First landed task](#first-landed-task-linux) for an ordered setup an
   checks at the commit `--at`, `required` and `target` from `--target` (read-only).
 - `tl workflow show [--checkout PATH] [--at REV] [--name NAME] [--json]` prints the workflow file
   `.task-loop/workflows/NAME.toml` as read from Git at REV: its sha256 digest, the commit, each step's agent choice and
-  ordered prompt sections, and the feedback section count (read-only). `tl workflow init [--checkout PATH] [--name NAME]
-  [--json]` writes a generic starter file into the working tree, uncommitted; it refuses an existing file and runs no Git
-  write. Commit the file to the branch tasks start from: tasks read the workflow from their source commit.
+  ordered prompt sections, and the feedback section count (read-only). Commit the file to the branch tasks start from:
+  tasks read the workflow from their source commit.
+- `tl init [--checkout PATH] [--workflow NAME] [--json]` writes the starter `.task-loop.json` (setup filled; `checks` and
+  `required` empty, so a task is refused until you name them) and the starter workflow file into the working tree,
+  whichever is absent, uncommitted; it never overwrites a file and runs no Git write.
 - `tl slot adopt CHECKOUT [--slot-count N]` adopts hand-made detached worktrees as slots and creates `factory.db`.
 - `tl step start|show|list|commit|release|abandon|publish` run, inspect, complete factory commit, release, abandon (returns the tracker
   claim) and publish one task's current attempt. `tl step start` on a done plan admits implementation; after implementation

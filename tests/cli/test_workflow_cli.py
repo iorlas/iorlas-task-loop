@@ -1,5 +1,4 @@
-"""`tl workflow show` reads the file from Git through a port fake (no Git is started); `tl workflow init` writes the starter
-into a temporary working tree and refuses an existing file."""
+"""`tl workflow show` reads the file from Git through a port fake (no Git is started)."""
 
 import json
 from dataclasses import dataclass
@@ -9,10 +8,9 @@ import pytest
 
 from taskloop.attempt_types import Checkouts
 from taskloop.cli import main
-from taskloop.inspection_guide import WORKFLOW, WORKFLOW_INIT
+from taskloop.inspection_guide import WORKFLOW
 from taskloop.profile import NoCommit, Unavailable
 from taskloop.workflow import Reason
-from taskloop.workflow_starter import STARTER
 
 AGENT = b"""
 [step.plan.agent]
@@ -108,28 +106,3 @@ def test_a_missing_or_unusable_file_is_exit_1_and_unavailable_exit_3(
 
 def test_every_refusal_reason_has_a_guide() -> None:
     assert {str(reason) for reason in Reason} | {"unavailable"} == set(WORKFLOW)
-
-
-def test_init_writes_the_starter_once_and_leaves_it_to_the_person_to_commit(
-    tmp_path: Path,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    path = tmp_path / ".task-loop" / "workflows" / "mine.toml"
-    assert main(["workflow", "init", "--checkout", str(tmp_path), "--name", "mine"]) == 0
-    out = capsys.readouterr().out
-    assert path.read_text() == STARTER and f"Wrote {path}" in out and "new and uncommitted" in out and "commit they start from" in out
-    path.write_text("mine")
-    assert main(["workflow", "init", "--checkout", str(tmp_path), "--name", "mine", "--json"]) == 1
-    assert json.loads(capsys.readouterr().err)["error"]["kind"] == "exists" and path.read_text() == "mine"
-    assert main(["workflow", "init", "--checkout", str(tmp_path), "--name", "mine"]) == 1
-    assert capsys.readouterr().err.endswith(WORKFLOW_INIT["exists"] + "\n")
-
-
-def test_init_json_and_an_unusable_checkout_or_name(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
-    assert main(["workflow", "init", "--checkout", str(tmp_path), "--json"]) == 0
-    assert json.loads(capsys.readouterr().out) == {"path": str(tmp_path / ".task-loop/workflows/default.toml"), "committed": False}
-    assert main(["workflow", "init", "--checkout", str(tmp_path / "absent")]) == 1
-    assert capsys.readouterr().err.endswith(WORKFLOW_INIT["unwritable"] + "\n") and not (tmp_path / "absent").exists()
-    with pytest.raises(SystemExit) as result:
-        main(["workflow", "init", "--name", "../x"])
-    assert result.value.code == 2
