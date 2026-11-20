@@ -60,7 +60,9 @@ def prepared(con: sqlite3.Connection, surroundings: AttemptSurroundings, executi
 
 
 def test_native_resume_preserves_admission_and_cleans_once(
-    tmp_path: Path, surroundings: AttemptSurroundings, monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    surroundings: AttemptSurroundings,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     con = database(tmp_path / "factory.db")
     execution = NativeRun()
@@ -129,7 +131,10 @@ def test_native_result_is_bound_before_capture(tmp_path: Path, surroundings: Att
 
 @pytest.mark.parametrize("change", ["UPDATE attempt SET rev=rev+1", "INSERT INTO drain_state VALUES(1,1,'draining')"])
 def test_registration_revalidates_before_permit_and_cleans_on_refusal(
-    tmp_path: Path, surroundings: AttemptSurroundings, monkeypatch: pytest.MonkeyPatch, change: str,
+    tmp_path: Path,
+    surroundings: AttemptSurroundings,
+    monkeypatch: pytest.MonkeyPatch,
+    change: str,
 ) -> None:
     con = database(tmp_path / "factory.db")
     execution = NativeRun()
@@ -154,7 +159,10 @@ def test_registration_revalidates_before_permit_and_cleans_on_refusal(
 
 @pytest.mark.parametrize("failure", ["write", "invalid_clock", "execution"])
 def test_continuation_duration_failures_preserve_execution_and_cleanup(
-    tmp_path: Path, surroundings: AttemptSurroundings, monkeypatch: pytest.MonkeyPatch, failure: str,
+    tmp_path: Path,
+    surroundings: AttemptSurroundings,
+    monkeypatch: pytest.MonkeyPatch,
+    failure: str,
 ) -> None:
     con = database(tmp_path / "factory.db")
     execution = NativeRun()

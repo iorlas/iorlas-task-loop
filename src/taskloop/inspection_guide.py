@@ -63,8 +63,7 @@ REPO = {
 TASK = {
     "not_found": "The tracker has no such task. Check the task ID and explicitly selected backlog and tracker root.",
     "malformed": "The tracker returned malformed task data. Preserve its explanation and ask the tracker owner to correct the task.",
-    "tracker_unavailable": "The tracker could not answer. Check the supplied adapter explanation and access to "
-    "the configured tracker.",
+    "tracker_unavailable": "The tracker could not answer. Check the supplied adapter explanation and access to the configured tracker.",
     "invalid_binding": "The task scope does not match the configured tracker binding. Correct the backlog or "
     "tracker root before inspecting again.",
 }

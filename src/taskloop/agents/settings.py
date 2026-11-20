@@ -158,8 +158,13 @@ class StepSettings(Input):
 def apply(setting: AgentSetting, flags: Overrides) -> AgentSetting:
     if flags.harness is not None and flags.harness is not setting.harness:
         raise ValueError(f"{flags.harness} needs matching per-step model and access configuration")
-    return AgentSetting(harness=setting.harness, model=flags.model or setting.model, effort=flags.effort or setting.effort,
-                        access=setting.access, compaction_token_limit=setting.compaction_token_limit)
+    return AgentSetting(
+        harness=setting.harness,
+        model=flags.model or setting.model,
+        effort=flags.effort or setting.effort,
+        access=setting.access,
+        compaction_token_limit=setting.compaction_token_limit,
+    )
 
 
 def choose(machine: AgentSetting, workflow: Agent, flags: Overrides) -> AgentSetting:
@@ -169,10 +174,13 @@ def choose(machine: AgentSetting, workflow: Agent, flags: Overrides) -> AgentSet
     if workflow.harness is not None and workflow.harness is not machine.harness:
         raise ValueError(f"The workflow names harness {workflow.harness}, but the machine configuration sets {machine.harness}")
     named = AgentSetting(
-        harness=machine.harness, model=machine.model if workflow.model is None else workflow.model,
-        effort=machine.effort if workflow.effort is None else workflow.effort, access=machine.access,
-        compaction_token_limit=(machine.compaction_token_limit if workflow.compaction_token_limit is None
-                                else workflow.compaction_token_limit),
+        harness=machine.harness,
+        model=machine.model if workflow.model is None else workflow.model,
+        effort=machine.effort if workflow.effort is None else workflow.effort,
+        access=machine.access,
+        compaction_token_limit=(
+            machine.compaction_token_limit if workflow.compaction_token_limit is None else workflow.compaction_token_limit
+        ),
     )
     return apply(named, flags)
 
@@ -181,10 +189,16 @@ def encode_policy(policy: Policy) -> str:
     return POLICY.dump_json(policy).decode()
 
 
-def decode_setting(harness: str, provider: str, model: str, effort: str, policy: str,
-                   compaction_token_limit: int | None = None) -> AgentSetting:
-    setting = AgentSetting(harness=HarnessKind(harness), model=model, effort=effort, access=POLICY.validate_json(policy),
-                           compaction_token_limit=compaction_token_limit)
+def decode_setting(
+    harness: str, provider: str, model: str, effort: str, policy: str, compaction_token_limit: int | None = None
+) -> AgentSetting:
+    setting = AgentSetting(
+        harness=HarnessKind(harness),
+        model=model,
+        effort=effort,
+        access=POLICY.validate_json(policy),
+        compaction_token_limit=compaction_token_limit,
+    )
     if setting.provider != provider:
         raise ValueError("stored provider does not match harness and model")
     return setting

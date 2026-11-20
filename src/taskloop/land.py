@@ -50,10 +50,14 @@ BAR: Final = f"url.{PUSH_REFUSED}.pushinsteadof"  # the agent's push bar (`agent
 SHOW: Final = "The task's status names the next step."
 
 
-NEEDS_MINUTES = Failed("refused", "minutes", "A validation deadline in minutes is required here: S must be validated (main moved, "
-                       "its required names "
-                       "changed, or a pending candidate resumes). Land again with the minutes given; a candidate that origin's "
-                       "move superseded stays recorded so.")
+NEEDS_MINUTES = Failed(
+    "refused",
+    "minutes",
+    "A validation deadline in minutes is required here: S must be validated (main moved, "
+    "its required names "
+    "changed, or a pending candidate resumes). Land again with the minutes given; a candidate that origin's "
+    "move superseded stays recorded so.",
+)
 
 
 type Mode = Literal["land", "summary", "withdraw"]
@@ -114,8 +118,11 @@ def _not_checked(checks: ChecksRow | None, no_change: bool) -> Failed | None:
     if checks is None or checks.abandoned or checks.released_at is None or checks.conclusion is None:
         return Failed("refused", "not_checked", f"The task's checks have not concluded and been released: {SHOW}")
     if checks.conclusion != "passed" and not no_change:
-        return Failed("refused", "not_checked", f"The task's checks failed ({checks.reason}): they have to pass before it "
-                      "lands; run them again or give the task up.")
+        return Failed(
+            "refused",
+            "not_checked",
+            f"The task's checks failed ({checks.reason}): they have to pass before it lands; run them again or give the task up.",
+        )
     return None
 
 
@@ -133,8 +140,11 @@ def _task(ports: LandPorts, request: LandRequest) -> _Task | Failed:
         return refused or Failed("refused", "not_checked")
     candidate = ports.lands.latest(checks.key.attempt_id)
     if candidate is not None and candidate.superseded == "abandoned":  # only `tl step abandon` marks it so
-        return Failed("refused", "abandoning", "The task's abandon stopped after its land candidate: abandon the task again "
-                      "to finish it. Nothing was landed.")
+        return Failed(
+            "refused",
+            "abandoning",
+            "The task's abandon stopped after its land candidate: abandon the task again to finish it. Nothing was landed.",
+        )
     return _Task(key, checks, candidate)
 
 
@@ -147,8 +157,11 @@ def _branch(origin: Origin, task: _Task, task_tip: str | None) -> Failed | None:
     local = tips.get(f"{HEADS}/{task_id}") or tips.get(f"{REMOTES}/{task_id}")
     if local == x and task_tip == x:
         return None
-    return Failed("refused", "branch_moved", f"task/{task_id} (local {local}, origin {task_tip}) is not the checked {x}: abandon "
-                  "and restart, or reset the branch.")
+    return Failed(
+        "refused",
+        "branch_moved",
+        f"task/{task_id} (local {local}, origin {task_tip}) is not the checked {x}: abandon and restart, or reset the branch.",
+    )
 
 
 def _origin(ports: LandPorts, request: LandRequest, task: _Task) -> Origin | Failed:
@@ -201,14 +214,20 @@ def _tracker(ports: LandPorts, origin: Origin, task: _Task, release: str | None)
     if isinstance(read, Failed):
         return read
     if read.status == "closed":
-        found = None if task.candidate is None or not task.candidate.pushable else observed(
-            ports.lands, ports.work.clock, origin, task.candidate)
+        found = (
+            None
+            if task.candidate is None or not task.candidate.pushable
+            else observed(ports.lands, ports.work.clock, origin, task.candidate)
+        )
         if isinstance(found, (Delivered, Failed)):
             return Landed(found.row, "already_pushed", release) if isinstance(found, Delivered) else found
         return Failed("refused", "closed", f"{checks.task_id} is closed in the tracker without a land.")
     if read.status != "in_progress" or read.assignee != ACTOR:
-        return Failed("refused", "claim_lost", f"The tracker shows {checks.task_id} {read.status or 'without status'}, assigned "
-                      f"to {read.assignee or 'nobody'}.")
+        return Failed(
+            "refused",
+            "claim_lost",
+            f"The tracker shows {checks.task_id} {read.status or 'without status'}, assigned to {read.assignee or 'nobody'}.",
+        )
     return read
 
 
@@ -223,15 +242,27 @@ def _made(ports: LandPorts, request: LandRequest, task: _Task, origin: Origin, n
     if isinstance(squashed, Conflicted) and isinstance(resumed, Completed):
         squashed = Failed("refused", "conflict", "The retained resolution still conflicts with its target; delivery stopped.")
     if isinstance(squashed, (Conflicted, Failed)):
-        result = squashed if isinstance(squashed, Failed) else ports.conflicts.conflicted(origin.repo,
-            request_for(task.implement, task.checks, o, 0.0), request.minutes, request.no_change, ports.work.clock)
+        result = (
+            squashed
+            if isinstance(squashed, Failed)
+            else ports.conflicts.conflicted(
+                origin.repo, request_for(task.implement, task.checks, o, 0.0), request.minutes, request.no_change, ports.work.clock
+            )
+        )
         return result if isinstance(result, Failed) else _made(ports, request, task, origin, number)
     s, tree_s, tree_x, tree_o = squashed
     no_change = tree_s == tree_o
     if no_change != request.no_change:
-        return Failed("refused", "no_change", f"origin's main at {o} already holds X's changes, so there is nothing to push: "
-                      "a person confirms that and records the task as landed with no change to push.") if no_change else Failed(
-            "refused", "changes", "There is something to land: land it as a change, not as a no-change landing.")
+        return (
+            Failed(
+                "refused",
+                "no_change",
+                f"origin's main at {o} already holds X's changes, so there is nothing to push: "
+                "a person confirms that and records the task as landed with no change to push.",
+            )
+            if no_change
+            else Failed("refused", "changes", "There is something to land: land it as a change, not as a no-change landing.")
+        )
     refused = None if no_change else gated(ports.profiles, origin, request.accept, o, s)
     if refused is not None:
         return refused
@@ -251,21 +282,29 @@ def _deadline(ports: LandPorts, minutes: int | None, validates: bool) -> float |
     return deadline_after(minutes, ports.work.clock)
 
 
-def _no_change(ports: LandPorts, origin: Origin, current: LandRow | None, again: Callable[[], LandRow | Failed],
-               release: str | None) -> LandResult:
+def _no_change(
+    ports: LandPorts, origin: Origin, current: LandRow | None, again: Callable[[], LandRow | Failed], release: str | None
+) -> LandResult:
     """`--no-change` never validates or pushes: a pending candidate is `landing`; a pushable one is read by the rule
     without a push (on origin: delivered; origin still at its O: `changes`, S is what to land; moved past it:
     superseded `moved`); then the no-change candidate (`changes` when S's tree is not O's)."""
     if current is not None and current.pending:
-        return Failed("refused", "landing", "A land candidate of the task is being validated: land the task again as a change, "
-                      "or abandon it. Nothing was recorded.")
+        return Failed(
+            "refused",
+            "landing",
+            "A land candidate of the task is being validated: land the task again as a change, or abandon it. Nothing was recorded.",
+        )
     if current is not None and current.pushable:
         seen = observed(ports.lands, ports.work.clock, origin, current)
         if isinstance(seen, (Delivered, Failed)):
             return Landed(seen.row, "already_pushed", release) if isinstance(seen, Delivered) else seen
         if seen == "at_origin":
-            return Failed("refused", "changes", f"The validated candidate S ({current.commit}) onto origin's main is still "
-                          "to land: land it as a change, not as a no-change landing. Nothing was pushed.")
+            return Failed(
+                "refused",
+                "changes",
+                f"The validated candidate S ({current.commit}) onto origin's main is still "
+                "to land: land it as a change, not as a no-change landing. Nothing was pushed.",
+            )
         ports.lands.supersede(current.key, "moved", ports.work.clock())
     made = again()
     return made if isinstance(made, Failed) else Landed(made, "no_change", release)
@@ -275,8 +314,9 @@ def _landed(found: Delivered | Failed, release: str | None) -> Landed | Failed:
     return found if isinstance(found, Failed) else Landed(found.row, found.how, release)
 
 
-def _pending(ports: LandPorts, minutes: int | None, current: LandRow, origin: Origin, release: str | None,
-             again: Callable[[], LandRow | Failed]) -> LandResult:
+def _pending(
+    ports: LandPorts, minutes: int | None, current: LandRow, origin: Origin, release: str | None, again: Callable[[], LandRow | Failed]
+) -> LandResult:
     """A pending candidate: its deadline renewed (`--minutes` needed), its validation resumed, then its delivery."""
     deadline = _deadline(ports, minutes, True)
     if isinstance(deadline, Failed):
@@ -364,8 +404,7 @@ def _summary(ports: LandPorts, request: LandRequest, task: _Task) -> LandSummary
     made = made_s(origin, task.checks, read.title, target[0])
     if isinstance(made, Failed):
         return made
-    return summarized(origin, ports.profiles(origin.checkout), checks, ports.work.store.results(checks.key), made,
-                      read.title, target)
+    return summarized(origin, ports.profiles(origin.checkout), checks, ports.work.store.results(checks.key), made, read.title, target)
 
 
 def _landing(ports: LandPorts, request: LandRequest) -> LandResult:
@@ -383,8 +422,14 @@ def land(ports: LandPorts, request: LandRequest) -> LandResult:
     """The land, through the delivery and the close: `Landed`, `Withdrawn`, `LandSummary`, or `Failed` (refused: exit 1; unavailable:
     exit 3, a rerun is safe). A factory.db fault anywhere is `unavailable store`, nothing further changed by this call."""
     try:
-        with operation(ports.lands, ActionKind.LAND, ids=ports.ids, subject=request.task_id, backlog=request.backlog,
-                       checkout=str(request.checkout.expanduser().absolute())) as call:
+        with operation(
+            ports.lands,
+            ActionKind.LAND,
+            ids=ports.ids,
+            subject=request.task_id,
+            backlog=request.backlog,
+            checkout=str(request.checkout.expanduser().absolute()),
+        ) as call:
             result = _landing(ports, request)
             call.resolved = not isinstance(result, Failed) or result.kind not in {"unavailable", "uncertain"}
             return result

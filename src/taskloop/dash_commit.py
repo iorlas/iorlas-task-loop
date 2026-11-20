@@ -44,8 +44,10 @@ def factory_commit(row: AttemptRow, number: int, result: AttemptResult, successo
     failed = _failed(result, successor)
     names = [reason for _text, reason in CHECKS]
     at = names.index(failed) if failed in names else len(names) if verdict is not None else -1
-    checks = tuple(CommitCheck(text, "failed" if index == at else "passed" if index < at else "not_run")
-                   for index, (text, _reason) in enumerate(CHECKS))
+    checks = tuple(
+        CommitCheck(text, "failed" if index == at else "passed" if index < at else "not_run")
+        for index, (text, _reason) in enumerate(CHECKS)
+    )
     if verdict is not None:
         word = judged(verdict)
     elif failed in {"unsafe", "ignored", "uncommitted"}:

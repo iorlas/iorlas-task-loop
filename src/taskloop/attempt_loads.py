@@ -93,12 +93,14 @@ class AttemptLoads(StoreConnection, ABC):
     def _retained(self, con: sqlite3.Connection, key: AttemptKey) -> RetainedInputs | None: ...
 
     @abstractmethod
-    def _plan_row(self, con: sqlite3.Connection, repo_id: str, backlog: str, task_id: str,
-                  tracker_root: str) -> tuple[object, ...] | None: ...
+    def _plan_row(
+        self, con: sqlite3.Connection, repo_id: str, backlog: str, task_id: str, tracker_root: str
+    ) -> tuple[object, ...] | None: ...
 
     @abstractmethod
-    def _earlier_row(self, con: sqlite3.Connection, repo_id: str, backlog: str, task_id: str,
-                     tracker_root: str) -> tuple[object, ...] | None: ...
+    def _earlier_row(
+        self, con: sqlite3.Connection, repo_id: str, backlog: str, task_id: str, tracker_root: str
+    ) -> tuple[object, ...] | None: ...
 
     @abstractmethod
     def _scope_row(self, con: sqlite3.Connection, key: AttemptKey) -> tuple[object, ...] | None: ...
@@ -131,8 +133,12 @@ class AttemptLoads(StoreConnection, ABC):
             row = self._plan_row(con, repo_id, backlog, task_id, tracker_root)
         if row is None or row[6] != "committed" or row[4] is None or row[5] is None:
             return None
-        return PlanEvidence(key=AttemptKey(as_text(row[0]), as_text(row[1]), as_int(row[2])), revision=as_int(row[3]),
-                            end_commit=as_text(row[4]), blob=as_text(row[5]))
+        return PlanEvidence(
+            key=AttemptKey(as_text(row[0]), as_text(row[1]), as_int(row[2])),
+            revision=as_int(row[3]),
+            end_commit=as_text(row[4]),
+            blob=as_text(row[5]),
+        )
 
     def earlier(self, repo_id: str, backlog: str, task_id: str, tracker_root: str) -> EarlierAttempt | None:
         """Latest agent attempt for exactly this registered repo and tracker task; checks have their own table."""
@@ -140,11 +146,19 @@ class AttemptLoads(StoreConnection, ABC):
             row = self._earlier_row(con, repo_id, backlog, task_id, tracker_root)
         if row is None:
             return None
-        return EarlierAttempt.model_validate({
-            "key": AttemptKey(as_text(row[0]), as_text(row[1]), as_int(row[2])), "revision": as_int(row[3]),
-            "repo_id": repo_id, "backlog": backlog, "task_id": task_id, "tracker_root": tracker_root,
-            "slot": as_text(row[4]), "step": decode_step(as_text(row[5])), "end_commit": as_nullable_text(row[6]),
-        })
+        return EarlierAttempt.model_validate(
+            {
+                "key": AttemptKey(as_text(row[0]), as_text(row[1]), as_int(row[2])),
+                "revision": as_int(row[3]),
+                "repo_id": repo_id,
+                "backlog": backlog,
+                "task_id": task_id,
+                "tracker_root": tracker_root,
+                "slot": as_text(row[4]),
+                "step": decode_step(as_text(row[5])),
+                "end_commit": as_nullable_text(row[6]),
+            }
+        )
 
     def earlier_for(self, key: AttemptKey) -> EarlierAttempt | None:
         """Look up the predecessor's fenced identity, independently of its released reservation."""
@@ -187,8 +201,9 @@ class AttemptLoads(StoreConnection, ABC):
         pid, pgid, began, boot = row[15:19]
         worker = None if pid is None else Worker(pid=as_int(pid), pgid=as_int(pgid), start=as_text(began), boot=as_text(boot))
         session, conflict = as_nullable_text(row[19]), bool(as_int(row[20]))
-        if admission.repair is not None and (session != admission.repair.session or
-                                             (row[21] is not None and row[21] != admission.repair.base_commit)):
+        if admission.repair is not None and (
+            session != admission.repair.session or (row[21] is not None and row[21] != admission.repair.base_commit)
+        ):
             raise StoreUnavailable("Malformed repair context")
         if admission.repair is not None:
             self._repair_source(con, as_text(row[24]), admission)
@@ -198,10 +213,15 @@ class AttemptLoads(StoreConnection, ABC):
     def _repair_source(self, con: sqlite3.Connection, previous: str, admission: Admission) -> None:
         row = self._repair_row(con, previous)
         context = admission.repair
-        if (row is None or context is None or row[10] is not None or row[:4] !=
-                (context.session, context.base_commit, admission.number, admission.deadline)
-                or stored_setting(*row[4:10]) != admission.setting
-                or row[11] is None or answer_failures.AnswerFailureData.model_validate_json(as_text(row[11])) != context.failure):
+        if (
+            row is None
+            or context is None
+            or row[10] is not None
+            or row[:4] != (context.session, context.base_commit, admission.number, admission.deadline)
+            or stored_setting(*row[4:10]) != admission.setting
+            or row[11] is None
+            or answer_failures.AnswerFailureData.model_validate_json(as_text(row[11])) != context.failure
+        ):
             raise StoreUnavailable("Repair context disagrees with its failed attempt")
 
     def load(self, key: AttemptKey) -> AttemptRecord | None:
@@ -218,9 +238,11 @@ class AttemptLoads(StoreConnection, ABC):
         fence(con, admission.key, callback)
         current = self._fence(con, admission)
         worker = current.worker
-        if callback is not None and (worker is None or
-                (worker.pid, worker.pgid, worker.start, worker.boot) !=
-                (callback.worker.pid, callback.worker.pgid, callback.worker.start, callback.worker.boot)):
+        if callback is not None and (
+            worker is None
+            or (worker.pid, worker.pgid, worker.start, worker.boot)
+            != (callback.worker.pid, callback.worker.pgid, callback.worker.start, callback.worker.boot)
+        ):
             raise StoreRefused("worker_mismatch")
         return current
 
@@ -261,7 +283,11 @@ class AttemptLoads(StoreConnection, ABC):
         if session_state not in ("complete", "pending", "conflict", "fault"):
             raise StoreUnavailable("Invalid session state")
         answer = AnswerState(
-            kind, as_nullable_text(row[27]), stored_effect(row[28]), as_listed(row[29]), as_nullable_text(row[30]),
+            kind,
+            as_nullable_text(row[27]),
+            stored_effect(row[28]),
+            as_listed(row[29]),
+            as_nullable_text(row[30]),
             answer_failures.decode(row[31], kind),
         )
         return StoredExecution(key, facts, evidence, answer, session_state, verdict_of(row[33:37]))

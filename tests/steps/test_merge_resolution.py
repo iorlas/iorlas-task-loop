@@ -38,11 +38,18 @@ def repo(tmp_path: Path, remote: FakeRemote) -> FakeRepo:
 
 
 @pytest.fixture
-def conflict(registered: sqlite3.Connection, repo: FakeRepo, remote: FakeRemote, slot: FakeWorktree,
-             slot_files: FakeSlotFiles, checkouts: PinnedViews) -> Bench:
+def conflict(
+    registered: sqlite3.Connection,
+    repo: FakeRepo,
+    remote: FakeRemote,
+    slot: FakeWorktree,
+    slot_files: FakeSlotFiles,
+    checkouts: PinnedViews,
+) -> Bench:
     case = bench(registered, repo, remote, slot, slot_files, checkouts, conflict=True)
-    case.work = case.store.put(case.work, case.work.model_copy(update={
-        "input_digest": hashlib.sha256(b"Plan the actual task").hexdigest()}))
+    case.work = case.store.put(
+        case.work, case.work.model_copy(update={"input_digest": hashlib.sha256(b"Plan the actual task").hexdigest()})
+    )
     return case
 
 
@@ -59,15 +66,27 @@ class Agent:
             raise KeyboardInterrupt
         if self.disposition == "resolved":
             self.case.slot.write_file("README", "the task\ncurrent main\n")
-        text = json.dumps({"disposition": self.disposition, "paths": ["README"] if self.disposition == "resolved" else [],
-                           "explanation": "Retain both changes." if self.disposition == "resolved" else "A decision is needed."})
+        text = json.dumps(
+            {
+                "disposition": self.disposition,
+                "paths": ["README"] if self.disposition == "resolved" else [],
+                "explanation": "Retain both changes." if self.disposition == "resolved" else "A decision is needed.",
+            }
+        )
         result = RunOutcome(rc=0, worker=WORKER, summary=Summary(text=text, rc=0, stands=True, res={"ref": "native-session"}))
         return FakeRun(result, refs=("native-session",))(harness, spec, timeout, hooks)
 
     def operation(self, root: Path) -> Merge:
         operation = self.case.operation()
-        operation.resolve = Resolution(self.case.store, AgentLaunch(lambda _h: ("/bin/codex", {}), ids=NativeIds()), EvidenceFiles(root),
-                                       self.run, lambda _worker: self.gone, lambda: 10, lambda: None)
+        operation.resolve = Resolution(
+            self.case.store,
+            AgentLaunch(lambda _h: ("/bin/codex", {}), ids=NativeIds()),
+            EvidenceFiles(root),
+            self.run,
+            lambda _worker: self.gone,
+            lambda: 10,
+            lambda: None,
+        )
         return operation
 
 
@@ -124,7 +143,9 @@ def test_needs_owner_is_terminal_without_running_the_ordinary_step(conflict: Ben
 
 
 def test_crash_after_evidence_capture_adopts_the_same_execution(
-    conflict: Bench, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    conflict: Bench,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     agent = Agent(conflict)
     capture = EvidenceFiles.capture
@@ -143,7 +164,9 @@ def test_crash_after_evidence_capture_adopts_the_same_execution(
 
 
 def test_third_execution_intent_is_retried_when_registration_never_committed(
-    conflict: Bench, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    conflict: Bench,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     agent = Agent(conflict, "incomplete")
     agent.operation(tmp_path).resume(conflict.work)

@@ -112,11 +112,14 @@ def test_a_remote_rejected_push_while_main_moved_is_the_race_not_a_policy_refusa
     assert isinstance(found, Landed) and found.how == "pushed" and found.row.number == 2
 
 
-@pytest.mark.parametrize(("answer", "expected"), [
-    (Transient("reset by peer"), ("unavailable", "remote")),
-    (RemoteRejected("[remote rejected] main (protected branch hook declined)"), ("refused", "remote_rejected")),
-    (HookRejected("pre-push hook declined"), ("unavailable", "git")),
-])
+@pytest.mark.parametrize(
+    ("answer", "expected"),
+    [
+        (Transient("reset by peer"), ("unavailable", "remote")),
+        (RemoteRejected("[remote rejected] main (protected branch hook declined)"), ("refused", "remote_rejected")),
+        (HookRejected("pre-push hook declined"), ("unavailable", "git")),
+    ],
+)
 def test_each_push_answer_records_nothing_and_leaves_the_candidate_pushable(
     b: LandBench, answer: Transient | RemoteRejected | HookRejected, expected: tuple[str, str]
 ) -> None:
@@ -261,4 +264,3 @@ def test_withdraw_of_a_pruned_s_onto_a_moved_main_supersedes_it(b: LandBench) ->
     b.advance({"OTHER": "another task\n"})
     found = b.land("withdraw")
     assert isinstance(found, Withdrawn) and found.row.superseded == "withdrawn"
-

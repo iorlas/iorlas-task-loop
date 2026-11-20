@@ -94,11 +94,33 @@ class Repository:
         self.d = self.rev("HEAD")
         adopt(SlotsStore(lambda: factory, begin_immediate), VIEWS.checkouts(self.main), SlotGit(VIEWS.checkouts, RealSlotFiles()), slots, 1)
         self.store, self.files = AttemptStore(lambda: factory), RealSlotFiles()
-        self.releaser = SlotRelease(self.store, VIEWS.checkouts, self.files, lambda _entry: "gone", gone, custody, yes, lambda: 30,
-                                    lambda _setup: "gone", lambda _scratch: True, ids=NativeIds())
+        self.releaser = SlotRelease(
+            self.store,
+            VIEWS.checkouts,
+            self.files,
+            lambda _entry: "gone",
+            gone,
+            custody,
+            yes,
+            lambda: 30,
+            lambda _setup: "gone",
+            lambda _scratch: True,
+            ids=NativeIds(),
+        )
         self.admission = AttemptAdmission(
-            lambda: factory, begin_immediate, EvidenceFiles(self.art), tasks, VIEWS.checkouts, yes, yes, lambda: 10, probe, RealSlotFiles()
-        , ids=NativeIds(), engine=ENGINE)
+            lambda: factory,
+            begin_immediate,
+            EvidenceFiles(self.art),
+            tasks,
+            VIEWS.checkouts,
+            yes,
+            yes,
+            lambda: 10,
+            probe,
+            RealSlotFiles(),
+            ids=NativeIds(),
+            engine=ENGINE,
+        )
         self.root = root
 
     def rev(self, name: str) -> str:
@@ -137,8 +159,9 @@ class Repository:
             (self.slot / P).write_text(PLAN_TEXT)
 
         key = self.run(answered(PLAN, write))
-        assert isinstance(FactoryCommit(self.store, VIEWS.checkouts, self.files, gone, lambda: 20, hold,
-                                        ids=NativeIds()).commit(key), Committed)
+        assert isinstance(
+            FactoryCommit(self.store, VIEWS.checkouts, self.files, gone, lambda: 20, hold, ids=NativeIds()).commit(key), Committed
+        )
         return key, self.rev("HEAD")
 
 

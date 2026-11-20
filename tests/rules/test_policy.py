@@ -60,7 +60,6 @@ def test_caps_cannot_be_relaxed() -> None:
     assert limits == {"code-file": 400, "function": 80, "test-file": 800}
 
 
-
 # Every SQL write in the source, by (verb, table) -> the one module allowed to issue it. Anything unlisted is refused.
 WRITERS = {
     ("CREATE TABLE", "task_content"): "factory_schema.py",
@@ -130,7 +129,8 @@ WRITERS = {
 # the table after `ON`.
 WRITE = re.compile(
     r"\b(?:(CREATE\s+TABLE|(?:INSERT|REPLACE)(?:\s+OR\s+\w+)?\s+INTO|UPDATE(?:\s+OR\s+\w+)?|DELETE\s+FROM)\s+(\w+)"
-    r"|CREATE\s+(?:UNIQUE\s+)?INDEX\s+(?:IF\s+NOT\s+EXISTS\s+)?\w+\s+ON\s+(\w+))", re.IGNORECASE
+    r"|CREATE\s+(?:UNIQUE\s+)?INDEX\s+(?:IF\s+NOT\s+EXISTS\s+)?\w+\s+ON\s+(\w+))",
+    re.IGNORECASE,
 )
 
 
@@ -145,8 +145,7 @@ def write_of(match: re.Match[str]) -> tuple[str, str]:
 
 def sql_writes(root: Path = ROOT / "src" / "taskloop") -> set[tuple[str, str, str]]:
     paths = root.rglob("*.py")
-    return {(*write_of(match), path.relative_to(root).as_posix()) for path in paths
-            for match in WRITE.finditer(path.read_text())}
+    return {(*write_of(match), path.relative_to(root).as_posix()) for path in paths for match in WRITE.finditer(path.read_text())}
 
 
 def test_every_sql_write_has_its_one_owner() -> None:
@@ -185,23 +184,49 @@ def test_sql_ownership_distinguishes_nested_stores(tmp_path: Path, change: str) 
             assert_sql_owners(found, writers)
 
 
-@pytest.mark.parametrize(("statement", "write"), [
-    ("INSERT INTO slot(a) VALUES (1)", ("INSERT", "slot")), ("REPLACE INTO reservation VALUES (1)", ("INSERT", "reservation")),
-    ("delete from attempt", ("DELETE FROM", "attempt")), ("UPDATE OR ABORT slot SET a=1", ("UPDATE", "slot")),
-    ("CREATE UNIQUE INDEX one ON land_candidate(a) WHERE b", ("CREATE INDEX", "land_candidate")),
-    ("create index if not exists two\non  Attempt (a)", ("CREATE INDEX", "attempt")), ("CREATE TABLE slot (a)", ("CREATE TABLE", "slot")),
-])
+@pytest.mark.parametrize(
+    ("statement", "write"),
+    [
+        ("INSERT INTO slot(a) VALUES (1)", ("INSERT", "slot")),
+        ("REPLACE INTO reservation VALUES (1)", ("INSERT", "reservation")),
+        ("delete from attempt", ("DELETE FROM", "attempt")),
+        ("UPDATE OR ABORT slot SET a=1", ("UPDATE", "slot")),
+        ("CREATE UNIQUE INDEX one ON land_candidate(a) WHERE b", ("CREATE INDEX", "land_candidate")),
+        ("create index if not exists two\non  Attempt (a)", ("CREATE INDEX", "attempt")),
+        ("CREATE TABLE slot (a)", ("CREATE TABLE", "slot")),
+    ],
+)
 def test_write_pattern_catches_spelling_variants(statement: str, write: tuple[str, str]) -> None:
     match = WRITE.search(statement)
     assert match is not None and write_of(match) == write
 
 
 # The remote and ref writes below (sync, the other pushes, branch and remote-ref deletion) have no owner: unused.
-GIT_WRITES = frozenset({
-    "stage", "stage_tracked", "record", "take_branch", "park", "push", "fetch", "sync", "delete_remote_at", "push_refspecs",
-    "push_request", "push_lease", "delete_branch", "clean", "reset", "squash",
-    "start_merge", "finish_merge", "abort_merge", "commit_tree", "update_ref",
-})
+GIT_WRITES = frozenset(
+    {
+        "stage",
+        "stage_tracked",
+        "record",
+        "take_branch",
+        "park",
+        "push",
+        "fetch",
+        "sync",
+        "delete_remote_at",
+        "push_refspecs",
+        "push_request",
+        "push_lease",
+        "delete_branch",
+        "clean",
+        "reset",
+        "squash",
+        "start_merge",
+        "finish_merge",
+        "abort_merge",
+        "commit_tree",
+        "update_ref",
+    }
+)
 
 
 DYNAMIC = frozenset({"getattr", "methodcaller", "attrgetter"})  # calls that reach an attribute by a string name
@@ -231,11 +256,21 @@ def git_writers() -> set[tuple[str, str]]:
     return {(name, str(path.relative_to(root))) for path in root.rglob("*.py") for name in git_names(ast.parse(path.read_text()))}
 
 
-@pytest.mark.parametrize(("source", "names"), [
-    ("slot.reset(x)", {"reset"}), ("hook = slot.park", {"park"}), ("reset()", {"reset"}), ('getattr(slot, "record")()', {"record"}),
-    ('operator.methodcaller("clean")', {"clean"}), ('attrgetter("push")', {"push"}),
-    ('WORDS = ("reset", "clean")', set()), ('word = "environment:reset"', set()), ('f(reset)', set()),
-], ids=["call", "reference", "bare_call", "getattr", "methodcaller", "attrgetter", "word_table", "refusal_word", "plain_name"])
+@pytest.mark.parametrize(
+    ("source", "names"),
+    [
+        ("slot.reset(x)", {"reset"}),
+        ("hook = slot.park", {"park"}),
+        ("reset()", {"reset"}),
+        ('getattr(slot, "record")()', {"record"}),
+        ('operator.methodcaller("clean")', {"clean"}),
+        ('attrgetter("push")', {"push"}),
+        ('WORDS = ("reset", "clean")', set()),
+        ('word = "environment:reset"', set()),
+        ("f(reset)", set()),
+    ],
+    ids=["call", "reference", "bare_call", "getattr", "methodcaller", "attrgetter", "word_table", "refusal_word", "plain_name"],
+)
 def test_the_git_write_matcher_sees_uses_and_not_words(source: str, names: set[str]) -> None:
     assert git_names(ast.parse(source)) == names
 
@@ -246,21 +281,40 @@ def test_only_the_commit_prepare_release_publish_environment_and_land_modules_wr
     land's squash (objects only) is `land_target`'s, its fetch of origin's `main` and its push of S `land_push`'s.
     Admission's bounded fetch of origin main is `prepare`'s."""
     expected = {
-        ("stage", "factory_commit.py"), ("record", "factory_commit.py"), ("take_branch", "prepare.py"), ("park", "prepare.py"),
+        ("stage", "factory_commit.py"),
+        ("record", "factory_commit.py"),
+        ("take_branch", "prepare.py"),
+        ("park", "prepare.py"),
         ("fetch", "prepare.py"),
-        ("park", "slot_park.py"), ("park", "wip.py"), ("reset", "wip.py"),
-        ("stage", "wip.py"), ("commit_tree", "wip.py"), ("update_ref", "wip.py"), ("abort_merge", "slot_park.py"),
-        ("park", "merge/start.py"), ("start_merge", "merge/start.py"), ("finish_merge", "merge/start.py"),
+        ("park", "slot_park.py"),
+        ("park", "wip.py"),
+        ("reset", "wip.py"),
+        ("stage", "wip.py"),
+        ("commit_tree", "wip.py"),
+        ("update_ref", "wip.py"),
+        ("abort_merge", "slot_park.py"),
+        ("park", "merge/start.py"),
+        ("start_merge", "merge/start.py"),
+        ("finish_merge", "merge/start.py"),
         ("fetch", "merge/start.py"),
-        ("stage", "merge/start.py"), ("stage", "merge/git.py"), ("update_ref", "merge/git.py"), ("take_branch", "merge/git.py"),
-        ("stage", "land_conflict/preserve.py"), ("commit_tree", "land_conflict/preserve.py"),
+        ("stage", "merge/start.py"),
+        ("stage", "merge/git.py"),
+        ("update_ref", "merge/git.py"),
+        ("take_branch", "merge/git.py"),
+        ("stage", "land_conflict/preserve.py"),
+        ("commit_tree", "land_conflict/preserve.py"),
         ("update_ref", "land_conflict/preserve.py"),
-        ("reset", "land_conflict/cleanup.py"), ("park", "land_conflict/cleanup.py"),
+        ("reset", "land_conflict/cleanup.py"),
+        ("park", "land_conflict/cleanup.py"),
         ("park", "land_conflict/release.py"),
-            ("abort_merge", "land_conflict/abort.py"),
-            ("push", "publish.py"), ("clean", "environment.py"), ("reset", "environment.py"),
+        ("abort_merge", "land_conflict/abort.py"),
+        ("push", "publish.py"),
+        ("clean", "environment.py"),
+        ("reset", "environment.py"),
         ("record", "publish.py"),  # PublishStore.record persists the publication; the matcher sees every receiver.
-        ("squash", "land_target.py"), ("fetch", "land_push.py"), ("push", "land_push.py"),
+        ("squash", "land_target.py"),
+        ("fetch", "land_push.py"),
+        ("push", "land_push.py"),
     }
     assert git_writers() == expected
 
@@ -285,10 +339,22 @@ def test_only_tracker_client_constructs_the_tracker_client() -> None:
 
 SIGNAL_USES = frozenset({"signal", "SIGINT", "SIGTERM", "SIGHUP", "SIG_IGN", "SIG_DFL", "default_int_handler", "getsignal"})
 # Sending or timing signals, under any receiver (`os.kill`, `signal.alarm`, `proc.kill`): no factory source or test uses one.
-SIGNALLING = frozenset({
-    "kill", "killpg", "alarm", "setitimer", "pthread_kill", "pthread_sigmask", "set_wakeup_fd", "pidfd_send_signal",
-    "raise_signal", "siginterrupt", "sigwait", "sigtimedwait",
-})
+SIGNALLING = frozenset(
+    {
+        "kill",
+        "killpg",
+        "alarm",
+        "setitimer",
+        "pthread_kill",
+        "pthread_sigmask",
+        "set_wakeup_fd",
+        "pidfd_send_signal",
+        "raise_signal",
+        "siginterrupt",
+        "sigwait",
+        "sigtimedwait",
+    }
+)
 
 
 def signal_uses(path: Path) -> tuple[set[str], set[str], set[str]]:
@@ -322,18 +388,46 @@ def test_the_one_signal_owner_installs_only_the_rounds_handlers_and_nothing_send
         assert imports == ({"import"} if path == owner else set()), path
         assert dynamic == signalling == set(), path
     tree = ast.parse(owner.read_text())
-    used = {node.attr for node in ast.walk(tree) if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name)
-            and node.value.id == "signal"}
+    used = {
+        node.attr
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name) and node.value.id == "signal"
+    }
     assert used == SIGNAL_USES
     assert not any(isinstance(node, ast.Import) and any(alias.name == "os" for alias in node.names) for node in ast.walk(tree))
 
 
 # Replacing or forking this process, or another way to start one: none exists in the factory (the layer above owns versions).
-REPLACING = frozenset({
-    "execl", "execle", "execlp", "execlpe", "execv", "execve", "execvp", "execvpe", "posix_spawn", "posix_spawnp", "fork",
-    "forkpty", "spawnl", "spawnle", "spawnlp", "spawnlpe", "spawnv", "spawnve", "spawnvp", "spawnvpe", "system", "popen",
-    "create_subprocess_exec", "create_subprocess_shell", "ProcessPoolExecutor", "fork_exec",
-})
+REPLACING = frozenset(
+    {
+        "execl",
+        "execle",
+        "execlp",
+        "execlpe",
+        "execv",
+        "execve",
+        "execvp",
+        "execvpe",
+        "posix_spawn",
+        "posix_spawnp",
+        "fork",
+        "forkpty",
+        "spawnl",
+        "spawnle",
+        "spawnlp",
+        "spawnlpe",
+        "spawnv",
+        "spawnve",
+        "spawnvp",
+        "spawnvpe",
+        "system",
+        "popen",
+        "create_subprocess_exec",
+        "create_subprocess_shell",
+        "ProcessPoolExecutor",
+        "fork_exec",
+    }
+)
 PROCESS_MODULES = frozenset({"pty", "multiprocessing", "_posixsubprocess", "concurrent.futures.process"})
 DYNAMIC_IMPORTS = frozenset({"import_module", "__import__"})
 
@@ -354,8 +448,10 @@ def _by_string(node: ast.AST) -> list[str]:
     """A `REPLACING` name reached by a string: `getattr(os, "fork")`, `vars(os)["fork"]`, `os.__dict__["fork"]`."""
     if isinstance(node, ast.Call) and _called(node) == "getattr":
         return [name for name in _strings_of(node.args[1:2]) if name in REPLACING]
-    if isinstance(node, ast.Subscript) and ((isinstance(node.value, ast.Call) and _called(node.value) == "vars")
-                                            or (isinstance(node.value, ast.Attribute) and node.value.attr == "__dict__")):
+    if isinstance(node, ast.Subscript) and (
+        (isinstance(node.value, ast.Call) and _called(node.value) == "vars")
+        or (isinstance(node.value, ast.Attribute) and node.value.attr == "__dict__")
+    ):
         return [name for name in _strings_of([node.slice]) if name in REPLACING]
     return []
 
@@ -380,29 +476,81 @@ def process_replacements(tree: ast.AST) -> list[str]:
     return found
 
 
-@pytest.mark.parametrize(("source", "names"), [
-    ("os.execv(p, a)", ["execv"]), ("os.execvpe(p, a, e)", ["execvpe"]), ("from os import execl", ["execl"]),
-    ("os.posix_spawnp(p, a, e)", ["posix_spawnp"]), ("pid = os.fork()", ["fork"]), ("os.forkpty()", ["forkpty"]),
-    ("os.spawnv(m, p, a)", ["spawnv"]), ("hook = os.spawnlp", ["spawnlp"]), ("os.system(c)", ["system"]),
-    ("os.popen(c)", ["popen"]), ("asyncio.create_subprocess_exec(p)", ["create_subprocess_exec"]),
-    ("from asyncio import create_subprocess_shell", ["create_subprocess_shell"]),
-    ("from concurrent.futures import ProcessPoolExecutor", ["ProcessPoolExecutor"]),
-    ("_posixsubprocess.fork_exec(a)", ["fork_exec"]), ("import _posixsubprocess", ["_posixsubprocess"]),
-    ("import concurrent.futures.process", ["concurrent.futures.process"]),
-    ("from concurrent.futures import process", ["concurrent.futures.process"]),
-    ("from concurrent.futures.process import _ExceptionWithTraceback", ["concurrent.futures.process"]),
-    ('getattr(os, "fork")()', ["fork"]), ('vars(os)["execv"]', ["execv"]), ('os.__dict__["system"]', ["system"]),
-    ("import pty", ["pty"]), ("import multiprocessing.pool", ["multiprocessing"]),
-    ("from multiprocessing import Process", ["multiprocessing"]), ('importlib.import_module("pty")', ["pty"]),
-    ('__import__("multiprocessing")', ["multiprocessing"]), ('import_module("concurrent.futures.process")', ["concurrent.futures.process"]),
-    ("os.execv(p, a)\nos.execv(p, a)", ["execv", "execv"]),
-    ('WORDS = ("execv", "fork")', []), ("executable = sys.executable", []), ("popen_held(argv)", []),
-    ('getattr(os, "getcwd")', []), ('vars(o)["name"]', []), ("from concurrent.futures import ThreadPoolExecutor", []),
-], ids=["execv", "execvpe", "from_os", "posix_spawnp", "fork", "forkpty", "spawnv", "spawn_reference", "system", "popen",
-        "asyncio_exec", "asyncio_shell", "process_pool", "fork_exec", "posixsubprocess", "futures_process", "futures_process_from",
-        "futures_process_member", "getattr", "vars", "dunder_dict", "pty", "mp_submodule", "mp_from", "import_module",
-        "dunder_import", "import_module_futures", "twice", "words", "executable", "shelf_spawn", "getattr_other", "vars_other",
-        "threads"])
+@pytest.mark.parametrize(
+    ("source", "names"),
+    [
+        ("os.execv(p, a)", ["execv"]),
+        ("os.execvpe(p, a, e)", ["execvpe"]),
+        ("from os import execl", ["execl"]),
+        ("os.posix_spawnp(p, a, e)", ["posix_spawnp"]),
+        ("pid = os.fork()", ["fork"]),
+        ("os.forkpty()", ["forkpty"]),
+        ("os.spawnv(m, p, a)", ["spawnv"]),
+        ("hook = os.spawnlp", ["spawnlp"]),
+        ("os.system(c)", ["system"]),
+        ("os.popen(c)", ["popen"]),
+        ("asyncio.create_subprocess_exec(p)", ["create_subprocess_exec"]),
+        ("from asyncio import create_subprocess_shell", ["create_subprocess_shell"]),
+        ("from concurrent.futures import ProcessPoolExecutor", ["ProcessPoolExecutor"]),
+        ("_posixsubprocess.fork_exec(a)", ["fork_exec"]),
+        ("import _posixsubprocess", ["_posixsubprocess"]),
+        ("import concurrent.futures.process", ["concurrent.futures.process"]),
+        ("from concurrent.futures import process", ["concurrent.futures.process"]),
+        ("from concurrent.futures.process import _ExceptionWithTraceback", ["concurrent.futures.process"]),
+        ('getattr(os, "fork")()', ["fork"]),
+        ('vars(os)["execv"]', ["execv"]),
+        ('os.__dict__["system"]', ["system"]),
+        ("import pty", ["pty"]),
+        ("import multiprocessing.pool", ["multiprocessing"]),
+        ("from multiprocessing import Process", ["multiprocessing"]),
+        ('importlib.import_module("pty")', ["pty"]),
+        ('__import__("multiprocessing")', ["multiprocessing"]),
+        ('import_module("concurrent.futures.process")', ["concurrent.futures.process"]),
+        ("os.execv(p, a)\nos.execv(p, a)", ["execv", "execv"]),
+        ('WORDS = ("execv", "fork")', []),
+        ("executable = sys.executable", []),
+        ("popen_held(argv)", []),
+        ('getattr(os, "getcwd")', []),
+        ('vars(o)["name"]', []),
+        ("from concurrent.futures import ThreadPoolExecutor", []),
+    ],
+    ids=[
+        "execv",
+        "execvpe",
+        "from_os",
+        "posix_spawnp",
+        "fork",
+        "forkpty",
+        "spawnv",
+        "spawn_reference",
+        "system",
+        "popen",
+        "asyncio_exec",
+        "asyncio_shell",
+        "process_pool",
+        "fork_exec",
+        "posixsubprocess",
+        "futures_process",
+        "futures_process_from",
+        "futures_process_member",
+        "getattr",
+        "vars",
+        "dunder_dict",
+        "pty",
+        "mp_submodule",
+        "mp_from",
+        "import_module",
+        "dunder_import",
+        "import_module_futures",
+        "twice",
+        "words",
+        "executable",
+        "shelf_spawn",
+        "getattr_other",
+        "vars_other",
+        "threads",
+    ],
+)
 def test_the_process_replacement_matcher_sees_uses_and_not_words(source: str, names: list[str]) -> None:
     assert sorted(process_replacements(ast.parse(source))) == sorted(names)
 
@@ -425,7 +573,15 @@ def _imported(tree: ast.Module) -> list[str]:
 
 def test_http_and_url_parsing_imports_have_explicit_owners() -> None:
     """Pin the HTTP server, digest URL parser and test consumers; import contracts restrict the precise modules."""
-    importers = {str(path.relative_to(ROOT)) for path in FILES
-                 if any(name.split(".")[0] in {"http", "urllib", "socketserver"} for name in _imported(ast.parse(path.read_text())))}
-    assert importers == {"src/taskloop/dash_server.py", "tests/cli/test_dash_server.py", "tests/cli/test_dash_composition.py",
-                         "tests/rules/test_isolation.py", "src/taskloop/shelf_digest/identities.py"}
+    importers = {
+        str(path.relative_to(ROOT))
+        for path in FILES
+        if any(name.split(".")[0] in {"http", "urllib", "socketserver"} for name in _imported(ast.parse(path.read_text())))
+    }
+    assert importers == {
+        "src/taskloop/dash_server.py",
+        "tests/cli/test_dash_server.py",
+        "tests/cli/test_dash_composition.py",
+        "tests/rules/test_isolation.py",
+        "src/taskloop/shelf_digest/identities.py",
+    }

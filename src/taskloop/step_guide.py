@@ -7,27 +7,35 @@ from taskloop.hold_guide import HOLD, ON_HOLD
 from taskloop.land_guide import LAND_GUIDE, LAND_NEXT
 from taskloop.step_refusal_guide import REFUSALS
 
-STEP_ONLY = ("Steps built: plan, implement and check. Committed results are published on the task branch. "
-             "The profile selects automatic land during a round or manual land by the owner.")
-PUBLISH = ("The step's result is accepted by factory commit but has not been published to origin. "
-           "Publication must finish before the next step. "
-           "An unreachable remote may need network or credential repair. If the remote branch moved, diverged or advanced, "
-           "compare it with the commit accepted by factory commit and decide how to reconcile the histories; "
-           "the factory never forces a push.")
-HELD = ("The tracker claim stays held; the slot stays reserved until the step ends and its work is settled. "
-        "Abandoning also returns the claim. While a step runs, its entry renews the tracker lease every 100 seconds. "
-        "Between steps the lease is not renewed, so tracker maintenance can reclaim it after the lease and grace period "
-        "expire. Rounds never renew or retake a lapsed claim: they skip an open task while factory.db retains its attempt.")
+STEP_ONLY = (
+    "Steps built: plan, implement and check. Committed results are published on the task branch. "
+    "The profile selects automatic land during a round or manual land by the owner."
+)
+PUBLISH = (
+    "The step's result is accepted by factory commit but has not been published to origin. "
+    "Publication must finish before the next step. "
+    "An unreachable remote may need network or credential repair. If the remote branch moved, diverged or advanced, "
+    "compare it with the commit accepted by factory commit and decide how to reconcile the histories; "
+    "the factory never forces a push."
+)
+HELD = (
+    "The tracker claim stays held; the slot stays reserved until the step ends and its work is settled. "
+    "Abandoning also returns the claim. While a step runs, its entry renews the tracker lease every 100 seconds. "
+    "Between steps the lease is not renewed, so tracker maintenance can reclaim it after the lease and grace period "
+    "expire. Rounds never renew or retake a lapsed claim: they skip an open task while factory.db retains its attempt."
+)
 ABANDON = "Abandoning frees the slot once its processes are proven stopped and its work is settled, and returns the claim."
-ROUNDS = ("Starting rounds also reopens a drain that completed (a drain) when the running code matches. "
-          "Scheduling starts with a round immediately, then repeats at the configured interval and when a slot becomes free. "
-          "Each round holds stopped tasks it took, advances completed claimed tasks, then starts approved ready tasks within "
-          "the running-task limit (default 3). Under the automatic land profile read from origin's main, a round first lands "
-          "one passed task it took; a conflict or failed re-check holds that task. The tracker is read only when a slot is free. "
-          "The last free slot is reserved for a passed task waiting to land. Round results are retained in rounds.log. "
-          "Ctrl-C once stops scheduling after the current move; twice exits immediately. Launched steps keep running. "
-          "If interrupt handling was disabled at launch, SIGTERM is needed to stop scheduling. A move in flight finishes "
-          "first, including any publication push up to Git's timeout. Checkout validation waits until a slot is free.")
+ROUNDS = (
+    "Starting rounds also reopens a drain that completed (a drain) when the running code matches. "
+    "Scheduling starts with a round immediately, then repeats at the configured interval and when a slot becomes free. "
+    "Each round holds stopped tasks it took, advances completed claimed tasks, then starts approved ready tasks within "
+    "the running-task limit (default 3). Under the automatic land profile read from origin's main, a round first lands "
+    "one passed task it took; a conflict or failed re-check holds that task. The tracker is read only when a slot is free. "
+    "The last free slot is reserved for a passed task waiting to land. Round results are retained in rounds.log. "
+    "Ctrl-C once stops scheduling after the current move; twice exits immediately. Launched steps keep running. "
+    "If interrupt handling was disabled at launch, SIGTERM is needed to stop scheduling. A move in flight finishes "
+    "first, including any publication push up to Git's timeout. Checkout validation waits until a slot is free."
+)
 GUIDE = {
     **REFUSALS,
     "start": "The entry needs relaunching. Rounds relaunch it until its deadline; an entry registered before a reboot gets "
@@ -186,19 +194,24 @@ NEEDS_OWNER = (
 )
 
 # Commit rules and classified execution failures already have an owning explanation.
-GUIDE.update({word: f"Factory commit refused: {what}. Inspect the retained evidence and resolve this before continuing."
-              for word, (what, _fix) in RULES.items()})
-GUIDE.update({f"run:{word}": f"{what} The owner must resolve this before new work is approved."
-              for word, (what, _fix) in RUN.items()})
-GUIDE.update({
-    "answer_repair": "The rejected answer's repair could not be admitted. The factory will retry when admission is available.",
-    "run:timeout": "The agent exceeded its deadline. Inspect its retained work and evidence before deciding on another attempt.",
-    "incomplete": "The agent reported incomplete work. Inspect its answer and evidence before deciding how to continue.",
-    "needs_owner": NEEDS_OWNER,
-    "run": "The agent execution failed. Inspect its retained stdout, stderr and diagnostics before deciding on another attempt.",
-    "answer": "The agent answer did not meet the answer contract. Inspect diagnostics.txt and the retained answer before "
-    "deciding on another attempt.",
-})
+GUIDE.update(
+    {
+        word: f"Factory commit refused: {what}. Inspect the retained evidence and resolve this before continuing."
+        for word, (what, _fix) in RULES.items()
+    }
+)
+GUIDE.update({f"run:{word}": f"{what} The owner must resolve this before new work is approved." for word, (what, _fix) in RUN.items()})
+GUIDE.update(
+    {
+        "answer_repair": "The rejected answer's repair could not be admitted. The factory will retry when admission is available.",
+        "run:timeout": "The agent exceeded its deadline. Inspect its retained work and evidence before deciding on another attempt.",
+        "incomplete": "The agent reported incomplete work. Inspect its answer and evidence before deciding how to continue.",
+        "needs_owner": NEEDS_OWNER,
+        "run": "The agent execution failed. Inspect its retained stdout, stderr and diagnostics before deciding on another attempt.",
+        "answer": "The agent answer did not meet the answer contract. Inspect diagnostics.txt and the retained answer before "
+        "deciding on another attempt.",
+    }
+)
 
 
 def refusal_guide(reason: str, *, checks: bool = False, land: bool = False) -> str:
@@ -228,10 +241,12 @@ def guide(word: str, *, checks: bool, land: bool = False) -> str:
 
 def discard(db: Path) -> str:
     """The last resort, naming this machine config's resolved factory.db, never another factory's."""
-    return "\n".join([
-        "Last resort: when an attempt cannot be proven stopped, the owner may decide to discard the whole factory database.",
-        "First stop scheduling, then all entries and workers, using only independently verified process identities.",
-        f"Only after all are stopped, discard {db} and its -wal/-shm companions; preserve every other factory's database.",
-        "Return each tracker claim only if it is still held by the factory, then inspect and readopt each slot worktree.",
-        "Never edit rows by hand: a deleted reservation silently fences out a still-running worker.",
-    ])
+    return "\n".join(
+        [
+            "Last resort: when an attempt cannot be proven stopped, the owner may decide to discard the whole factory database.",
+            "First stop scheduling, then all entries and workers, using only independently verified process identities.",
+            f"Only after all are stopped, discard {db} and its -wal/-shm companions; preserve every other factory's database.",
+            "Return each tracker claim only if it is still held by the factory, then inspect and readopt each slot worktree.",
+            "Never edit rows by hand: a deleted reservation silently fences out a still-running worker.",
+        ]
+    )

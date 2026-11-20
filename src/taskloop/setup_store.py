@@ -28,8 +28,12 @@ from taskloop.drain.models import Owner, Role, owners
 from taskloop.land_conflict.reservation_store import owns
 from taskloop.step import Step
 
-FAILURES: Final[tuple[CommandConclusion, ...]] = (CommandConclusion.FAILED, CommandConclusion.TIMED_OUT,
-    CommandConclusion.LINGERING, CommandConclusion.DIRTY)  # `interrupted` is not the setup's fault
+FAILURES: Final[tuple[CommandConclusion, ...]] = (
+    CommandConclusion.FAILED,
+    CommandConclusion.TIMED_OUT,
+    CommandConclusion.LINGERING,
+    CommandConclusion.DIRTY,
+)  # `interrupted` is not the setup's fault
 SETUP_RUNS: Final = 2  # failed runs of one attempt before relaunches stop running its setup (`environment:failed`)
 # Concluded with a process possibly left in the last command's group (a member that outlived it, or one the deadline's stop
 # could not prove gone): until that group is empty the run still holds the slot, like an unfinished one.
@@ -40,10 +44,13 @@ COLUMNS: Final = "run,commit_sha,digest,command,pid,pgid,proc_start,boot,conclus
 # The run's attempt is an agent attempt, a checks attempt or a land candidate (`setup_run` has no foreign key): an agent or
 # checks attempt `admitted`, or a candidate pending, holding its reservation at the key's generation. Bound with the key
 # three times.
-HELD: Final = """SELECT 1 FROM attempt p JOIN reservation r ON r.repo_id=p.repo_id AND r.slot=p.slot
+HELD: Final = (
+    """SELECT 1 FROM attempt p JOIN reservation r ON r.repo_id=p.repo_id AND r.slot=p.slot
 AND r.attempt_id=p.attempt_id AND r.generation=p.generation
 WHERE p.attempt_id=? AND p.dispatch_token=? AND p.generation=? AND p.phase='admitted'
-UNION ALL """ + RESULT_HELD
+UNION ALL """
+    + RESULT_HELD
+)
 
 
 @dataclass(frozen=True)
@@ -115,8 +122,16 @@ def _conclusion(value: object) -> CommandConclusion | None:
 def _row(row: tuple[object, ...]) -> SetupRow:
     pid, pgid, start, boot = as_nullable_int(row[4]), as_nullable_int(row[5]), as_nullable_text(row[6]), as_nullable_text(row[7])
     process = None if pid is None or pgid is None or start is None or boot is None else OwnedProcess(pid, pgid, start, boot)
-    return SetupRow(as_int(row[0]), as_text(row[1]), as_text(row[2]), as_int(row[3]), process, _conclusion(row[8]),
-                    _time(row[9]), None if row[10] is None else _time(row[10]))
+    return SetupRow(
+        as_int(row[0]),
+        as_text(row[1]),
+        as_text(row[2]),
+        as_int(row[3]),
+        process,
+        _conclusion(row[8]),
+        _time(row[9]),
+        None if row[10] is None else _time(row[10]),
+    )
 
 
 def latest_of(con: sqlite3.Connection, attempt_id: str) -> SetupRow | None:
@@ -161,22 +176,35 @@ class SetupStore(AttemptReads):
     def samples(self, backlog: str) -> tuple[SetupSample, ...]:
         """Ten most recent implement owners, each represented by its highest run, including unusable samples."""
         with self._connection() as con:
-            rows = con.execute("""SELECT a.attempt_id,a.task_id,a.repo_id,s.run,s.started_at,s.ended_at,s.conclusion
+            rows = con.execute(
+                """SELECT a.attempt_id,a.task_id,a.repo_id,s.run,s.started_at,s.ended_at,s.conclusion
                 FROM attempt a JOIN setup_run s ON s.attempt_id=a.attempt_id
                 WHERE a.backlog=? AND a.step=? AND a.previous_attempt_id IS NULL
                 AND s.run=(SELECT max(r.run) FROM setup_run r WHERE r.attempt_id=a.attempt_id)
-                ORDER BY s.started_at DESC,a.attempt_id ASC LIMIT 10""", (backlog, Step.IMPLEMENT)).fetchall()
-            return tuple(SetupSample(attempt_id=as_text(row[0]), task_id=as_text(row[1]), repo_id=as_text(row[2]),
-                                     run=as_int(row[3]), started_at=_time(row[4]),
-                                     ended_at=None if row[5] is None else _time(row[5]), conclusion=_conclusion(row[6]))
-                         for row in rows)
+                ORDER BY s.started_at DESC,a.attempt_id ASC LIMIT 10""",
+                (backlog, Step.IMPLEMENT),
+            ).fetchall()
+            return tuple(
+                SetupSample(
+                    attempt_id=as_text(row[0]),
+                    task_id=as_text(row[1]),
+                    repo_id=as_text(row[2]),
+                    run=as_int(row[3]),
+                    started_at=_time(row[4]),
+                    ended_at=None if row[5] is None else _time(row[5]),
+                    conclusion=_conclusion(row[6]),
+                )
+                for row in rows
+            )
 
     def failures(self, key: AttemptKey) -> int:
         """Runs of this attempt that ended as the setup's own failure (`FAILURES`)."""
         marks = ",".join("?" * len(FAILURES))
         with self._connection() as con:
-            row = con.execute(f"SELECT count(*) FROM setup_run WHERE attempt_id=? AND conclusion IN ({marks})",
-                              (key.attempt_id, *(encode(each) for each in FAILURES))).fetchone()
+            row = con.execute(
+                f"SELECT count(*) FROM setup_run WHERE attempt_id=? AND conclusion IN ({marks})",
+                (key.attempt_id, *(encode(each) for each in FAILURES)),
+            ).fetchone()
             return as_int(row[0])
 
     def _held(self, con: sqlite3.Connection, key: AttemptKey) -> None:
@@ -200,8 +228,13 @@ class SetupStore(AttemptReads):
     def registered(self, key: AttemptKey, run: int, command: int, process: OwnedProcess) -> None:
         """Command `command`'s identity, committed before it executes (the registered start's callback)."""
         with self.registering._connection(write=True) as con:
-            self._changed(con, key, run, "command=?,pid=?,pgid=?,proc_start=?,boot=?",
-                          (command, process.pid, process.pgid, process.start, process.boot))
+            self._changed(
+                con,
+                key,
+                run,
+                "command=?,pid=?,pgid=?,proc_start=?,boot=?",
+                (command, process.pid, process.pgid, process.start, process.boot),
+            )
 
     def conclude(self, key: AttemptKey, run: int, conclusion: CommandConclusion, rc: int | None, now: float) -> None:
         if conclusion not in SETUP_CONCLUSIONS:

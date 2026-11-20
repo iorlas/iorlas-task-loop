@@ -18,24 +18,29 @@ def current(con: sqlite3.Connection) -> bool:
 def refusal(error: SchemaError, path: Path) -> str:
     """Explain an incompatible restart without changing the database or offering unsafe upgrade recovery."""
     found = _recorded(path)
-    diagnosis = (f"its recorded schema version could not be read ({error})" if found is None else
-                 f"it records schema version {found}" + (" (no schema version recorded)" if found == 0 else ""))
+    diagnosis = (
+        f"its recorded schema version could not be read ({error})"
+        if found is None
+        else f"it records schema version {found}" + (" (no schema version recorded)" if found == 0 else "")
+    )
     if found == SCHEMA.version:
         diagnosis += f"; the database is incompatible: {' '.join(str(error).splitlines())}"
-    return (f"Restart refused: factory.db at {path.resolve()}: {diagnosis}; this runtime expects schema version {SCHEMA.version}. "
-            "The database has been preserved. Resume with matching code to keep unfinished work. For an incompatible "
-            "upgrade, first stop admitting work and let running attempts and their entry processes finish under the "
-            "matching runtime. Draining belongs before the upgrade; this incompatible runtime cannot safely perform it. "
-            "Stopping rounds alone does not confirm that entries or agents have stopped. After confirming they have "
-            "stopped, the owner deliberately discards the old factory database before initializing the new runtime. "
-            "Discard loses local execution progress and session references.")
+    return (
+        f"Restart refused: factory.db at {path.resolve()}: {diagnosis}; this runtime expects schema version {SCHEMA.version}. "
+        "The database has been preserved. Resume with matching code to keep unfinished work. For an incompatible "
+        "upgrade, first stop admitting work and let running attempts and their entry processes finish under the "
+        "matching runtime. Draining belongs before the upgrade; this incompatible runtime cannot safely perform it. "
+        "Stopping rounds alone does not confirm that entries or agents have stopped. After confirming they have "
+        "stopped, the owner deliberately discards the old factory database before initializing the new runtime. "
+        "Discard loses local execution progress and session references."
+    )
 
 
 def _recorded(path: Path) -> int | None:
     """The schema version the file records, read-only (only to word a refusal); None when it cannot be read."""
     try:
         con = sqlite3.connect(f"{path.resolve().as_uri()}?mode=ro", uri=True)
-    except (sqlite3.Error, OSError, ValueError):
+    except sqlite3.Error, OSError, ValueError:
         return None
     try:
         return int(con.execute("PRAGMA user_version").fetchone()[0])

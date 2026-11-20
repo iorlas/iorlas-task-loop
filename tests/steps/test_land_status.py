@@ -92,12 +92,17 @@ def test_a_same_tree_land_is_landed_with_its_lines_and_no_slot_or_check(b: LandB
         f"Land required: check, test (origin main at {b.base}; same as the checks)",
         "Land result: same_tree",
         f"Pushed: origin main at {row.commit}, 1970-01-01 00:00:10 UTC",
-        "Closed: 1970-01-01 00:00:10 UTC (closed)", NOT_SYNCED,
+        "Closed: 1970-01-01 00:00:10 UTC (closed)",
+        NOT_SYNCED,
     ]
     assert lines(b)[-2:] == ["Next: landed", LAND_NEXT["landed"]] and view(b).next == "landed"
     data = as_data(shown(b))["land"]
-    assert isinstance(data, dict) and (data["commit"], data["delivery"], data["close"], data["results"]) == (row.commit, "pushed",
-                                                                                                             "closed", [])
+    assert isinstance(data, dict) and (data["commit"], data["delivery"], data["close"], data["results"]) == (
+        row.commit,
+        "pushed",
+        "closed",
+        [],
+    )
 
 
 def test_a_close_refused_after_the_push_is_still_next_land_and_shows_pushed(b: LandBench) -> None:
@@ -130,8 +135,9 @@ def test_a_pending_candidate_whose_land_process_runs_is_next_land_and_names_the_
     interrupted(b)
     shown_lines = land_lines(lines(b, {ME}))
     assert "Land slot: s1, held" in shown_lines and "Land process: running (pid 4242)" in shown_lines
-    assert "Land result: pending" in shown_lines and any(line.startswith("Land check: test unfinished, process group") for line in
-                                                          shown_lines)
+    assert "Land result: pending" in shown_lines and any(
+        line.startswith("Land check: test unfinished, process group") for line in shown_lines
+    )
     assert shown(b, {ME}).view.next == "land" and "Land process: gone (pid 4242)" in land_lines(lines(b))
 
 
@@ -197,15 +203,17 @@ class HalfWay:
         return NotReleased("unavailable", "store", "OperationalError. Nothing changed.")
 
 
-def release(b: LandBench, abandon: bool, implement: Implement, alive: set[EntryIdentity] | None = None, *,
-            halfway: bool = False) -> ReleasedTask | Failed:
+def release(
+    b: LandBench, abandon: bool, implement: Implement, alive: set[EntryIdentity] | None = None, *, halfway: bool = False
+) -> ReleasedTask | Failed:
     work = b.checking()
 
     def seen(entry: EntryIdentity) -> Seen:
         return "matching" if entry in (alive or set()) else "gone"
 
-    checks = ChecksRelease(work.store, work.checkouts, work.slot_files, seen, b.ports().custody, work.clock,
-        work.seen, work.scratch, ids=NativeIds())
+    checks = ChecksRelease(
+        work.store, work.checkouts, work.slot_files, seen, b.ports().custody, work.clock, work.seen, work.scratch, ids=NativeIds()
+    )
     ports = HalfWay(checks) if halfway else checks
     return release_task(AttemptStore(lambda: b.con), implement, ports, "tasks", "tl-1", abandon=abandon)
 
@@ -236,7 +244,8 @@ def test_the_abandon_goes_land_candidate_first_then_checks_then_the_implement_at
     rendered = human("tl step release", found, None)
     assert [line.split(":")[0] for line in rendered if line.startswith(("released", "abandoned"))] == ["released"] * 3
     assert rendered.index(f"released: land candidate {candidate.key.attempt_id} for tl-1 (backlog tasks)") < rendered.index(
-        "released: attempt checks for tl-1 (backlog tasks)")
+        "released: attempt checks for tl-1 (backlog tasks)"
+    )
     data = as_data(found)
     assert isinstance(data["land"], dict) and data["land"]["candidate"] is True and data["candidate"] is False
 
@@ -282,13 +291,15 @@ def test_a_pending_candidate_whose_land_process_cannot_be_observed_is_unknown_an
     assert isinstance(listed, Listed) and [each.next for each in listed.attempts] == ["unknown"]
 
 
-@pytest.mark.parametrize(("arrange", "word"), [
-    (lambda b: setattr(b.repo, "answer", Transient("connection reset")) or b.land(), "landing"),
-    (lambda b: b.land(), "landed"),
-], ids=["pushable", "delivered"])
-def test_the_abandon_of_a_pushable_or_delivered_candidate_is_refused_and_nothing_changes(
-    b: LandBench, arrange: object, word: str
-) -> None:
+@pytest.mark.parametrize(
+    ("arrange", "word"),
+    [
+        (lambda b: setattr(b.repo, "answer", Transient("connection reset")) or b.land(), "landing"),
+        (lambda b: b.land(), "landed"),
+    ],
+    ids=["pushable", "delivered"],
+)
+def test_the_abandon_of_a_pushable_or_delivered_candidate_is_refused_and_nothing_changes(b: LandBench, arrange: object, word: str) -> None:
     assert callable(arrange)
     arrange(b)
     before = b.rows()

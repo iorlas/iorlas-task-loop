@@ -108,8 +108,13 @@ class Entry:
             assert AttemptStore(lambda: con, store.begin_immediate).register_entry(KEY, entry, 10) == "accepted"
             con.close()
         self.files = FlakyFiles(db.parent, failures)
-        summary = Summary(text=text or json.dumps(PLAN), rc=rc, stands=True, vendor="request failed SECRET=credential" if rc else "",
-                          res={"tokens": {"in": 8, "cached": 2, "out": 3}, "requests": 1})
+        summary = Summary(
+            text=text or json.dumps(PLAN),
+            rc=rc,
+            stands=True,
+            vendor="request failed SECRET=credential" if rc else "",
+            res={"tokens": {"in": 8, "cached": 2, "out": 3}, "requests": 1},
+        )
         self.outcome = RunOutcome(rc=rc, worker=WORKER, summary=summary, out="agent says SECRET=credential")
         self.run = FakeRun(self.outcome)
         self.credential_calls = 0
@@ -145,8 +150,9 @@ class Entry:
         self.opened.append((database, artifacts))
         store = Store(SCHEMA)
         connect = AttemptStore(lambda: store.shared_rw(database), store.begin_immediate)
-        return Attempts(connect, self.files, AgentLaunch(self.credentials, ids=NativeIds()), self.execution,
-            self.clock, self.checkouts, self.slot_files)
+        return Attempts(
+            connect, self.files, AgentLaunch(self.credentials, ids=NativeIds()), self.execution, self.clock, self.checkouts, self.slot_files
+        )
 
     def clock(self) -> float:
         return self.now
@@ -175,8 +181,19 @@ class Entry:
 
     def __call__(self, inspect: Callable[[int], ProcessObservation] = inspect_process, task_id: str = "tl-1") -> int:
         args = EntryArgs(self.db, self.db.parent, 600, "tasks", task_id)
-        return enter(args, self.attempts, inspect, self.clock, self.wait, self.lines.append, self.gone, self.heartbeat_for, self.stop,
-                     self.unclaim, self.remotes)
+        return enter(
+            args,
+            self.attempts,
+            inspect,
+            self.clock,
+            self.wait,
+            self.lines.append,
+            self.gone,
+            self.heartbeat_for,
+            self.stop,
+            self.unclaim,
+            self.remotes,
+        )
 
 
 NOTE = "docs/design/tl-1/note.md"
@@ -185,8 +202,8 @@ NOTE = "docs/design/tl-1/note.md"
 @pytest.mark.parametrize(
     ("files", "line", "code", "opens"),
     [
-            ({P: PLAN_TEXT}, "collected committed commit=committed claim=held release=released branch=published", 0, 17),
-            ({P: " \n"}, "collected rejected:plan_empty commit=rejected:plan_empty claim=held release=released", 1, 17),
+        ({P: PLAN_TEXT}, "collected committed commit=committed claim=held release=released branch=published", 0, 17),
+        ({P: " \n"}, "collected rejected:plan_empty commit=rejected:plan_empty claim=held release=released", 1, 17),
         ({P: PLAN_TEXT, NOTE: "n"}, "pending commit commit=uncommitted:uncommitted claim=held", 1, 13),
         ({}, "pending commit commit=uncommitted:unsafe claim=held", 1, 9),
     ],
@@ -219,8 +236,12 @@ INCOMPLETE = "collected incomplete commit=not_applicable claim=held release=rele
     [
         (1, "", "collected run:vendor_blip commit=not_applicable claim=held release=released"),
         (1, json.dumps(PLAN), "collected run:vendor_blip commit=not_applicable claim=held release=released"),
-        (0, "not json", "collected answer:json_invalid: json: Answer must be one complete strict JSON value: "
-         "Expecting value: line 1 column 1 (char 0) commit=not_applicable claim=held release=released"),
+        (
+            0,
+            "not json",
+            "collected answer:json_invalid: json: Answer must be one complete strict JSON value: "
+            "Expecting value: line 1 column 1 (char 0) commit=not_applicable claim=held release=released",
+        ),
         (0, json.dumps(PLAN | {"disposition": "incomplete", "plan_path": None, "paths": [], "message": None}), INCOMPLETE),
     ],
     ids=["failed_run_no_answer", "failed_run_valid_answer", "clean_run_bad_answer", "incomplete"],
@@ -262,10 +283,20 @@ def test_an_absent_task_or_a_missing_database_runs_nothing(
 @pytest.mark.parametrize(
     ("failures", "wait_to", "line", "waits", "captures"),
     [
-        (1, 10, "unavailable evidence publish=accepted then=collected:committed commit=committed claim=held release=released "
-         "branch=published", 1, 2),
-        (4, 10, "unavailable evidence publish=accepted then=collected:committed commit=committed claim=held release=released "
-         "branch=published", 4, 5),
+        (
+            1,
+            10,
+            "unavailable evidence publish=accepted then=collected:committed commit=committed claim=held release=released branch=published",
+            1,
+            2,
+        ),
+        (
+            4,
+            10,
+            "unavailable evidence publish=accepted then=collected:committed commit=committed claim=held release=released branch=published",
+            4,
+            5,
+        ),
         (9, 100, "unavailable evidence commit=refused:not_captured claim=held", 1, 1),
     ],
     ids=["second_try_captures", "retries_until_it_captures", "never_past_the_deadline"],
@@ -291,8 +322,9 @@ def test_capture_is_retried_only_while_unavailable_and_the_agent_never_again(
 def test_a_claim_found_lost_before_the_agent_refuses_and_runs_nothing(
     admitted: Path, checkouts: Checkouts, slot_files: SlotFiles, slot: FakeWorktree
 ) -> None:
-    entry = Entry(admitted, checkouts, slot_files, me(), written=(slot, {P: PLAN_TEXT}, [P]),
-                  beats=(ClaimWord.LOST, ClaimWord.HELD), rounds=3)
+    entry = Entry(
+        admitted, checkouts, slot_files, me(), written=(slot, {P: PLAN_TEXT}, [P]), beats=(ClaimWord.LOST, ClaimWord.HELD), rounds=3
+    )
     assert entry() == 1
     assert entry.lines == ["refused claim_lost"] and entry.renewed == [("/tracker", "tl-1")]
     assert entry.run.calls == [] and entry.credential_calls == 0 and entry.git_opens == 0 and entry.stop.waits == 0
@@ -300,8 +332,12 @@ def test_a_claim_found_lost_before_the_agent_refuses_and_runs_nothing(
 
 @pytest.mark.parametrize("held", [True, False], ids=["slot_busy", "lock"])
 def test_a_held_or_unlockable_slot_refuses_the_entry_before_anything_is_read_or_run(
-    admitted: Path, checkouts: Checkouts, slot_files: SlotFiles, slot: FakeWorktree,
-    occupy: Callable[[Path], AbstractContextManager[None]], held: bool,
+    admitted: Path,
+    checkouts: Checkouts,
+    slot_files: SlotFiles,
+    slot: FakeWorktree,
+    occupy: Callable[[Path], AbstractContextManager[None]],
+    held: bool,
 ) -> None:
     """Held by another entry or commit: `refused slot_busy`. A lock file that cannot be made (here `.locks` is a file):
     `refused lock`."""
@@ -396,8 +432,14 @@ def test_an_unreachable_origin_is_only_the_branch_word_and_the_committed_plan_st
     ids=["lost_mid_run", "fault_mid_run", "fault_before_the_agent", "never_renewed", "renewed_after_a_failure"],
 )
 def test_a_claim_lost_or_faulted_while_the_step_runs_is_only_recorded(
-    admitted: Path, checkouts: Checkouts, slot_files: SlotFiles, slot: FakeWorktree,
-    beats: tuple[Beat | Exception, ...], rounds: int, word: str, renewals: int,
+    admitted: Path,
+    checkouts: Checkouts,
+    slot_files: SlotFiles,
+    slot: FakeWorktree,
+    beats: tuple[Beat | Exception, ...],
+    rounds: int,
+    word: str,
+    renewals: int,
 ) -> None:
     entry = Entry(admitted, checkouts, slot_files, me(), written=(slot, {P: PLAN_TEXT}, [P]), beats=beats, rounds=rounds)
     assert entry() == 0  # the step completes, publishes and commits; nothing is released or re-claimed
@@ -430,9 +472,18 @@ class Claims:
 
 @pytest.mark.parametrize(
     "argv",
-    [[], ["db", "/a", "600", "tasks", "tl-1"], ["/db", "a", "600", "tasks", "tl-1"], ["/db", "/a", "", "tasks", "tl-1"],
-     ["/db", "/a", "6x", "tasks", "tl-1"], ["/db", "/a", "29", "tasks", "tl-1"], ["/db", "/a", "86401", "tasks", "tl-1"],
-     ["/db", "/a", "9" * 5000, "tasks", "tl-1"], ["/db", "/a", "600", "", "tl-1"], ["/db", "/a", "600", "tasks", "tl-1", "x"]],
+    [
+        [],
+        ["db", "/a", "600", "tasks", "tl-1"],
+        ["/db", "a", "600", "tasks", "tl-1"],
+        ["/db", "/a", "", "tasks", "tl-1"],
+        ["/db", "/a", "6x", "tasks", "tl-1"],
+        ["/db", "/a", "29", "tasks", "tl-1"],
+        ["/db", "/a", "86401", "tasks", "tl-1"],
+        ["/db", "/a", "9" * 5000, "tasks", "tl-1"],
+        ["/db", "/a", "600", "", "tl-1"],
+        ["/db", "/a", "600", "tasks", "tl-1", "x"],
+    ],
 )
 def test_arguments_are_two_absolute_paths_the_git_bound_a_backlog_and_a_task(argv: list[str]) -> None:
     assert arguments(argv) is None
@@ -462,10 +513,13 @@ def test_main_refuses_bad_arguments_with_one_log_line(capfd: pytest.CaptureFixtu
     assert (out + err).strip() == "refused usage"
 
 
-@pytest.mark.parametrize(("code", "logged"), [(143, "failed terminated_by_signal"), (129, "failed terminated_by_signal"),
-                                              (1, "failed SystemExit"), (None, "failed SystemExit")])
-def test_main_names_only_a_signal_exit_terminated(capfd: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch, code: int | None,
-                                                  logged: str) -> None:
+@pytest.mark.parametrize(
+    ("code", "logged"),
+    [(143, "failed terminated_by_signal"), (129, "failed terminated_by_signal"), (1, "failed SystemExit"), (None, "failed SystemExit")],
+)
+def test_main_names_only_a_signal_exit_terminated(
+    capfd: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch, code: int | None, logged: str
+) -> None:
     """`any_agent.supervisor` raises SystemExit(128 + signal) from its SIGTERM/SIGHUP handler and SystemExit(1) when the parent
     is gone: only the first is a signal's cause."""
     monkeypatch.setattr("taskloop.attempt_entry.tracker_located", lambda: None)
@@ -481,11 +535,17 @@ def test_main_names_only_a_signal_exit_terminated(capfd: pytest.CaptureFixture[s
 
 
 @pytest.mark.parametrize(
-    ("beats", "expected"), [((ClaimWord.HELD,), ClaimWord.HELD), ((ClaimWord.LOST,), ClaimWord.LOST),
-                            ((ClaimWord.UNRENEWED,), ClaimWord.UNRENEWED), ((ClaimWord.HELD, ClaimWord.LOST), ClaimWord.LOST)]
+    ("beats", "expected"),
+    [
+        ((ClaimWord.HELD,), ClaimWord.HELD),
+        ((ClaimWord.LOST,), ClaimWord.LOST),
+        ((ClaimWord.UNRENEWED,), ClaimWord.UNRENEWED),
+        ((ClaimWord.HELD, ClaimWord.LOST), ClaimWord.LOST),
+    ],
 )
 def test_the_renewal_after_setup_renews_once_more_and_answers_the_keep_alives_word(
-    beats: tuple[Beat, ...], expected: ClaimWord,
+    beats: tuple[Beat, ...],
+    expected: ClaimWord,
 ) -> None:
     """An implement step's setup may take minutes: the entry renews the claim once more before dispatch (`lost` refuses)."""
     script = list(beats)

@@ -17,7 +17,10 @@ KEY = AttemptKey("attempt", "dispatch", 1)
 
 @pytest.mark.parametrize("state", ["absent", "empty", "truncated", "unreadable"])
 def test_agent_events_location_is_read_only_before_launch(
-    registered: sqlite3.Connection, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, state: str,
+    registered: sqlite3.Connection,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    state: str,
 ) -> None:
     files = EvidenceFiles(tmp_path / "custom artifacts with spaces")
     expected = files.events_path(KEY)
@@ -29,6 +32,7 @@ def test_agent_events_location_is_read_only_before_launch(
             expected.write_text("" if state == "empty" else '{"unfinished":')
     before = sorted(files.root.rglob("*"))
     changes = registered.total_changes
+
     # Guard the owning evidence content reader instead of depending on filesystem permissions.
     def content(*_args: object, **_kwargs: object) -> None:
         pytest.fail("Show must not read event content")

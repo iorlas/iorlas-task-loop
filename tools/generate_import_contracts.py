@@ -56,23 +56,35 @@ def generate(root: Path, text: str) -> str:
         private = [module for module in owned if module != owner and files[module].name != "api.py"]
         if not private:
             continue
-        sections.append(section("slice-" + owner, {
-            "name": f"Private modules belong to {owner}; api.py is its public door",
-            "type": "protected",
-            "protected_modules": listed(private),
-            "allowed_importers": listed(owned),
-            "as_packages": "False",
-            "unmatched_ignore_imports_alerting": "error",
-        }, previous))
-    sections.append(section("sqlite-only-in-stores", {
-        "name": "Only literal store.py modules import SQLite, including connection types",
-        "type": "forbidden",
-        "source_modules": listed([module for module, path in files.items() if path.name != "store.py"]),
-        "forbidden_modules": "sqlite3",
-        "as_packages": "False",
-        "allow_indirect_imports": "True",
-        "unmatched_ignore_alerting": "error",
-    }, previous))
+        sections.append(
+            section(
+                "slice-" + owner,
+                {
+                    "name": f"Private modules belong to {owner}; api.py is its public door",
+                    "type": "protected",
+                    "protected_modules": listed(private),
+                    "allowed_importers": listed(owned),
+                    "as_packages": "False",
+                    "unmatched_ignore_imports_alerting": "error",
+                },
+                previous,
+            )
+        )
+    sections.append(
+        section(
+            "sqlite-only-in-stores",
+            {
+                "name": "Only literal store.py modules import SQLite, including connection types",
+                "type": "forbidden",
+                "source_modules": listed([module for module, path in files.items() if path.name != "store.py"]),
+                "forbidden_modules": "sqlite3",
+                "as_packages": "False",
+                "allow_indirect_imports": "True",
+                "unmatched_ignore_alerting": "error",
+            },
+            previous,
+        )
+    )
     generated = START + "\n\n" + "\n\n".join(sections) + "\n\n" + END + "\n"
     if START not in text and END not in text:
         return text.rstrip() + "\n\n" + generated

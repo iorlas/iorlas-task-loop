@@ -31,11 +31,31 @@ from taskloop.slot_release import SlotRelease
 def abandon(b: LandBench) -> ReleasedTask | Failed:
     """`tl step release tl-1 --abandon`: the real operation, the real checks and implement releases."""
     work = b.checking()
-    checks = ChecksRelease(work.store, work.checkouts, work.slot_files, lambda _entry: "gone", b.ports().custody, work.clock, work.seen,
-                           work.scratch, ids=NativeIds())
+    checks = ChecksRelease(
+        work.store,
+        work.checkouts,
+        work.slot_files,
+        lambda _entry: "gone",
+        b.ports().custody,
+        work.clock,
+        work.seen,
+        work.scratch,
+        ids=NativeIds(),
+    )
     store = AttemptStore(lambda: b.con)
-    implement = SlotRelease(store, b.views, b.files, lambda _entry: "gone", lambda _worker: True, custody, lambda _root, _task: True,
-                            lambda: b.now, lambda _setup: "gone", lambda _scratch: True, ids=NativeIds())
+    implement = SlotRelease(
+        store,
+        b.views,
+        b.files,
+        lambda _entry: "gone",
+        lambda _worker: True,
+        custody,
+        lambda _root, _task: True,
+        lambda: b.now,
+        lambda _setup: "gone",
+        lambda _scratch: True,
+        ids=NativeIds(),
+    )
     return release_task(store, implement, checks, "tasks", "tl-1", abandon=True)
 
 
@@ -53,20 +73,27 @@ def seed_chain(b: LandBench, number: int, x: str) -> None:
             '{"harness":"codex","sandbox":"workspace-write"}',100,'captured',?,?,1,?,?,?,
         'abababababababababababababababababababababababababababababababab',
         (SELECT digest FROM workflow_file),
-        'eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',1.0)""", (implement,
-            f"{implement}-token", repo_id, base, x, 2 * number, b.d, base))
+        'eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',1.0)""",
+            (implement, f"{implement}-token", repo_id, base, x, 2 * number, b.d, base),
+        )
         b.con.execute(
             """INSERT INTO execution (attempt_id,dispatch_token,generation,rc,timed_out,work,stands,stdout_path,stdout_digest,
             stderr_path,stderr_digest,answer_path,answer_digest,diagnostic_path,diagnostic_digest,answer_kind,effect,session_state)
-            VALUES (?,?,1,0,0,1,1,'o','d','e','d','a','d','g','d','valid','commit','complete')""", (implement, f"{implement}-token"))
-        b.con.execute("INSERT INTO factory_commit (attempt_id,dispatch_token,generation,verdict,observed_at) "
-                      "VALUES (?,?,1,'committed',5)", (implement, f"{implement}-token"))
+            VALUES (?,?,1,0,0,1,1,'o','d','e','d','a','d','g','d','valid','commit','complete')""",
+            (implement, f"{implement}-token"),
+        )
+        b.con.execute(
+            "INSERT INTO factory_commit (attempt_id,dispatch_token,generation,verdict,observed_at) VALUES (?,?,1,'committed',5)",
+            (implement, f"{implement}-token"),
+        )
         b.con.execute("INSERT INTO slot_release VALUES (?,?,1,?,4,'kept')", (implement, f"{implement}-token", b.d))
         b.con.execute("INSERT INTO published_branch VALUES (?,?,1,?,?,6)", (implement, f"{implement}-token", x, x))
         key = AttemptKey(checks, f"{checks}-token", 1)
         check_store.insert(b.con, check_store.ChecksAdmitted(key, implement, 1, "s1", b.d, base, REQUIRED, 100.0))
-        b.con.execute("UPDATE checks_attempt SET phase='concluded',conclusion='passed',concluded_at=5,released_at=6,parked=? "
-                      "WHERE attempt_id=?", (b.d, checks))
+        b.con.execute(
+            "UPDATE checks_attempt SET phase='concluded',conclusion='passed',concluded_at=5,released_at=6,parked=? WHERE attempt_id=?",
+            (b.d, checks),
+        )
 
 
 def recover(b: LandBench, number: int, old_x: str, files: dict[str, str]) -> str:
@@ -139,11 +166,13 @@ def factory(factory: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, che
     built = Factory(factory, tmp_path, slot, checkouts, slot_files, Tracker(task("tl-1")))
     plan, code = "docs/design/tl-1/plan.md", "src/shared.py"
     built.agents["tl-1", "plan"] = scripted(
-        slot.repo, {"disposition": "planned", "plan_path": plan, "paths": [plan], "message": "Plan", "explanation": "planned"},
-        {plan: PLAN_TEXT})
+        slot.repo,
+        {"disposition": "planned", "plan_path": plan, "paths": [plan], "message": "Plan", "explanation": "planned"},
+        {plan: PLAN_TEXT},
+    )
     built.agents["tl-1", "implement"] = scripted(
-        slot.repo, {"disposition": "implemented", "message": "Add it", "explanation": "ran just check"},
-        {code: "X = 1\n"})
+        slot.repo, {"disposition": "implemented", "message": "Add it", "explanation": "ran just check"}, {code: "X = 1\n"}
+    )
     return built
 
 
@@ -159,8 +188,8 @@ def test_the_restarted_chain_is_planned_and_implemented_on_the_moved_main(factor
     abandoned = release_task(factory.store, factory.releaser(), factory.checks_release(), "tasks", "tl-1", abandon=True)
     assert isinstance(abandoned, ReleasedTask)
     factory.agents["tl-1", "implement"] = scripted(
-        repo, {"disposition": "implemented", "message": "Add it", "explanation": "ran just check"},
-        {"src/shared.py": "X = 2\nY = 1\n"})
+        repo, {"disposition": "implemented", "message": "Add it", "explanation": "ran just check"}, {"src/shared.py": "X = 2\nY = 1\n"}
+    )
     factory.by_hand("tl-1")  # tl step start
     for _ in range(4):
         factory.round()

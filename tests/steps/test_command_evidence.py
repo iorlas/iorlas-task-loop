@@ -67,22 +67,23 @@ def test_an_incomplete_final_record_waits_for_its_newline(tmp_path: Path) -> Non
     assert files.last_command(KEY) == 1001.0
 
 
-@pytest.mark.parametrize("suffix", [b"{\"k\":", b"\xff\xfe", b"unfinished", b"{\"at\":NaN"])
+@pytest.mark.parametrize("suffix", [b'{"k":', b"\xff\xfe", b"unfinished", b'{"at":NaN'])
 def test_an_incomplete_suffix_does_not_make_earlier_complete_records_unreadable(tmp_path: Path, suffix: bytes) -> None:
     files = EvidenceFiles(tmp_path)
     write(files, command(1000.0) + suffix)
     assert files.last_command(KEY) == 1000.0
 
 
-@pytest.mark.parametrize("data", [b"{\"k\":", b"\xff\xfe", b"unfinished"])
+@pytest.mark.parametrize("data", [b'{"k":', b"\xff\xfe", b"unfinished"])
 def test_a_stream_with_only_an_incomplete_record_has_no_command(tmp_path: Path, data: bytes) -> None:
     files = EvidenceFiles(tmp_path)
     write(files, data)
     assert files.last_command(KEY) == "none"
 
 
-@pytest.mark.parametrize("bad", [b"not JSON\n", b"\n", b"[]\n", b"{}\n", b"\xff\xfe\n",
-                                b'{"k":"message","s":"finished","at":1,"t":"\xff"}\n'])
+@pytest.mark.parametrize(
+    "bad", [b"not JSON\n", b"\n", b"[]\n", b"{}\n", b"\xff\xfe\n", b'{"k":"message","s":"finished","at":1,"t":"\xff"}\n']
+)
 def test_a_bad_complete_record_after_a_command_makes_the_evidence_unreadable(tmp_path: Path, bad: bytes) -> None:
     files = EvidenceFiles(tmp_path)
     write(files, command(1000.0) + bad + message())
@@ -97,8 +98,14 @@ def test_invalid_command_timestamps_are_unreadable(tmp_path: Path, at: str) -> N
     assert files.last_command(KEY) == "unreadable"
 
 
-@pytest.mark.parametrize("record", [b'"k":"unknown","s":"running","at":1,"t":"x"', b'"k":"command","s":"unknown","at":1,"t":"x"',
-                                     b'"k":"command","s":"running","at":1,"t":null'])
+@pytest.mark.parametrize(
+    "record",
+    [
+        b'"k":"unknown","s":"running","at":1,"t":"x"',
+        b'"k":"command","s":"unknown","at":1,"t":"x"',
+        b'"k":"command","s":"running","at":1,"t":null',
+    ],
+)
 def test_other_invalid_activity_fields_cannot_conceal_a_newer_start(tmp_path: Path, record: bytes) -> None:
     files = EvidenceFiles(tmp_path)
     write(files, command(1000.0) + b"{" + record + b"}\n")

@@ -95,19 +95,35 @@ def test_a_repeat_commits_x2_on_x1_from_the_dirty_worktree_and_the_chain_commits
 
     def attempts(run: Execution) -> Attempts:
         return Attempts(
-            store, EvidenceFiles(art), AgentLaunch(lambda _harness: ("/bin/codex", {}), ids=NativeIds()), run,
-                lambda: 10, VIEWS.checkouts, files
+            store,
+            EvidenceFiles(art),
+            AgentLaunch(lambda _harness: ("/bin/codex", {}), ids=NativeIds()),
+            run,
+            lambda: 10,
+            VIEWS.checkouts,
+            files,
         )
 
     factory_commit = FactoryCommit(store, VIEWS.checkouts, files, lambda _worker: True, lambda: 20, hold, ids=NativeIds())
     assert attempts(agent(slot, {P: PLAN_TEXT, "scratch.txt": "s"}, (), [P])).execute(KEY, ENTRY).reason == "commit"
     assert factory_commit.commit(KEY) == Uncommitted("uncommitted", ("?? scratch.txt",))
     x1 = git(slot, "rev-parse", "HEAD").strip()
-    admission = ChainAdmission(lambda: factory, begin_immediate, EvidenceFiles(art), lambda: 10, VIEWS.checkouts, files,
-                              ids=NativeIds(), engine=ENGINE)
-    repeat = StepRepeat(store, factory_commit, EvidenceFiles(art), admission, RegisteringLauncher(store, SECOND),
-                        lambda _w: True, lambda _e: "gone", lambda: 10,
-                        repeating, ids=NativeIds(), discussion=refresh_discussion)
+    admission = ChainAdmission(
+        lambda: factory, begin_immediate, EvidenceFiles(art), lambda: 10, VIEWS.checkouts, files, ids=NativeIds(), engine=ENGINE
+    )
+    repeat = StepRepeat(
+        store,
+        factory_commit,
+        EvidenceFiles(art),
+        admission,
+        RegisteringLauncher(store, SECOND),
+        lambda _w: True,
+        lambda _e: "gone",
+        lambda: 10,
+        repeating,
+        ids=NativeIds(),
+        discussion=refresh_discussion,
+    )
     started = repeat.repeat("tasks", "tl-1", KEY, ENTRY, 30)
     assert isinstance(started, Started) and started.status == "repeated"
     found = store.attempt_of("tasks", "tl-1")

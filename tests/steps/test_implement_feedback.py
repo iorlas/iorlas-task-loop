@@ -20,8 +20,7 @@ TASK = TaskInspection(TaskReference(TaskScope("tasks"), "tl-1"), "Fix a widget",
 
 
 def prompt(files: EvidenceFiles, argv: tuple[str, ...] = ("pytest", "a file.py", "a'\"b", "é")) -> str:
-    found = FailedCheck(source=KEY, block=1, commit="a" * 40, name="test", argv=argv, rc=1,
-                        output=files.check_output(KEY, 1, "test"))
+    found = FailedCheck(source=KEY, block=1, commit="a" * 40, name="test", argv=argv, rc=1, output=files.check_output(KEY, 1, "test"))
     return failed_check_feedback(found, task_text(TASK, "implement", CONTEXT, WORKFLOW), "NONCE", FEEDBACK_OPENING)
 
 
@@ -83,8 +82,7 @@ def test_long_arguments_are_preserved_and_invalid_failed_check_inputs_are_refuse
     arg = "a" * 4096
     assert arg in prompt(files, ("program", arg))
     with pytest.raises(ValidationError):
-        FailedCheck(source=KEY, block=1, commit="a" * 40, name="test", argv=("program",), rc=0,
-                    output=files.check_output(KEY, 1, "test"))
+        FailedCheck(source=KEY, block=1, commit="a" * 40, name="test", argv=("program",), rc=0, output=files.check_output(KEY, 1, "test"))
 
 
 @pytest.mark.parametrize("path", ["src/executable.py", "src/.gitattributes", "src/a\x1b[31m\nfile.py"])

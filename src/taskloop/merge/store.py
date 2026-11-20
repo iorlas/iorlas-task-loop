@@ -20,8 +20,9 @@ class MergeStore(StoreConnection):
 
     def start(self, work: Work) -> Work:
         with self._connection(write=True) as con:
-            con.execute("INSERT INTO merge_operation (attempt_id,data) VALUES (?,?) ON CONFLICT DO NOTHING",
-                        (work.attempt_id, encode(work)))
+            con.execute(
+                "INSERT INTO merge_operation (attempt_id,data) VALUES (?,?) ON CONFLICT DO NOTHING", (work.attempt_id, encode(work))
+            )
         found = self.get(work.attempt_id)
         if found is None:
             raise StoreRefused("merge_missing")
@@ -29,8 +30,9 @@ class MergeStore(StoreConnection):
 
     def put(self, previous: Work, work: Work) -> Work:
         with self._connection(write=True) as con:
-            changed = con.execute("UPDATE merge_operation SET data=? WHERE attempt_id=? AND data=?",
-                                  (encode(work), work.attempt_id, encode(previous))).rowcount
+            changed = con.execute(
+                "UPDATE merge_operation SET data=? WHERE attempt_id=? AND data=?", (encode(work), work.attempt_id, encode(previous))
+            ).rowcount
         if changed != 1:
             raise StoreRefused("merge_changed")
         return work
@@ -39,5 +41,9 @@ class MergeStore(StoreConnection):
         with self._connection() as con:
             rows = con.execute("SELECT data FROM merge_operation").fetchall()
         works = tuple(stored(row[0]) for row in rows)
-        return tuple(Owner(subject=work.attempt_id, role=Role.AGENT, identity=execution.worker)
-                     for work in works for execution in work.executions if execution.worker is not None and not execution.ended)
+        return tuple(
+            Owner(subject=work.attempt_id, role=Role.AGENT, identity=execution.worker)
+            for work in works
+            for execution in work.executions
+            if execution.worker is not None and not execution.ended
+        )

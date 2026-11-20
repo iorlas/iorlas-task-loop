@@ -45,7 +45,10 @@ def ports(con: sqlite3.Connection, repo: FakeRepo, return_claim: Callable[[Actio
 
 @pytest.mark.parametrize("acquired", [False, True])
 def test_crashed_admission_reopens_and_admits_without_retake(
-    tmp_path: Path, repo: FakeRepo, root: Path, acquired: bool,
+    tmp_path: Path,
+    repo: FakeRepo,
+    root: Path,
+    acquired: bool,
 ) -> None:
     path = tmp_path / "factory.db"
     con = connect(path)
@@ -135,7 +138,10 @@ def test_uncertain_tracker_result_stays_durable_until_a_later_restart(tmp_path: 
 @pytest.mark.parametrize("seen", [Seen.ALIVE, Seen.UNKNOWN])
 @pytest.mark.parametrize("uncertain", [False, True])
 def test_live_or_unknown_admission_owner_is_never_adopted(
-    factory: sqlite3.Connection, repo: FakeRepo, seen: Seen, uncertain: bool,
+    factory: sqlite3.Connection,
+    repo: FakeRepo,
+    seen: Seen,
+    uncertain: bool,
 ) -> None:
     recovering = ports(factory, repo, lambda _action: pytest.fail("must preserve the claim"))
     action = recovering.store.authorize(ActionKind.CLAIM, OLD, subject="tl-1", backlog="tasks", tracker_root="/tracker")
@@ -149,7 +155,10 @@ def test_live_or_unknown_admission_owner_is_never_adopted(
 
 
 def test_committed_attempt_adopts_its_claim_and_other_action_kinds_are_untouched(
-    factory: sqlite3.Connection, repo: FakeRepo, root: Path, tmp_path: Path,
+    factory: sqlite3.Connection,
+    repo: FakeRepo,
+    root: Path,
+    tmp_path: Path,
 ) -> None:
     slots(factory, repo, root, 1)
     assert isinstance(admission(factory, tmp_path, Tracker(factory, tmp_path / "artifacts"), repo).admit(request(tmp_path, repo)), Admitted)

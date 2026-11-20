@@ -23,13 +23,24 @@ def admission(tmp_path: Path) -> Admission:
     return record.admission
 
 
-@pytest.mark.parametrize(("status", "assignee", "state"), [
-    ("open", ACTOR, ClaimState.OWNED), ("in_progress", ACTOR, ClaimState.OWNED),
-    ("closed", ACTOR, ClaimState.LOST), ("open", "", ClaimState.LOST), ("open", "someone", ClaimState.LOST),
-    ("", ACTOR, ClaimState.UNKNOWN),
-])
+@pytest.mark.parametrize(
+    ("status", "assignee", "state"),
+    [
+        ("open", ACTOR, ClaimState.OWNED),
+        ("in_progress", ACTOR, ClaimState.OWNED),
+        ("closed", ACTOR, ClaimState.LOST),
+        ("open", "", ClaimState.LOST),
+        ("open", "someone", ClaimState.LOST),
+        ("", ACTOR, ClaimState.UNKNOWN),
+    ],
+)
 def test_bound_read_explains_claim_without_writes(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, admission: Admission, status: str, assignee: str, state: ClaimState,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    admission: Admission,
+    status: str,
+    assignee: str,
+    state: ClaimState,
 ) -> None:
     client = FakeTaskReadClient((Bead("tl-1", status=status, assignee=assignee),))
     roots: list[Path] = []
@@ -46,7 +57,10 @@ def test_bound_read_explains_claim_without_writes(
 
 @pytest.mark.parametrize("missing", [False, True])
 def test_absence_and_failed_reads_are_distinct(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, admission: Admission, missing: bool,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    admission: Admission,
+    missing: bool,
 ) -> None:
     client = FakeTaskReadClient(faults={} if missing else {"tl-1": BdError("timeout", "Task read timed out")})
     monkeypatch.setattr(tracker_client, "_reader", lambda _root: client)
@@ -56,7 +70,9 @@ def test_absence_and_failed_reads_are_distinct(
 
 
 def test_invalid_binding_is_unknown_without_discovery(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, admission: Admission,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    admission: Admission,
 ) -> None:
     def forbidden(_root: Path) -> FakeTaskReadClient:
         raise AssertionError("An invalid binding must not read a tracker")

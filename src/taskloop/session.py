@@ -76,7 +76,11 @@ class SessionLatch:
 
 
 def reconcile(
-    store: AttemptStore, admission: Admission, sessions: SessionInput, facts: ExecutionFacts, callback: Callback | None = None,
+    store: AttemptStore,
+    admission: Admission,
+    sessions: SessionInput,
+    facts: ExecutionFacts,
+    callback: Callback | None = None,
 ) -> Literal["complete", "pending", "conflict", "fault"]:
     """Publish the unaccepted first ref and the reported terminal ref, one conditional write each."""
     conflict, fault, pending = sessions.conflict, sessions.fault is not None, False

@@ -63,11 +63,17 @@ def test_restarted_observer_cannot_join_a_saved_active_monotonic_origin(tmp_path
     assert files.duration(KEY) == saved
 
 
-@pytest.mark.parametrize("data", [
-    b"null", b"{", b"{}", b"x" * (duration_file.CAP + 1),
-    b'{"execution":"wrong","elapsed":1,"number":1,"state":"active"}',
-    b'{"execution":"wrong","elapsed":NaN,"number":1,"state":"active"}',
-])
+@pytest.mark.parametrize(
+    "data",
+    [
+        b"null",
+        b"{",
+        b"{}",
+        b"x" * (duration_file.CAP + 1),
+        b'{"execution":"wrong","elapsed":1,"number":1,"state":"active"}',
+        b'{"execution":"wrong","elapsed":NaN,"number":1,"state":"active"}',
+    ],
+)
 @pytest.mark.parametrize("name", [duration_file.ACTIVE, duration_file.SEALED])
 def test_invalid_files_are_unavailable_without_read_side_effects(tmp_path: Path, data: bytes, name: str) -> None:
     files = EvidenceFiles(tmp_path)
@@ -80,11 +86,20 @@ def test_invalid_files_are_unavailable_without_read_side_effects(tmp_path: Path,
     assert path.read_bytes() == data and sorted(directory.iterdir()) == before
 
 
-@pytest.mark.parametrize("field,value", [
-    ("elapsed", -1.0), ("elapsed", float("nan")), ("elapsed", float("inf")),
-    ("command_offset", -1.0), ("command_offset", float("inf")), ("command_offset", 5.0),
-    ("number", -1), ("number", 1.5), ("extra", 1),
-])
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("elapsed", -1.0),
+        ("elapsed", float("nan")),
+        ("elapsed", float("inf")),
+        ("command_offset", -1.0),
+        ("command_offset", float("inf")),
+        ("command_offset", 5.0),
+        ("number", -1),
+        ("number", 1.5),
+        ("extra", 1),
+    ],
+)
 def test_sample_validation_rejects_invalid_values(field: str, value: float, tmp_path: Path) -> None:
     fields = {"execution": EvidenceFiles(tmp_path).directory(KEY), "elapsed": 4.0, "number": 1, "state": DurationState.ACTIVE}
     fields[field] = value
@@ -92,9 +107,16 @@ def test_sample_validation_rejects_invalid_values(field: str, value: float, tmp_
         DurationSample.model_validate(fields)
 
 
-@pytest.mark.parametrize("change", [
-    {"number": 0}, {"elapsed": 3.0}, {"command_offset": None}, {"command_offset": 2.0}, {"execution": "different"},
-])
+@pytest.mark.parametrize(
+    "change",
+    [
+        {"number": 0},
+        {"elapsed": 3.0},
+        {"command_offset": None},
+        {"command_offset": 2.0},
+        {"execution": "different"},
+    ],
+)
 def test_writer_rejects_regression_and_identity_mismatch(tmp_path: Path, change: dict[str, object]) -> None:
     files = EvidenceFiles(tmp_path)
     observer = files.observe_duration(KEY, lambda: 1.0)
@@ -164,7 +186,9 @@ def test_unreadable_or_corrupt_seal_never_falls_back_to_active_evidence(tmp_path
 
 @pytest.mark.parametrize("seal", [False, True])
 def test_interrupted_publication_preserves_previous_complete_sample(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, seal: bool,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    seal: bool,
 ) -> None:
     files = EvidenceFiles(tmp_path)
     now = [1000.0]

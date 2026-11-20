@@ -39,7 +39,8 @@ def attempt(con: sqlite3.Connection, attempt_id: str, *, task: str = "tl-1", seq
         'abababababababababababababababababababababababababababababababab',
         (SELECT digest FROM workflow_file),
         'eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',1.0)""",
-        (attempt_id, attempt_id + "-token", task, seq, D, label))
+        (attempt_id, attempt_id + "-token", task, seq, D, label),
+    )
 
 
 def checks(con: sqlite3.Connection, checks_id: str, after: str, number: int, *, abandoned: bool = False) -> None:
@@ -48,7 +49,8 @@ def checks(con: sqlite3.Connection, checks_id: str, after: str, number: int, *, 
     con.execute(
         """INSERT INTO checks_attempt (attempt_id,dispatch_token,generation,after_attempt_id,number,slot,slot_head,target_commit,
         required,deadline,released_at,parked,abandoned) VALUES (?,?,1,?,?,'s2',?,?,'[]',100,?,?,?)""",
-        (checks_id, checks_id + "-token", after, number, D, X, *released))
+        (checks_id, checks_id + "-token", after, number, D, X, *released),
+    )
 
 
 def put(con: sqlite3.Connection, row: dict[str, object]) -> None:
@@ -85,37 +87,57 @@ LEASE = MOVED | {"commenting_at": 12}
 COMMENTED = LEASE | {"commented_at": 13}
 
 
-@pytest.mark.parametrize("row", [
-    HELD, MOVED, LEASE, COMMENTED, MOVED | {"labels": "not_ours"}, COMMENTED | {"labels": "absent", "cleared_at": 14},
-    HELD | {"labels": "closed", "labelled_at": 11}, HELD | {"labels": "superseded", "labelled_at": 11, "cleared_at": 11},
-    HELD | {"commenting_at": 12},
-], ids=["held", "moved", "lease", "commented", "not_ours", "cleared", "closed", "superseded", "early_lease"])
+@pytest.mark.parametrize(
+    "row",
+    [
+        HELD,
+        MOVED,
+        LEASE,
+        COMMENTED,
+        MOVED | {"labels": "not_ours"},
+        COMMENTED | {"labels": "absent", "cleared_at": 14},
+        HELD | {"labels": "closed", "labelled_at": 11},
+        HELD | {"labels": "superseded", "labelled_at": 11, "cleared_at": 11},
+        HELD | {"commenting_at": 12},
+    ],
+    ids=["held", "moved", "lease", "commented", "not_ours", "cleared", "closed", "superseded", "early_lease"],
+)
 def test_valid_holds_are_stored(con: sqlite3.Connection, row: dict[str, object]) -> None:
     put(con, row)
     assert con.execute("SELECT rev FROM task_hold").fetchone() == (0,)
 
 
-@pytest.mark.parametrize(("row", "check"), [
-    (HELD | {"event": "not json"}, EVENT),
-    (HELD | {"labels": "other", "labelled_at": 11}, LABELS_IN),
-    (HELD | {"labelled_at": 11}, LABELLED_AT), (MOVED | {"labelled_at": None}, LABELLED_AT),
-    (MOVED | {"commented_at": 13}, LEASED),
-    (LEASE | {"labels": "closed", "commented_at": 13}, COMMENTS), (LEASE | {"labels": "missing", "commented_at": 13}, COMMENTS),
-    (LEASE | {"labels": "superseded", "commented_at": 13}, COMMENTS),
-    (HELD | {"commenting_at": 12, "commented_at": 13}, COMMENTS),  # NULL labels with a comment
-    (HELD | {"cleared_at": 14}, CLEARED),
-], ids=lambda value: ",".join(f"{key}={each}" for key, each in value.items() if HELD.get(key, "-") != each)
-    if isinstance(value, dict) else "")
+@pytest.mark.parametrize(
+    ("row", "check"),
+    [
+        (HELD | {"event": "not json"}, EVENT),
+        (HELD | {"labels": "other", "labelled_at": 11}, LABELS_IN),
+        (HELD | {"labelled_at": 11}, LABELLED_AT),
+        (MOVED | {"labelled_at": None}, LABELLED_AT),
+        (MOVED | {"commented_at": 13}, LEASED),
+        (LEASE | {"labels": "closed", "commented_at": 13}, COMMENTS),
+        (LEASE | {"labels": "missing", "commented_at": 13}, COMMENTS),
+        (LEASE | {"labels": "superseded", "commented_at": 13}, COMMENTS),
+        (HELD | {"commenting_at": 12, "commented_at": 13}, COMMENTS),  # NULL labels with a comment
+        (HELD | {"cleared_at": 14}, CLEARED),
+    ],
+    ids=lambda value: (
+        ",".join(f"{key}={each}" for key, each in value.items() if HELD.get(key, "-") != each) if isinstance(value, dict) else ""
+    ),
+)
 def test_every_hold_check_rejects_its_bad_row(con: sqlite3.Connection, row: dict[str, object], check: str) -> None:
     with pytest.raises(sqlite3.IntegrityError, match=f"^CHECK constraint failed: {re.escape(check)}$"):
         put(con, row)
 
 
-@pytest.mark.parametrize(("row", "error"), [
-    (HELD | {"event": None}, "NOT NULL constraint failed: task_hold.event"),
-    (HELD | {"held_at": None}, "NOT NULL constraint failed: task_hold.held_at"),
-    (HELD | {"attempt_id": "nobody"}, "FOREIGN KEY constraint failed"),
-])
+@pytest.mark.parametrize(
+    ("row", "error"),
+    [
+        (HELD | {"event": None}, "NOT NULL constraint failed: task_hold.event"),
+        (HELD | {"held_at": None}, "NOT NULL constraint failed: task_hold.held_at"),
+        (HELD | {"attempt_id": "nobody"}, "FOREIGN KEY constraint failed"),
+    ],
+)
 def test_a_hold_names_an_attempt_and_has_its_record(con: sqlite3.Connection, row: dict[str, object], error: str) -> None:
     with pytest.raises(sqlite3.IntegrityError, match=f"^{re.escape(error)}$"):
         put(con, row)
@@ -137,14 +159,26 @@ def test_the_attempt_label_is_null_or_one_to_200_characters(factory: sqlite3.Con
 
 def test_the_insert_records_the_hold_joined_with_its_attempt(con: sqlite3.Connection) -> None:
     found = held(con)
-    assert found == HoldRow(event=event(), held_at=10.0, labels=None, labelled_at=None, commenting_at=None,
-                            commented_at=None, cleared_at=None, rev=0, backlog="tasks", task_id="tl-1", tracker_root="/tracker",
-                            label="auto")
+    assert found == HoldRow(
+        event=event(),
+        held_at=10.0,
+        labels=None,
+        labelled_at=None,
+        commenting_at=None,
+        commented_at=None,
+        cleared_at=None,
+        rev=0,
+        backlog="tasks",
+        task_id="tl-1",
+        tracker_root="/tracker",
+        label="auto",
+    )
     assert store(con).of_attempts(("a", "hand", "nobody")) == {"a": found} and store(con).of_attempts(()) == {}
 
 
-@pytest.mark.parametrize("payload", ["{}", encode_event(event(attempt_id="other")),
-                                   encode_event(event()).replace('"needs_owner"', '"invented"')])
+@pytest.mark.parametrize(
+    "payload", ["{}", encode_event(event(attempt_id="other")), encode_event(event()).replace('"needs_owner"', '"invented"')]
+)
 def test_corrupt_or_mismatched_payload_is_unavailable(con: sqlite3.Connection, payload: str) -> None:
     put(con, HELD | {"event": payload})
     with pytest.raises(StoreUnavailable, match="Malformed stored hold event"):
@@ -279,7 +313,12 @@ def test_a_hold_that_added_no_label_is_never_cleared(con: sqlite3.Connection, la
 
 # tl-3 .. tl-9: each one's hold `t<n>`, the label step's word (None: unfinished), and whether it is cleared already.
 UNCLEARED: tuple[tuple[int, Labelled | None, bool], ...] = (
-    (3, "moved", False), (4, "absent", False), (5, None, False), (6, "not_ours", False), (7, "closed", False), (8, "missing", False),
+    (3, "moved", False),
+    (4, "absent", False),
+    (5, None, False),
+    (6, "not_ours", False),
+    (7, "closed", False),
+    (8, "missing", False),
     (9, "moved", True),
 )
 
@@ -320,12 +359,18 @@ def test_a_cleared_hold_takes_no_comment_lease(con: sqlite3.Connection) -> None:
     assert store(con).of_attempts(("a",))["a"] == cleared
 
 
-@pytest.mark.parametrize(("newer", "again"), [
-    (None, True), ("moved", True), ("absent", True), ("not_ours", False), ("closed", False), ("missing", False),
-])
-def test_only_a_newer_hold_that_may_own_held_counts_as_held_again(
-    con: sqlite3.Connection, newer: Labelled | None, again: bool
-) -> None:
+@pytest.mark.parametrize(
+    ("newer", "again"),
+    [
+        (None, True),
+        ("moved", True),
+        ("absent", True),
+        ("not_ours", False),
+        ("closed", False),
+        ("missing", False),
+    ],
+)
+def test_only_a_newer_hold_that_may_own_held_counts_as_held_again(con: sqlite3.Connection, newer: Labelled | None, again: bool) -> None:
     store(con).labelled("a", held(con).rev, "moved", 11.0)
     later(con)
     renewed = held(con, "b", "b", now=30.0)

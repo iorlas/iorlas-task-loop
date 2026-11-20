@@ -6,7 +6,8 @@ from dataclasses import asdict
 from pathlib import Path
 
 import pytest
-from test_dash_read import Tracker, reads_of, restarted_at_plan, unsafe_repeat
+from dash_read_support import Tracker, reads_of
+from test_dash_read_restarts import restarted_at_plan, unsafe_repeat
 
 from taskloop.answer_failures import AnswerFailureData, AnswerRule, encode
 from taskloop.dash_model import TaskDetail, Usage
@@ -15,8 +16,12 @@ from taskloop.evidence_files import EvidenceFiles
 
 
 def report(
-    con: sqlite3.Connection, attempt: str, tokens: tuple[int | None, int | None, int | None], turns: int | None,
-    *, incomplete: bool | None = None,
+    con: sqlite3.Connection,
+    attempt: str,
+    tokens: tuple[int | None, int | None, int | None],
+    turns: int | None,
+    *,
+    incomplete: bool | None = None,
 ) -> None:
     """Persist a report at the owning execution boundary; cumulative deliberately differs from attempt usage."""
     con.execute(
@@ -25,9 +30,13 @@ def report(
          answer_path,answer_digest,diagnostic_path,diagnostic_digest,answer_kind,session_state,answer_failure)
         SELECT attempt_id,dispatch_token,generation,0,0,1,1,'o','d','e','d','a','d','g','d','missing','complete',?
         FROM attempt WHERE attempt_id=?""",
-        (encode(AnswerFailureData(rule=AnswerRule.MISSING, explanation="Answer must not be empty")), attempt))
-    con.execute("""UPDATE execution SET t_in=?,t_cached=?,t_out=?,turns=?,usage_incomplete=?,
-                c_in=999999,c_cached=999999,c_out=999999 WHERE attempt_id=?""", (*tokens, turns, incomplete, attempt))
+        (encode(AnswerFailureData(rule=AnswerRule.MISSING, explanation="Answer must not be empty")), attempt),
+    )
+    con.execute(
+        """UPDATE execution SET t_in=?,t_cached=?,t_out=?,turns=?,usage_incomplete=?,
+                c_in=999999,c_cached=999999,c_out=999999 WHERE attempt_id=?""",
+        (*tokens, turns, incomplete, attempt),
+    )
 
 
 def detail(con: sqlite3.Connection, root: Path, task_id: str = "tl-1") -> TaskDetail:
@@ -36,21 +45,27 @@ def detail(con: sqlite3.Connection, root: Path, task_id: str = "tl-1") -> TaskDe
     return found
 
 
-@pytest.mark.parametrize(("tokens", "turns", "expected"), [
-    ((546541, 496768, 2375), 74, Usage(49773, 496768, 2375, 74, 1, 1)),
-    ((0, 0, 0), 0, Usage(0, 0, 0, 0, 1, 1)),
-    ((20, 5, 3), None, Usage(15, 5, 3, None, 1, 0)),
-    ((None, None, None), 2, Usage(None, None, None, 2, 1, 0)),
-    ((None, None, None), None, Usage(attempts=1)),
-    ((20, None, 3), 1, Usage(None, None, 3, 1, 1, 0)),
-    ((None, 5, None), 1, Usage(None, 5, None, 1, 1, 0)),
-    ((20, 5, None), 1, Usage(15, 5, None, 1, 1, 0)),
-    ((4, 5, 3), 1, Usage(None, None, 3, 1, 1, 0)),
-    ((-1, 5, -2), -3, Usage(None, 5, None, None, 1, 0)),
-    ((20, -5, 3), 1, Usage(None, None, 3, 1, 1, 0)),
-])
+@pytest.mark.parametrize(
+    ("tokens", "turns", "expected"),
+    [
+        ((546541, 496768, 2375), 74, Usage(49773, 496768, 2375, 74, 1, 1)),
+        ((0, 0, 0), 0, Usage(0, 0, 0, 0, 1, 1)),
+        ((20, 5, 3), None, Usage(15, 5, 3, None, 1, 0)),
+        ((None, None, None), 2, Usage(None, None, None, 2, 1, 0)),
+        ((None, None, None), None, Usage(attempts=1)),
+        ((20, None, 3), 1, Usage(None, None, 3, 1, 1, 0)),
+        ((None, 5, None), 1, Usage(None, 5, None, 1, 1, 0)),
+        ((20, 5, None), 1, Usage(15, 5, None, 1, 1, 0)),
+        ((4, 5, 3), 1, Usage(None, None, 3, 1, 1, 0)),
+        ((-1, 5, -2), -3, Usage(None, 5, None, None, 1, 0)),
+        ((20, -5, 3), 1, Usage(None, None, 3, 1, 1, 0)),
+    ],
+)
 def test_attempt_usage_preserves_reported_counts_and_unknowns(
-    registered: sqlite3.Connection, tmp_path: Path, tokens: tuple[int | None, int | None, int | None], turns: int | None,
+    registered: sqlite3.Connection,
+    tmp_path: Path,
+    tokens: tuple[int | None, int | None, int | None],
+    turns: int | None,
     expected: Usage,
 ) -> None:
     report(registered, "attempt", tokens, turns)
@@ -87,15 +102,15 @@ def test_retries_count_once_and_checks_and_factory_commits_do_not_contribute(che
     report(checking, "implement", (100, 60, 10), 1)
     report(checking, "again", (20, 5, 2), 3)
     found = detail(checking, tmp_path)
-    assert [(each.step, each.n) for each in found.attempts] == [
-        ("implement", 1), ("commit", 1), ("checks", 1), ("implement", 2)]
+    assert [(each.step, each.n) for each in found.attempts] == [("implement", 1), ("commit", 1), ("checks", 1), ("implement", 2)]
     assert all(each.usage is None for each in found.attempts if each.step in ("checks", "commit"))
     assert found.step_usage == {"implement": Usage(55, 65, 12, 4, 2, 2)}
     assert found.usage == Usage(55, 65, 12, 4, 2, 2)
 
 
 def test_incomplete_totals_sum_known_metrics_without_claiming_complete_coverage(
-    registered: sqlite3.Connection, tmp_path: Path,
+    registered: sqlite3.Connection,
+    tmp_path: Path,
 ) -> None:
     restarted_at_plan(registered)
     report(registered, "attempt", (100, 60, 10), 1)

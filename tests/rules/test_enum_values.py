@@ -16,85 +16,87 @@ ENUM_BASES = {"enum.Enum", "enum.IntEnum", "enum.StrEnum", "enum.Flag", "enum.In
 CODECS = {"src/taskloop/step.py", "src/taskloop/claim.py", "src/taskloop/land_timing.py"}
 # Initial census at da7309d0. Remove resolved sites; never add entries to pass.
 # Keys are path | enclosing symbol | normalized receiver | occurrence (not line).
-KNOWN_EXCEPTIONS: frozenset[str] = frozenset({
-    "src/taskloop/agent_credentials.py|machine_credentials|harness|1",
-    "src/taskloop/agent_credentials.py|machine_credentials|harness|2",
-    "src/taskloop/agents/config.py|display|setting.harness|1",
-    "src/taskloop/agents/config.py|display|setting.provider|1",
-    "src/taskloop/answer_failures.py|AnswerFailureData.describe|self.rule|1",
-    "src/taskloop/answer_read.py|read|answer|1",
-    "src/taskloop/attempt.py|Attempts._validate|answer|1",
-    "src/taskloop/check_repeat/feedback.py|stored_source|CheckRepeatReason.FAILED_CHECK|1",
-    "src/taskloop/cli_drain.py|run|loaded.settings.db|1",
-    "src/taskloop/cli_step.py|_next|settings.db|1",
-    "src/taskloop/cli_step.py|_next|settings.artifacts|1",
-    "src/taskloop/cli_step.py|_rounds|settings.artifacts|1",
-    "src/taskloop/cli_step.py|_rounds|settings.db|1",
-    "src/taskloop/cli_step.py|_rounds|settings.artifacts|2",
-    "src/taskloop/cli_step.py|run|loaded.settings.db|1",
-    "src/taskloop/cli_step.py|run|loaded.settings.artifacts|1",
-    "src/taskloop/command_conclusion.py|encode|value|1",
-    "src/taskloop/dash_board.py|card_of|found.status|1",
-    "src/taskloop/dash_board.py|queued_card|found.status|1",
-    "src/taskloop/dash_task.py|_checks_feed|each.state|1",
-    "src/taskloop/dash_task.py|<module>|CodexSandbox.DANGER_FULL_ACCESS|1",
-    "src/taskloop/drain/render.py|human|owner.role|1",
-    "src/taskloop/factory_schema.py|<module>|each|1",
-    "src/taskloop/factory_schema.py|<module>|each|2",
-    "src/taskloop/factory_schema.py|<module>|each|3",
-    "src/taskloop/factory_schema.py|<module>|ActionKind.CLAIM|1",
-    "src/taskloop/factory_schema.py|<module>|ActionState.DONE|1",
-    "src/taskloop/factory_schema.py|<module>|CheckRepeatReason.FAILED_CHECK|1",
-    "src/taskloop/factory_schema.py|<module>|CheckRepeatReason.FAILED_CHECK|2",
-    "src/taskloop/land_conflict/handoff.py|refused|outcome|1",
-    "src/taskloop/land_conflict/handoff.py|stopped|result.reason|1",
-    "src/taskloop/land_conflict/models.py|AdmissionRefused.__init__|outcome|1",
-    "src/taskloop/plan_step.py|<module>|depth|1",
-    "src/taskloop/profile.py|_land|each|1",
-    "src/taskloop/recovery/observe.py|NativeProcesses.entry|state|1",
-    "src/taskloop/recovery/observe.py|NativeProcesses.process|state|1",
-    "src/taskloop/result_data.py|_show_data|task_status(each).status|1",
-    "src/taskloop/result_data.py|_setup_data|each|1",
-    "src/taskloop/result_data.py|_setup_data|each|2",
-    "src/taskloop/result_data.py|_setup_data|each|3",
-    "src/taskloop/shelf_digest/declarations.py|_target_names|target|1",
-    "src/taskloop/shelf_digest/declarations.py|expression_name|node|1",
-    "src/taskloop/shelf_digest/documentation.py|_docstring|first|1",
-    "src/taskloop/shelf_digest/documentation.py|_docstring|first.value|1",
-    "src/taskloop/shelf_digest/documentation.py|_docstring|first|2",
-    "src/taskloop/shelf_digest/documentation.py|_docstring|first.value|2",
-    "src/taskloop/shelf_digest/documentation.py|_docstring|first|3",
-    "src/taskloop/shelf_digest/documentation.py|documentation_order|item.kind|1",
-    "src/taskloop/shelf_digest/exports.py|_strings|item|1",
-    "src/taskloop/shelf_digest/exports.py|_strings|item|2",
-    "src/taskloop/shelf_digest/exports.py|_strings|item|3",
-    "src/taskloop/shelf_digest/exports.py|PackageExports._statement|node|1",
-    "src/taskloop/shelf_digest/exports.py|PackageExports._declare|node|1",
-    "src/taskloop/shelf_digest/exports.py|PackageExports._declare|node|2",
-    "src/taskloop/shelf_digest/exports.py|PackageExports._save_declaration|node|1",
-    "src/taskloop/shelf_digest/facts.py|_fragment|node|1",
-    "src/taskloop/shelf_digest/facts.py|_parameter_matches|expected|1",
-    "src/taskloop/shelf_digest/facts.py|_parameter_matches|expected|2",
-    "src/taskloop/slot_park.py|_saved|refused.reason|1",
-    "src/taskloop/slot_park.py|_saved|parked.reason|1",
-    "src/taskloop/step_render.py|_setup_lines|each|1",
-    "src/taskloop/step_render.py|_setup_lines|each|2",
-    "src/taskloop/task_event.py|TaskEvent.consistent|self.step|1",
-    "src/taskloop/task_event.py|TaskEvent.consistent|self.agent_step|1",
-    "src/taskloop/task_event_codec.py|reason|cause.reason|1",
-    "src/taskloop/task_event_codec.py|reason|cause.reason|2",
-    "src/taskloop/task_event_codec.py|reason|cause.reason|3",
-    "src/taskloop/task_event_codec.py|reason|cause.reason|4",
-    "src/taskloop/task_event_codec.py|reason|cause.reason|5",
-    "src/taskloop/task_event_codec.py|reason|cause.leftovers.reason|1",
-    "src/taskloop/task_event_codec.py|reason|cause.reason|6",
-    "src/taskloop/task_event_codec.py|reason|cause.reason|7",
-    "src/taskloop/task_event_codec.py|reason|cause.reason|8",
-    "src/taskloop/task_event_codec.py|_checks|cause.reason|1",
-    "src/taskloop/task_event_codec.py|_checks|cause.check.conclusion|1",
-    "src/taskloop/task_event_codec.py|_checks|cause.setup|1",
-    "src/taskloop/task_event_codec.py|_checks|cause.profile|1",
-})
+KNOWN_EXCEPTIONS: frozenset[str] = frozenset(
+    {
+        "src/taskloop/agent_credentials.py|machine_credentials|harness|1",
+        "src/taskloop/agent_credentials.py|machine_credentials|harness|2",
+        "src/taskloop/agents/config.py|display|setting.harness|1",
+        "src/taskloop/agents/config.py|display|setting.provider|1",
+        "src/taskloop/answer_failures.py|AnswerFailureData.describe|self.rule|1",
+        "src/taskloop/answer_read.py|read|answer|1",
+        "src/taskloop/attempt.py|Attempts._validate|answer|1",
+        "src/taskloop/check_repeat/feedback.py|stored_source|CheckRepeatReason.FAILED_CHECK|1",
+        "src/taskloop/cli_drain.py|run|loaded.settings.db|1",
+        "src/taskloop/cli_step.py|_next|settings.db|1",
+        "src/taskloop/cli_step.py|_next|settings.artifacts|1",
+        "src/taskloop/cli_step.py|_rounds|settings.artifacts|1",
+        "src/taskloop/cli_step.py|_rounds|settings.db|1",
+        "src/taskloop/cli_step.py|_rounds|settings.artifacts|2",
+        "src/taskloop/cli_step.py|run|loaded.settings.db|1",
+        "src/taskloop/cli_step.py|run|loaded.settings.artifacts|1",
+        "src/taskloop/command_conclusion.py|encode|value|1",
+        "src/taskloop/dash_board.py|card_of|found.status|1",
+        "src/taskloop/dash_board.py|queued_card|found.status|1",
+        "src/taskloop/dash_task.py|_checks_feed|each.state|1",
+        "src/taskloop/dash_task.py|<module>|CodexSandbox.DANGER_FULL_ACCESS|1",
+        "src/taskloop/drain/render.py|human|owner.role|1",
+        "src/taskloop/factory_schema.py|<module>|each|1",
+        "src/taskloop/factory_schema.py|<module>|each|2",
+        "src/taskloop/factory_schema.py|<module>|each|3",
+        "src/taskloop/factory_schema.py|<module>|ActionKind.CLAIM|1",
+        "src/taskloop/factory_schema.py|<module>|ActionState.DONE|1",
+        "src/taskloop/factory_schema.py|<module>|CheckRepeatReason.FAILED_CHECK|1",
+        "src/taskloop/factory_schema.py|<module>|CheckRepeatReason.FAILED_CHECK|2",
+        "src/taskloop/land_conflict/handoff.py|refused|outcome|1",
+        "src/taskloop/land_conflict/handoff.py|stopped|result.reason|1",
+        "src/taskloop/land_conflict/models.py|AdmissionRefused.__init__|outcome|1",
+        "src/taskloop/plan_step.py|<module>|depth|1",
+        "src/taskloop/profile.py|_land|each|1",
+        "src/taskloop/recovery/observe.py|NativeProcesses.entry|state|1",
+        "src/taskloop/recovery/observe.py|NativeProcesses.process|state|1",
+        "src/taskloop/result_data.py|_show_data|task_status(each).status|1",
+        "src/taskloop/result_data.py|_setup_data|each|1",
+        "src/taskloop/result_data.py|_setup_data|each|2",
+        "src/taskloop/result_data.py|_setup_data|each|3",
+        "src/taskloop/shelf_digest/declarations.py|_target_names|target|1",
+        "src/taskloop/shelf_digest/declarations.py|expression_name|node|1",
+        "src/taskloop/shelf_digest/documentation.py|_docstring|first|1",
+        "src/taskloop/shelf_digest/documentation.py|_docstring|first.value|1",
+        "src/taskloop/shelf_digest/documentation.py|_docstring|first|2",
+        "src/taskloop/shelf_digest/documentation.py|_docstring|first.value|2",
+        "src/taskloop/shelf_digest/documentation.py|_docstring|first|3",
+        "src/taskloop/shelf_digest/documentation.py|documentation_order|item.kind|1",
+        "src/taskloop/shelf_digest/exports.py|_strings|item|1",
+        "src/taskloop/shelf_digest/exports.py|_strings|item|2",
+        "src/taskloop/shelf_digest/exports.py|_strings|item|3",
+        "src/taskloop/shelf_digest/exports.py|PackageExports._statement|node|1",
+        "src/taskloop/shelf_digest/exports.py|PackageExports._declare|node|1",
+        "src/taskloop/shelf_digest/exports.py|PackageExports._declare|node|2",
+        "src/taskloop/shelf_digest/exports.py|PackageExports._save_declaration|node|1",
+        "src/taskloop/shelf_digest/facts.py|_fragment|node|1",
+        "src/taskloop/shelf_digest/facts.py|_parameter_matches|expected|1",
+        "src/taskloop/shelf_digest/facts.py|_parameter_matches|expected|2",
+        "src/taskloop/slot_park.py|_saved|refused.reason|1",
+        "src/taskloop/slot_park.py|_saved|parked.reason|1",
+        "src/taskloop/step_render.py|_setup_lines|each|1",
+        "src/taskloop/step_render.py|_setup_lines|each|2",
+        "src/taskloop/task_event.py|TaskEvent.consistent|self.step|1",
+        "src/taskloop/task_event.py|TaskEvent.consistent|self.agent_step|1",
+        "src/taskloop/task_event_codec.py|reason|cause.reason|1",
+        "src/taskloop/task_event_codec.py|reason|cause.reason|2",
+        "src/taskloop/task_event_codec.py|reason|cause.reason|3",
+        "src/taskloop/task_event_codec.py|reason|cause.reason|4",
+        "src/taskloop/task_event_codec.py|reason|cause.reason|5",
+        "src/taskloop/task_event_codec.py|reason|cause.leftovers.reason|1",
+        "src/taskloop/task_event_codec.py|reason|cause.reason|6",
+        "src/taskloop/task_event_codec.py|reason|cause.reason|7",
+        "src/taskloop/task_event_codec.py|reason|cause.reason|8",
+        "src/taskloop/task_event_codec.py|_checks|cause.reason|1",
+        "src/taskloop/task_event_codec.py|_checks|cause.check.conclusion|1",
+        "src/taskloop/task_event_codec.py|_checks|cause.setup|1",
+        "src/taskloop/task_event_codec.py|_checks|cause.profile|1",
+    }
+)
 
 
 def reference(node: ast.expr, module: str, aliases: dict[str, str]) -> str:
@@ -119,7 +121,7 @@ def imports(tree: ast.Module, module: str, package: bool) -> dict[str, str]:
             prefix = node.module or ""
             if node.level:
                 parts = module.split(".") if package else module.split(".")[:-1]
-                prefix = ".".join(parts[:len(parts) - node.level + 1] + ([prefix] if prefix else []))
+                prefix = ".".join(parts[: len(parts) - node.level + 1] + ([prefix] if prefix else []))
             aliases.update({alias.asname or alias.name: f"{prefix}.{alias.name}" for alias in node.names})
     return aliases
 
@@ -142,7 +144,8 @@ class Index:
                     self.bases[name] = {reference(base, module, aliases) for base in node.bases}
                     self.fields[name] = {
                         field.target.id: reference(field.annotation, module, aliases)
-                        for field in node.body if isinstance(field, ast.AnnAssign) and isinstance(field.target, ast.Name)
+                        for field in node.body
+                        if isinstance(field, ast.AnnAssign) and isinstance(field.target, ast.Name)
                     }
                     self.index_returns(node.body, name, module, aliases)
             self.index_returns(tree.body, module, module, aliases)
@@ -395,16 +398,19 @@ def project_scan(root: Path, files: dict[str, str]) -> dict[str, str]:
     return scan({path.relative_to(root).as_posix(): path.read_text() for path in (root / "src/taskloop").rglob("*.py")})
 
 
-@pytest.mark.parametrize("consumer", [
-    "text = Word.YES.value",
-    "def render(word: Word):\n    return word.value",
-    "def render():\n    word = Word.YES\n    return word.value",
-    "class Words:\n    word: Word\n    def render(self):\n        return self.word.value",
-    "async def render(word: 'Word'):\n    return word.value",
-    "def render(word=Word.YES.value):\n    pass",
-    "def render(word: Literal[Word.YES.value]):\n    pass",
-    "class Child(Word):\n    pass\ntext = Child.YES.value",
-])
+@pytest.mark.parametrize(
+    "consumer",
+    [
+        "text = Word.YES.value",
+        "def render(word: Word):\n    return word.value",
+        "def render():\n    word = Word.YES\n    return word.value",
+        "class Words:\n    word: Word\n    def render(self):\n        return self.word.value",
+        "async def render(word: 'Word'):\n    return word.value",
+        "def render(word=Word.YES.value):\n    pass",
+        "def render(word: Literal[Word.YES.value]):\n    pass",
+        "class Child(Word):\n    pass\ntext = Child.YES.value",
+    ],
+)
 def test_enum_access_outside_codecs_fails(tmp_path: Path, consumer: str) -> None:
     sites = project_scan(tmp_path, {"words.py": VOCABULARY + consumer})
     assert sites and all("(enum)" in diagnostic for diagnostic in sites.values())
@@ -424,42 +430,55 @@ def test_other_modules_are_not_implicitly_codecs(tmp_path: Path, path: str) -> N
 
 
 def test_imported_annotations_fields_returns_and_assignments_distinguish_non_enums(tmp_path: Path) -> None:
-    sites = project_scan(tmp_path, {
-        "fields.py": FIELDS,
-        "feature/use.py": """from ..fields import Setting as Field, Settings, settings as load
+    sites = project_scan(
+        tmp_path,
+        {
+            "fields.py": FIELDS,
+            "feature/use.py": """from ..fields import Setting as Field, Settings, settings as load
 import taskloop.fields as fields
 def render(config: 'Settings', field: Field[str]):
     alias = config.chosen
     created = fields.Setting()
     return field.value, alias.value, created.value, load().chosen.value
 """,
-    })
+        },
+    )
     assert_census(sites, frozenset())
 
 
 def test_class_fields_do_not_mask_a_global_enum_in_method_bodies(tmp_path: Path) -> None:
-    sites = project_scan(tmp_path, {"words.py": VOCABULARY + FIELDS + """
+    sites = project_scan(
+        tmp_path,
+        {
+            "words.py": VOCABULARY
+            + FIELDS
+            + """
 field = Word.YES
 class Consumer:
     field: Setting[str]
     def render(self):
         return field.value
-"""})
+"""
+        },
+    )
     with pytest.raises(AssertionError, match="outside codecs"):
         assert_census(sites, frozenset())
 
 
-@pytest.mark.parametrize("consumer", [
-    "def render(unknown):\n    return unknown.value",
-    "def render(field: Setting[str]):\n    field = fetch()\n    return field.value",
-    "def render(field: Setting[str]):\n    return (lambda field: field.value)(fetch())",
-    "def render(field: Setting[str]):\n    return [field.value for field in fetch()]",
-    "from taskloop.fields import Setting as field\ntext = [field.value for field in fetch()]",
-    "def render(field: Setting[str]):\n    from vendor import field\n    return field.value",
-    "def render(field: Setting[str]):\n    try:\n        work()\n    except Exception as field:\n        return field.value",
-    "def render(field: Setting[str]):\n    match fetch():\n        case field:\n            return field.value",
-    "class Consumer:\n    field = fetch()\n    text = field.value",
-])
+@pytest.mark.parametrize(
+    "consumer",
+    [
+        "def render(unknown):\n    return unknown.value",
+        "def render(field: Setting[str]):\n    field = fetch()\n    return field.value",
+        "def render(field: Setting[str]):\n    return (lambda field: field.value)(fetch())",
+        "def render(field: Setting[str]):\n    return [field.value for field in fetch()]",
+        "from taskloop.fields import Setting as field\ntext = [field.value for field in fetch()]",
+        "def render(field: Setting[str]):\n    from vendor import field\n    return field.value",
+        "def render(field: Setting[str]):\n    try:\n        work()\n    except Exception as field:\n        return field.value",
+        "def render(field: Setting[str]):\n    match fetch():\n        case field:\n            return field.value",
+        "class Consumer:\n    field = fetch()\n    text = field.value",
+    ],
+)
 def test_unknown_or_shadowed_receivers_require_exact_exceptions(tmp_path: Path, consumer: str) -> None:
     sites = project_scan(tmp_path, {"fields.py": FIELDS + consumer})
     with pytest.raises(AssertionError, match="outside codecs"):
@@ -467,12 +486,15 @@ def test_unknown_or_shadowed_receivers_require_exact_exceptions(tmp_path: Path, 
     assert_census(sites, frozenset(sites))
 
 
-@pytest.mark.parametrize("changed", [
-    "def render(word: Word):\n    return word.value, word.value",
-    "def moved(word: Word):\n    return word.value",
-    "def render(other: Word):\n    return other.value",
-    "def render(word: Word):\n    return word",
-])
+@pytest.mark.parametrize(
+    "changed",
+    [
+        "def render(word: Word):\n    return word.value, word.value",
+        "def moved(word: Word):\n    return word.value",
+        "def render(other: Word):\n    return other.value",
+        "def render(word: Word):\n    return word",
+    ],
+)
 def test_added_duplicated_moved_or_removed_sites_fail_the_census(tmp_path: Path, changed: str) -> None:
     original = "def render(word: Word):\n    return word.value"
     exceptions = frozenset(project_scan(tmp_path, {"words.py": VOCABULARY + original}))

@@ -14,13 +14,28 @@ from taskloop.land_summary import LandSummary
 def candidate_data(row: LandRow) -> dict[str, object]:
     """One candidate's stored facts: O, S, its validation, release, supersession, delivery and close."""
     return {
-        "candidate_id": row.key.attempt_id, "number": row.number, "checks_attempt_id": row.checks, "origin": row.origin,
-        "commit": row.commit, "tree_same": row.tree_same, "required": [name for name, _ in row.required], "slot": row.slot,
-        "slot_head": row.slot_head, "deadline": row.deadline, "validation": row.validation, "reason": row.reason,
-        "validated_at": row.validated_at, "released_at": row.released_at, "parked": row.parked, "superseded": row.superseded,
-        "delivery": row.delivery, "delivered_at": row.delivered_at, "remote_head": row.remote_head, "close": row.close,
-        "closed_at": row.closed_at, "land_process": None if row.entry is None else {"pid": row.entry[0], "start": row.entry[1],
-                                                                                    "boot": row.entry[2]},
+        "candidate_id": row.key.attempt_id,
+        "number": row.number,
+        "checks_attempt_id": row.checks,
+        "origin": row.origin,
+        "commit": row.commit,
+        "tree_same": row.tree_same,
+        "required": [name for name, _ in row.required],
+        "slot": row.slot,
+        "slot_head": row.slot_head,
+        "deadline": row.deadline,
+        "validation": row.validation,
+        "reason": row.reason,
+        "validated_at": row.validated_at,
+        "released_at": row.released_at,
+        "parked": row.parked,
+        "superseded": row.superseded,
+        "delivery": row.delivery,
+        "delivered_at": row.delivered_at,
+        "remote_head": row.remote_head,
+        "close": row.close,
+        "closed_at": row.closed_at,
+        "land_process": None if row.entry is None else {"pid": row.entry[0], "start": row.entry[1], "boot": row.entry[2]},
     }
 
 
@@ -29,8 +44,18 @@ def view_data(land: LandView | None) -> dict[str, object] | None:
     if land is None:
         return None
     logs = land.logs or (None,) * len(land.results)
-    results = [{"name": each.name, "conclusion": each.conclusion, "rc": each.rc, "block": each.block, "started_at": each.started_at,
-                "ended_at": each.ended_at, "log": None if log is None else str(log)} for each, log in zip(land.results, logs, strict=True)]
+    results = [
+        {
+            "name": each.name,
+            "conclusion": each.conclusion,
+            "rc": each.rc,
+            "block": each.block,
+            "started_at": each.started_at,
+            "ended_at": each.ended_at,
+            "log": None if log is None else str(log),
+        }
+        for each, log in zip(land.results, logs, strict=True)
+    ]
     return candidate_data(land.row) | {"process": land.process, "results": results}
 
 
@@ -39,8 +64,7 @@ def _task(row: LandRow) -> dict[str, object]:
 
 
 def landed_data(found: Landed) -> dict[str, object]:
-    return {"status": found.how, **_task(found.row), "release": found.release, "synced": False,
-            "gate": gate_data(found.gate)}
+    return {"status": found.how, **_task(found.row), "release": found.release, "synced": False, "gate": gate_data(found.gate)}
 
 
 def withdrawn_data(found: Withdrawn) -> dict[str, object]:
@@ -55,30 +79,54 @@ def land_data(found: Landed | Withdrawn | LandSummary) -> dict[str, object]:
 
 
 def _changed(each: Changed) -> dict[str, object]:
-    return {"name": each.name, "argv_at_origin": None if each.at_o is None else list(each.at_o.argv),
-            "argv_at_x": None if each.at_x is None else list(each.at_x.argv)}
+    return {
+        "name": each.name,
+        "argv_at_origin": None if each.at_o is None else list(each.at_o.argv),
+        "argv_at_x": None if each.at_x is None else list(each.at_x.argv),
+    }
 
 
 def gate_data(gate: Gate | None) -> dict[str, object] | None:
     """What S changes in the gate against O (`land_gate`)."""
     if gate is None:
         return None
-    setup = None if gate.setup is None else {"at_origin": [list(each) for each in gate.setup[0]],
-                                             "at_s": [list(each) for each in gate.setup[1]]}
+    setup = (
+        None
+        if gate.setup is None
+        else {"at_origin": [list(each) for each in gate.setup[0]], "at_s": [list(each) for each in gate.setup[1]]}
+    )
     required = None if gate.required is None else {"at_origin": list(gate.required[0]), "at_s": list(gate.required[1])}
-    return {"files": [{"path": each.path, "kind": each.kind, "added": each.added, "deleted": each.deleted} for each in gate.changes],
-            "checks": [_changed(each) for each in gate.checks], "setup": setup, "required": required,
-            "configs": list(gate.configs), "weakened": [{"path": each.path, "why": each.why} for each in gate.weakened],
-            "decisive": gate.decisive}
+    return {
+        "files": [{"path": each.path, "kind": each.kind, "added": each.added, "deleted": each.deleted} for each in gate.changes],
+        "checks": [_changed(each) for each in gate.checks],
+        "setup": setup,
+        "required": required,
+        "configs": list(gate.configs),
+        "weakened": [{"path": each.path, "why": each.why} for each in gate.weakened],
+        "decisive": gate.decisive,
+    }
 
 
 def summary_data(found: LandSummary) -> dict[str, object]:
     """The summary's facts (section 10), its message whole."""
     return {
-        "status": "summary", "checks_attempt_id": found.checks_id, "conclusion": found.conclusion, "target": found.target,
-        "commit": found.x, "results": [{"name": name, "conclusion": encode(result) if isinstance(result,
-            CommandConclusion) else result} for name, result in found.results], "origin": found.origin,
-        "added": list(found.added), "removed": list(found.removed), "argv": [_changed(each) for each in found.argv],
-        "gate": gate_data(found.gate), "base": found.base,
-        "state": found.state, "again": found.again, "conflicts": list(found.conflicts), "message": found.message,
+        "status": "summary",
+        "checks_attempt_id": found.checks_id,
+        "conclusion": found.conclusion,
+        "target": found.target,
+        "commit": found.x,
+        "results": [
+            {"name": name, "conclusion": encode(result) if isinstance(result, CommandConclusion) else result}
+            for name, result in found.results
+        ],
+        "origin": found.origin,
+        "added": list(found.added),
+        "removed": list(found.removed),
+        "argv": [_changed(each) for each in found.argv],
+        "gate": gate_data(found.gate),
+        "base": found.base,
+        "state": found.state,
+        "again": found.again,
+        "conflicts": list(found.conflicts),
+        "message": found.message,
     }

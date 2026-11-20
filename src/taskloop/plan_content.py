@@ -32,7 +32,7 @@ def _lines(text: str) -> Iterator[str]:
         stripped = line.lstrip(" ")
         indent = len(line) - len(stripped)
         if fence:
-            if indent <= 3 and stripped.startswith(fence) and not stripped[len(fence):].strip(fence[0] + " \t"):
+            if indent <= 3 and stripped.startswith(fence) and not stripped[len(fence) :].strip(fence[0] + " \t"):
                 fence = ""
             continue
         if indent <= 3 and stripped.startswith(("```", "~~~")):
@@ -70,8 +70,9 @@ def _change_map(lines: tuple[str, ...]) -> bool:
 def validate(text: str, size: int) -> Rule | None:
     """Validate one declared depth, UTF-8 byte budget and structural content rules."""
     lines = tuple(_lines(text))
-    depths = [match[1].split(";", 1)[0].strip() for line in lines
-              if (match := re.fullmatch(r" {0,3}Depth\s*:\s*(.*)", line, re.IGNORECASE))]
+    depths = [
+        match[1].split(";", 1)[0].strip() for line in lines if (match := re.fullmatch(r" {0,3}Depth\s*:\s*(.*)", line, re.IGNORECASE))
+    ]
     if len(depths) != 1:
         return PlanContentRule.DEPTH
     try:

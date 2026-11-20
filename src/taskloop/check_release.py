@@ -129,8 +129,10 @@ def checks_stopped(seen: SetupSeen, results: tuple[ResultRow, ...]) -> NotReleas
 
 LANDED = "The task's land delivered S to origin's main but has not closed the task: land the task again to finish the close."
 CLOSED = "The task's land delivered S to origin's main and closed the task: nothing is left to abandon or finish."
-LANDING = ("A land candidate of these checks holds its slot or may already be on origin's main: land the task "
-           "again to land it, or withdraw its candidate, then abandon.")
+LANDING = (
+    "A land candidate of these checks holds its slot or may already be on origin's main: land the task "
+    "again to land it, or withdraw its candidate, then abandon."
+)
 
 
 def _refused_by_land(recorded: Recorded, where: str) -> NotReleased | None:
@@ -160,8 +162,19 @@ class ChecksTarget:
         if checks is None:
             return NotReleased("refused", "absent", f"No such checks attempt. {NOTHING}")
         with _connected(self.checks) as con:
-            return Holding(checks, key, checks.repo_id, checks.slot, checks.slot_head, checks.commit, checks.entry, held_slot(con, key),
-                           running(con, key.attempt_id), unsettled(con, key.attempt_id), "checks attempt")
+            return Holding(
+                checks,
+                key,
+                checks.repo_id,
+                checks.slot,
+                checks.slot_head,
+                checks.commit,
+                checks.entry,
+                held_slot(con, key),
+                running(con, key.attempt_id),
+                unsettled(con, key.attempt_id),
+                "checks attempt",
+            )
 
     def released(self, held: Holding[ChecksRow], abandon: bool) -> ReleaseResult | None:
         """Released before: an abandon flips it (no Git, no lock); anything else changes nothing."""
@@ -173,7 +186,8 @@ class ChecksTarget:
         recorded = self.checks.abandon_released(checks.key)
         if recorded != "abandoned":
             return _refused_by_land(recorded, NOTHING) or NotReleased(
-                "unavailable", "changed", f"Another release changed it first, or a later checks attempt exists. {NOTHING}")
+                "unavailable", "changed", f"Another release changed it first, or a later checks attempt exists. {NOTHING}"
+            )
         return Released(checks.slot, None, False, "kept", True)
 
     def refusal(self, held: Holding[ChecksRow], abandon: bool) -> NotReleased | None:
@@ -208,8 +222,20 @@ class CandidateTarget:
             return NotReleased("refused", "absent", f"No such land candidate holding a slot. {NOTHING}")
         with _connected(self.lands) as con:
             slot_path = land_store.held_slot(con, key)
-            return Holding(found, key, found.repo_id, found.slot, found.slot_head, found.commit, found.entry, slot_path,
-                           running(con, key.attempt_id), unsettled(con, key.attempt_id), "land candidate", "land process")
+            return Holding(
+                found,
+                key,
+                found.repo_id,
+                found.slot,
+                found.slot_head,
+                found.commit,
+                found.entry,
+                slot_path,
+                running(con, key.attempt_id),
+                unsettled(con, key.attempt_id),
+                "land candidate",
+                "land process",
+            )
 
     def released(self, held: Holding[LandRow], abandon: bool) -> ReleaseResult | None:
         """Released before: settled changes nothing; an abandon still refuses a delivered or pushable candidate."""
@@ -265,14 +291,19 @@ class ChecksRelease:
 
     def release_of[R](self, target: ReleaseTarget[R], key: AttemptKey, abandon: bool, me: EntryIdentity | None = None) -> ReleaseResult:
         try:
-            with operation(self.store, ActionKind.FINALIZE, ids=self.ids, subject=key.attempt_id,
-                           existing=lambda owner: self.store.owns_entry(key, owner)):
+            with operation(
+                self.store,
+                ActionKind.FINALIZE,
+                ids=self.ids,
+                subject=key.attempt_id,
+                existing=lambda owner: self.store.owns_entry(key, owner),
+            ):
                 return self._release_of(target, key, abandon, me)
         except Fenced:
             return NotReleased("refused", Reason.DRAINING, BLOCKED)
         except Unobservable:
             return NotReleased("unavailable", "observe", "The calling process cannot be observed.")
-        except (sqlite3.Error, StoreUnavailable):
+        except sqlite3.Error, StoreUnavailable:
             return NotReleased("unavailable", "store")
 
     def _release_of[R](self, target: ReleaseTarget[R], key: AttemptKey, abandon: bool, me: EntryIdentity | None) -> ReleaseResult:
@@ -292,8 +323,11 @@ class ChecksRelease:
     def _stopped[R](self, held: Holding[R], me: EntryIdentity | None) -> NotReleased | None:
         """The stop proof, read before anything changes: the registered entry or land process (`me` passing), the
         latest setup run's unsettled command, every unsettled result of the latest block."""
-        return (entry_stopped(self.observe, me, held.entry, held.process) or setup_stopped(self.setup_seen, held.setup)
-                or checks_stopped(self.setup_seen, held.results))
+        return (
+            entry_stopped(self.observe, me, held.entry, held.process)
+            or setup_stopped(self.setup_seen, held.setup)
+            or checks_stopped(self.setup_seen, held.results)
+        )
 
     def _again[R](self, target: ReleaseTarget[R], held: Holding[R], abandon: bool, me: EntryIdentity | None) -> NotReleased | None:
         """Under the lock, before any Git write: read again and prove again (a land process may have taken the custody,
@@ -337,8 +371,11 @@ class ChecksRelease:
             self._reset(held, path)
             slot = park_slot(self.checkouts, self.slot_files, path, held.repo_id, held.slot_head, None)
         except GitUnavailable as error:
-            return NotReleased(UNAVAILABLE, "git", f"Git could not read, reset or park the slot ({type(error).__name__}): inspect it, "
-                               "then rerun. Nothing was recorded.")
+            return NotReleased(
+                UNAVAILABLE,
+                "git",
+                f"Git could not read, reset or park the slot ({type(error).__name__}): inspect it, then rerun. Nothing was recorded.",
+            )
         if isinstance(slot, NotReleased):
             return slot
         head, parked = slot
@@ -348,8 +385,7 @@ class ChecksRelease:
         except (sqlite3.Error, StoreUnavailable) as error:
             return NotReleased("unavailable", STORE, f"{type(error).__name__}. {where}; nothing was recorded.")
         if recorded not in ("released", "abandoned"):
-            changed = NotReleased("unavailable", CHANGED,
-                                  f"The {held.what} changed after the stop proof. {where}; nothing was recorded.")
+            changed = NotReleased("unavailable", CHANGED, f"The {held.what} changed after the stop proof. {where}; nothing was recorded.")
             return _refused_by_land(recorded, f"{where}; nothing was recorded.") or changed
         self.scratch(path)  # best effort: the next preparation empties it again
         return Released(held.slot, parked, True, "kept", abandon)

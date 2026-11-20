@@ -41,7 +41,8 @@ class Unavailable:
 
 
 def test_saved_repair_is_adopted_after_launch_failure_without_another_successor(
-    failed: sqlite3.Connection, surroundings: AttemptSurroundings,
+    failed: sqlite3.Connection,
+    surroundings: AttemptSurroundings,
 ) -> None:
     admission = operation(failed, surroundings)
     launcher = FakeLauncher(LaunchUnavailable("start"))
@@ -67,7 +68,8 @@ def test_unavailable_admission_defers_terminal_handling(failed: sqlite3.Connecti
 
 
 def test_invalid_repair_reports_its_latest_rule_and_never_admits_again(
-    failed: sqlite3.Connection, surroundings: AttemptSurroundings,
+    failed: sqlite3.Connection,
+    surroundings: AttemptSurroundings,
 ) -> None:
     admission = operation(failed, surroundings)
     repair = admission.admit(KEY)

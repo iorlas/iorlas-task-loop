@@ -27,20 +27,30 @@ COMPLETE = StoredExecution(
 )
 
 
-@pytest.mark.parametrize("answer", [
-    AnswerState("valid", "planned", "commit"),
-    AnswerState("valid", "implemented", "commit"),
-    AnswerState("valid", "unchanged", "keep"),
-])
+@pytest.mark.parametrize(
+    "answer",
+    [
+        AnswerState("valid", "planned", "commit"),
+        AnswerState("valid", "implemented", "commit"),
+        AnswerState("valid", "unchanged", "keep"),
+    ],
+)
 def test_valid_answers_without_a_verdict_wait_for_commit(answer: AnswerState) -> None:
     result = report(replace(COMPLETE, answer=answer))
     assert result.reason is PendingReason.COMMIT and not succeeded(result)
     assert json.dumps({"status": result.status, "reason": result.reason}) == '{"status": "pending", "reason": "commit"}'
 
 
-@pytest.mark.parametrize(("entry", "expected"), [
-    ("none", "commit"), ("gone", "commit"), ("different_process", "commit"), ("running", "wait"), ("unknown", "unknown"),
-])
+@pytest.mark.parametrize(
+    ("entry", "expected"),
+    [
+        ("none", "commit"),
+        ("gone", "commit"),
+        ("different_process", "commit"),
+        ("running", "wait"),
+        ("unknown", "unknown"),
+    ],
+)
 @pytest.mark.parametrize("with_execution", [False, True])
 def test_commit_pending_preserves_the_next_action(entry: EntryState, expected: str, with_execution: bool) -> None:
     result = report(COMPLETE) if with_execution else AttemptResult("pending", PendingReason.COMMIT)
@@ -54,11 +64,14 @@ def test_a_missing_execution_keeps_its_existing_phase_action(phase: str, expecte
     assert next_action(phase, "gone", AttemptResult("pending", PendingReason.COMMIT), False) == expected
 
 
-@pytest.mark.parametrize(("stored", "reason"), [
-    (replace(COMPLETE, answer=AnswerState("validation_pending")), "validation_pending"),
-    (replace(COMPLETE, session_state="pending"), "session_pending"),
-    (replace(COMPLETE, session_state="fault"), "session_fault"),
-])
+@pytest.mark.parametrize(
+    ("stored", "reason"),
+    [
+        (replace(COMPLETE, answer=AnswerState("validation_pending")), "validation_pending"),
+        (replace(COMPLETE, session_state="pending"), "session_pending"),
+        (replace(COMPLETE, session_state="fault"), "session_fault"),
+    ],
+)
 def test_unfinished_capture_still_precedes_the_commit_wait(stored: StoredExecution, reason: str) -> None:
     result = report(stored)
     assert (result.status, result.reason) == ("pending", reason) and not succeeded(result)

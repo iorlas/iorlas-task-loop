@@ -114,24 +114,33 @@ def _path(move: Move) -> list[str]:
 def _rows_lines(command: str, result: Listed | Round | Ended | SetupTimingReport, stuck: list[str]) -> list[str]:
     """Render ordered rows, setup samples, or the reason rounds ended."""
     if isinstance(result, SetupTimingReport):
-        return [f"Setup times: backlog {result.backlog}", *[
-            f"Task {row.task_id}; repo {row.repo_id}; attempt {row.attempt_id}; run {row.run}; "
-            f"{encode(row.conclusion) or 'unfinished'}; {setup_times(row.started_at, row.ended_at, row.duration_seconds)}"
-            for row in result.rows], f"Usable samples: {result.sample_count} of {len(result.rows)} displayed (at most 10)"]
+        return [
+            f"Setup times: backlog {result.backlog}",
+            *[
+                f"Task {row.task_id}; repo {row.repo_id}; attempt {row.attempt_id}; run {row.run}; "
+                f"{encode(row.conclusion) or 'unfinished'}; {setup_times(row.started_at, row.ended_at, row.duration_seconds)}"
+                for row in result.rows
+            ],
+            f"Usable samples: {result.sample_count} of {len(result.rows)} displayed (at most 10)",
+        ]
     if isinstance(result, Ended):
-        ended = {Reason.DRAINING: "Rounds stopped: new work is blocked by the durable drain request.",
-                 Reason.DRAINED: "Idle was verified; new work remains blocked. The owner can decide whether to restart or upgrade.",
-                 "interrupted": "Rounds stopped: interrupted. Launched steps keep running; restarting scheduling continues them.",
-                 "abrupt": "Stopped at once."}
+        ended = {
+            Reason.DRAINING: "Rounds stopped: new work is blocked by the durable drain request.",
+            Reason.DRAINED: "Idle was verified; new work remains blocked. The owner can decide whether to restart or upgrade.",
+            "interrupted": "Rounds stopped: interrupted. Launched steps keep running; restarting scheduling continues them.",
+            "abrupt": "Stopped at once.",
+        }
         if result.reason in ended:
             return [ended[result.reason]]
-        return [f"{command}: {result.reason}", *([result.detail] if result.detail else []),
-                automatic_guide(result.reason)]
+        return [f"{command}: {result.reason}", *([result.detail] if result.detail else []), automatic_guide(result.reason)]
     if isinstance(result, Listed):
         attempts = result.attempts
-        rows = [f"{a.task_id}\t{a.backlog}\t{a.step}\t{a.number}{'' if a.checks else f'/{ATTEMPTS}'}\t{a.slot}\t{a.phase}\t{a.entry}\t"
-                f"{a.result.status} {a.result.reason}\t{status_words(task_status(a))}\t{a.next}\t"
-                f"{a.hold.reason if a.hold is not None else a.hold_due or '-'}\t{last_command(a) or '-'}" for a in attempts]
+        rows = [
+            f"{a.task_id}\t{a.backlog}\t{a.step}\t{a.number}{'' if a.checks else f'/{ATTEMPTS}'}\t{a.slot}\t{a.phase}\t{a.entry}\t"
+            f"{a.result.status} {a.result.reason}\t{status_words(task_status(a))}\t{a.next}\t"
+            f"{a.hold.reason if a.hold is not None else a.hold_due or '-'}\t{last_command(a) or '-'}"
+            for a in attempts
+        ]
         kinds = dict.fromkeys((a.next, a.checks is not None) for a in attempts if a.next.startswith("stuck:") or a.next == "hold")
         steps = [f"{kind}: {guide(kind, checks=checks)}" for kind, checks in kinds]
         steps += stuck if any(kind.startswith("stuck:") for kind, _checks in kinds) else []
@@ -141,8 +150,11 @@ def _rows_lines(command: str, result: Listed | Round | Ended | SetupTimingReport
     lines = [line for each, text in zip(result.moves, lines, strict=True) for line in (text, *_path(each))]
     lines += [f"Stopped: {result.stopped}"] if result.stopped else []
     lines += [] if result.moves or result.stopped else [f"Nothing to do in backlog {result.backlog}."]
-    words = [("abandoned_skip" if each.word == "abandoned" else each.word) for each in result.moves
-             if each.action in ("report", "skip", "advance") or ":" in each.word]
+    words = [
+        ("abandoned_skip" if each.word == "abandoned" else each.word)
+        for each in result.moves
+        if each.action in ("report", "skip", "advance") or ":" in each.word
+    ]
     pending = dict.fromkeys(pending_guide(each.word) for each in result.moves if each.action == "hold" and each.word.startswith("pending "))
     words = [word for word in words if not word.startswith("pending ")]
     keys = dict.fromkeys([*words, *([result.stopped] if result.stopped else [])])
@@ -155,12 +167,15 @@ def _released_lines(result: CommittedTask | ReleasedTask | PublishedTask) -> lis
     if isinstance(result, PublishedTask):
         found = result.result
         done = publish_word(found)
-        return [f"{done}: task/{result.task_id} at {found.commit} on origin (attempt {result.attempt_id}, backlog {result.backlog})",
-                *(["Nothing changed: it was published before."] if done == "already_published" else [])]
+        return [
+            f"{done}: task/{result.task_id} at {found.commit} on origin (attempt {result.attempt_id}, backlog {result.backlog})",
+            *(["Nothing changed: it was published before."] if done == "already_published" else []),
+        ]
     if isinstance(result, CommittedTask):
         held = [f"Release: {result.release}"] + ([] if is_released(result.release) else [refusal_guide(result.release.split(":", 1)[1])])
-        held += [f"Publish: {result.published}"] + ([] if is_published(result.published) else [
-            refusal_guide(result.published.split(":", 1)[1])])
+        held += [f"Publish: {result.published}"] + (
+            [] if is_published(result.published) else [refusal_guide(result.published.split(":", 1)[1])]
+        )
         return [f"{result.status}: attempt {result.attempt_id} for {result.task_id} (backlog {result.backlog})", *held]
     found, task = result.result, result.task_id
     first = [] if result.land is None else _released_lines(result.land)
@@ -172,8 +187,11 @@ def _released_lines(result: CommittedTask | ReleasedTask | PublishedTask) -> lis
     lines = [*first, f"{release_word(found)}: {what}"]
     lines += [f"Slot {found.slot} parked at {found.parked}" if found.parked else f"Slot {found.slot}: no Git write"]
     lines += [f"Reservation of {found.slot} removed"] if found.reservation_removed else []
-    claims = {"kept": "Claim kept", "unclaimed": "Claim returned to the tracker",
-              "not_held": "Claim not held by the factory: it was reverted or belongs to another actor. Inspect tracker ownership."}
+    claims = {
+        "kept": "Claim kept",
+        "unclaimed": "Claim returned to the tracker",
+        "not_held": "Claim not held by the factory: it was reverted or belongs to another actor. Inspect tracker ownership.",
+    }
     lines += [claims[found.claim]]
     fresh = found.abandoned and found.claim != "kept"  # a checks attempt's abandon keeps the claim: its implement attempt's follows
     return lines + (["Abandoned: the next approved admission starts a fresh attempt."] if fresh else [])
@@ -190,10 +208,11 @@ def _setup_lines(result: Adoption | Loaded) -> list[str]:
         attached = any(not isinstance(each, Adopted) and each.reason == "attached" for each in slots)
         hints = ["Missing slots need registered detached worktrees before adoption can finish."] if missing else []
         hints += ["A slot attached to a task branch needs its work preserved and its HEAD detached before adoption."] if attached else []
-        return lines + hints + list(
-            dict.fromkeys(SLOT[each.reason] for each in slots if not isinstance(each, Adopted)))
+        return lines + hints + list(dict.fromkeys(SLOT[each.reason] for each in slots if not isinstance(each, Adopted)))
     lines = [f"Config file: {result.path} ({'exists' if result.exists else 'missing: built-in defaults'})"]
     lines += [f"{key} = {'unset' if each.value is None else each.value} ({each.source})" for key, each in result.settings.pairs()]
-    lines += [f"{key} = {each['value']} ({each['source']})"
-              for key, each in display(result.settings.agents, result.settings.agent_sources).items()]
+    lines += [
+        f"{key} = {each['value']} ({each['source']})"
+        for key, each in display(result.settings.agents, result.settings.agent_sources).items()
+    ]
     return [*lines, SLOT_COUNT_NOTE]

@@ -46,10 +46,16 @@ def detail(con: sqlite3.Connection, tmp_path: Path) -> TaskDetail:
 @pytest.mark.parametrize("checks", [False, True])
 @pytest.mark.parametrize("historical", [False, True])
 def test_stored_causes_follow_the_deciding_row_and_survive_history(
-    checking: sqlite3.Connection, tmp_path: Path, checks: bool, historical: bool,
+    checking: sqlite3.Connection,
+    tmp_path: Path,
+    checks: bool,
+    historical: bool,
 ) -> None:
-    cause = ChecksCause(reason=ChecksReason.COMMIT_MISSING, explanation="Saved <check> context") if checks else DispositionCause(
-        reason=DispositionReason.NEEDS_OWNER, explanation="Saved <agent> decision")
+    cause = (
+        ChecksCause(reason=ChecksReason.COMMIT_MISSING, explanation="Saved <check> context")
+        if checks
+        else DispositionCause(reason=DispositionReason.NEEDS_OWNER, explanation="Saved <agent> decision")
+    )
     snapshot = event(cause, "implement", "checks" if checks else None, Step.IMPLEMENT)
     checking.execute("UPDATE attempt SET label='auto'")
     if not checks:
@@ -61,12 +67,12 @@ def test_stored_causes_follow_the_deciding_row_and_survive_history(
         checking.execute("UPDATE slot_release SET claim='unclaimed'")
     before = checking.total_changes
     found = detail(checking, tmp_path)
-    selected, = (row for row in found.attempts if row.context is not None)
+    (selected,) = (row for row in found.attempts if row.context is not None)
     assert selected.step == ("checks" if checks else "implement") and selected.n == 1
     assert selected.context is not None and selected.context.event == snapshot
     assert selected.context.held_at == "1970-01-01T00:00:07Z" and selected.past == historical
     payload = json.loads(_json(found).body)
-    stored, = (row["context"] for row in payload["attempts"] if row["context"] is not None)
+    (stored,) = (row["context"] for row in payload["attempts"] if row["context"] is not None)
     assert stored["event"] == snapshot.model_dump(mode="json")
     assert checking.total_changes == before
 
@@ -85,7 +91,9 @@ def repeat_ports(con: sqlite3.Connection, tmp_path: Path, before: str, now: str)
         SELECT 'again','again-token',2,step,adapter,backlog,task_id,tracker_root,repo_id,slot,
         input_path,input_digest,schema_version,model,effort,access_policy,deadline,2,3,slot_head,'implement','unsafe',?,
         engine_digest,workflow_digest,workflow_sha,admitted_at
-        FROM attempt WHERE attempt_id='implement'""", ("c" * 40,))
+        FROM attempt WHERE attempt_id='implement'""",
+        ("c" * 40,),
+    )
     files = EvidenceFiles(tmp_path)
     for key, text in ((AttemptKey("implement", "implement-token", 1), before), (AttemptKey("again", "again-token", 2), now)):
         ref = files.put_input(key, text)
@@ -95,15 +103,22 @@ def repeat_ports(con: sqlite3.Connection, tmp_path: Path, before: str, now: str)
 
 
 @pytest.mark.parametrize("historical", [False, True])
-@pytest.mark.parametrize(("before", "now", "added"), [
-    ("Title\nKeep\n", "Title\nAdded <prompt>\nKeep\n", ((1, 2),)),
-    ("Title\nOld\nKeep\n", "Title\nNew\nMore\nKeep\n", ((1, 3),)),
-    ("Same\n", "Same\n", ()),
-    ("Title\nRemoved\n", "Title\n", ()),
-])
+@pytest.mark.parametrize(
+    ("before", "now", "added"),
+    [
+        ("Title\nKeep\n", "Title\nAdded <prompt>\nKeep\n", ((1, 2),)),
+        ("Title\nOld\nKeep\n", "Title\nNew\nMore\nKeep\n", ((1, 3),)),
+        ("Same\n", "Same\n", ()),
+        ("Title\nRemoved\n", "Title\n", ()),
+    ],
+)
 def test_repeat_changes_use_recorded_bases_and_prompt_ranges_without_writing(
-    checking: sqlite3.Connection, tmp_path: Path, historical: bool,
-    before: str, now: str, added: tuple[tuple[int, int], ...],
+    checking: sqlite3.Connection,
+    tmp_path: Path,
+    historical: bool,
+    before: str,
+    now: str,
+    added: tuple[tuple[int, int], ...],
 ) -> None:
     ports = repeat_ports(checking, tmp_path, before, now)
     if historical:
@@ -125,7 +140,10 @@ def test_repeat_changes_use_recorded_bases_and_prompt_ranges_without_writing(
 
 @pytest.mark.parametrize(("before", "after"), [("b" * 40, "b" * 40), (None, "c" * 40), ("b" * 40, None), (None, None)])
 def test_repeat_bases_can_be_unchanged_or_unavailable(
-    checking: sqlite3.Connection, tmp_path: Path, before: str | None, after: str | None,
+    checking: sqlite3.Connection,
+    tmp_path: Path,
+    before: str | None,
+    after: str | None,
 ) -> None:
     ports = repeat_ports(checking, tmp_path, "same", "same")
     checking.execute("DELETE FROM reservation WHERE attempt_id='checks'")

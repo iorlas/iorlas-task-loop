@@ -36,8 +36,14 @@ def repo(tmp_path: Path, remote: FakeRemote) -> FakeRepo:
 
 
 @pytest.fixture
-def conflict(registered: sqlite3.Connection, repo: FakeRepo, remote: FakeRemote, slot: FakeWorktree,
-             slot_files: FakeSlotFiles, checkouts: PinnedViews) -> Bench:
+def conflict(
+    registered: sqlite3.Connection,
+    repo: FakeRepo,
+    remote: FakeRemote,
+    slot: FakeWorktree,
+    slot_files: FakeSlotFiles,
+    checkouts: PinnedViews,
+) -> Bench:
     case = bench(registered, repo, remote, slot, slot_files, checkouts, conflict=True)
     operation = case.operation()
 
@@ -50,9 +56,20 @@ def conflict(registered: sqlite3.Connection, repo: FakeRepo, remote: FakeRemote,
 
 
 def releaser(con: sqlite3.Connection, case: Bench) -> SlotRelease:
-    return SlotRelease(AttemptStore(lambda: con), case.views, case.files, lambda _entry: "gone", lambda _worker: True,
-                       lambda _slot, _attempt: nullcontext(), lambda _root, _task: True, lambda: 20,
-                       lambda _process: "gone", lambda _path: True, HoldStore(lambda: con), ids=NativeIds())
+    return SlotRelease(
+        AttemptStore(lambda: con),
+        case.views,
+        case.files,
+        lambda _entry: "gone",
+        lambda _worker: True,
+        lambda _slot, _attempt: nullcontext(),
+        lambda _root, _task: True,
+        lambda: 20,
+        lambda _process: "gone",
+        lambda _path: True,
+        HoldStore(lambda: con),
+        ids=NativeIds(),
+    )
 
 
 def test_unlabelled_terminal_merge_holds_and_preserves_before_abort(conflict: Bench, registered: sqlite3.Connection) -> None:
@@ -60,8 +77,9 @@ def test_unlabelled_terminal_merge_holds_and_preserves_before_abort(conflict: Be
     view = current_view(StatusPorts(store, lambda _entry: "gone", lambda: 10, lambda _key: None, lambda: "boot"), "tasks", "tl-1")
     assert view is not None and view.next == "hold" and cause(view) == "merge:needs_owner" and view.result.explanation
     log = HoldStore(lambda: registered)
-    row = log.insert(HoldInsert(event=event(MergeCause(reason=MergeReason.NEEDS_OWNER,
-                                                     explanation=view.result.explanation), "attempt"), now=10))
+    row = log.insert(
+        HoldInsert(event=event(MergeCause(reason=MergeReason.NEEDS_OWNER, explanation=view.result.explanation), "attempt"), now=10)
+    )
     assert row.label is None and not reingests("on_hold", row, "auto")
     markers = conflict.slot.read_file("README")
     result = releaser(registered, conflict).release(AttemptKey("attempt", "dispatch", 1), True)
@@ -78,11 +96,14 @@ def test_unlabelled_terminal_merge_holds_and_preserves_before_abort(conflict: Be
 
 
 def test_preservation_failure_keeps_the_merge_and_reservation(
-    conflict: Bench, registered: sqlite3.Connection, monkeypatch: pytest.MonkeyPatch,
+    conflict: Bench,
+    registered: sqlite3.Connection,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     log = HoldStore(lambda: registered)
-    log.insert(HoldInsert(event=event(MergeCause(reason=MergeReason.NEEDS_OWNER,
-                                               explanation="Resolve retained merge work."), "attempt"), now=10))
+    log.insert(
+        HoldInsert(event=event(MergeCause(reason=MergeReason.NEEDS_OWNER, explanation="Resolve retained merge work."), "attempt"), now=10)
+    )
 
     def unavailable(*_args: object) -> None:
         raise GitUnavailable("capture failed")
@@ -95,11 +116,14 @@ def test_preservation_failure_keeps_the_merge_and_reservation(
 
 
 def test_crash_after_abort_adopts_preservation_without_saving_a_reverted_tree(
-    conflict: Bench, registered: sqlite3.Connection, monkeypatch: pytest.MonkeyPatch,
+    conflict: Bench,
+    registered: sqlite3.Connection,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     log = HoldStore(lambda: registered)
-    log.insert(HoldInsert(event=event(MergeCause(reason=MergeReason.NEEDS_OWNER,
-                                               explanation="Resolve retained merge work."), "attempt"), now=10))
+    log.insert(
+        HoldInsert(event=event(MergeCause(reason=MergeReason.NEEDS_OWNER, explanation="Resolve retained merge work."), "attempt"), now=10)
+    )
     abort = FakeWorktree.abort_merge
 
     def interrupted(self: FakeWorktree) -> None:

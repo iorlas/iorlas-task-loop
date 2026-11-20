@@ -18,9 +18,18 @@ def capture(con: sqlite3.Connection, snapshot: Snapshot) -> None:
     assert snapshot.intent is not None
     files = FileRef("evidence", "digest")
     execution = ExecutionFacts(0, False, None, None, True, True, True, None, None, None, None, None, "saved")
-    assert AttemptStore(lambda: con).capture(
-        snapshot.attempt.admission, None, execution, Evidence(files, files, files, files), "complete", callback(snapshot.intent), now=10.0,
-    ) == "accepted"
+    assert (
+        AttemptStore(lambda: con).capture(
+            snapshot.attempt.admission,
+            None,
+            execution,
+            Evidence(files, files, files, files),
+            "complete",
+            callback(snapshot.intent),
+            now=10.0,
+        )
+        == "accepted"
+    )
 
 
 def test_exact_snapshot_comparison_is_read_only_after_reopen(tmp_path: Path) -> None:
@@ -39,11 +48,15 @@ def test_exact_snapshot_comparison_is_read_only_after_reopen(tmp_path: Path) -> 
     con.close()
 
 
-@pytest.mark.parametrize(("change", "outcome"), [*CHANGES,
-    ("UPDATE attempt SET session_ref='other'", Outcome.CHANGED),
-    ("UPDATE attempt SET entry_start='other'", Outcome.CHANGED),
-    ("UPDATE attempt SET worker_pgid=99", Outcome.CHANGED),
-])
+@pytest.mark.parametrize(
+    ("change", "outcome"),
+    [
+        *CHANGES,
+        ("UPDATE attempt SET session_ref='other'", Outcome.CHANGED),
+        ("UPDATE attempt SET entry_start='other'", Outcome.CHANGED),
+        ("UPDATE attempt SET worker_pgid=99", Outcome.CHANGED),
+    ],
+)
 def test_comparison_preserves_drift_and_eligibility_results(tmp_path: Path, change: str, outcome: Outcome) -> None:
     con = database(tmp_path / "factory.db")
     store = RecoveryStore(lambda: con)

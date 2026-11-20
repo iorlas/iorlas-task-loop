@@ -82,7 +82,11 @@ def test_the_dispatch_records_the_slot_head_as_base_and_keeps_the_fenced_admissi
 
 @pytest.mark.parametrize("mode", ["execute", "refused", "crashed"])
 def test_worker_registration_commits_before_target_effects_and_refusal_forbids_them(
-    con: sqlite3.Connection, tmp_path: Path, checkouts: Checkouts, slot_files: SlotFiles, mode: str,
+    con: sqlite3.Connection,
+    tmp_path: Path,
+    checkouts: Checkouts,
+    slot_files: SlotFiles,
+    mode: str,
 ) -> None:
     effects: list[str] = []
 
@@ -95,7 +99,11 @@ def test_worker_registration_commits_before_target_effects_and_refusal_forbids_t
         hooks.started(WORKER)
         assert not con.in_transaction
         assert con.execute("SELECT phase,worker_pid,worker_pgid,worker_start,worker_boot FROM attempt").fetchone() == (
-            "registered", WORKER.pid, WORKER.pgid, WORKER.start, WORKER.boot,
+            "registered",
+            WORKER.pid,
+            WORKER.pgid,
+            WORKER.start,
+            WORKER.boot,
         )
         if mode == "crashed":
             raise RuntimeError("entry lost after worker registration")
@@ -106,8 +114,11 @@ def test_worker_registration_commits_before_target_effects_and_refusal_forbids_t
     owner.execution = gated
     result = owner.execute(KEY, ENTRY)
     assert effects == (["target executed"] if mode == "execute" else [])
-    expected = {"execute": ("pending", "commit"), "refused": ("conflict", "registration_conflict"),
-                "crashed": ("unavailable", "run_failed:RuntimeError")}
+    expected = {
+        "execute": ("pending", "commit"),
+        "refused": ("conflict", "registration_conflict"),
+        "crashed": ("unavailable", "run_failed:RuntimeError"),
+    }
     assert (result.status, result.reason) == expected[mode]
     if mode == "crashed":
         assert con.execute("SELECT phase,worker_pid FROM attempt").fetchone() == ("registered", WORKER.pid)
@@ -125,8 +136,9 @@ def test_a_deadline_crossed_during_the_slot_read_never_dispatches(
 
     agent = run()
     store, files = AttemptStore(lambda: con), EvidenceFiles(tmp_path)
-    owner = Attempts(store, files, AgentLaunch(lambda _harness: ("/bin/codex", {}), ids=NativeIds()), agent,
-        lambda: now[0], slow, slot_files)
+    owner = Attempts(
+        store, files, AgentLaunch(lambda _harness: ("/bin/codex", {}), ids=NativeIds()), agent, lambda: now[0], slow, slot_files
+    )
     result = owner.execute(KEY, ENTRY)
     assert (result.status, result.reason) == ("refused", "expired") and agent.calls == [] and CountingHarness.cleanups == [1]
     assert con.execute("SELECT phase,rev,base_commit FROM attempt").fetchone() == ("admitted", 0, None)

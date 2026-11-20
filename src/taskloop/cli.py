@@ -82,17 +82,19 @@ def show_task(arguments: argparse.Namespace) -> int:
 
 def _profile_data(found: Resolved, at: str, target_ref: str) -> dict[str, object]:
     return {
-        "at": at, "target_ref": target_ref, "setup": [list(argv) for argv in found.setup],
+        "at": at,
+        "target_ref": target_ref,
+        "setup": [list(argv) for argv in found.setup],
         "checks": [{"name": check.name, "argv": list(check.argv), "timeout": check.timeout} for check in found.checks],
-        "required": list(found.required), "target": found.target,
+        "required": list(found.required),
+        "target": found.target,
     }
 
 
 def _profile_lines(found: Resolved, at: str, target_ref: str) -> list[str]:
     lines = [f"Profile: setup and checks at {at}; required and target from {target_ref}"]
     lines += [f"Setup: {shlex.join(argv)}" for argv in found.setup] or ["Setup: (none)"]
-    lines += [f"Check {check.name}: {shlex.join(check.argv)} (timeout {check.timeout} s)" for check in found.checks] or [
-        "Checks: (none)"]
+    lines += [f"Check {check.name}: {shlex.join(check.argv)} (timeout {check.timeout} s)" for check in found.checks] or ["Checks: (none)"]
     return [*lines, f"Required: {', '.join(found.required) or '(none)'}", f"Target: {found.target}"]
 
 
@@ -126,51 +128,65 @@ def main(argv: Sequence[str] | None = None) -> int:
     tracker_located()  # before any bd call: the given tracker root decides the tracker, never an inherited BEADS_DIR
     parser = argparse.ArgumentParser(
         prog="tl",
-        description=("Task loop runs agent work on tracker tasks in managed slots and lands the checked results. First run: "
-                     "`tl config show`, `tl slot adopt CHECKOUT`, `tl profile show`, then `tl rounds start`. "
-                     "Command groups: config, slot, repo, profile, workflow, task, step, attempt, land, rounds, drain, version. "
-                     f"{STEP_ONLY}"),
+        description=(
+            "Task loop runs agent work on tracker tasks in managed slots and lands the checked results. First run: "
+            "`tl config show`, `tl slot adopt CHECKOUT`, `tl profile show`, then `tl rounds start`. "
+            "Command groups: config, slot, repo, profile, workflow, task, step, attempt, land, rounds, drain, version. "
+            f"{STEP_ONLY}"
+        ),
         epilog="Exit 0: success; 1: refusal or task/repo showion error; 2: invalid syntax; "
-               "3: no reliable result (profile unavailable or step unknown), safe to retry; "
-               "130: abrupt rounds stop, interrupted land or interrupted drain.",
+        "3: no reliable result (profile unavailable or step unknown), safe to retry; "
+        "130: abrupt rounds stop, interrupted land or interrupted drain.",
         allow_abbrev=False,
     )
     parser.add_argument("--config", metavar="FILE", help="Machine config file (default ~/.config/task-loop/config.toml)")
     commands = parser.add_subparsers(dest="command")
-    repo = commands.add_parser("repo", help="Inspect a local repository", description="Inspect a local repository (read-only).",
-                               allow_abbrev=False)
+    repo = commands.add_parser(
+        "repo", help="Inspect a local repository", description="Inspect a local repository (read-only).", allow_abbrev=False
+    )
     operations = repo.add_subparsers(dest="operation", required=True)
-    repo_show = operations.add_parser(SHOW, help="Show an explicit checkout root (readonly)", allow_abbrev=False,
-                                    description="Print a checkout's repository identity: id, common directory, checkout path, origin. "
-                                    "Reads Git only; writes nothing.")
+    repo_show = operations.add_parser(
+        SHOW,
+        help="Show an explicit checkout root (readonly)",
+        allow_abbrev=False,
+        description="Print a checkout's repository identity: id, common directory, checkout path, origin. Reads Git only; writes nothing.",
+    )
     repo_show.add_argument("path", metavar="PATH", help="Explicit checkout root; subdirectories, files, bare repositories unsupported")
     repo_show.add_argument("--json", action="store_true", dest="json_output", help="Print JSON data; refusals are JSON on stderr")
     task = commands.add_parser("task", help="Read a task in an explicitly configured backlog", allow_abbrev=False)
     task_operations = task.add_subparsers(dest="operation", required=True)
-    show = task_operations.add_parser(SHOW, help="Inspect a task as the tracker holds it, without modifying it", allow_abbrev=False,
-                                      description="Print a task as the tracker holds it: title, requirements, acceptance, "
-                                      "dependencies. Reads the tracker only; writes nothing (`tl attempt show` is the factory's read).")
+    show = task_operations.add_parser(
+        SHOW,
+        help="Inspect a task as the tracker holds it, without modifying it",
+        allow_abbrev=False,
+        description="Print a task as the tracker holds it: title, requirements, acceptance, "
+        "dependencies. Reads the tracker only; writes nothing (`tl attempt show` is the factory's read).",
+    )
     show.add_argument("task_id", metavar="TASK_ID")
     backlog(show)
     tracker_root(show)
     show.add_argument("--json", action="store_true", dest="json_output", help="Print JSON data; refusals are JSON on stderr")
     profile = commands.add_parser("profile", help="The repository profile .task-loop.json, read from Git", allow_abbrev=False)
     profile_show = profile.add_subparsers(dest="operation", required=True).add_parser(
-        SHOW, help="Print the resolved profile: setup and checks at --at, required and target from --target (read-only)",
+        SHOW,
+        help="Print the resolved profile: setup and checks at --at, required and target from --target (read-only)",
         allow_abbrev=False,
         description="Print the repository profile `.task-loop.json` as the factory reads it from Git: setup and checks at --at, "
-        "required, target and land from --target. Reads Git only; writes nothing.")
+        "required, target and land from --target. Reads Git only; writes nothing.",
+    )
     profile_show.add_argument("--checkout", default=".", metavar="PATH", help="The repository checkout (default: .)")
     profile_show.add_argument("--at", default="HEAD", metavar="REV", help="The commit under test (default: HEAD)")
-    profile_show.add_argument("--target", default="main", metavar="REF", help="The target ref holding required and target "
-                              "(default: main)")
+    profile_show.add_argument("--target", default="main", metavar="REF", help="The target ref holding required and target (default: main)")
     profile_show.add_argument("--json", action="store_true", dest="json_output", help="Print JSON data; refusals are JSON on stderr")
     cli_workflow.register(commands)
     cli_step.register(commands)
     cli_drain.register(commands)
-    commands.add_parser("version", help="Print the running package version", allow_abbrev=False,
-                        description="Print the version of the installed package this command runs.").add_argument(
-        "--json", action="store_true", dest="json_output", help="Print JSON data")
+    commands.add_parser(
+        "version",
+        help="Print the running package version",
+        allow_abbrev=False,
+        description="Print the version of the installed package this command runs.",
+    ).add_argument("--json", action="store_true", dest="json_output", help="Print JSON data")
     arguments = parser.parse_args(argv)
     if arguments.command is None:
         parser.print_help()

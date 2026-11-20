@@ -69,8 +69,11 @@ def test_checks_run_on_the_host_in_a_slot_detached_at_x(
     assert block.run(target, sink, store.block(CHECKS), (PASS, UNTRACKED, SLOW, REWRITE, NEVER)) is None
     rows = "SELECT block,name,conclusion,rc,pid IS NOT NULL FROM check_result ORDER BY block,position"
     assert checking.execute(rows).fetchall() == [
-        (1, "pass", "passed", 0, 1), (1, "untracked", "passed", 0, 1), (1, "slow", "timed_out", None, 1),
-        (1, "rewrite", "dirty", 0, 1)]
+        (1, "pass", "passed", 0, 1),
+        (1, "untracked", "passed", 0, 1),
+        (1, "slow", "timed_out", None, 1),
+        (1, "rewrite", "dirty", 0, 1),
+    ]
     assert evidence.check_log(CHECKS, 1, "pass").read_text() == "$ /bin/sh -c 'echo ok'\nok\nexit 0\n"
     assert evidence.check_log(CHECKS, 1, "untracked").read_text().endswith("exit 0\nuntracked: untracked-file\n")
     assert evidence.check_log(CHECKS, 1, "slow").read_text().endswith("timed out\nuntracked: untracked-file\n")

@@ -32,11 +32,14 @@ def test_the_repo_default_workflow_loads_and_is_read_from_the_commit() -> None:
     assert files.asked == [("c" * 40, PATH)]
 
 
-@pytest.mark.parametrize(("answer", "reason"), [
-    (None, Reason.MISSING),
-    (NotAFile("120000"), Reason.NOT_A_FILE),
-    (b"= =", Reason.NOT_TOML),
-])
+@pytest.mark.parametrize(
+    ("answer", "reason"),
+    [
+        (None, Reason.MISSING),
+        (NotAFile("120000"), Reason.NOT_A_FILE),
+        (b"= =", Reason.NOT_TOML),
+    ],
+)
 def test_a_missing_or_unusable_file_is_a_typed_refusal(answer: Answer, reason: Reason) -> None:
     with pytest.raises(WorkflowRefusal) as raised:
         read_workflow(Files(answer), "c" * 40)

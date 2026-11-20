@@ -34,68 +34,105 @@ RETURNED = ReleaseRow(D, 5.0, "unclaimed")
 ROW = hold_row()
 
 
-@pytest.mark.parametrize(("view", "expected"), [
-    (VIEW, "failed:needs_owner"),
-    (replace(VIEW, next="release", result=AttemptResult("collected", "run:timeout")), "failed:run:timeout"),
-    (replace(VIEW, step="check", result=AttemptResult("collected", "failed:test:failed")), "failed:test:failed"),
-    (replace(VIEW, result=AttemptResult("collected", "rejected:paths")), "failed:rejected:paths"),
-    (replace(VIEW, result=AttemptResult("collected", "committed")), None),
-    (replace(VIEW, result=AttemptResult("collected", "passed")), None),
-    (replace(VIEW, result=AttemptResult("pending", "commit")), None),
-    (replace(VIEW, next="repeats_exhausted", leftovers=("uncommitted", "a.py")), "repeats_exhausted:uncommitted"),
-    *((replace(VIEW, next=word), word) for word in ("stuck:expired_admitted", "stuck:entry_lost", "stuck:uncollected",
-                                                   "stuck:conflict", "stuck:setup_failed", "stuck:checks_refused")),
-    *((replace(VIEW, next=word), None) for word in ("stuck:hung", "unknown", "wait", "start", "landed")),
-    (replace(VIEW, label=None), None),  # started by hand
-    (replace(VIEW, next="stuck:entry_lost", label=None), None),
-    (replace(VIEW, next="release", release=ReleaseRow(D, 5.0, "unclaiming")), None),  # an abandon already started
-    (replace(VIEW, release=ReleaseRow(D, 5.0, "kept", checks_abandoned=True)), None),
-    (replace(VIEW, release=ReleaseRow(D, 5.0, "kept")), "failed:needs_owner"),  # released settled: still held
-], ids=lambda each: each.next + ":" + each.result.reason + (":hand" if each.label is None else "") if isinstance(each, AttemptView) else "")
+@pytest.mark.parametrize(
+    ("view", "expected"),
+    [
+        (VIEW, "failed:needs_owner"),
+        (replace(VIEW, next="release", result=AttemptResult("collected", "run:timeout")), "failed:run:timeout"),
+        (replace(VIEW, step="check", result=AttemptResult("collected", "failed:test:failed")), "failed:test:failed"),
+        (replace(VIEW, result=AttemptResult("collected", "rejected:paths")), "failed:rejected:paths"),
+        (replace(VIEW, result=AttemptResult("collected", "committed")), None),
+        (replace(VIEW, result=AttemptResult("collected", "passed")), None),
+        (replace(VIEW, result=AttemptResult("pending", "commit")), None),
+        (replace(VIEW, next="repeats_exhausted", leftovers=("uncommitted", "a.py")), "repeats_exhausted:uncommitted"),
+        *(
+            (replace(VIEW, next=word), word)
+            for word in (
+                "stuck:expired_admitted",
+                "stuck:entry_lost",
+                "stuck:uncollected",
+                "stuck:conflict",
+                "stuck:setup_failed",
+                "stuck:checks_refused",
+            )
+        ),
+        *((replace(VIEW, next=word), None) for word in ("stuck:hung", "unknown", "wait", "start", "landed")),
+        (replace(VIEW, label=None), None),  # started by hand
+        (replace(VIEW, next="stuck:entry_lost", label=None), None),
+        (replace(VIEW, next="release", release=ReleaseRow(D, 5.0, "unclaiming")), None),  # an abandon already started
+        (replace(VIEW, release=ReleaseRow(D, 5.0, "kept", checks_abandoned=True)), None),
+        (replace(VIEW, release=ReleaseRow(D, 5.0, "kept")), "failed:needs_owner"),  # released settled: still held
+    ],
+    ids=lambda each: (
+        each.next + ":" + each.result.reason + (":hand" if each.label is None else "") if isinstance(each, AttemptView) else ""
+    ),
+)
 def test_the_cause_rule(view: AttemptView, expected: str | None) -> None:
     assert cause(view) == expected
 
 
-@pytest.mark.parametrize(("row", "release", "done"), [
-    (ROW, RETURNED, True), (ROW, ReleaseRow(D, 5.0, "not_held"), True), (ROW, ReleaseRow(D, 5.0, "unclaiming"), False),
-    (ROW, ReleaseRow(D, 5.0, "kept"), False), (ROW, None, False), (ROW.model_copy(update={"commented_at": None}), RETURNED, False),
-    (ROW.model_copy(update={"labels": None, "labelled_at": None}), RETURNED, False),
-    (ROW.model_copy(update={"labels": "closed", "commenting_at": None, "commented_at": None}), ReleaseRow(D, 5.0, "not_held"), True),
-    (ROW.model_copy(update={"labels": "missing", "commenting_at": None, "commented_at": None}), ReleaseRow(D, 5.0, "not_held"), True),
-    (ROW.model_copy(update={"labels": "not_ours", "commented_at": None}), ReleaseRow(D, 5.0, "not_held"), False),
-])
+@pytest.mark.parametrize(
+    ("row", "release", "done"),
+    [
+        (ROW, RETURNED, True),
+        (ROW, ReleaseRow(D, 5.0, "not_held"), True),
+        (ROW, ReleaseRow(D, 5.0, "unclaiming"), False),
+        (ROW, ReleaseRow(D, 5.0, "kept"), False),
+        (ROW, None, False),
+        (ROW.model_copy(update={"commented_at": None}), RETURNED, False),
+        (ROW.model_copy(update={"labels": None, "labelled_at": None}), RETURNED, False),
+        (ROW.model_copy(update={"labels": "closed", "commenting_at": None, "commented_at": None}), ReleaseRow(D, 5.0, "not_held"), True),
+        (ROW.model_copy(update={"labels": "missing", "commenting_at": None, "commented_at": None}), ReleaseRow(D, 5.0, "not_held"), True),
+        (ROW.model_copy(update={"labels": "not_ours", "commented_at": None}), ReleaseRow(D, 5.0, "not_held"), False),
+    ],
+)
 def test_a_hold_is_finished_once_labelled_abandoned_and_commented(row: HoldRow, release: ReleaseRow | None, done: bool) -> None:
     assert finished(row, release) is done
 
 
-@pytest.mark.parametrize(("view", "row", "word"), [
-    (VIEW, None, "hold"),  # due
-    (replace(VIEW, label=None), None, "done"),
-    (replace(VIEW, release=RETURNED, next="start"), ROW, "on_hold"),
-    (replace(VIEW, next="start"), ROW, "hold"),
-    (replace(VIEW, next="stuck:hung"), ROW, "hold"),  # once recorded the row decides whatever the word
-    (replace(VIEW, next="unknown"), ROW, "unknown"),
-    (replace(VIEW, next="unknown"), None, "unknown"),
-])
+@pytest.mark.parametrize(
+    ("view", "row", "word"),
+    [
+        (VIEW, None, "hold"),  # due
+        (replace(VIEW, label=None), None, "done"),
+        (replace(VIEW, release=RETURNED, next="start"), ROW, "on_hold"),
+        (replace(VIEW, next="start"), ROW, "hold"),
+        (replace(VIEW, next="stuck:hung"), ROW, "hold"),  # once recorded the row decides whatever the word
+        (replace(VIEW, next="unknown"), ROW, "unknown"),
+        (replace(VIEW, next="unknown"), None, "unknown"),
+    ],
+)
 def test_the_hold_decides_the_word_after_every_rule_but_unknown(view: AttemptView, row: HoldRow | None, word: str) -> None:
     held = with_hold(view, row)
     assert (held.next, held.hold, held.hold_due) == (word, row, "failed:needs_owner" if word == "hold" and row is None else None)
 
 
-@pytest.mark.parametrize(("word", "row", "label", "taken"), [
-    ("on_hold", ROW, "auto", True), ("on_hold", ROW.model_copy(update={"labels": "absent"}), "auto", True),
-    ("on_hold", ROW, "auto2", False),
-    *(("on_hold", ROW.model_copy(update={"labels": each}), "auto", False) for each in ("not_ours", "closed", "missing")),
-    ("hold", ROW, "auto", False), ("start", None, "auto", False),
-])
+@pytest.mark.parametrize(
+    ("word", "row", "label", "taken"),
+    [
+        ("on_hold", ROW, "auto", True),
+        ("on_hold", ROW.model_copy(update={"labels": "absent"}), "auto", True),
+        ("on_hold", ROW, "auto2", False),
+        *(("on_hold", ROW.model_copy(update={"labels": each}), "auto", False) for each in ("not_ours", "closed", "missing")),
+        ("hold", ROW, "auto", False),
+        ("start", None, "auto", False),
+    ],
+)
 def test_only_a_hold_that_removed_the_round_s_own_label_is_taken_again(word: str, row: HoldRow | None, label: str, taken: bool) -> None:
     assert reingests(word, row, label) is taken
 
 
-@pytest.mark.parametrize(("reason", "retry"), [
-    ("land:conflict", False), ("merge:needs_owner", False), ("land:checks_failed", True),
-    ("land:remote_rejected", True), ("land:branch_moved", True), ("land:claim_lost", True),
-])
+@pytest.mark.parametrize(
+    ("reason", "retry"),
+    [
+        ("land:conflict", False),
+        ("merge:needs_owner", False),
+        ("land:checks_failed", True),
+        ("land:remote_rejected", True),
+        ("land:branch_moved", True),
+        ("land:claim_lost", True),
+    ],
+)
 def test_terminal_decisions_resist_restored_approval_labels(reason: str, retry: bool) -> None:
     assert reingests("on_hold", ROW.model_copy(update={"event": event_for(reason)}), "auto") is retry
 
@@ -103,8 +140,7 @@ def test_terminal_decisions_resist_restored_approval_labels(reason: str, retry: 
 @pytest.mark.parametrize("pending", [True, False])
 def test_terminal_land_guidance_preserves_work_without_restart_advice(pending: bool) -> None:
     row = ROW.model_copy(update={"event": event_for("land:conflict")})
-    view = replace(VIEW, next="hold" if pending else "on_hold", hold=None if pending else row,
-                   hold_due=row.reason if pending else None)
+    view = replace(VIEW, next="hold" if pending else "on_hold", hold=None if pending else row, hold_due=row.reason if pending else None)
     text = hold_guide(view)
     assert "retained task work" in text and "stays held" in text
     assert "do not restart" in text and "resolution limit" in text
@@ -124,7 +160,8 @@ def plan(con: sqlite3.Connection, *, label: str | None = "auto", released: str |
         'abababababababababababababababababababababababababababababababab',
         (SELECT digest FROM workflow_file),
         'eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',1.0)""",
-            (D, label))
+            (D, label),
+        )
         if released is not None:
             con.execute("INSERT INTO slot_release VALUES ('a','a-token',1,?,5,?)", (D, released))
 
@@ -133,8 +170,9 @@ def reads(con: sqlite3.Connection, now: float = 500) -> StatusPorts:
     return StatusPorts(AttemptStore(lambda: con), lambda _entry: "gone", lambda: now, lambda _key: None, lambda: "boot")
 
 
-def recorded(con: sqlite3.Connection, attempt_id: str = "a", cause_id: str = "a", reason: str = "stuck:expired_admitted",
-             comment: bool = True) -> HoldRow:
+def recorded(
+    con: sqlite3.Connection, attempt_id: str = "a", cause_id: str = "a", reason: str = "stuck:expired_admitted", comment: bool = True
+) -> HoldRow:
     store = HoldStore(lambda: con)
     row = store.insert(HoldInsert(event=event_for(reason, attempt_id, cause_id), now=10.0))
     row = store.labelled(attempt_id, row.rev, "moved", 11.0)
@@ -151,8 +189,11 @@ def listed(con: sqlite3.Connection, *, stuck: bool = False) -> tuple[AttemptView
 
 @pytest.mark.parametrize(("requested", "configured"), [("tasks", None), (None, "tasks"), ("tasks", "other")])
 def test_show_reads_a_selected_backlog_without_enumerating_others(
-    factory: sqlite3.Connection, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
-    requested: str | None, configured: str | None,
+    factory: sqlite3.Connection,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    requested: str | None,
+    configured: str | None,
 ) -> None:
     plan(factory)
     ports = reads(factory)
@@ -165,7 +206,10 @@ def test_show_reads_a_selected_backlog_without_enumerating_others(
     assert isinstance(shown, Shown) and shown.view.backlog == "tasks"
     failed = show_attempt(ports, tmp_path, None, "tl-1")
     assert isinstance(failed, Failed) and (failed.kind, failed.reason, failed.detail) == (
-        "unavailable", "store", "Backlog enumeration unavailable")
+        "unavailable",
+        "store",
+        "Backlog enumeration unavailable",
+    )
 
 
 def test_a_due_hold_is_listed_stuck_and_a_hand_started_one_keeps_its_word(factory: sqlite3.Connection) -> None:
@@ -190,7 +234,8 @@ def test_a_task_taken_again_shows_its_new_attempt_without_the_old_hold(factory: 
     plan(factory, released="unclaimed")
     recorded(factory)
     with begin_immediate(factory):
-        factory.execute("""INSERT INTO attempt (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,
+        factory.execute(
+            """INSERT INTO attempt (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,
             repo_id,slot,input_path,input_digest,schema_version,model,effort,access_policy,deadline,number,seq,slot_head,label,
             engine_digest,workflow_digest,workflow_sha,admitted_at) VALUES
             ('b','b-token',1,'plan','beads','tasks','tl-1','/tracker','r','s1','i','d',1,'m','e',
@@ -198,7 +243,8 @@ def test_a_task_taken_again_shows_its_new_attempt_without_the_old_hold(factory: 
         'abababababababababababababababababababababababababababababababab',
         (SELECT digest FROM workflow_file),
         'eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',1.0)""",
-            (D,))
+            (D,),
+        )
     (view,) = listed(factory)
     assert (view.attempt_id, view.next, view.hold) == ("b", "start", None)
 
@@ -207,8 +253,20 @@ def test_the_swapped_checks_view_finds_the_hold_of_the_implement_attempt_it_foll
     """The view shows the checks attempt; the hold is the implement attempt's (`checks.row.after`), its cause the checks."""
     checking.execute("UPDATE attempt SET label='auto'")
     row = CheckStore(lambda: checking).of_attempt("implement")[0]
-    view = AttemptView("tasks", "tl-1", "check", row.key.attempt_id, "s2", "concluded", "gone",
-                       AttemptResult("collected", "failed:test:failed"), False, "done", label="auto", checks=ChecksView(row, ()))
+    view = AttemptView(
+        "tasks",
+        "tl-1",
+        "check",
+        row.key.attempt_id,
+        "s2",
+        "concluded",
+        "gone",
+        AttemptResult("collected", "failed:test:failed"),
+        False,
+        "done",
+        label="auto",
+        checks=ChecksView(row, ()),
+    )
     assert with_hold(view, None).hold_due == "failed:test:failed" and agent_attempt(view) == "implement"
     held = recorded(checking, "implement", row.key.attempt_id, "failed:test:failed", comment=False)
     assert HoldStore(lambda: checking).of_attempts((view.attempt_id,)) == {}  # never looked up by the checks attempt's id
@@ -228,8 +286,16 @@ def test_show_prints_the_hold_lines_and_the_answer_with_the_stored_label(factory
     assert "First restore task/tl-1 to contain the commit accepted by factory commit" in text and "--abandon` again" not in text
     data = as_data(shown)
     assert data["label"] == "auto" and data["hold_due"] is None
-    assert data["hold"] == {"reason": "branch_moved", "cause": "a", "label": "auto", "held_at": 10.0, "labels": "moved",
-                            "labelled_at": 11.0, "commented_at": 13.0, "cleared_at": None}
+    assert data["hold"] == {
+        "reason": "branch_moved",
+        "cause": "a",
+        "label": "auto",
+        "held_at": 10.0,
+        "labels": "moved",
+        "labelled_at": 11.0,
+        "commented_at": 13.0,
+        "cleared_at": None,
+    }
 
 
 def test_the_on_hold_guide_explains_the_cause_and_recovery_decision(factory: sqlite3.Connection, tmp_path: Path) -> None:
@@ -296,7 +362,8 @@ def test_list_stuck_reads_the_leftovers_of_a_round_taken_attempt_so_a_due_repeat
         'abababababababababababababababababababababababababababababababab',
         (SELECT digest FROM workflow_file),
         'eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',1.0)""",
-                (f"a{number}", f"a{number}-token", D, number, number, D, previous, why))
+                (f"a{number}", f"a{number}-token", D, number, number, D, previous, why),
+            )
         factory.execute("""INSERT INTO execution (attempt_id,dispatch_token,generation,rc,timed_out,work,stands,stdout_path,
             stdout_digest,stderr_path,stderr_digest,answer_path,answer_digest,diagnostic_path,diagnostic_digest,answer_kind,effect,
             session_state) VALUES ('a3','a3-token',1,0,0,1,1,'o','d','e','d','a','d','g','d','valid','commit','complete')""")
@@ -309,7 +376,8 @@ def test_list_stuck_reads_the_leftovers_of_a_round_taken_attempt_so_a_due_repeat
     ports = replace(reads(factory), leftovers=leftovers)
     found = list_attempts(ports, stuck=True)
     assert isinstance(found, Listed) and [(each.next, each.hold_due) for each in found.attempts] == [
-        ("hold", "repeats_exhausted:uncommitted")]
+        ("hold", "repeats_exhausted:uncommitted")
+    ]
     factory.execute("UPDATE attempt SET label=NULL")
     probed.clear()
     found = list_attempts(ports, stuck=True)
@@ -327,7 +395,8 @@ def test_a_moved_head_shows_the_refs_the_agent_made_but_stays_next_commit_not_a_
     ports = replace(reads(factory), leftovers=lambda _key: CommitRefused("head_moved", ("refs/tags/task/evil",)))
     found = list_attempts(ports)
     assert isinstance(found, Listed) and [(each.next, each.leftovers) for each in found.attempts] == [
-        ("commit", ("head_moved", "refs/tags/task/evil"))]
+        ("commit", ("head_moved", "refs/tags/task/evil"))
+    ]
     for reason in ("branch", "unborn"):  # no listing: the reason alone, which the `unsettled` guide's `branch` text answers
         found = list_attempts(replace(ports, leftovers=lambda _key, why=reason: CommitRefused(why)))
         assert isinstance(found, Listed) and [(each.next, each.leftovers) for each in found.attempts] == [("commit", (reason,))]
@@ -340,11 +409,13 @@ def test_deadline_passed_of_a_captured_agent_attempt_is_whether_its_run_timed_ou
 ) -> None:
     plan(factory)
     factory.execute("UPDATE attempt SET phase='captured',base_commit=?", (D,))
-    factory.execute("""INSERT INTO execution (attempt_id,dispatch_token,generation,rc,timed_out,work,stands,stdout_path,
+    factory.execute(
+        """INSERT INTO execution (attempt_id,dispatch_token,generation,rc,timed_out,work,stands,stdout_path,
         stdout_digest,stderr_path,stderr_digest,answer_path,answer_digest,diagnostic_path,diagnostic_digest,answer_kind,
         session_state,answer_failure)
         VALUES ('a','a-token',1,0,0,1,1,'o','d','e','d','a','d','g','d','json_invalid','complete',?)""",
-        (encode(AnswerFailureData(rule=AnswerRule.JSON, explanation="Answer must be strict JSON")),))
+        (encode(AnswerFailureData(rule=AnswerRule.JSON, explanation="Answer must be strict JSON")),),
+    )
 
     def seen(now: float) -> list[bool]:
         found = list_attempts(reads(factory, now))
@@ -356,14 +427,16 @@ def test_deadline_passed_of_a_captured_agent_attempt_is_whether_its_run_timed_ou
     assert (seen(50), seen(500)) == ([True], [True])
 
 
-def test_show_of_a_task_held_for_failed_checks_names_each_failed_check_with_its_exit_and_log(checking: sqlite3.Connection,
-                                                                                            tmp_path: Path) -> None:
+def test_show_of_a_task_held_for_failed_checks_names_each_failed_check_with_its_exit_and_log(
+    checking: sqlite3.Connection, tmp_path: Path
+) -> None:
     """After the hold's abandon the current attempt is the implement attempt, but the cause is the checks attempt: `show`
     prints that attempt's unpassed results from factory.db with their log paths (not the tracker comment, not a log)."""
     with begin_immediate(checking):
         checking.executemany(
             "INSERT INTO check_result VALUES ('checks',1,?,?,'checks-token',1,?,60,NULL,NULL,NULL,NULL,1,?,?,?)",
-            [(0, "check", "1" * 64, 3, 1, "failed"), (1, "test", "2" * 64, 9, 0, "passed")])
+            [(0, "check", "1" * 64, 3, 1, "failed"), (1, "test", "2" * 64, 9, 0, "passed")],
+        )
         checking.execute("UPDATE slot_release SET claim='unclaimed' WHERE attempt_id='implement'")
         checking.execute("UPDATE attempt SET label='auto'")
     recorded(checking, "implement", "checks", "failed:check:failed")

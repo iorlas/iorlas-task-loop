@@ -113,8 +113,13 @@ class BranchPublish:
 
     def publish(self, key: AttemptKey) -> PublishResult:
         try:
-            with operation(self.store, ActionKind.FINALIZE, ids=self.ids, subject=key.attempt_id,
-                           existing=lambda owner: self.store.owns_entry(key, owner)) as call:
+            with operation(
+                self.store,
+                ActionKind.FINALIZE,
+                ids=self.ids,
+                subject=key.attempt_id,
+                existing=lambda owner: self.store.owns_entry(key, owner),
+            ) as call:
                 result = self._publish(key)
                 call.resolved = not isinstance(result, NotPublished) or result.kind != "unavailable"
                 return result
@@ -122,7 +127,7 @@ class BranchPublish:
             return _refused(Reason.DRAINING, BLOCKED)
         except Unobservable:
             return _unavailable("observe", "The calling process cannot be observed.")
-        except (sqlite3.Error, StoreUnavailable):
+        except sqlite3.Error, StoreUnavailable:
             return _unavailable("store", "The factory database is unavailable.")
 
     def _publish(self, key: AttemptKey) -> PublishResult:
@@ -158,8 +163,10 @@ class BranchPublish:
             return None
         if row.verdict == "rejected":
             return _refused(PublishRefusalReason.NOT_COMMITTED, f"The step's result was rejected ({row.reason}).")
-        return _refused(PublishRefusalReason.NOT_COMMITTED,
-                        "The step's result is not accepted by factory commit yet. Factory commit must accept it before publication.")
+        return _refused(
+            PublishRefusalReason.NOT_COMMITTED,
+            "The step's result is not accepted by factory commit yet. Factory commit must accept it before publication.",
+        )
 
     def _repository(self, row: PublishRow, x: str) -> tuple[Repo, Path] | NotPublished:
         """The person's checkout through the slot's verified pointer (file reads first), `origin`, then the local branch
@@ -177,8 +184,10 @@ class BranchPublish:
         name = "refs/heads/" + task_branch(row.task_id)
         tip = next((entry.sha for entry in repo.refs(["refs/heads/task/"]) if entry.name == name), None)
         if tip is None or not repo.is_ancestor(x, tip):
-            return _refused("branch_moved", f"The local {task_branch(row.task_id)} is missing or does not contain {x}: restore it, "
-                            "then rerun (or abandon).")
+            return _refused(
+                "branch_moved",
+                f"The local {task_branch(row.task_id)} is missing or does not contain {x}: restore it, then rerun (or abandon).",
+            )
         return repo, root
 
     def _pushed(self, key: AttemptKey, task_id: str, repo: Repo, root: Path, x: str) -> PublishResult:
@@ -213,8 +222,9 @@ class BranchPublish:
             return result
         if result is not RecordOutcome.RECORDED:
             gone = result is RecordOutcome.ABANDONED
-            return NotPublished("refused" if gone else "unavailable", "abandoned" if gone else "changed",
-                                f"The attempt changed during the push: {pushed}.")
+            return NotPublished(
+                "refused" if gone else "unavailable", "abandoned" if gone else "changed", f"The attempt changed during the push: {pushed}."
+            )
         return BranchPublished(x, x)
 
 
@@ -243,17 +253,24 @@ def _rejected(repo: Repo, branch: str, x: str) -> NotPublished:
         return _unavailable("changed", f"`{REMOTE}`'s {branch} changed during the push: rerun.")
     try:
         relation = _relation(repo, x, t)
-    except (MissingRevision, GitReadFailure):  # T is not in this repository
-        return _refused("remote_moved", f"`{REMOTE}`'s {branch} is at {t}, unknown here: "
-                                        "fetch that branch from the remote, then try again.")
+    except MissingRevision, GitReadFailure:  # T is not in this repository
+        return _refused(
+            "remote_moved", f"`{REMOTE}`'s {branch} is at {t}, unknown here: fetch that branch from the remote, then try again."
+        )
     except GitUnavailable as error:
         return _unavailable("git", f"Git could not compare {x} with {t} ({type(error).__name__}): rerun.")
     words: dict[str, tuple[Literal["refused", "unavailable"], str, str]] = {
         "behind": ("unavailable", "changed", f"`{REMOTE}`'s {branch} is at {t}, behind {x}; it moved during the push: rerun."),
-        "ahead": ("refused", "remote_ahead", f"`{REMOTE}`'s {branch} is at {t}, which already contains {x} and more: not "
-                  "recorded; compare them, the factory never forces."),
-        "diverged": ("refused", "diverged", f"`{REMOTE}`'s {branch} is at {t}, which does not contain {x}: compare {x}..{t}; "
-                     "never forced."),
+        "ahead": (
+            "refused",
+            "remote_ahead",
+            f"`{REMOTE}`'s {branch} is at {t}, which already contains {x} and more: not recorded; compare them, the factory never forces.",
+        ),
+        "diverged": (
+            "refused",
+            "diverged",
+            f"`{REMOTE}`'s {branch} is at {t}, which does not contain {x}: compare {x}..{t}; never forced.",
+        ),
     }
     kind, reason, detail = words[relation]
     return NotPublished(kind, reason, f"{detail} {NOTHING}")

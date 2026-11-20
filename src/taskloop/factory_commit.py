@@ -93,8 +93,15 @@ def trailer(admission: Admission) -> str:
     return f"{TRAILER}: {admission.key.attempt_id}"
 
 
-def settle(checkouts: Checkouts, files: SlotFiles, admission: Admission, base: str, answer: AnswerState, quiet: GitQuiet,
-           timing: OperationTiming | None = None) -> Settled:
+def settle(
+    checkouts: Checkouts,
+    files: SlotFiles,
+    admission: Admission,
+    base: str,
+    answer: AnswerState,
+    quiet: GitQuiet,
+    timing: OperationTiming | None = None,
+) -> Settled:
     """Steps 2 to 5 of the step commit for a valid answer of effect `commit` or `keep` with no stored `end_commit`.
     `quiet` is asked right before each Git write: its answer (`worker_alive`, `superseded`) stops it, nothing written."""
     state = _observed(checkouts, files, admission)
@@ -106,16 +113,26 @@ def settle(checkouts: Checkouts, files: SlotFiles, admission: Admission, base: s
     if answer.effect == "keep":  # X is B: a `keep` step never adopts a commit
         if head != base:
             return _moved(checkouts(state.root), head, base, admission)
-        return (_reviewed(checkouts, files, admission, state, base, quiet, timing)
-                if wip.needs_review(checkouts(state.root), base) else Committed(base))
+        return (
+            _reviewed(checkouts, files, admission, state, base, quiet, timing)
+            if wip.needs_review(checkouts(state.root), base)
+            else Committed(base)
+        )
     if head != base:
         view = checkouts(state.root)
         return Committed(head) if _ours(view, head, base, admission) else _moved(view, head, base, admission)
     return _commit(checkouts, files, admission, state, base, answer, quiet, timing)
 
 
-def _reviewed(checkouts: Checkouts, files: SlotFiles, admission: Admission, state: SlotState, base: str, quiet: GitQuiet,
-              timing: OperationTiming | None) -> Settled:
+def _reviewed(
+    checkouts: Checkouts,
+    files: SlotFiles,
+    admission: Admission,
+    state: SlotState,
+    base: str,
+    quiet: GitQuiet,
+    timing: OperationTiming | None,
+) -> Settled:
     """A `keep` answer over a base that is saved work: B is preservation, never a result, so the step ends at its own commit
     of the same tree (parent B, this attempt's trailer), made only for this valid answer: the hold never made it."""
     blocked = _blocked(quiet, files, admission, state)
@@ -125,7 +142,8 @@ def _reviewed(checkouts: Checkouts, files: SlotFiles, admission: Admission, stat
     slot = checkouts(path, git_dir=state.gitdir).worktree(path)
     with measured(timing, admission.key, OperationKind.COMMIT) as observed:
         made = slot.record(
-            f"Review saved work of {admission.task.task_id}\n\n{trailer(admission)}", paths="staged", hooks=False, allow_empty=True)
+            f"Review saved work of {admission.task.task_id}\n\n{trailer(admission)}", paths="staged", hooks=False, allow_empty=True
+        )
         observed.state = OperationState.COMPLETED if isinstance(made, Recorded) else OperationState.FAILED
     if isinstance(made, Recorded):
         return Committed(made.sha)
@@ -133,7 +151,13 @@ def _reviewed(checkouts: Checkouts, files: SlotFiles, admission: Admission, stat
 
 
 def _commit(
-    checkouts: Checkouts, files: SlotFiles, admission: Admission, state: SlotState, base: str, answer: AnswerState, quiet: GitQuiet,
+    checkouts: Checkouts,
+    files: SlotFiles,
+    admission: Admission,
+    state: SlotState,
+    base: str,
+    answer: AnswerState,
+    quiet: GitQuiet,
     timing: OperationTiming | None,
 ) -> Settled:
     """Step 4 (the selected paths, Git's own files near them, ignored files), then step 5: stage exactly the reviewed paths
@@ -199,19 +223,31 @@ def _review(
     paths = tuple(each for each in selected if not _unchanged(files, path, tree, each))
     unsafe = tuple(found for each in paths if (found := unsafe_path(files, path, rules, (each,), tree.files)) is not None)
     if implement:
-        unsafe += tuple(PathExplanation(each, "A changed Git file affects how the selected paths are staged."
-                                        if git_file((each,), rules, paths) is not None else
-                                        "The path must be an allowed relative file of at most 255 bytes, without excluded "
-                                        "prefixes, .git-prefixed or empty/dot components, NUL, newline or backslash.")
-                        for each in paths if not path_allowed(each, rules))
-        unsafe += tuple(PathExplanation(each, "An implement step cannot change plan.md.")
-                        for each in paths if each.rsplit("/", 1)[-1].casefold() == "plan.md")
+        unsafe += tuple(
+            PathExplanation(
+                each,
+                "A changed Git file affects how the selected paths are staged."
+                if git_file((each,), rules, paths) is not None
+                else "The path must be an allowed relative file of at most 255 bytes, without excluded "
+                "prefixes, .git-prefixed or empty/dot components, NUL, newline or backslash.",
+            )
+            for each in paths
+            if not path_allowed(each, rules)
+        )
+        unsafe += tuple(
+            PathExplanation(each, "An implement step cannot change plan.md.")
+            for each in paths
+            if each.rsplit("/", 1)[-1].casefold() == "plan.md"
+        )
         if len(paths) > rules.max_paths:
             unsafe += (PathExplanation(paths[0], f"The slot has {len(paths)} changed paths; the limit is {rules.max_paths} paths."),)
     dirt = view.worktree(path).dirty(base, ignored_under=attributes(rules, paths))
     git_paths = tuple(each for each in dirt.tracked + dirt.untracked if git_file((each,), rules, paths) is not None)
-    unsafe += tuple(PathExplanation(each, "A changed Git file affects how the listed paths are staged.")
-                    for each in git_paths if each not in {found.path for found in unsafe})
+    unsafe += tuple(
+        PathExplanation(each, "A changed Git file affects how the listed paths are staged.")
+        for each in git_paths
+        if each not in {found.path for found in unsafe}
+    )
     if unsafe:
         beside = sorted(set(dirt.tracked + dirt.untracked) - {*(found.path for found in unsafe), *answer.paths})
         return paths, Uncommitted("unsafe", bounded((*(found.path for found in unsafe), *beside)), explanations=unsafe)
@@ -305,8 +341,8 @@ def secret(data: bytes) -> bool:
     (`auth.json` holds both token names). A committed copy would be published to `origin`; no content of the person's own
     files is read to compare (tl-8bh9.14.50, docs/design/self-hosting-trial-5-fixes.md)."""
     # Keep signature literals separate so this source is not itself mistaken for a credential copy.
-    key = b"-----BEGIN " in data and b"PRIVATE " b"KEY-----" in data
-    return key or (b'"access_' b'token"' in data and b'"refresh_' b'token"' in data)
+    key = b"-----BEGIN " in data and b"PRIVATE KEY-----" in data
+    return key or (b'"access_token"' in data and b'"refresh_token"' in data)
 
 
 def unsafe_path(
@@ -330,8 +366,13 @@ def unsafe_path(
                 explanation = f"The baseline ancestor {ancestor!r} is a Git file, not a directory."
         folders = [files.lstat(slot.joinpath(*parts[:depth])) for depth in range(1, len(parts))]
         entry = files.lstat(slot.joinpath(*parts))
-        if (not explanation and entry is None and rules.deletions and was is not None
-                and all(each is None or each.kind == "dir" for each in folders)):
+        if (
+            not explanation
+            and entry is None
+            and rules.deletions
+            and was is not None
+            and all(each is None or each.kind == "dir" for each in folders)
+        ):
             continue
         for depth, folder in enumerate(folders, 1):
             if not explanation and (folder is None or folder.kind != "dir"):

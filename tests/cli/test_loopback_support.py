@@ -11,7 +11,10 @@ pytest_plugins = ("pytester",)
 
 
 def probe_session(
-    pytester: pytest.Pytester, monkeypatch: pytest.MonkeyPatch, error_number: int | None, fail_at_bind: bool = False,
+    pytester: pytest.Pytester,
+    monkeypatch: pytest.MonkeyPatch,
+    error_number: int | None,
+    fail_at_bind: bool = False,
 ) -> tuple[pytest.RunResult, list[str]]:
     events: list[str] = []
 
@@ -20,7 +23,10 @@ def probe_session(
             return self
 
         def __exit__(
-            self, error_type: type[BaseException] | None, error: BaseException | None, traceback: TracebackType | None,
+            self,
+            error_type: type[BaseException] | None,
+            error: BaseException | None,
+            traceback: TracebackType | None,
         ) -> None:
             events.append("close")
 
@@ -38,7 +44,7 @@ def probe_session(
         return Probe()
 
     pytester.makeconftest(Path(__file__).with_name("conftest.py").read_text())
-    pytester.makepyfile('''
+    pytester.makepyfile("""
         def test_first(require_loopback):
             assert require_loopback is None
 
@@ -47,7 +53,7 @@ def probe_session(
 
         def test_without_sockets():
             pass
-    ''')
+    """)
     with monkeypatch.context() as patch:
         patch.setattr(socket, "socket", create)
         result = pytester.runpytest_inprocess("-q", "-rs", "-p", "no:cacheprovider")
@@ -57,7 +63,10 @@ def probe_session(
 @pytest.mark.parametrize("error_number", [errno.EPERM, errno.EACCES])
 @pytest.mark.parametrize("fail_at_bind", [False, True])
 def test_permission_denial_skips_consumers_but_leaves_socket_free_tests_running(
-    pytester: pytest.Pytester, monkeypatch: pytest.MonkeyPatch, error_number: int, fail_at_bind: bool,
+    pytester: pytest.Pytester,
+    monkeypatch: pytest.MonkeyPatch,
+    error_number: int,
+    fail_at_bind: bool,
 ) -> None:
     result, events = probe_session(pytester, monkeypatch, error_number, fail_at_bind)
     result.assert_outcomes(passed=1, skipped=2)
@@ -67,7 +76,8 @@ def test_permission_denial_skips_consumers_but_leaves_socket_free_tests_running(
 
 
 def test_allowed_loopback_runs_consumers_with_one_closed_probe(
-    pytester: pytest.Pytester, monkeypatch: pytest.MonkeyPatch,
+    pytester: pytest.Pytester,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     result, events = probe_session(pytester, monkeypatch, None)
     result.assert_outcomes(passed=3)
@@ -76,7 +86,10 @@ def test_allowed_loopback_runs_consumers_with_one_closed_probe(
 
 @pytest.mark.parametrize(("error_number", "fail_at_bind"), [(errno.EMFILE, False), (errno.EADDRINUSE, True)])
 def test_unrelated_socket_errors_remain_errors(
-    pytester: pytest.Pytester, monkeypatch: pytest.MonkeyPatch, error_number: int, fail_at_bind: bool,
+    pytester: pytest.Pytester,
+    monkeypatch: pytest.MonkeyPatch,
+    error_number: int,
+    fail_at_bind: bool,
 ) -> None:
     result, events = probe_session(pytester, monkeypatch, error_number, fail_at_bind)
     result.assert_outcomes(passed=1, errors=2)

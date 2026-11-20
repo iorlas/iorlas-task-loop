@@ -23,8 +23,12 @@ class StopStore(StoreConnection):
         key = AttemptKey(record.attempt_id, record.dispatch_token, record.generation)
         found = attempts.load(key)
         entry, agent = record.entry, record.agent
-        if (found is None or found.admission.entry != (entry.pid, entry.start, entry.boot)
-                or found.worker is None or found.phase not in (("registered", "captured") if captured else ("registered",))):
+        if (
+            found is None
+            or found.admission.entry != (entry.pid, entry.start, entry.boot)
+            or found.worker is None
+            or found.phase not in (("registered", "captured") if captured else ("registered",))
+        ):
             raise StoreRefused("worker_mismatch")
         worker = found.worker
         if (worker.pid, worker.pgid, worker.start, worker.boot) != (agent.pid, agent.pgid, agent.start, agent.boot):
@@ -33,8 +37,7 @@ class StopStore(StoreConnection):
     def request(self, record: AgentStop) -> AgentStop:
         with self._connection(write=True) as con:
             self._fence(record, AttemptStore(lambda: con))
-            con.execute("INSERT INTO agent_stop (attempt_id,data) VALUES (?,?) ON CONFLICT DO NOTHING",
-                        (record.attempt_id, encode(record)))
+            con.execute("INSERT INTO agent_stop (attempt_id,data) VALUES (?,?) ON CONFLICT DO NOTHING", (record.attempt_id, encode(record)))
             row = con.execute("SELECT data FROM agent_stop WHERE attempt_id=?", (record.attempt_id,)).fetchone()
             found = None if row is None else stored(row[0])
             if found != record:
@@ -60,7 +63,8 @@ class StopStore(StoreConnection):
         result = AgentStop.model_validate({**previous.model_dump(), "phase": StopPhase.OBSERVED_GONE, "observed_gone_at": now})
         with self._connection(write=True) as con:
             self._fence(previous, AttemptStore(lambda: con), captured=True)
-            changed = con.execute("UPDATE agent_stop SET data=? WHERE attempt_id=? AND data=?",
-                                  (encode(result), previous.attempt_id, encode(previous))).rowcount
+            changed = con.execute(
+                "UPDATE agent_stop SET data=? WHERE attempt_id=? AND data=?", (encode(result), previous.attempt_id, encode(previous))
+            ).rowcount
             if changed != 1:
                 raise StoreRefused("changed")

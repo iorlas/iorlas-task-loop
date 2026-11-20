@@ -27,10 +27,17 @@ from taskloop.slot_release_store import ReleaseRow
 
 
 def saved_recovery(con: sqlite3.Connection, owner: Identity = OWNER) -> Intent:
-    value = Intent(key=KEY, generation=1, token="recovery", owner=owner, attempt_revision=4,
-                   session="saved", entry=ENTRY, worker=Identity(pid=42, pgid=43, start="old", boot="boot"),
-                   execution=Execution(drain=Boundary(generation=0, state=State.OPEN), phase=Phase.REGISTERED,
-                                       worker=WORKER, revision=5))
+    value = Intent(
+        key=KEY,
+        generation=1,
+        token="recovery",
+        owner=owner,
+        attempt_revision=4,
+        session="saved",
+        entry=ENTRY,
+        worker=Identity(pid=42, pgid=43, start="old", boot="boot"),
+        execution=Execution(drain=Boundary(generation=0, state=State.OPEN), phase=Phase.REGISTERED, worker=WORKER, revision=5),
+    )
     save(con, value, None)
     con.execute("UPDATE execution SET recovery_callback=?", (callback(value).model_dump_json(),))
     return value
@@ -40,8 +47,14 @@ def saved_recovery(con: sqlite3.Connection, owner: Identity = OWNER) -> Intent:
 @pytest.mark.parametrize("pid", [OWNER.pid, 42, WORKER.pid])
 @pytest.mark.parametrize("seen", ["alive", "unknown"])
 def test_recovery_process_or_group_blocks_every_initial_release(
-    registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles,
-    mode: str, pid: int, seen: ProcessSeen,
+    registered: sqlite3.Connection,
+    tmp_path: Path,
+    slot: FakeWorktree,
+    checkouts: Checkouts,
+    slot_files: SlotFiles,
+    mode: str,
+    pid: int,
+    seen: ProcessSeen,
 ) -> None:
     if mode == "reconcile":
         registered.execute("UPDATE attempt SET phase='dispatching',base_commit=slot_head")
@@ -63,12 +76,13 @@ def test_recovery_process_or_group_blocks_every_initial_release(
 
 
 def test_recovery_proof_deduplicates_identities(
-    registered: sqlite3.Connection, checkouts: Checkouts, slot_files: SlotFiles,
+    registered: sqlite3.Connection,
+    checkouts: Checkouts,
+    slot_files: SlotFiles,
 ) -> None:
     value = saved_recovery(registered)
     assert value.execution is not None
-    value = value.model_copy(update={"owner": value.worker,
-                                     "execution": value.execution.model_copy(update={"worker": value.worker})})
+    value = value.model_copy(update={"owner": value.worker, "execution": value.execution.model_copy(update={"worker": value.worker})})
     ports = Ports(registered, checkouts, slot_files)
     assert recovery_stopped(ports.setup_seen, value) is None
     assert ports.setup_asked == [value.worker.pid]
@@ -77,8 +91,13 @@ def test_recovery_proof_deduplicates_identities(
 @pytest.mark.parametrize("during_custody", [False, True])
 @pytest.mark.parametrize("seen", ["alive", "unknown"])
 def test_callers_recovery_group_blocks_release_even_when_liveness_changes_under_custody(
-    registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles,
-    during_custody: bool, seen: ProcessSeen,
+    registered: sqlite3.Connection,
+    tmp_path: Path,
+    slot: FakeWorktree,
+    checkouts: Checkouts,
+    slot_files: SlotFiles,
+    during_custody: bool,
+    seen: ProcessSeen,
 ) -> None:
     committed(registered, tmp_path, slot, checkouts, slot_files)
     owner = Identity(pid=ENTRY[0], pgid=17, start=ENTRY[1], boot=ENTRY[2])
@@ -97,11 +116,19 @@ def test_callers_recovery_group_blocks_release_even_when_liveness_changes_under_
 
 @pytest.mark.parametrize("corruption", ["json", "key", "execution"])
 def test_invalid_recovery_records_refuse_release_without_effects(
-    registered: sqlite3.Connection, checkouts: Checkouts, slot_files: SlotFiles, corruption: str,
+    registered: sqlite3.Connection,
+    checkouts: Checkouts,
+    slot_files: SlotFiles,
+    corruption: str,
 ) -> None:
     value = saved_recovery(registered)
-    data = ("{}" if corruption == "json" else value.model_copy(update={"key": replace(KEY, dispatch_token="other")}).model_dump_json()
-            if corruption == "key" else value.model_dump_json().replace('"revision":5', '"revision":9'))
+    data = (
+        "{}"
+        if corruption == "json"
+        else value.model_copy(update={"key": replace(KEY, dispatch_token="other")}).model_dump_json()
+        if corruption == "key"
+        else value.model_dump_json().replace('"revision":5', '"revision":9')
+    )
     registered.execute("UPDATE recovery_intent SET data=?", (data,))
     with pytest.raises(StoreUnavailable):
         RecoveryStore(lambda: registered).release_intent(KEY)
@@ -114,8 +141,13 @@ def test_invalid_recovery_records_refuse_release_without_effects(
 
 @pytest.mark.parametrize("moment", ["custody", "observation", "record"])
 def test_recovery_drift_retains_reservation_and_reports_completed_park(
-    registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles,
-    monkeypatch: pytest.MonkeyPatch, moment: str,
+    registered: sqlite3.Connection,
+    tmp_path: Path,
+    slot: FakeWorktree,
+    checkouts: Checkouts,
+    slot_files: SlotFiles,
+    monkeypatch: pytest.MonkeyPatch,
+    moment: str,
 ) -> None:
     x = committed(registered, tmp_path, slot, checkouts, slot_files)
     value = saved_recovery(registered)
@@ -152,8 +184,13 @@ def test_recovery_drift_retains_reservation_and_reports_completed_park(
 
 @pytest.mark.parametrize("interruption", ["park", "claim", "none"])
 def test_completed_recovery_release_reopens_and_preserves_work_evidence_and_reused_slot(
-    registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles,
-    monkeypatch: pytest.MonkeyPatch, interruption: str,
+    registered: sqlite3.Connection,
+    tmp_path: Path,
+    slot: FakeWorktree,
+    checkouts: Checkouts,
+    slot_files: SlotFiles,
+    monkeypatch: pytest.MonkeyPatch,
+    interruption: str,
 ) -> None:
     x = committed(registered, tmp_path, slot, checkouts, slot_files)
     value = saved_recovery(registered)
@@ -165,6 +202,7 @@ def test_completed_recovery_release_reopens_and_preserves_work_evidence_and_reus
     durable = {table: con.execute(f"SELECT * FROM {table}").fetchall() for table in ("execution", "recovery_intent")}
     ports = Ports(con, checkouts, slot_files)
     if interruption == "park":
+
         def interrupted(*_args: object, **_kwargs: object) -> NoReturn:
             raise KeyboardInterrupt
 

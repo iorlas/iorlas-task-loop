@@ -21,11 +21,13 @@ def test_canonical_content_normalizes_line_endings_and_source_and_relationship_s
     source = OWN.model_copy(update={"comments": (comment,)})
     reordered = LINK.model_copy(update={"relationships": ("blocks", "related", "blocks")})
     assert digest(task, (source, LINK)) == digest(
-        replace(task, requirements="one\ntwo\nthree", acceptance="done\n", title="Title\n"), (reordered, OWN))
+        replace(task, requirements="one\ntwo\nthree", acceptance="done\n", title="Title\n"), (reordered, OWN)
+    )
 
 
-@pytest.mark.parametrize("changed", [replace(TASK, title="changed"), replace(TASK, requirements="changed"),
-                                     replace(TASK, acceptance="changed")])
+@pytest.mark.parametrize(
+    "changed", [replace(TASK, title="changed"), replace(TASK, requirements="changed"), replace(TASK, acceptance="changed")]
+)
 def test_task_edits_change_evidence(changed: TaskInspection) -> None:
     assert digest(TASK, (OWN, LINK)) != digest(changed, (OWN, LINK))
 
@@ -45,16 +47,22 @@ def test_discussion_source_fields_change_evidence(field: str, value: object) -> 
 
 def test_comment_order_duplicates_whitespace_and_unicode_are_significant() -> None:
     other = COMMENT.model_copy(update={"text": "second"})
-    variants = [(COMMENT,), (COMMENT, COMMENT), (COMMENT, other), (other, COMMENT),
-                (COMMENT.model_copy(update={"text": COMMENT.text.rstrip()}),),
-                (COMMENT.model_copy(update={"text": "Décision\nKeep spacing  "}),)]
+    variants = [
+        (COMMENT,),
+        (COMMENT, COMMENT),
+        (COMMENT, other),
+        (other, COMMENT),
+        (COMMENT.model_copy(update={"text": COMMENT.text.rstrip()}),),
+        (COMMENT.model_copy(update={"text": "Décision\nKeep spacing  "}),),
+    ]
     assert len({digest(TASK, (OWN.model_copy(update={"comments": comments}),)).value for comments in variants}) == len(variants)
 
 
 def test_generated_comments_are_filtered_but_status_and_assignment_are_not_content() -> None:
     notification = DiscussionComment(author="taskloop", at="later", text="taskloop hold: failed:needs_owner", generated=True)
     assert digest(TASK, (OWN,)) == digest(
-        replace(TASK, status="held", assignee="elsewhere"), (OWN.model_copy(update={"comments": (COMMENT, notification)}),))
+        replace(TASK, status="held", assignee="elsewhere"), (OWN.model_copy(update={"comments": (COMMENT, notification)}),)
+    )
     assert empty(TASK, "").digest == digest(TASK, ())
     assert empty(TASK, "").digest != empty(replace(TASK, acceptance="new"), "").digest
 

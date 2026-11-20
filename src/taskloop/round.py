@@ -77,9 +77,20 @@ from taskloop.tracker import ACTOR, ReadyRows, TaskRow, ancestry, leaked_claim, 
 
 # A refusal that stops admission for the round: no slot is free, or the round's own inputs or the store are wrong. Any
 # other refusal (a claim elsewhere, a branch rule, a race that found an attempt another start made) is about one task.
-STOPS: Final = frozenset({
-    "no_free_slot", "checkout", "choices", "deadline", "expired", "constraint", "schema", "database", "input", "task",
-})
+STOPS: Final = frozenset(
+    {
+        "no_free_slot",
+        "checkout",
+        "choices",
+        "deadline",
+        "expired",
+        "constraint",
+        "schema",
+        "database",
+        "input",
+        "task",
+    }
+)
 # The advance's own stop: only words about the round's inputs, store or slots. `task`, `input`, `checkout` and
 # `constraint` come from one claimed task's stored facts (its tracker root, its repository, its row) and are its skip.
 ADVANCE_STOPS: Final = frozenset({"no_free_slot", "choices", "deadline", "expired", "database", "schema"})
@@ -154,8 +165,11 @@ def _request(request: NextRequest, task_id: str) -> StartRequest:
 
 
 def max_running_refused(count: int) -> Failed | None:
-    return None if count >= 1 else Failed(
-        "refused", "max_running", "The running limit must be at least 1 (tasks in flight before nothing starts)")
+    return (
+        None
+        if count >= 1
+        else Failed("refused", "max_running", "The running limit must be at least 1 (tasks in flight before nothing starts)")
+    )
 
 
 def run_round(ports: RoundPorts, request: NextRequest) -> Round | Failed:
@@ -166,7 +180,7 @@ def run_round(ports: RoundPorts, request: NextRequest) -> Round | Failed:
         return Failed("refused", Reason.DRAINING, BLOCKED)
     except Unobservable:
         return Failed("unavailable", "observe", "The calling process cannot be observed.")
-    except (sqlite3.Error, StoreUnavailable):
+    except sqlite3.Error, StoreUnavailable:
         return Failed("unavailable", "store", "The factory database is unavailable.")
 
 
@@ -174,8 +188,11 @@ def _run_round(ports: RoundPorts, request: NextRequest) -> Round | Failed:
     """One round: settle, advance, admit (while fewer than `max_running` tasks are in flight), publish, clear. A
     whole-round refusal (empty label, unreadable store) is `Failed`."""
     label = request.label.strip()
-    refused = (Failed("refused", "label", "An approval label is required (name the label); a round never takes every ready task")
-               if not label else minutes_refused(request.minutes) or max_running_refused(request.max_running))
+    refused = (
+        Failed("refused", "label", "An approval label is required (name the label); a round never takes every ready task")
+        if not label
+        else minutes_refused(request.minutes) or max_running_refused(request.max_running)
+    )
     if refused is not None:
         return refused
     request = replace(request, label=label)
@@ -198,11 +215,15 @@ def _run_round(ports: RoundPorts, request: NextRequest) -> Round | Failed:
     if isinstance(repo_id, Failed):
         return repo_id
     for_land = tuple(each for each in after_settle if repo_id is None or each.repo_id == repo_id)
-    finished = frozenset() if ports.stopping() else land_passed(
-        ports.landing, request.backlog, request.checkout, request.minutes, for_land, trail, partial(_held, ports.holding))
+    finished = (
+        frozenset()
+        if ports.stopping()
+        else land_passed(ports.landing, request.backlog, request.checkout, request.minutes, for_land, trail, partial(_held, ports.holding))
+    )
     reserve = int(any(each.next == "land" and each.task_id not in finished for each in for_land))
-    waiting = tuple(each for each in current if each.next == "advance" or _rerun(each)
-                    or (each.next == "repeat" and each.checks is not None))
+    waiting = tuple(
+        each for each in current if each.next == "advance" or _rerun(each) or (each.next == "repeat" and each.checks is not None)
+    )
     stopped = _advance(ports, request, waiting, trail, reserve)
     stopped = stopped or _admit(ports, request, after_settle, trail, reserve, finished)
     if stopped != INTERRUPTED:
@@ -279,10 +300,19 @@ def _released(ports: RoundPorts, each: AttemptView) -> Move:
     try:
         found = ports.starting.reader.attempt_of(each.backlog, each.task_id)
         if found is None or found[0].attempt_id != each.attempt_id:
-            return Move(each.task_id, "release", "refused:changed", each.attempt_id,
-                        "Another attempt is current since this round read the store.", each.step)
-        released = (ports.releaser.release(found[0], False) if each.result.status == "collected" and each.release is None
-                    else ports.releaser.reconcile(found[0]))
+            return Move(
+                each.task_id,
+                "release",
+                "refused:changed",
+                each.attempt_id,
+                "Another attempt is current since this round read the store.",
+                each.step,
+            )
+        released = (
+            ports.releaser.release(found[0], False)
+            if each.result.status == "collected" and each.release is None
+            else ports.releaser.reconcile(found[0])
+        )
     except StoreUnavailable as error:
         return Move(each.task_id, "release", "unavailable:store", each.attempt_id, str(error), each.step)
     detail = released.detail if isinstance(released, NotReleased) else ""
@@ -351,11 +381,11 @@ def _detail(result: Started | Failed) -> str:
 def _committed(ports: RoundPorts, backlog: str, each: AttemptView) -> Move:
     """`tl step commit`: the verdict, then the settled release and publication of a result accepted by factory commit."""
     if each.checks is None and each.result.status == "pending" and each.result.reason != PendingReason.COMMIT:
-        completed = (AttemptResult("unavailable", "store") if ports.completion is None
-                     else ports.completion(backlog, each.task_id, each.attempt_id))
+        completed = (
+            AttemptResult("unavailable", "store") if ports.completion is None else ports.completion(backlog, each.task_id, each.attempt_id)
+        )
         if completed.status != "pending" or completed.reason != PendingReason.COMMIT:
-            return Move(each.task_id, COMMIT, f"{completed.status}:{completed.reason}", each.attempt_id,
-                        completed.explanation, each.step)
+            return Move(each.task_id, COMMIT, f"{completed.status}:{completed.reason}", each.attempt_id, completed.explanation, each.step)
     committed = commit_task(ports.reads.store, ports.factory_commit, ports.releaser, ports.publisher, backlog, each.task_id)
     if isinstance(committed, CommittedTask):
         word = f"{committed.status} release={committed.release} branch={committed.published}"
@@ -397,8 +427,11 @@ def _advance(ports: RoundPorts, request: NextRequest, waiting: tuple[AttemptView
         done = each.attempt_id if each.checks is None else each.checks.row.after  # a re-run follows the implement attempt
         result = start(ports.starting, _request(request, each.task_id), advancing=done, rerun=each.checks is not None)
         if isinstance(result, Started):
-            trail.add(Move(each.task_id, "repeat" if each.next == "repeat" else "advance", result.status, result.attempt_id,
-                           step=result.step or ""))
+            trail.add(
+                Move(
+                    each.task_id, "repeat" if each.next == "repeat" else "advance", result.status, result.attempt_id, step=result.step or ""
+                )
+            )
             continue
         trail.unusable(each.task_id, result)  # the slots the refusal names: no_free_slot's, the one holding a held branch
         if result.reason == "no_free_slot":
@@ -415,8 +448,9 @@ def _advance(ports: RoundPorts, request: NextRequest, waiting: tuple[AttemptView
     return ""
 
 
-def _admit(ports: RoundPorts, request: NextRequest, current: tuple[AttemptView, ...], trail: Trail, reserve: int,
-           finished: frozenset[str]) -> str:
+def _admit(
+    ports: RoundPorts, request: NextRequest, current: tuple[AttemptView, ...], trail: Trail, reserve: int, finished: frozenset[str]
+) -> str:
     """Eligible ready tasks in priority order, one start each, until a slot, the in-flight bound (`max_running`) or the
     round's inputs run out; the word that stopped admission early ("" when the candidates ran out). With every slot
     reserved (`no_free_slot`, `slot_for_land`) or the bound reached (`max_running`): no tracker call."""

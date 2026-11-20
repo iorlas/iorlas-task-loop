@@ -70,7 +70,7 @@ def test_two_occurrences_per_module_pass() -> None:
 
 
 def test_docstrings_comments_bytes_and_fstring_text_are_excluded() -> None:
-    source = '''
+    source = """
 "same"
 class Reader:
     "same"
@@ -82,17 +82,20 @@ async def read():
 raw = [b'same', b'same', b'same']
 text = [f'same{1}', f'same{2}', f'same{3}']
 formatted = [f'{1:same}', f'{2:same}', f'{3:same}']
-'''
+"""
     assert_string_census(repeated_string_sites({"module.py": source}), {})
 
 
-@pytest.mark.parametrize("source", [
-    "items = [f\"{'same'}\", f\"{'same'}\", f\"{'same'}\"]",
-    "items = [f\"{1:{'same'}}\", f\"{2:{'same'}}\", f\"{3:{'same'}}\"]",
-    "items = ['sa' 'me', 's\\x61me', \"same\"]",
-    "def first():\n    return 'same'\ndef second():\n    return 'same'\nclass Reader:\n    text = 'same'",
-    "value = 1\n'same'\n'same'\n'same'",
-])
+@pytest.mark.parametrize(
+    "source",
+    [
+        "items = [f\"{'same'}\", f\"{'same'}\", f\"{'same'}\"]",
+        "items = [f\"{1:{'same'}}\", f\"{2:{'same'}}\", f\"{3:{'same'}}\"]",
+        "items = ['sa' 'me', 's\\x61me', \"same\"]",
+        "def first():\n    return 'same'\ndef second():\n    return 'same'\nclass Reader:\n    text = 'same'",
+        "value = 1\n'same'\n'same'\n'same'",
+    ],
+)
 def test_executable_literals_are_counted_by_decoded_value_across_the_module(source: str) -> None:
     sites = repeated_string_sites({"module.py": source})
     assert len(sites["module.py"]["same"]) == 3
@@ -100,13 +103,16 @@ def test_executable_literals_are_counted_by_decoded_value_across_the_module(sour
         assert_string_census(sites, {})
 
 
-@pytest.mark.parametrize("sources", [
-    {"module.py": "items = ['same', 'same', 'same', 'same']"},
-    {"module.py": "items = ['other', 'other', 'other']"},
-    {"moved.py": "items = ['same', 'same', 'same']"},
-    {"module.py": "items = ['same', 'same']"},
-    {},
-])
+@pytest.mark.parametrize(
+    "sources",
+    [
+        {"module.py": "items = ['same', 'same', 'same', 'same']"},
+        {"module.py": "items = ['other', 'other', 'other']"},
+        {"moved.py": "items = ['same', 'same', 'same']"},
+        {"module.py": "items = ['same', 'same']"},
+        {},
+    ],
+)
 def test_increased_changed_moved_or_stale_exceptions_fail(sources: dict[str, str]) -> None:
     with pytest.raises(AssertionError):
         assert_string_census(repeated_string_sites(sources), {"module.py": {"same": 3}})
@@ -122,14 +128,17 @@ def test_formatting_preserves_identity_and_resolved_counts_require_baseline_shri
         assert_string_census({}, {"module.py": {}})
 
 
-@pytest.mark.parametrize("document", [
-    '{"module.py": {"same": 0}}',
-    '{"module.py": {"same": -1}}',
-    '{"module.py": {"same": true}}',
-    '{"module.py": {"same": "3"}}',
-    '{"module.py": {"same": 3.5}}',
-    '{"module.py": ["same"]}',
-])
+@pytest.mark.parametrize(
+    "document",
+    [
+        '{"module.py": {"same": 0}}',
+        '{"module.py": {"same": -1}}',
+        '{"module.py": {"same": true}}',
+        '{"module.py": {"same": "3"}}',
+        '{"module.py": {"same": 3.5}}',
+        '{"module.py": ["same"]}',
+    ],
+)
 def test_exception_data_requires_nested_positive_integer_counts(document: str) -> None:
     with pytest.raises(ValidationError):
         CENSUS.validate_json(document)

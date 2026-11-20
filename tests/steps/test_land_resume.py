@@ -61,8 +61,12 @@ def test_ctrl_c_during_the_block_is_repeated_whole_by_the_rerun_with_a_renewed_d
     b.environment.process.script = []
     found = b.land()
     assert isinstance(found, Landed) and found.how == "pushed"
-    assert b.con.execute(RESULTS).fetchall() == [(1, "check", "passed"), (1, "test", "interrupted"), (2, "check", "passed"),
-                                                 (2, "test", "passed")]
+    assert b.con.execute(RESULTS).fetchall() == [
+        (1, "check", "passed"),
+        (1, "test", "interrupted"),
+        (2, "check", "passed"),
+        (2, "test", "passed"),
+    ]
     assert b.rows()[0].deadline == 1000.0 + 5 * 60 and b.rows()[0].validation == "passed"
 
 
@@ -144,8 +148,7 @@ def test_a_claim_lost_at_the_first_renewal_concludes_the_candidate_failed_and_re
 
 
 def test_no_free_slot_is_unavailable_and_writes_nothing(b: LandBench) -> None:
-    b.con.execute("INSERT INTO reservation (slot,repo_id,generation,attempt_id) SELECT 's1',repo_id,9,'other' FROM slot "
-                  "WHERE name='s1'")
+    b.con.execute("INSERT INTO reservation (slot,repo_id,generation,attempt_id) SELECT 's1',repo_id,9,'other' FROM slot WHERE name='s1'")
     assert word(b.land()) == ("unavailable", "no_free_slot") and b.rows() == ()
 
 

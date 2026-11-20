@@ -3,7 +3,6 @@ slot openers over `composition`'s real wiring. The attempt entry process never i
 
 import os
 import sqlite3
-import sys
 import time
 from collections.abc import Callable, Generator
 from contextlib import AbstractContextManager, contextmanager
@@ -67,6 +66,7 @@ from taskloop.round import NextRequest, RoundPorts, repository_of, run_round
 from taskloop.round_land import Landing
 from taskloop.rounds import RoundsPorts, inputs
 from taskloop.rounds_lock import RoundsLockUnavailable, RoundsRunning, hold
+from taskloop.rounds_wiring import say, transient, unlogged
 from taskloop.slot_files import RealSlotFiles
 from taskloop.slot_lock import probe, refused, repeating
 from taskloop.slot_release import SlotRelease
@@ -119,12 +119,21 @@ def open_reads(database: Path, artifacts: Path, views: GitViews) -> Generator[St
             yield con
         else:
             reader = _reader(con)
-            factory_commit = FactoryCommit(reader, views.checkouts, RealSlotFiles(), worker_gone, time.time, refused,
-                ids=NativeIds())  # never commits
+            factory_commit = FactoryCommit(
+                reader, views.checkouts, RealSlotFiles(), worker_gone, time.time, refused, ids=NativeIds()
+            )  # never commits
             seen = EvidenceFiles(artifacts).last_command
-            yield StatusPorts(reader, entry_seen, time.time, factory_commit.leftovers, current_boot, setup_seen, seen,
-                              recovery=recovery_reader(reader, time.time),
-                              policy=known_slot_mode(views.checkouts, RealSlotFiles()))
+            yield StatusPorts(
+                reader,
+                entry_seen,
+                time.time,
+                factory_commit.leftovers,
+                current_boot,
+                setup_seen,
+                seen,
+                recovery=recovery_reader(reader, time.time),
+                policy=known_slot_mode(views.checkouts, RealSlotFiles()),
+            )
 
 
 @contextmanager
@@ -145,23 +154,47 @@ def open_start(database: Path, artifacts: Path, views: GitViews) -> Generator[St
 def _starting(reader: AttemptStore, database: Path, artifacts: Path, store: Store, views: GitViews) -> StartPorts:
     admission, chain = open_admission(database, artifacts, views, store), open_chain(database, artifacts, views, store)
     launcher = open_launcher(database, artifacts, views)
-    repeat = StepRepeat(reader, open_factory_commit(database, store, views, artifacts), EvidenceFiles(artifacts), chain, launcher,
-                        worker_gone, entry_seen,
-                        time.time, repeating, ids=NativeIds(), discussion=open_discussion(database, store).for_task)
+    repeat = StepRepeat(
+        reader,
+        open_factory_commit(database, store, views, artifacts),
+        EvidenceFiles(artifacts),
+        chain,
+        launcher,
+        worker_gone,
+        entry_seen,
+        time.time,
+        repeating,
+        ids=NativeIds(),
+        discussion=open_discussion(database, store).for_task,
+    )
     releaser = open_checks_releaser(database, store, views)
     checks = ChecksPorts(open_checks_admission(database, views, store), open_checks_launcher(database, artifacts, views), releaser)
-    repair = CheckRepeat(CheckRepeatStore(lambda: store.shared_rw(database), store.begin_immediate), EvidenceFiles(artifacts),
-                         inspect_tracker_task, views.checkouts, RealSlotFiles(), probe,
-                         partial(GitProfileFiles, repos=views.checkouts), launcher, entry_seen, setup_seen, time.time, ids=NativeIds(),
-                         engine=installed_digest(), discussion=open_discussion(database, store).for_task)
+    repair = CheckRepeat(
+        CheckRepeatStore(lambda: store.shared_rw(database), store.begin_immediate),
+        EvidenceFiles(artifacts),
+        inspect_tracker_task,
+        views.checkouts,
+        RealSlotFiles(),
+        probe,
+        partial(GitProfileFiles, repos=views.checkouts),
+        launcher,
+        entry_seen,
+        setup_seen,
+        time.time,
+        ids=NativeIds(),
+        engine=installed_digest(),
+        discussion=open_discussion(database, store).for_task,
+    )
     answers = AnswerRepairRouting(reader, open_answer_repair(database, artifacts, store), launcher)
-    return StartPorts(reader, admission, launcher, time.time, repeat, open_advance(database, artifacts, views, store),
-                      checks, repair, answers)
+    return StartPorts(
+        reader, admission, launcher, time.time, repeat, open_advance(database, artifacts, views, store), checks, repair, answers
+    )
 
 
 @contextmanager
-def open_next(database: Path, artifacts: Path, views: GitViews, tracker_root: str,
-              store: Store | None = None, registration: Store | None = None) -> Generator[RoundPorts | Failed]:
+def open_next(
+    database: Path, artifacts: Path, views: GitViews, tracker_root: str, store: Store | None = None, registration: Store | None = None
+) -> Generator[RoundPorts | Failed]:
     """`tl rounds once`: the database guard first, then the tracker's read port at the explicit root (an unusable root
     refuses `tracker_root`), the start, commit, release, publish and hold ports on one shared writer (closed here; the
     hold's abandon uses the release ports `tl step abandon` uses, its tracker writes `tracker_holds`), the reads
@@ -180,22 +213,44 @@ def open_next(database: Path, artifacts: Path, views: GitViews, tracker_root: st
                 return
             reader = _reader(con)
             leftovers = FactoryCommit(reader, views.checkouts, RealSlotFiles(), worker_gone, time.time, refused, ids=NativeIds()).leftovers
-            reads = StatusPorts(reader, entry_seen, time.time, leftovers, current_boot, setup_seen,
-                                recovery=recovery_reader(reader, time.time),
-                                policy=known_slot_mode(views.checkouts, RealSlotFiles()))
+            reads = StatusPorts(
+                reader,
+                entry_seen,
+                time.time,
+                leftovers,
+                current_boot,
+                setup_seen,
+                recovery=recovery_reader(reader, time.time),
+                policy=known_slot_mode(views.checkouts, RealSlotFiles()),
+            )
             releaser = open_releaser(database, store, views)
-            holding = HoldPorts(HoldStore(lambda: store.shared_rw(database), store.begin_immediate), reader, tracker_holds(), releaser,
-                                open_checks_releaser(database, store, views), time.time, EvidenceFiles(artifacts),
-                                partial(current_view, reads))
+            holding = HoldPorts(
+                HoldStore(lambda: store.shared_rw(database), store.begin_immediate),
+                reader,
+                tracker_holds(),
+                releaser,
+                open_checks_releaser(database, store, views),
+                time.time,
+                EvidenceFiles(artifacts),
+                partial(current_view, reads),
+            )
             with open_land(database, artifacts, views, store, registration) as lands:  # the land's ports, the ones `tl land run` opens
                 landing = None if isinstance(lands, Failed) else Landing(land_mode(views.remotes), partial(_landed, lands))
-                yield RoundPorts(reads, _starting(reader, database, artifacts, store, views),
-                                 open_factory_commit(database, store, views, artifacts), releaser,
-                                 open_publisher(database, store, views, artifacts), holding, ready, EvidenceFiles(artifacts).log_round,
-                                 repository=partial(repository_of, views.checkouts), landing=landing,
-                                 completion=open_completion(database, artifacts, views),
-                                 drain_store=DrainStore(lambda: store.shared_rw(database),
-                                     ids=NativeIds()), ids=NativeIds())
+                yield RoundPorts(
+                    reads,
+                    _starting(reader, database, artifacts, store, views),
+                    open_factory_commit(database, store, views, artifacts),
+                    releaser,
+                    open_publisher(database, store, views, artifacts),
+                    holding,
+                    ready,
+                    EvidenceFiles(artifacts).log_round,
+                    repository=partial(repository_of, views.checkouts),
+                    landing=landing,
+                    completion=open_completion(database, artifacts, views),
+                    drain_store=DrainStore(lambda: store.shared_rw(database), ids=NativeIds()),
+                    ids=NativeIds(),
+                )
         finally:
             if owned:
                 store.close_shared()
@@ -210,8 +265,14 @@ def _landed(ports: LandPorts, request: LandRequest) -> How | Failed:
 
 
 def one_round(
-    database: Path, artifacts: Path, views: GitViews, request: NextRequest, stopping: Callable[[], bool], generation: int | None = None,
-    store: Store | None = None, registration: Store | None = None,
+    database: Path,
+    artifacts: Path,
+    views: GitViews,
+    request: NextRequest,
+    stopping: Callable[[], bool],
+    generation: int | None = None,
+    store: Store | None = None,
+    registration: Store | None = None,
 ) -> Callable[[Quiet], Round | Failed]:
     """One `tl rounds start` round: `open_next`'s fresh ports, its `stopping` the rounds process's flag. A factory.db
     that exists but cannot be opened now (locked, busy) is `unavailable:store`, so the rounds back off; an absent one stays
@@ -220,16 +281,10 @@ def one_round(
     def once(quiet: Quiet) -> Round | Failed:
         with open_next(database, artifacts, views, request.tracker_root, store, registration) as ports:
             if isinstance(ports, Failed):
-                return _transient(ports, database)
+                return transient(ports, database)
             return run_round(replace(ports, stopping=stopping, generation=generation), replace(request, quiet=quiet))
 
     return once
-
-
-def _transient(refused: Failed, database: Path) -> Failed:
-    if refused.reason == "database" and database.exists():
-        return Failed("unavailable", "store", "factory.db exists but could not be opened now")
-    return refused
 
 
 def _slot_use(database: Path) -> Callable[[], SlotUse | None]:
@@ -245,17 +300,6 @@ def _slot_use(database: Path) -> Callable[[], SlotUse | None]:
                 return None
 
     return read
-
-
-def _unlogged(artifacts: Path) -> Callable[[], None]:
-    def warn() -> None:
-        print(f"Log: not written ({artifacts / 'rounds.log'})", file=sys.stderr)
-
-    return warn
-
-
-def _say(text: str) -> None:
-    os.write(2, (text + "\n").encode())  # unbuffered: the SIGINT handler may say it while the process writes stderr
 
 
 def _rounds_lock(database: Path, request: NextRequest) -> Callable[[], None] | Failed:
@@ -275,9 +319,13 @@ def _rounds_lock(database: Path, request: NextRequest) -> Callable[[], None] | F
 
 
 @contextmanager
-def open_rounds(database: Path, artifacts: Path, views: GitViews, request: NextRequest,
-                install: Callable[[Callable[[str], object]], AbstractContextManager[Interrupts]] = installed,
-                ) -> Generator[RoundsPorts | Ended | Failed]:
+def open_rounds(
+    database: Path,
+    artifacts: Path,
+    views: GitViews,
+    request: NextRequest,
+    install: Callable[[Callable[[str], object]], AbstractContextManager[Interrupts]] = installed,
+) -> Generator[RoundsPorts | Ended | Failed]:
     """`tl rounds start`: refused before any round (inputs, `database`/`schema`, `rounds_running`), else the rounds lock,
     then the SIGINT and SIGTERM handlers (`interrupts`) for the block's life, per-round `open_next` ports, the wall and monotonic clocks,
     `time.sleep`, the round log and the `Log: not written` warning on stderr. `install` is the real handler unless a test passes its own."""
@@ -301,17 +349,29 @@ def open_rounds(database: Path, artifacts: Path, views: GitViews, request: NextR
                 elif started.conclusion is Conclusion.INTERRUPTED:
                     yield Ended(request.backlog, "abrupt", started.detail)
                 else:
-                    yield Failed("refused" if started.conclusion is Conclusion.REFUSED else "unavailable",
-                                 Reason.DRAINING, started.detail)
+                    yield Failed("refused" if started.conclusion is Conclusion.REFUSED else "unavailable", Reason.DRAINING, started.detail)
                 return
             assert not isinstance(draining, Result)
+
             def fenced() -> bool:
                 current = draining.store.boundary()
                 return current.state is not State.OPEN or current.generation != started.generation
-            with install(_say) as interrupts:
+
+            with install(say) as interrupts:
                 rounding = one_round(database, artifacts, views, request, interrupts.stopping, started.generation, store, registration)
-                yield RoundsPorts(rounding, _slot_use(database), time.time, time.monotonic,
-                             time.sleep, log, _unlogged(artifacts), interrupts.stopping, pid, not interrupts.ignored, fenced)
+                yield RoundsPorts(
+                    rounding,
+                    _slot_use(database),
+                    time.time,
+                    time.monotonic,
+                    time.sleep,
+                    log,
+                    unlogged(artifacts),
+                    interrupts.stopping,
+                    pid,
+                    not interrupts.ignored,
+                    fenced,
+                )
     finally:
         registration.close_shared()
         store.close_shared()
@@ -319,8 +379,9 @@ def open_rounds(database: Path, artifacts: Path, views: GitViews, request: NextR
 
 
 @contextmanager
-def open_commit(database: Path, views: GitViews, artifacts: Path
-                ) -> Generator[tuple[AttemptStore, FactoryCommit, SlotRelease, BranchPublish] | Failed]:
+def open_commit(
+    database: Path, views: GitViews, artifacts: Path
+) -> Generator[tuple[AttemptStore, FactoryCommit, SlotRelease, BranchPublish] | Failed]:
     """Open guarded factory commit, release and publication over one shared writer."""
     store = Store(SCHEMA)
     with _read_only(database) as con:
@@ -328,8 +389,12 @@ def open_commit(database: Path, views: GitViews, artifacts: Path
             if isinstance(con, Failed):
                 yield con
             else:
-                yield (_reader(con), open_factory_commit(database, store, views, artifacts), open_releaser(database, store, views),
-                       open_publisher(database, store, views, artifacts))
+                yield (
+                    _reader(con),
+                    open_factory_commit(database, store, views, artifacts),
+                    open_releaser(database, store, views),
+                    open_publisher(database, store, views, artifacts),
+                )
         finally:
             store.close_shared()
 
@@ -352,8 +417,11 @@ def open_release(database: Path, views: GitViews) -> Generator[tuple[AttemptStor
     store = Store(SCHEMA)
     with _read_only(database) as con:
         try:
-            yield con if isinstance(con, Failed) else (
-                _reader(con), open_releaser(database, store, views), open_checks_releaser(database, store, views))
+            yield (
+                con
+                if isinstance(con, Failed)
+                else (_reader(con), open_releaser(database, store, views), open_checks_releaser(database, store, views))
+            )
         finally:
             store.close_shared()
 
@@ -380,8 +448,9 @@ def adopt(database: Path, checkout: Path, root: Path, count: int, git: SlotGit) 
 
 
 @contextmanager
-def open_land(database: Path, artifacts: Path, views: GitViews, store: Store | None = None,
-              registration: Store | None = None) -> Generator[LandPorts | Failed]:
+def open_land(
+    database: Path, artifacts: Path, views: GitViews, store: Store | None = None, registration: Store | None = None
+) -> Generator[LandPorts | Failed]:
     """Wire land after its database guard. Neither entry may import land (`entries-never-land`)."""
     with _read_only(database) as con:
         if isinstance(con, Failed):

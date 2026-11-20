@@ -35,13 +35,25 @@ def test_effective_ddl_matches_its_version_pin() -> None:
     assert_pinned_ddl(SCHEMA)
 
 
-@pytest.mark.parametrize(("kind", "reason", "reused", "valid"), [
-    ("committed", None, 0, True), ("committed", None, 1, True), ("rejected", "paths", 0, True),
-    ("invalid", None, 0, False), ("committed", "paths", 0, False), ("rejected", None, 0, False),
-    ("rejected", "paths", 1, False), ("committed", None, 2, False),
-])
+@pytest.mark.parametrize(
+    ("kind", "reason", "reused", "valid"),
+    [
+        ("committed", None, 0, True),
+        ("committed", None, 1, True),
+        ("rejected", "paths", 0, True),
+        ("invalid", None, 0, False),
+        ("committed", "paths", 0, False),
+        ("rejected", None, 0, False),
+        ("rejected", "paths", 1, False),
+        ("committed", None, 2, False),
+    ],
+)
 def test_factory_commit_verdict_constraints_at_schema_35(
-    registered: sqlite3.Connection, kind: str, reason: str | None, reused: int, valid: bool,
+    registered: sqlite3.Connection,
+    kind: str,
+    reason: str | None,
+    reused: int,
+    valid: bool,
 ) -> None:
     assert SCHEMA.version == 35
     registered.execute(
@@ -70,7 +82,8 @@ def test_factory_commit_foreign_keys(registered: sqlite3.Connection) -> None:
         )
     with pytest.raises(sqlite3.IntegrityError):
         registered.execute(
-            "INSERT INTO published_branch VALUES ('attempt','dispatch',1,?,?,10)", ("e" * 40, "e" * 40),
+            "INSERT INTO published_branch VALUES ('attempt','dispatch',1,?,?,10)",
+            ("e" * 40, "e" * 40),
         )
 
 
@@ -89,14 +102,25 @@ def test_usage_completeness_is_a_nullable_boolean(registered: sqlite3.Connection
             registered.execute("UPDATE execution SET usage_incomplete=?", (value,))
 
 
-@pytest.mark.parametrize(("kind", "failure", "valid"), [
-    ("validation_pending", None, True), ("valid", None, True),
-    ("missing", None, False), ("json_invalid", None, False), ("schema_invalid", None, False),
-    ("valid", '{}', False), ("validation_pending", '{}', False), ("schema_invalid", 'not json', False),
-    ("schema_invalid", '{"rule":"shape","explanation":"Object required"}', True),
-])
+@pytest.mark.parametrize(
+    ("kind", "failure", "valid"),
+    [
+        ("validation_pending", None, True),
+        ("valid", None, True),
+        ("missing", None, False),
+        ("json_invalid", None, False),
+        ("schema_invalid", None, False),
+        ("valid", "{}", False),
+        ("validation_pending", "{}", False),
+        ("schema_invalid", "not json", False),
+        ("schema_invalid", '{"rule":"shape","explanation":"Object required"}', True),
+    ],
+)
 def test_answer_failure_storage_requires_detail_only_for_rejections(
-    registered: sqlite3.Connection, kind: str, failure: str | None, valid: bool,
+    registered: sqlite3.Connection,
+    kind: str,
+    failure: str | None,
+    valid: bool,
 ) -> None:
     registered.execute(
         """INSERT INTO execution (attempt_id,dispatch_token,generation,timed_out,work,stands,stdout_path,stdout_digest,
@@ -116,10 +140,13 @@ def test_ddl_change_without_a_version_bump_fails_the_guard() -> None:
         assert_pinned_ddl(changed)
 
 
-@pytest.mark.parametrize("value,valid", [(None, True), (1, True), (100000, True), (0, False), (-1, False),
-                                        (0.5, False), ("invalid", False)])
+@pytest.mark.parametrize(
+    "value,valid", [(None, True), (1, True), (100000, True), (0, False), (-1, False), (0.5, False), ("invalid", False)]
+)
 def test_attempt_compaction_storage_requires_a_positive_integer_or_null(
-    registered: sqlite3.Connection, value: object, valid: bool,
+    registered: sqlite3.Connection,
+    value: object,
+    valid: bool,
 ) -> None:
     if valid:
         registered.execute("UPDATE attempt SET compaction_token_limit=?", (value,))
@@ -164,7 +191,9 @@ def test_current_reads_the_borrowed_connection_without_changing_it(version: int)
 
 @pytest.mark.parametrize("contents", ["missing", "corrupt", "version"])
 def test_refusal_diagnosis_is_read_only_and_closes_its_connection(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, contents: str,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    contents: str,
 ) -> None:
     path = tmp_path / "factory.db"
     if contents == "corrupt":

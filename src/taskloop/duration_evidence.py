@@ -32,7 +32,10 @@ class DurationSample(BaseModel):
 
 class DurationObserver:
     def __init__(
-        self, identity: Callable[[], str], clock: Callable[[], float], write: Callable[[DurationSample], None],
+        self,
+        identity: Callable[[], str],
+        clock: Callable[[], float],
+        write: Callable[[DurationSample], None],
         invalidate: Callable[[], None],
     ) -> None:
         self.clock, self.write, self.invalidate = clock, write, invalidate
@@ -54,8 +57,9 @@ class DurationObserver:
             self.invalidate()
 
     def _save(self, state: DurationState) -> None:
-        sample = DurationSample(execution=self._identity, elapsed=self._last, command_offset=self._command,
-                                number=self._number, state=state)
+        sample = DurationSample(
+            execution=self._identity, elapsed=self._last, command_offset=self._command, number=self._number, state=state
+        )
         try:
             self.write(sample)
         except Exception:

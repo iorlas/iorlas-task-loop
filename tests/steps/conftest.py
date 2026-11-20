@@ -165,7 +165,9 @@ def checking(factory: sqlite3.Connection) -> sqlite3.Connection:
             'digest',1,'m','e','{"harness":"codex","sandbox":"workspace-write"}',100,'captured',?,?,1,2,?,?,
         'abababababababababababababababababababababababababababababababab',
         (SELECT digest FROM workflow_file),
-        'eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',1.0)""", ("b" * 40, X, D, "a" * 40))
+        'eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',1.0)""",
+            ("b" * 40, X, D, "a" * 40),
+        )
         factory.execute("INSERT INTO slot_release VALUES ('implement','implement-token',1,?,1,'kept')", (D,))
         factory.execute("INSERT INTO reservation VALUES ('s2','r',1,'checks')")
         check_store.insert(factory, check_store.ChecksAdmitted(CHECKS, "implement", 1, "s2", D, TARGET, REQUIRED, 100.0))
@@ -177,12 +179,16 @@ def landing(checking: sqlite3.Connection) -> sqlite3.Connection:
     """`checking` with `CHECKS` concluded `passed` and released (parked at D, slot s2 free), and its land candidate 1
     `CANDIDATE` (O `ORIGIN`, S `SQUASH`, S's tree not X's) pending on slot s1 at D, deadline 300, with its held reservation."""
     with begin_immediate(checking):
-        checking.execute("""UPDATE checks_attempt SET phase='concluded',conclusion='passed',concluded_at=5,released_at=6,parked=?
-        WHERE attempt_id='checks'""", (D,))
+        checking.execute(
+            """UPDATE checks_attempt SET phase='concluded',conclusion='passed',concluded_at=5,released_at=6,parked=?
+        WHERE attempt_id='checks'""",
+            (D,),
+        )
         checking.execute("DELETE FROM reservation WHERE attempt_id='checks'")
         checking.execute("INSERT INTO reservation VALUES ('s1','r',1,'candidate')")
-        land_store.insert(checking, land_store.LandAdmitted(CANDIDATE, "checks", 1, ORIGIN, SQUASH, False, REQUIRED, "s1", D, 300.0,
-                                                            None, 10.0))
+        land_store.insert(
+            checking, land_store.LandAdmitted(CANDIDATE, "checks", 1, ORIGIN, SQUASH, False, REQUIRED, "s1", D, 300.0, None, 10.0)
+        )
     return checking
 
 
@@ -210,8 +216,9 @@ def on_slot(tmp_path: Path, repo: FakeRepo, slot: FakeWorktree) -> Path:
             'digest',1,'m','e','{"harness":"codex","sandbox":"workspace-write"}',100,'captured',?,?,1,2,?,?,
         'abababababababababababababababababababababababababababababababab',
         (SELECT digest FROM workflow_file),
-        'eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',1.0)""", (repo_id,
-            "b" * 40, made.sha, d, "a" * 40))
+        'eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',1.0)""",
+            (repo_id, "b" * 40, made.sha, d, "a" * 40),
+        )
         con.execute("INSERT INTO slot_release VALUES ('implement','implement-token',1,?,1,'kept')", (d,))
         con.execute("INSERT INTO reservation VALUES ('s1',?,1,'checks')", (repo_id,))
         check_store.insert(con, check_store.ChecksAdmitted(CHECKS, "implement", 1, "s1", d, made.sha, REQUIRED, 100.0))
@@ -231,11 +238,15 @@ def candidate_on_slot(on_slot: Path, repo: FakeRepo, slot: FakeWorktree) -> tupl
     d, con = head(slot), Store(SCHEMA).open_rw(on_slot)
     assert con is not None
     with begin_immediate(con):
-        con.execute("""UPDATE checks_attempt SET phase='concluded',conclusion='passed',concluded_at=5,released_at=6,parked=?
-        WHERE attempt_id='checks'""", (d,))
+        con.execute(
+            """UPDATE checks_attempt SET phase='concluded',conclusion='passed',concluded_at=5,released_at=6,parked=?
+        WHERE attempt_id='checks'""",
+            (d,),
+        )
         con.execute("UPDATE reservation SET attempt_id='candidate' WHERE attempt_id='checks'")
-        land_store.insert(con, land_store.LandAdmitted(CANDIDATE, "checks", 1, ORIGIN, made.sha, False, REQUIRED, "s1", d, 300.0,
-                                                       None, 10.0))
+        land_store.insert(
+            con, land_store.LandAdmitted(CANDIDATE, "checks", 1, ORIGIN, made.sha, False, REQUIRED, "s1", d, 300.0, None, 10.0)
+        )
     con.close()
     return on_slot, made.sha
 
@@ -278,8 +289,9 @@ def done(tmp_path: Path, repo: FakeRepo, slot: FakeWorktree) -> Done:
             'digest',1,'m','e','{"harness":"codex","sandbox":"workspace-write"}',100,'captured',?,?,1,2,?,?,
         'abababababababababababababababababababababababababababababababab',
         (SELECT digest FROM workflow_file),
-        'eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',1.0)""", (repo_id,
-            target.sha, x.sha, d, target.sha))
+        'eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',1.0)""",
+            (repo_id, target.sha, x.sha, d, target.sha),
+        )
         for statement in DONE:
             con.execute(statement)
         con.execute("INSERT INTO slot_release VALUES ('implement','implement-token',1,?,4,'kept')", (d,))

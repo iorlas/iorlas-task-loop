@@ -58,8 +58,17 @@ def test_reused_cards_have_names_and_share_pointer_and_keyboard_activation() -> 
     assert "activateCard(node, () => openDrawer(t.id))" in function(app, "newCard")
     assert "cards.set(t.id, newCard(t))" in function(app, "renderBoard")
     activation = function(accessibility, "activateCard")
-    for contract in ('"role", "button"', "node.tabIndex = 0", '"click"', '"keydown"', '["Enter", " "]',
-                     "event.preventDefault()", "!event.repeat", "nested(event.target)", "target.closest"):
+    for contract in (
+        '"role", "button"',
+        "node.tabIndex = 0",
+        '"click"',
+        '"keydown"',
+        '["Enter", " "]',
+        "event.preventDefault()",
+        "!event.repeat",
+        "nested(event.target)",
+        "target.closest",
+    ):
         assert contract in activation
     assert activation.count("activate()") == 2
 
@@ -80,8 +89,13 @@ def test_closed_dialog_is_named_and_excluded_from_focus_until_reveal() -> None:
     assert opening.index("reveal()") < opening.index("await source.detail(id)")
     assert 'openDialog($("drawer"))' in function(drawer, "reveal")
     opening = function(accessibility, "openDialog")
-    for contract in ("invoker = document.activeElement", "node.inert = true", "drawer.inert = false",
-                     'setAttribute("aria-hidden", "false")', "drawer.focus()"):
+    for contract in (
+        "invoker = document.activeElement",
+        "node.inert = true",
+        "drawer.inert = false",
+        'setAttribute("aria-hidden", "false")',
+        "drawer.focus()",
+    ):
         assert contract in opening
 
 
@@ -93,12 +107,26 @@ def test_dialog_dismissal_bounds_focus_and_returns_to_invoker_or_screen() -> Non
     assert "closeButton(closeDrawer)" in function(drawer, "showError")
     assert 'closeDialog($("drawer"))' in function(drawer, "closeDrawer")
     trapping = function(accessibility, "initDialog")
-    for contract in ('event.key === "Escape"', "close()", 'event.key !== "Tab"', "event.shiftKey",
-                     "nodes.length - 1", "index === 0", "event.preventDefault()", ".focus()"):
+    for contract in (
+        'event.key === "Escape"',
+        "close()",
+        'event.key !== "Tab"',
+        "event.shiftKey",
+        "nodes.length - 1",
+        "index === 0",
+        "event.preventDefault()",
+        ".focus()",
+    ):
         assert contract in trapping
     closing = function(accessibility, "closeDialog")
-    for contract in ("drawer.inert = true", 'setAttribute("aria-hidden", "true")', "node.inert = inert",
-                     "invoker?.isConnected && available(invoker)", 'getElementById("nav-board")', ")?.focus()"):
+    for contract in (
+        "drawer.inert = true",
+        'setAttribute("aria-hidden", "true")',
+        "node.inert = inert",
+        "invoker?.isConnected && available(invoker)",
+        'getElementById("nav-board")',
+        ")?.focus()",
+    ):
         assert contract in closing
 
 
@@ -107,9 +135,16 @@ def test_redraws_preserve_focus_and_keep_stale_reply_guards() -> None:
     assert 'preserveDialogFocus($("drawer"), renderContent)' in function(drawer, "render")
     assert "preserveDialogFocus" in function(drawer, "showError")
     preservation = function(accessibility, "preserveDialogFocus")
-    for contract in ("drawer.contains(active)", "focusKey(active)", "update()", "!drawer.inert",
-                     'getAttribute("aria-hidden") === "false"', "focusKey(node) === key", "replacement ?? drawer",
-                     "preventScroll: true"):
+    for contract in (
+        "drawer.contains(active)",
+        "focusKey(active)",
+        "update()",
+        "!drawer.inert",
+        'getAttribute("aria-hidden") === "false"',
+        "focusKey(node) === key",
+        "replacement ?? drawer",
+        "preventScroll: true",
+    ):
         assert contract in preservation
     assert "node.id ||" in accessibility
     assert "open !== mine" in function(drawer, "openDrawer")
@@ -123,11 +158,11 @@ def test_dynamic_tabs_cover_tracker_empty_and_result_only_views() -> None:
     drawer, accessibility = source("drawer.js"), source("accessibility.js")
     rendering = function(drawer, "renderContent")
     assert 'tabBar("drawer-view", "Task views"' in rendering
-    assert 'tabPanel(taskView(open.tracker,' in rendering
+    assert "tabPanel(taskView(open.tracker," in rendering
     assert '"Not started: no attempt yet."), "drawer-view", view)' in rendering
     assert 'tabPanel(body, "drawer-view", view)' in rendering
     pane = function(drawer, "pane")
-    assert 'if (a.step === COMMIT.id) wrap.append(content);\n  else {' in pane
+    assert "if (a.step === COMMIT.id) wrap.append(content);\n  else {" in pane
     assert 'tabBar("attempt-body", "Attempt output"' in pane
     assert 'tabPanel(content, "attempt-body", tab)' in pane
     bar, panel = function(accessibility, "tabBar"), function(accessibility, "tabPanel")
@@ -147,9 +182,11 @@ def test_dynamic_tabs_cover_tracker_empty_and_result_only_views() -> None:
 
 def test_shared_accessibility_module_is_served_and_imported_by_both_consumers() -> None:
     module = ast.parse((ROOT / "src/taskloop/dash_server.py").read_text())
-    pages = next(ast.literal_eval(node.value) for node in module.body
-                 if isinstance(node, ast.Assign) and any(isinstance(target, ast.Name) and target.id == "PAGES"
-                                                        for target in node.targets))
+    pages = next(
+        ast.literal_eval(node.value)
+        for node in module.body
+        if isinstance(node, ast.Assign) and any(isinstance(target, ast.Name) and target.id == "PAGES" for target in node.targets)
+    )
     assert pages["accessibility.js"] == "accessibility.js"
     for consumer in ("app.js", "drawer.js"):
         assert 'from "./accessibility.js"' in source(consumer)
@@ -162,7 +199,7 @@ def test_rail_indicators_include_visible_state_and_verdict_words() -> None:
     assert 'btn.append(el("span", `block text-[11px] ${st.text}`, st.label))' in row
     assert "commitButton(factoryCommit, selected, select, a)" in row
     factory_commit = function(rail, "commitButton")
-    assert '`${v.mark} ${v.label}`' in factory_commit
+    assert "`${v.mark} ${v.label}`" in factory_commit
     assert "truncate" not in factory_commit and "sr-only" not in factory_commit
     history = function(rail, "summary")
     assert "verdict(factoryCommit)" in history and "STATE[a.state].label" in history
@@ -173,7 +210,7 @@ def test_rail_indicators_include_visible_state_and_verdict_words() -> None:
 def test_all_event_kind_glyphs_have_visible_words_after_insert_or_replace() -> None:
     script = source("lines.js")
     row = function(script, "line")
-    assert '`${KIND[e.type]} ${WORD[e.type]}`' in row
+    assert "`${KIND[e.type]} ${WORD[e.type]}`" in row
     assert "row.append(at, kind, content, right)" in row
     assert "sr-only" not in row
     assert "list.append(line(e, a," in function(script, "lines")

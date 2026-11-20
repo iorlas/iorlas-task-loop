@@ -92,10 +92,21 @@ def _execute(ports: Ports, record: Record) -> Result:
         fence()
         settings = SetupFor(record.key, target.slot, target.target, None, target.deadline, True, fence)
         prepared = Prepared(target.target or target.source, target.gitdir, target.root)
-        stopped = ports.environment.prepare_for(settings, prepared, ports.renew, ports.credentials[1],
-                    probe=None if ports.probe is None else (ports.probe, ports.credentials[1]))
-        return None if stopped is None else Unavailable(reason=Reason.UNKNOWN,
-                    explanation=f"The merge environment is waiting: {stopped.status}:{stopped.reason}. {stopped.explanation}")
+        stopped = ports.environment.prepare_for(
+            settings,
+            prepared,
+            ports.renew,
+            ports.credentials[1],
+            probe=None if ports.probe is None else (ports.probe, ports.credentials[1]),
+        )
+        return (
+            None
+            if stopped is None
+            else Unavailable(
+                reason=Reason.UNKNOWN,
+                explanation=f"The merge environment is waiting: {stopped.status}:{stopped.reason}. {stopped.explanation}",
+            )
+        )
 
     resolution = Resolution(ports.merges, ports.agent, ports.evidence, ports.run, ports.gone, ports.clock, fence)
     result = Merge(ports.merges, ports.checkouts, ports.remotes, ports.files, ports.clock, setup, resolution, fence).resume(work)
@@ -115,8 +126,9 @@ def _saved_result(ports: Ports, record: Record, work: Work, fence: Callable[[], 
             raise StoreRefused("merge_changed")
 
     if work.phase is Phase.COMPLETE:
-        result = Completed(commit=work.result or work.source, source=work.source, target=work.target or work.source,
-                           explanation=work.explanation)
+        result = Completed(
+            commit=work.result or work.source, source=work.source, target=work.target or work.source, explanation=work.explanation
+        )
     elif work.phase is Phase.TERMINAL:
         result = Terminal(reason=work.reason or Reason.INVALID, explanation=work.explanation)
     else:
@@ -141,8 +153,21 @@ def _saved_result(ports: Ports, record: Record, work: Work, fence: Callable[[], 
 
 
 def _work(record: Record, state: SlotState) -> Work:
-    return Work(attempt_id=record.key.attempt_id, dispatch_token=record.key.dispatch_token,
-                generation=record.key.reservation_generation, task_id=record.request.task_id, repo_id=record.request.repo_id,
-                root=state.root, slot=Path(record.slot_path), gitdir=state.gitdir, base=record.base,
-                source=record.request.checked, target=record.request.target, branch=None, deadline=record.request.deadline,
-                setting=record.inputs.setting, input_path=record.inputs.input_ref.path, input_digest=record.inputs.input_ref.digest)
+    return Work(
+        attempt_id=record.key.attempt_id,
+        dispatch_token=record.key.dispatch_token,
+        generation=record.key.reservation_generation,
+        task_id=record.request.task_id,
+        repo_id=record.request.repo_id,
+        root=state.root,
+        slot=Path(record.slot_path),
+        gitdir=state.gitdir,
+        base=record.base,
+        source=record.request.checked,
+        target=record.request.target,
+        branch=None,
+        deadline=record.request.deadline,
+        setting=record.inputs.setting,
+        input_path=record.inputs.input_ref.path,
+        input_digest=record.inputs.input_ref.digest,
+    )

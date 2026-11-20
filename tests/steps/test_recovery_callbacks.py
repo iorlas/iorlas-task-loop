@@ -40,7 +40,8 @@ def raw(worker: Worker) -> RunOutcome:
 
 
 def test_stale_hooks_results_answers_and_pending_retries_preserve_current_rows(
-    tmp_path: Path, surroundings: AttemptSurroundings,
+    tmp_path: Path,
+    surroundings: AttemptSurroundings,
 ) -> None:
     con = database(tmp_path / "factory.db")
     store = RecoveryStore(lambda: con)
@@ -130,8 +131,10 @@ def test_unavailable_capture_retries_and_reopen_finishes_without_agent(tmp_path:
     down = False
     # Persist the returned execution but leave decoding to trusted completion after restart.
     evidence = app.files.capture(KEY, pending.result.raw, identity)
-    assert attempts.capture(record.admission, worker, execution_facts(pending.result.raw), evidence, "pending", identity,
-                              now=10.0) == "accepted"
+    assert (
+        attempts.capture(record.admission, worker, execution_facts(pending.result.raw), evidence, "pending", identity, now=10.0)
+        == "accepted"
+    )
     con.close()
     con = sqlite3.connect(path, isolation_level=None)
     execution = FakeRun(RunOutcome(worker=UNUSED_WORKER))

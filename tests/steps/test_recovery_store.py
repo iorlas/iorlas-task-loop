@@ -145,8 +145,7 @@ def test_failed_commit_leaves_no_authorization_after_reopen(tmp_path: Path, rene
             raise sqlite3.OperationalError("commit failed")
 
     with pytest.raises(StoreUnavailable):
-        RecoveryStore(lambda: con, fail_commit).authorize(original, OWNER, "rolled-back", lambda: 10,
-                                                        deadline=200 if renewal else None)
+        RecoveryStore(lambda: con, fail_commit).authorize(original, OWNER, "rolled-back", lambda: 10, deadline=200 if renewal else None)
     con.close()
     con = sqlite3.connect(path, isolation_level=None)
     assert observed(RecoveryStore(lambda: con)).snapshot.intent is None
@@ -194,7 +193,10 @@ CHANGES = [
 @pytest.mark.parametrize(("change", "expected"), CHANGES)
 @pytest.mark.parametrize("renewal", [False, True])
 def test_local_changes_between_observation_and_commit_cannot_authorize(
-    tmp_path: Path, change: str, expected: Outcome, renewal: bool,
+    tmp_path: Path,
+    change: str,
+    expected: Outcome,
+    renewal: bool,
 ) -> None:
     con = database(tmp_path / "factory.db")
     store = RecoveryStore(lambda: con)
@@ -217,9 +219,11 @@ def test_successor_created_after_observation_prevents_authorization(tmp_path: Pa
     store = RecoveryStore(lambda: con)
     snapshot = observed(store)
     if checks:
-        con.execute("""INSERT INTO checks_attempt(attempt_id,dispatch_token,generation,after_attempt_id,number,slot,
+        con.execute(
+            """INSERT INTO checks_attempt(attempt_id,dispatch_token,generation,after_attempt_id,number,slot,
                     slot_head,target_commit,required,deadline) VALUES('checks','checks',1,'attempt',1,'attempt',?,?, '[]',100)""",
-                    ("b" * 40, "b" * 40))
+            ("b" * 40, "b" * 40),
+        )
     else:
         seed(con, attempt="successor", task="tl-other", session="another")
         con.execute("UPDATE attempt SET task_id='tl-1',seq=2 WHERE attempt_id='successor'")
@@ -253,12 +257,15 @@ def test_competing_renewals_elect_one_generation_and_reopen(tmp_path: Path, repl
     again = store.authorize(observed(store, now=110), winner.owner, winner.token, lambda: 110, deadline=300)
     assert again.outcome is Outcome.AUTHORIZED and again.intent == winner and again.explanation
     assert observed(store, now=110).snapshot == snapshot
-    expired = store.authorize(observed(store, now=200, allow_expired=True), winner.owner, winner.token,
-                              lambda: 200, deadline=300)
+    expired = store.authorize(observed(store, now=200, allow_expired=True), winner.owner, winner.token, lambda: 200, deadline=300)
     assert expired.outcome is Outcome.EXPIRED and expired.explanation
     assert con.execute("SELECT deadline,rev FROM attempt").fetchone() == (200, winner.attempt_revision)
-    for result in (store.snapshot(KEY, 200), store.compare(snapshot, lambda: 200),
-                   store.execute(winner, lambda: 200), store.register(winner, OWNER, lambda: 200)):
+    for result in (
+        store.snapshot(KEY, 200),
+        store.compare(snapshot, lambda: 200),
+        store.execute(winner, lambda: 200),
+        store.register(winner, OWNER, lambda: 200),
+    ):
         assert isinstance(result, Result) and result.outcome is Outcome.EXPIRED and result.explanation
     con.close()
 

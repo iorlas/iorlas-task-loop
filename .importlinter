@@ -664,6 +664,7 @@ source_modules =
     taskloop.command_conclusion
     taskloop.command_sink
     taskloop.commit
+    taskloop.commit_failure
     taskloop.composition
     taskloop.dash_board
     taskloop.dash_commit
@@ -794,6 +795,7 @@ source_modules =
     taskloop.round_trail
     taskloop.rounds
     taskloop.rounds_lock
+    taskloop.rounds_wiring
     taskloop.rows_render
     taskloop.selection
     taskloop.session

@@ -16,11 +16,16 @@ GROUP = "attempt"
 
 def register(commands: Parsers) -> None:
     verbs = group(commands, GROUP, "Read the factory's attempts (read-only)")
-    status = add(verbs, "show", "A task as the factory holds it: its attempt, entry, setup run, result and next action (read-only; "
-                 "`tl task show` reads the tracker)")
+    status = add(
+        verbs,
+        "show",
+        "A task as the factory holds it: its attempt, entry, setup run, result and next action (read-only; "
+        "`tl task show` reads the tracker)",
+    )
     status.add_argument("task_id", metavar="TASK")
-    status.add_argument("--backlog", metavar="KEY", help="Task scope; defaults to the machine config's backlog, then the sole backlog "
-                        "in factory.db")
+    status.add_argument(
+        "--backlog", metavar="KEY", help="Task scope; defaults to the machine config's backlog, then the sole backlog in factory.db"
+    )
     common(status, DB, ARTIFACTS)
     listing = add(verbs, "list", "Every task's current attempt with its next action (read-only)")
     listing.add_argument("--stuck", action="store_true", help="Only attempts whose next action is stuck:*, hold or unknown")
@@ -28,8 +33,12 @@ def register(commands: Parsers) -> None:
     timing = add(verbs, "setup-times", "Recent persisted implement setup times (read-only; no decision)")
     backlog(timing)
     common(timing, DB)
-    export = add(verbs, "export", "One row per agent attempt for A/A and A/B comparison, CSV with a header (NULL empty; --json: an array "
-                 "of objects, NULL as null; read-only). Pool only rows with the same engine_digest and workflow_digest")
+    export = add(
+        verbs,
+        "export",
+        "One row per agent attempt for A/A and A/B comparison, CSV with a header (NULL empty; --json: an array "
+        "of objects, NULL as null; read-only). Pool only rows with the same engine_digest and workflow_digest",
+    )
     export.add_argument("--backlog", metavar="KEY", help="Only this backlog (default: the machine config's backlog, else every backlog)")
     common(export, DB)
 
@@ -38,8 +47,9 @@ def _show(arguments: argparse.Namespace, loaded: Loaded) -> Result:
     with cli_composition.open_reads(loaded.settings.db.value, loaded.settings.artifacts.value, views_for(loaded)) as reads:
         if isinstance(reads, Failed):
             return reads
-        return attempt_status.show_attempt(reads, loaded.settings.artifacts.value, arguments.backlog, arguments.task_id,
-                                           configured_backlog=loaded.settings.backlog.value)
+        return attempt_status.show_attempt(
+            reads, loaded.settings.artifacts.value, arguments.backlog, arguments.task_id, configured_backlog=loaded.settings.backlog.value
+        )
 
 
 def _list(arguments: argparse.Namespace, loaded: Loaded) -> Result:

@@ -45,7 +45,8 @@ def opened(path: Path) -> Generator[Ports]:
 
 @pytest.mark.parametrize("missing", ["merge_operation", "drain_action"])
 def test_direct_drain_refuses_incomplete_state_before_writes(
-    database: tuple[Path, sqlite3.Connection], missing: str,
+    database: tuple[Path, sqlite3.Connection],
+    missing: str,
 ) -> None:
     path, con = database
     con.execute("INSERT INTO slot VALUES ('repo','s1','/slots/s1',1)")
@@ -61,7 +62,8 @@ def test_direct_drain_refuses_incomplete_state_before_writes(
 
 
 def test_drain_writer_rechecks_tables_after_the_reader_gate(
-    database: tuple[Path, sqlite3.Connection], monkeypatch: pytest.MonkeyPatch,
+    database: tuple[Path, sqlite3.Connection],
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     path, con = database
 

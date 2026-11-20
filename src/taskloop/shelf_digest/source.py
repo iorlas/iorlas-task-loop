@@ -68,7 +68,9 @@ class SourceSnapshot:
 def relative_path(path: str) -> bool:
     """Require an unambiguous, package-relative object path, without filesystem traversal."""
     return (
-        bool(path) and "\\" not in path and not any(ord(char) < 32 or ord(char) == 127 for char in path)
+        bool(path)
+        and "\\" not in path
+        and not any(ord(char) < 32 or ord(char) == 127 for char in path)
         and all(part not in {"", ".", ".."} for part in path.split("/"))
     )
 

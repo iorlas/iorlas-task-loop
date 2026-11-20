@@ -1,6 +1,5 @@
 """Public refusal coverage follows the producers, and asserts actual human presentation."""
 
-
 from itertools import pairwise
 from pathlib import Path
 
@@ -37,12 +36,34 @@ def test_every_public_reason_renders_explanation_and_action(context: str, reason
 
 
 GIT_VERBS = {"add", "branch", "checkout", "commit", "fetch", "log", "pull", "push", "show", "status", "switch", "worktree"}
-TEXT_TABLES = (GUIDE, CHECKS_GUIDE, LAND_GUIDE, CANDIDATE_RELEASE, CONFIG, PROFILE, WORKFLOW, WORKFLOW_INIT,
-               hold_cause.RULES, hold_cause.RUN,
-               hold_cause.STUCK, hold_cause.LAND)
-TEXT_CONSTANTS = (HOLD, ON_HOLD, land.SHOW, land.NEEDS_MINUTES.detail, check_release.LANDED, check_release.CLOSED,
-                  check_release.LANDING, land_check.RACED, prepare.HELD_SLOT, prepare.HELD_MAIN, prepare.HELD_OTHER,
-                  prepare.UNPUBLISHED)
+TEXT_TABLES = (
+    GUIDE,
+    CHECKS_GUIDE,
+    LAND_GUIDE,
+    CANDIDATE_RELEASE,
+    CONFIG,
+    PROFILE,
+    WORKFLOW,
+    WORKFLOW_INIT,
+    hold_cause.RULES,
+    hold_cause.RUN,
+    hold_cause.STUCK,
+    hold_cause.LAND,
+)
+TEXT_CONSTANTS = (
+    HOLD,
+    ON_HOLD,
+    land.SHOW,
+    land.NEEDS_MINUTES.detail,
+    check_release.LANDED,
+    check_release.CLOSED,
+    check_release.LANDING,
+    land_check.RACED,
+    prepare.HELD_SLOT,
+    prepare.HELD_MAIN,
+    prepare.HELD_OTHER,
+    prepare.UNPUBLISHED,
+)
 
 
 def _strings(value: object) -> list[str]:
@@ -82,12 +103,21 @@ def test_config_and_profile_collisions_have_different_remedies(reason: Refusal) 
 def test_checks_land_and_candidate_release_keep_their_overrides() -> None:
     assert CHECKS_GUIDE["unsettled"] in human("tl step release", Failed("unsettled", "unsettled", checks=True), None)
     assert LAND_GUIDE["expired"] in human("tl land run", Failed("refused", "expired"), None)
-    assert CANDIDATE_RELEASE["entry_running"] in human(
-        "tl step release", Failed("refused", "entry_running", land=True), None)
+    assert CANDIDATE_RELEASE["entry_running"] in human("tl step release", Failed("refused", "entry_running", land=True), None)
 
 
-@pytest.mark.parametrize("word", ["refused:label", "unavailable:store", "refused:conflict", "unusable:s1:dirty",
-                                  "waiting:worker_alive", "waiting:git:Unreadable", "waiting:validation_pending"])
+@pytest.mark.parametrize(
+    "word",
+    [
+        "refused:label",
+        "unavailable:store",
+        "refused:conflict",
+        "unusable:s1:dirty",
+        "waiting:worker_alive",
+        "waiting:git:Unreadable",
+        "waiting:validation_pending",
+    ],
+)
 def test_rounds_and_end_results_do_not_omit_reasons_or_request_cli_actions(word: str) -> None:
     result = Round("tasks", (Move("tl-1", "land", word),), "")
     lines = human("tl rounds once", result, None)
@@ -121,11 +151,14 @@ def test_a_new_literal_producer_fails_until_it_has_a_guide(tmp_path: Path, monke
 
 
 def test_final_string_reasons_have_literal_coverage_and_other_names_stay_dynamic(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     source = tmp_path / "operation.py"
-    source.write_text('from typing import Final\nREASON: Final = "changed"\n'
-                      'def operation(reason):\n    Failed("unavailable", REASON)\n    Failed("unavailable", reason)\n')
+    source.write_text(
+        'from typing import Final\nREASON: Final = "changed"\n'
+        'def operation(reason):\n    Failed("unavailable", REASON)\n    Failed("unavailable", reason)\n'
+    )
     monkeypatch.setattr(refusal_inventory, "ROOT", tmp_path)
     literals, dynamic = refusal_inventory.census()
     assert literals == {("step", "changed")}

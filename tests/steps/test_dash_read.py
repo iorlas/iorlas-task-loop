@@ -11,20 +11,21 @@ from any_agent import RunOutcome, Summary, events
 from any_agent.activity import Activity
 from any_agent.activity import encode as encode_activity
 from conftest import DONE
-from doubles import CHECKS, REQUIRED, TARGET, D
+from dash_read_support import KEY, Tracker, board_of, reads_of
+from doubles import CHECKS, D
 from hold_fixtures import event, event_for
 from sqlite_store import begin_immediate
 
-from taskloop import activity_file, check_store
+from taskloop import activity_file
 from taskloop.agents.stop_models import AgentStop, Identity, StopCause, encode
-from taskloop.attempt_status import StatusPorts, current_view
+from taskloop.attempt_status import current_view
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import AttemptKey, Seen
 from taskloop.check_store import CheckStore
 from taskloop.command_conclusion import CommandConclusion
 from taskloop.command_sink import CommandSink
-from taskloop.dash_board import BoardPorts, build_board, card_of, column_of, duration_of
-from taskloop.dash_model import AttemptBody, Board, Comment, FeedPage, Fields, LandEventKind, Ready, Run, TaskDetail
+from taskloop.dash_board import card_of, column_of, duration_of
+from taskloop.dash_model import AttemptBody, Comment, FeedPage, Fields, LandEventKind, Ready, Run, TaskDetail
 from taskloop.dash_task import TaskPorts, build_body, build_feed, build_task, build_tracker, history
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.hold_store import HoldInsert, HoldStore
@@ -34,42 +35,10 @@ from taskloop.profile import LandMode
 from taskloop.slots_store import SlotsStore, SlotsUnavailable
 from taskloop.step import Step, decode_step
 
-KEY = AttemptKey("attempt", "dispatch", 1)
-FIELDS = Fields("P1", ("auto",), "task/tl-1", "taskloop", "2026-11-12T10:00:00Z", "2026-11-12T11:00:00Z", ("tl-0",), "Why", "Done when",
-                "", "")
 
-
-class Tracker:
-    """The tracker reads as a fake: what it lists ready, the titles it knows and the one task it can show."""
-
-    def __init__(self, ready: tuple[Ready, ...] = (), problem: str | None = None) -> None:
-        self.listed, self.problem = ready, problem
-
-    def ready(self) -> tuple[Ready, ...]:
-        return self.listed
-
-    def titles(self, task_ids: tuple[str, ...]) -> dict[str, str]:
-        return {each: f"Title of {each}" for each in task_ids}
-
-    def fields(self, task_id: str) -> tuple[Fields, tuple[Comment, ...]] | None:
-        return (FIELDS, (Comment("denis", "2026-11-12T10:30:00Z", "Keep it small"),)) if task_id == "tl-1" else None
-
-    def notice(self) -> str | None:
-        return self.problem
-
-
-def reads_of(con: sqlite3.Connection, now: float = 1000.0) -> StatusPorts:
-    return StatusPorts(AttemptStore(lambda: con), lambda _entry: "matching", lambda: now, lambda _key: None, lambda: "boot")
-
-
-def board_of(con: sqlite3.Connection, files: EvidenceFiles, tracker: Tracker) -> Board:
-    found = build_board(BoardPorts(reads_of(con), files, tracker))
-    assert isinstance(found, Board)
-    return found
-
-
-def saved_ask(con: sqlite3.Connection, files: EvidenceFiles, key: AttemptKey = KEY, step: str = "plan",
-              text: str = "Which database?\nUse <primary>?") -> None:
+def saved_ask(
+    con: sqlite3.Connection, files: EvidenceFiles, key: AttemptKey = KEY, step: str = "plan", text: str = "Which database?\nUse <primary>?"
+) -> None:
     answer: dict[str, object] = {"disposition": "needs_owner", "message": None, "explanation": text}
     if step == "plan":
         answer["plan_path"] = None
@@ -77,18 +46,26 @@ def saved_ask(con: sqlite3.Connection, files: EvidenceFiles, key: AttemptKey = K
     evidence = files.capture(key, RunOutcome(rc=0, summary=Summary(text=json.dumps(answer))))
     os.utime(files.root / evidence.diagnostics.path, (8, 8))
     refs = tuple(value for ref in astuple(evidence) for value in ref)
-    con.execute("""UPDATE attempt SET phase='captured',base_commit=?,step=?,after_commit=?,label='auto'
-        WHERE attempt_id=?""", (D, step, D if step == "implement" else None, key.attempt_id))
-    con.execute("""INSERT INTO execution (attempt_id,dispatch_token,generation,rc,timed_out,work,stands,stdout_path,
+    con.execute(
+        """UPDATE attempt SET phase='captured',base_commit=?,step=?,after_commit=?,label='auto'
+        WHERE attempt_id=?""",
+        (D, step, D if step == "implement" else None, key.attempt_id),
+    )
+    con.execute(
+        """INSERT INTO execution (attempt_id,dispatch_token,generation,rc,timed_out,work,stands,stdout_path,
         stdout_digest,stderr_path,stderr_digest,answer_path,answer_digest,diagnostic_path,diagnostic_digest,answer_kind,
         disposition,effect,session_state) VALUES (?,?,?,0,0,1,1,?,?,?,?,?,?,?,?,'valid','needs_owner','none','complete')""",
-        (*astuple(key), *refs))
+        (*astuple(key), *refs),
+    )
 
 
 @pytest.mark.parametrize("step", ["plan", "implement"])
 @pytest.mark.parametrize("released", [False, True])
 def test_current_agent_questions_agree_on_board_and_detail(
-    registered: sqlite3.Connection, tmp_path: Path, step: str, released: bool,
+    registered: sqlite3.Connection,
+    tmp_path: Path,
+    step: str,
+    released: bool,
 ) -> None:
     files = EvidenceFiles(tmp_path)
     saved_ask(registered, files, step=step)
@@ -98,7 +75,7 @@ def test_current_agent_questions_agree_on_board_and_detail(
         store.labelled("attempt", hold.rev, "moved", 11)
         registered.execute("INSERT INTO slot_release VALUES ('attempt','dispatch',1,?,12,'unclaimed')", (D,))
         registered.execute("UPDATE task_hold SET commenting_at=12,commented_at=13 WHERE attempt_id='attempt'")
-    card, = board_of(registered, files, Tracker()).tasks
+    (card,) = board_of(registered, files, Tracker()).tasks
     detail = build_task(TaskPorts(reads_of(registered), files, Tracker()), "tasks", "tl-1")
     assert isinstance(detail, TaskDetail) and detail.task == card
     assert (card.column, card.ask, card.question) == ("held", True, "Which database?\nUse <primary>?")
@@ -106,7 +83,7 @@ def test_current_agent_questions_agree_on_board_and_detail(
     assert (card.slot is None) == released
     assert card.waiting_since == ("1970-01-01T00:00:10Z" if released else None)
     assert card.last_activity_at is None
-    attempt, = detail.attempts
+    (attempt,) = detail.attempts
     expected = "1970-01-01T00:00:12Z" if released else "1970-01-01T00:00:08Z"
     assert attempt.state == "failed" and attempt.ended_at == expected
     later = build_task(TaskPorts(reads_of(registered, now=2000), files, Tracker()), "tasks", "tl-1")
@@ -131,13 +108,16 @@ def test_running_attempt_has_no_end_time_even_with_captured_evidence(registered:
     registered.execute("UPDATE execution SET session_state='pending'")
     found = build_task(TaskPorts(reads_of(registered), files, Tracker()), "tasks", "tl-1")
     assert isinstance(found, TaskDetail)
-    attempt, = found.attempts
+    (attempt,) = found.attempts
     assert attempt.state == "running" and attempt.ended_at is None
 
 
 @pytest.mark.parametrize("damage", ["missing", "unreadable", "outside_root"])
 def test_failed_attempt_with_unavailable_capture_time_stays_readable(
-    registered: sqlite3.Connection, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, damage: str,
+    registered: sqlite3.Connection,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    damage: str,
 ) -> None:
     files = EvidenceFiles(tmp_path)
     saved_ask(registered, files)
@@ -157,13 +137,15 @@ def test_failed_attempt_with_unavailable_capture_time_stays_readable(
         monkeypatch.setattr(Path, "stat", unavailable)
     found = build_task(TaskPorts(reads_of(registered), files, Tracker()), "tasks", "tl-1")
     assert isinstance(found, TaskDetail)
-    attempt, = found.attempts
+    (attempt,) = found.attempts
     assert attempt.state == "failed" and attempt.ended_at is None
 
 
 @pytest.mark.parametrize("damage", ["missing", "changed", "invalid"])
 def test_damaged_question_evidence_preserves_the_ask(
-    registered: sqlite3.Connection, tmp_path: Path, damage: str,
+    registered: sqlite3.Connection,
+    tmp_path: Path,
+    damage: str,
 ) -> None:
     files = EvidenceFiles(tmp_path)
     saved_ask(registered, files)
@@ -175,24 +157,30 @@ def test_damaged_question_evidence_preserves_the_ask(
         if damage == "invalid":
             ref = files.capture_refs(KEY, RunOutcome(rc=0, summary=Summary(text="invalid json"))).answer
             registered.execute("UPDATE execution SET answer_digest=?", (ref.digest,))
-    card, = board_of(registered, files, Tracker()).tasks
+    (card,) = board_of(registered, files, Tracker()).tasks
     assert card.ask and card.question is None
     detail = build_task(TaskPorts(reads_of(registered), files, Tracker()), "tasks", "tl-1")
     assert isinstance(detail, TaskDetail) and detail.task == card
 
 
-@pytest.mark.parametrize("reason,explanation", [
-    ("branch_moved", "The factory held this task with recorded cause: branch_moved."),
-    ("land:branch_moved", "The task branch no longer holds exactly the commit that was checked."),
-    ("failed:run:timeout", "The agent did not finish before its deadline ("),
-])
+@pytest.mark.parametrize(
+    "reason,explanation",
+    [
+        ("branch_moved", "The factory held this task with recorded cause: branch_moved."),
+        ("land:branch_moved", "The task branch no longer holds exactly the commit that was checked."),
+        ("failed:run:timeout", "The agent did not finish before its deadline ("),
+    ],
+)
 def test_factory_holds_do_not_reuse_an_agent_question(
-    registered: sqlite3.Connection, tmp_path: Path, reason: str, explanation: str,
+    registered: sqlite3.Connection,
+    tmp_path: Path,
+    reason: str,
+    explanation: str,
 ) -> None:
     files = EvidenceFiles(tmp_path)
     saved_ask(registered, files)
     HoldStore(lambda: registered).insert(HoldInsert(event=event_for(reason, "attempt"), now=10))
-    card, = board_of(registered, files, Tracker()).tasks
+    (card,) = board_of(registered, files, Tracker()).tasks
     assert (card.column, card.ask, card.question, card.hold_cause) == ("held", False, None, reason)
     assert card.hold_explanation is not None and explanation in card.hold_explanation
     assert "Which database?" not in card.hold_explanation
@@ -204,7 +192,7 @@ def test_checks_hold_does_not_reuse_its_agents_question(checking: sqlite3.Connec
     files = EvidenceFiles(tmp_path)
     saved_ask(checking, files, AttemptKey("implement", "implement-token", 1), "implement")
     HoldStore(lambda: checking).insert(HoldInsert(event=event_for("failed:test:failed", "implement", "checks"), now=10))
-    card, = board_of(checking, files, Tracker()).tasks
+    (card,) = board_of(checking, files, Tracker()).tasks
     detail = build_task(TaskPorts(reads_of(checking), files, Tracker()), "tasks", "tl-1")
     assert isinstance(detail, TaskDetail) and detail.task == card
     assert (card.column, card.ask, card.question) == ("held", False, None)
@@ -214,12 +202,18 @@ def test_checks_hold_does_not_reuse_its_agents_question(checking: sqlite3.Connec
 def test_stop_explanation_takes_precedence_over_an_agent_question(registered: sqlite3.Connection, tmp_path: Path) -> None:
     files = EvidenceFiles(tmp_path)
     saved_ask(registered, files)
-    stop = AgentStop(attempt_id="attempt", dispatch_token="dispatch", generation=1,
-                     entry=Identity(pid=7, pgid=7, start="entry-start", boot="boot"),
-                     agent=Identity(pid=8, pgid=8, start="agent-start", boot="boot"),
-                     cause=StopCause.DEADLINE, requested_signal=15, requested_at=10)
+    stop = AgentStop(
+        attempt_id="attempt",
+        dispatch_token="dispatch",
+        generation=1,
+        entry=Identity(pid=7, pgid=7, start="entry-start", boot="boot"),
+        agent=Identity(pid=8, pgid=8, start="agent-start", boot="boot"),
+        cause=StopCause.DEADLINE,
+        requested_signal=15,
+        requested_at=10,
+    )
     registered.execute("INSERT INTO agent_stop VALUES (?,?)", ("attempt", encode(stop)))
-    card, = board_of(registered, files, Tracker()).tasks
+    (card,) = board_of(registered, files, Tracker()).tasks
     detail = build_task(TaskPorts(reads_of(registered), files, Tracker()), "tasks", "tl-1")
     assert isinstance(detail, TaskDetail) and detail.task == card
     assert (card.column, card.ask, card.question) == ("held", False, None)
@@ -229,13 +223,15 @@ def test_stop_explanation_takes_precedence_over_an_agent_question(registered: sq
 
 @pytest.mark.parametrize("step", list(Step))
 def test_board_members_and_text_have_the_same_columns_restarts_repeats_and_duration(
-    registered: sqlite3.Connection, tmp_path: Path, step: Step,
+    registered: sqlite3.Connection,
+    tmp_path: Path,
+    step: Step,
 ) -> None:
     reads, files = reads_of(registered), EvidenceFiles(tmp_path)
     files.put_input(KEY, "Plan the actual task")
     view = current_view(reads, "tasks", "tl-1")
     assert view is not None
-    row, = reads.store.attempts("tasks", "tl-1")
+    (row,) = reads.store.attempts("tasks", "tl-1")
     text = replace(view, step=str(step), seq=2)
     member = replace(text, step=step)
     shown = card_of(member, replace(row, step=step), "Title", files, 1000.0)
@@ -256,7 +252,8 @@ def test_board_members_and_text_have_the_same_columns_restarts_repeats_and_durat
 
 
 def test_the_board_has_a_card_for_each_attempted_task_and_each_ready_task_without_one(
-    registered: sqlite3.Connection, tmp_path: Path,
+    registered: sqlite3.Connection,
+    tmp_path: Path,
 ) -> None:
     files = EvidenceFiles(tmp_path)
     files.put_input(KEY, "Plan the actual task")
@@ -278,14 +275,16 @@ def test_the_board_has_a_card_for_each_attempted_task_and_each_ready_task_withou
 
 @pytest.mark.parametrize("approved", [False, True])
 def test_abandoned_wait_starts_at_release_but_requeued_wait_has_no_recorded_start(
-    registered: sqlite3.Connection, tmp_path: Path, approved: bool,
+    registered: sqlite3.Connection,
+    tmp_path: Path,
+    approved: bool,
 ) -> None:
     registered.execute("INSERT INTO slot_release VALUES ('attempt','dispatch',1,?,12,'unclaimed')", (D,))
     registered.execute("DELETE FROM reservation WHERE attempt_id='attempt'")
     files = EvidenceFiles(tmp_path)
     files.put_input(KEY, "Earlier attempt start is not the wait start")
     tracker = Tracker((Ready("tl-1", "Title of tl-1", "2026-11-12T09:30:00Z"),) if approved else ())
-    card, = board_of(registered, files, tracker).tasks
+    (card,) = board_of(registered, files, tracker).tasks
     detail = build_task(TaskPorts(reads_of(registered), files, tracker), "tasks", "tl-1")
     assert isinstance(detail, TaskDetail) and detail.task == card
     assert card.column == "waiting" and card.status == ("queued" if approved else "abandoned")
@@ -299,7 +298,8 @@ def test_a_tracker_problem_reaches_the_board_as_a_notice(registered: sqlite3.Con
 
 
 def test_a_task_detail_has_the_tracker_text_the_comments_and_each_attempts_prompt(
-    registered: sqlite3.Connection, tmp_path: Path,
+    registered: sqlite3.Connection,
+    tmp_path: Path,
 ) -> None:
     files = EvidenceFiles(tmp_path)
     files.put_input(KEY, "Plan the actual task")
@@ -317,7 +317,8 @@ def test_a_task_detail_has_the_tracker_text_the_comments_and_each_attempts_promp
 
 
 def test_a_task_with_no_attempt_is_a_waiting_card_and_the_tracker_part_says_whether_it_knows_it(
-    registered: sqlite3.Connection, tmp_path: Path,
+    registered: sqlite3.Connection,
+    tmp_path: Path,
 ) -> None:
     ports = TaskPorts(reads_of(registered), EvidenceFiles(tmp_path), Tracker())
     found = build_task(ports, "tasks", "tl-9")
@@ -351,20 +352,26 @@ def test_the_checks_attempt_follows_its_implement_attempt_in_the_history(checkin
 @pytest.mark.parametrize("custom", [False, True])
 @pytest.mark.parametrize("released", [False, True])
 def test_tool_paths_are_relative_in_detail_finished_and_cursor_feeds(
-    registered: sqlite3.Connection, tmp_path: Path, custom: bool, released: bool,
+    registered: sqlite3.Connection,
+    tmp_path: Path,
+    custom: bool,
+    released: bool,
 ) -> None:
     files = EvidenceFiles(tmp_path)
     ports = TaskPorts(reads_of(registered), files, Tracker())
-    row, = ports.reads.store.attempts("tasks", "tl-1")
+    (row,) = ports.reads.store.attempts("tasks", "tl-1")
     if custom:
         registered.execute("UPDATE slot SET path=?", ("/custom slots/[project]/worktree",))
     root = str(SlotsStore(lambda: registered).adopted(row.repo_id)[row.slot])
     cases = [
-        (root, "."), (root + "/src/a.py", "src/a.py"),
+        (root, "."),
+        (root + "/src/a.py", "src/a.py"),
         (f'"{root}/file with spaces.py"', '"file with spaces.py"'),
-        (f"'{root}'", "'.'"), (f"path={root}/src", "path=src"),
+        (f"'{root}'", "'.'"),
+        (f"path={root}/src", "path=src"),
         (f'["{root}/a", "{root}/b"]', '["a", "b"]'),
-        (root + "-other/a", root + "-other/a"), ("/external" + root + "/a", "/external" + root + "/a"),
+        (root + "-other/a", root + "-other/a"),
+        ("/external" + root + "/a", "/external" + root + "/a"),
         ("src/relative.py /outside/file.py", "src/relative.py /outside/file.py"),
     ]
     sink = CommandSink(files, KEY, iter(range(100, 300, 2)).__next__)
@@ -378,7 +385,7 @@ def test_tool_paths_are_relative_in_detail_finished_and_cursor_feeds(
     raw = files.events_path(KEY).read_bytes()
     detail = build_task(ports, "tasks", "tl-1")
     assert isinstance(detail, TaskDetail)
-    attempt, = detail.attempts
+    (attempt,) = detail.attempts
     tools = [line for line in attempt.feed if line.type == "tool"]
     assert [(line.name, line.cmd) for line in tools] == [("Read", expected) for _, expected in cases]
     assert next(line.cmd for line in attempt.feed if line.type == "command") == root + "/command"
@@ -395,7 +402,10 @@ def test_tool_paths_are_relative_in_detail_finished_and_cursor_feeds(
 
 @pytest.mark.parametrize("missing", [False, True])
 def test_tool_feed_fails_with_explanation_when_slot_context_is_unavailable(
-    registered: sqlite3.Connection, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, missing: bool,
+    registered: sqlite3.Connection,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    missing: bool,
 ) -> None:
     def unavailable(self: SlotsStore, repo_id: str) -> dict[str, Path]:
         if missing:
@@ -409,13 +419,17 @@ def test_tool_feed_fails_with_explanation_when_slot_context_is_unavailable(
     sink.feed(events.Cmd(id="command", text="just test"))
     assert isinstance(build_task(ports, "tasks", "tl-1"), TaskDetail)
     sink.feed(events.Tool(id="tool", name="Read", arg="/unknown/file"))
-    for found in (build_task(ports, "tasks", "tl-1"), build_feed(ports, "tasks", "tl-1", "plan", 1, None),
-                  build_feed(ports, "tasks", "tl-1", "plan", 1, "0:0")):
+    for found in (
+        build_task(ports, "tasks", "tl-1"),
+        build_feed(ports, "tasks", "tl-1", "plan", 1, None),
+        build_feed(ports, "tasks", "tl-1", "plan", 1, "0:0"),
+    ):
         assert isinstance(found, Failed) and found.kind == "unavailable" and "unavailable" in found.detail
 
 
 def test_an_agent_attempts_detail_and_feed_show_its_commands_and_messages_as_live_lines(
-    registered: sqlite3.Connection, tmp_path: Path,
+    registered: sqlite3.Connection,
+    tmp_path: Path,
 ) -> None:
     files = EvidenceFiles(tmp_path)
     files.put_input(KEY, "Plan the actual task")
@@ -428,10 +442,12 @@ def test_an_agent_attempts_detail_and_feed_show_its_commands_and_messages_as_liv
     assert isinstance(found, TaskDetail)
     (attempt,) = found.attempts
     assert [(line.type, line.state, line.cmd or line.text) for line in attempt.feed[1:]] == [
-        ("command", "finished", "just test"), ("message", None, "two checks failed")]
+        ("command", "finished", "just test"),
+        ("message", None, "two checks failed"),
+    ]
     assert attempt.feed[1].exit_code == 2 and attempt.feed_cursor is not None
     registered.execute("UPDATE attempt SET deadline=2000 WHERE attempt_id='attempt'")
-    card, = board_of(registered, files, Tracker()).tasks
+    (card,) = board_of(registered, files, Tracker()).tasks
     assert card.last_activity_at is not None and card.waiting_since is None
     sink.feed(events.Msg(text="done"))
     page = build_feed(ports, "tasks", "tl-1", "plan", 1, attempt.feed_cursor)
@@ -440,15 +456,16 @@ def test_an_agent_attempts_detail_and_feed_show_its_commands_and_messages_as_liv
 
 
 def test_an_agent_attempt_says_what_ran_it_in_plain_words(registered: sqlite3.Connection, tmp_path: Path) -> None:
-    registered.execute("UPDATE attempt SET harness='opencode', provider='deepseek', model='opencode/deepseek-v4.1-flash-free', "
-                       "access_policy=?", ('{"harness":"opencode"}',))
+    registered.execute(
+        "UPDATE attempt SET harness='opencode', provider='deepseek', model='opencode/deepseek-v4.1-flash-free', access_policy=?",
+        ('{"harness":"opencode"}',),
+    )
     files = EvidenceFiles(tmp_path)
     files.put_input(KEY, "Plan the actual task")
     found = build_task(TaskPorts(reads_of(registered), files, Tracker()), "tasks", "tl-1")
     assert isinstance(found, TaskDetail)
     (attempt,) = found.attempts
-    assert attempt.run == Run("OpenCode", "DeepSeek", "opencode/deepseek-v4.1-flash-free", "high",
-                              "default sandbox")
+    assert attempt.run == Run("OpenCode", "DeepSeek", "opencode/deepseek-v4.1-flash-free", "high", "default sandbox")
 
 
 def test_a_full_access_attempt_says_the_container_is_the_boundary(registered: sqlite3.Connection, tmp_path: Path) -> None:
@@ -474,7 +491,9 @@ def test_reasoning_is_a_collapsed_line_only_when_the_harness_gave_words(register
 
 @pytest.mark.parametrize("ended", [False, True])
 def test_a_poisoned_events_file_does_not_break_the_task_detail(
-    registered: sqlite3.Connection, tmp_path: Path, ended: bool,
+    registered: sqlite3.Connection,
+    tmp_path: Path,
+    ended: bool,
 ) -> None:
     files = EvidenceFiles(tmp_path)
     files.put_input(KEY, "Plan the actual task")
@@ -491,7 +510,9 @@ def test_a_poisoned_events_file_does_not_break_the_task_detail(
 
 @pytest.mark.parametrize("collected", [False, True])
 def test_fresh_finished_feeds_expose_full_history_while_live_and_cursor_reads_stay_bounded(
-    registered: sqlite3.Connection, tmp_path: Path, collected: bool,
+    registered: sqlite3.Connection,
+    tmp_path: Path,
+    collected: bool,
 ) -> None:
     files = EvidenceFiles(tmp_path)
     files.put_input(KEY, "Plan the actual task")
@@ -548,18 +569,23 @@ def test_a_command_still_running_in_an_ended_attempt_is_shown_unfinished(checkin
 
 @pytest.mark.parametrize("released", [False, True])
 def test_checks_cards_show_only_the_current_checks_slot(
-    checking: sqlite3.Connection, tmp_path: Path, released: bool,
+    checking: sqlite3.Connection,
+    tmp_path: Path,
+    released: bool,
 ) -> None:
     for statement in DONE:
         checking.execute(statement)
     checking.execute("INSERT INTO published_branch VALUES ('implement','implement-token',1,?,?,6)", (D, D))
     checking.execute("UPDATE checks_attempt SET deadline=2000 WHERE attempt_id='checks'")
     if released:
-        checking.execute("UPDATE checks_attempt SET phase='concluded',conclusion='passed',concluded_at=5,released_at=6,parked=? "
-                         "WHERE attempt_id='checks'", (D,))
+        checking.execute(
+            "UPDATE checks_attempt SET phase='concluded',conclusion='passed',concluded_at=5,released_at=6,parked=? "
+            "WHERE attempt_id='checks'",
+            (D,),
+        )
         checking.execute("DELETE FROM reservation WHERE attempt_id='checks'")
     files = EvidenceFiles(tmp_path)
-    card, = board_of(checking, files, Tracker()).tasks
+    (card,) = board_of(checking, files, Tracker()).tasks
     detail = build_task(TaskPorts(reads_of(checking), files, Tracker()), "tasks", "tl-1")
     assert isinstance(detail, TaskDetail) and detail.task == card
     assert (card.column, card.slot) == (("land", None) if released else ("checks", "s2"))
@@ -567,13 +593,16 @@ def test_checks_cards_show_only_the_current_checks_slot(
     assert card.waiting_since == ("1970-01-01T00:00:06Z" if released else None)
     assert [event.kind for event in detail.land_events] == ([LandEventKind.READY] if released else [])
     if released:
-        ready, = detail.land_events
+        (ready,) = detail.land_events
         assert ready.checks_n == 1 and ready.waits[0].open and ready.at == card.waiting_since
 
 
 @pytest.mark.parametrize("assigned,released", [(True, False), (True, True), (False, False)])
 def test_land_cards_show_only_the_current_land_slot(
-    landing: sqlite3.Connection, tmp_path: Path, assigned: bool, released: bool,
+    landing: sqlite3.Connection,
+    tmp_path: Path,
+    assigned: bool,
+    released: bool,
 ) -> None:
     for statement in DONE:
         landing.execute(statement)
@@ -583,15 +612,18 @@ def test_land_cards_show_only_the_current_land_slot(
         landing.execute("INSERT INTO slot (repo_id,name,path) VALUES ('r','s3','/slots/s3')")
         landing.execute("UPDATE land_candidate SET slot='s3' WHERE candidate_id='candidate'")
         if released:
-            landing.execute("UPDATE land_candidate SET validation='passed',validated_at=15,released_at=16,parked=? "
-                            "WHERE candidate_id='candidate'", (D,))
+            landing.execute(
+                "UPDATE land_candidate SET validation='passed',validated_at=15,released_at=16,parked=? WHERE candidate_id='candidate'", (D,)
+            )
         else:
             landing.execute("INSERT INTO reservation VALUES ('s3','r',1,'candidate')")
     else:
-        landing.execute("UPDATE land_candidate SET slot=NULL,slot_head=NULL,deadline=NULL,validation='same_tree',validated_at=15 "
-                        "WHERE candidate_id='candidate'")
+        landing.execute(
+            "UPDATE land_candidate SET slot=NULL,slot_head=NULL,deadline=NULL,validation='same_tree',validated_at=15 "
+            "WHERE candidate_id='candidate'"
+        )
     files = EvidenceFiles(tmp_path)
-    card, = board_of(landing, files, Tracker()).tasks
+    (card,) = board_of(landing, files, Tracker()).tasks
     detail = build_task(TaskPorts(reads_of(landing), files, Tracker()), "tasks", "tl-1")
     assert isinstance(detail, TaskDetail) and detail.task == card
     assert (card.column, card.slot) == ("land", "s3" if assigned and not released else None)
@@ -613,8 +645,10 @@ def test_a_waiting_task_says_manual_only_when_the_profile_says_so(landing: sqlit
 
 
 def test_a_checked_task_nobody_has_landed_waits_to_be_landed(checking: sqlite3.Connection) -> None:
-    checking.execute("UPDATE checks_attempt SET phase='concluded',conclusion='passed',concluded_at=5,released_at=6,parked=? "
-                     "WHERE attempt_id='checks'", ("d" * 40,))
+    checking.execute(
+        "UPDATE checks_attempt SET phase='concluded',conclusion='passed',concluded_at=5,released_at=6,parked=? WHERE attempt_id='checks'",
+        ("d" * 40,),
+    )
     assert land_of(checking, "matching") is None and land_state(None) == "unknown"
 
 
@@ -626,11 +660,15 @@ def test_a_task_shows_landing_only_while_its_land_process_runs(landing: sqlite3.
 
 
 def test_each_check_carries_the_end_of_its_log_passed_or_failed_and_none_when_the_log_is_gone(
-    checking: sqlite3.Connection, tmp_path: Path,
+    checking: sqlite3.Connection,
+    tmp_path: Path,
 ) -> None:
     files, store = EvidenceFiles(tmp_path), CheckStore(lambda: checking, begin_immediate)
-    for position, name, rc, conclusion in ((0, "lint", 0, CommandConclusion.PASSED), (1, "test", 1,
-        CommandConclusion.FAILED), (2, "types", 0, CommandConclusion.PASSED)):
+    for position, name, rc, conclusion in (
+        (0, "lint", 0, CommandConclusion.PASSED),
+        (1, "test", 1, CommandConclusion.FAILED),
+        (2, "types", 0, CommandConclusion.PASSED),
+    ):
         store.start(CHECKS, 1, position, name, "a" * 64, 60, 3)
         store.finish(CHECKS, 1, position, conclusion, rc, 4)
     files.check_log(CHECKS, 1, "lint").write_text("all clean\n")
@@ -655,169 +693,3 @@ def test_an_answer_file_longer_than_the_bound_is_cut_and_says_so(registered: sql
     body = build_body(TaskPorts(reads_of(registered), files, Tracker()), "tasks", "tl-1", "plan", 1)
     assert isinstance(body, AttemptBody) and body.result.answer is not None
     assert len(body.result.answer.text) == 65536 and body.result.answer.truncated
-
-
-@pytest.mark.parametrize("outcome,reason", [("passed", None), ("failed", "test:failed")])
-def test_checks_rerun_after_restart_keeps_its_number_and_prior_attempt_regardless_of_outcome(
-    checking: sqlite3.Connection, tmp_path: Path, outcome: str, reason: str | None,
-) -> None:
-    checking.execute("UPDATE checks_attempt SET phase='concluded',conclusion=?,reason=?,concluded_at=5,released_at=6,"
-                     "parked=? WHERE attempt_id='checks'", (outcome, reason, D))
-    checking.execute("DELETE FROM reservation WHERE attempt_id='checks'")
-    again = check_store.ChecksAdmitted(AttemptKey("again", "again-token", 1), "implement", 2, "s2", D, TARGET, REQUIRED, 100.0)
-    check_store.insert(checking, again)
-    found = build_task(TaskPorts(reads_of(checking), EvidenceFiles(tmp_path), Tracker()), "tasks", "tl-1")
-    assert isinstance(found, TaskDetail)
-    assert [(each.step, each.n, each.after, each.repeat_of) for each in found.attempts[1:]] == [
-        ("checks", 1, None, None), ("checks", 2, "repeat", 1)]
-    assert found.attempts[1].summary == (reason or outcome)
-    assert (found.attempts[2].reason, found.attempts[2].state, found.attempts[2].summary) == (
-        "The factory restarted", "running", "running")
-
-
-def test_first_checks_for_another_implement_attempt_are_not_a_restart(checking: sqlite3.Connection, tmp_path: Path) -> None:
-    checking.execute(
-        """INSERT INTO attempt (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,
-        input_path,input_digest,schema_version,model,effort,access_policy,deadline,number,seq,slot_head,previous_attempt_id,repeat_reason,
-        phase,base_commit,end_commit,after_commit,engine_digest,workflow_digest,workflow_sha,admitted_at)
-        SELECT 'another','another-token',1,step,adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,input_digest,
-        schema_version,model,effort,access_policy,deadline,2,3,slot_head,'implement','unsafe',phase,base_commit,end_commit,NULL,
-        engine_digest,workflow_digest,workflow_sha,admitted_at
-        FROM attempt WHERE attempt_id='implement'""")
-    checking.execute("INSERT INTO slot_release VALUES ('another','another-token',1,?,7,'kept')", (D,))
-    check_store.insert(checking, check_store.ChecksAdmitted(
-        AttemptKey("fresh", "fresh-token", 1), "another", 1, "s2", D, TARGET, REQUIRED, 100.0))
-    check_store.insert(checking, check_store.ChecksAdmitted(
-        AttemptKey("again", "again-token", 1), "another", 2, "s2", D, TARGET, REQUIRED, 100.0))
-    found = build_task(TaskPorts(reads_of(checking), EvidenceFiles(tmp_path), Tracker()), "tasks", "tl-1")
-    assert isinstance(found, TaskDetail)
-    checks = [each for each in found.attempts if each.step == "checks"]
-    assert [(each.n, each.after, each.repeat_of, each.reason) for each in checks] == [
-        (1, None, None, None), (2, None, None, None), (3, "repeat", 2, "The factory restarted")]
-
-
-def restarted_at_plan(con: sqlite3.Connection) -> None:
-    """tl-1's plan attempt `attempt` (seq 1) is followed by an implement attempt and a second plan attempt, each with stored
-    number 1, the way a restart at plan starts a new chain."""
-    for attempt, step, seq in (("implement", "implement", 2), ("again", "plan", 3)):
-        con.execute(
-            """INSERT INTO attempt (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,
-            input_path,input_digest,schema_version,model,effort,access_policy,deadline,number,seq,slot_head,after_commit,
-            engine_digest,workflow_digest,workflow_sha,admitted_at)
-            SELECT ?,?,1,?,adapter,backlog,
-            task_id,tracker_root,repo_id,slot,input_path,input_digest,schema_version,model,effort,access_policy,deadline,1,?,
-            slot_head,?,engine_digest,workflow_digest,workflow_sha,admitted_at
-            FROM attempt WHERE attempt_id='attempt'""", (attempt, f"{attempt}-token", step, seq, "a" * 40 if step == "implement" else None))
-
-
-def test_a_plan_restarted_at_plan_is_its_own_try_that_can_be_read_by_its_number(
-    registered: sqlite3.Connection, tmp_path: Path,
-) -> None:
-    restarted_at_plan(registered)
-    files = EvidenceFiles(tmp_path)
-    ports = TaskPorts(reads_of(registered), files, Tracker())
-    found = build_task(ports, "tasks", "tl-1")
-    assert isinstance(found, TaskDetail)
-    assert [(each.step, each.n, each.after) for each in found.attempts] == [
-        ("plan", 1, None), ("implement", 1, None), ("plan", 2, "restart_at_plan")]
-    assert found.task.attempt == 2 and found.task.repeat is not None and found.task.repeat.kind == "restart_at_plan"
-    assert found.task.repeat.reason == "Reason not recorded"
-    rows = tuple(replace(row, step=decode_step(row.step)) for row in ports.reads.store.attempts("tasks", "tl-1"))
-    assert history(ports, rows) == found.attempts
-    board_task, = board_of(registered, files, Tracker()).tasks
-    assert board_task.attempt == 2 and board_task.repeat is not None
-    assert (board_task.repeat.kind, board_task.repeat.reason) == ("restart_at_plan", "Reason not recorded")
-    files.put_input(KEY, "Plan the actual task")
-    ref = files.put_input(AttemptKey("again", "again-token", 1), "Plan it again after the owner's edit")
-    registered.execute("UPDATE attempt SET input_path=?,input_digest=? WHERE attempt_id='again'", (ref.path, ref.digest))
-    first, second = (build_body(ports, "tasks", "tl-1", "plan", each) for each in (1, 2))
-    assert isinstance(first, AttemptBody) and isinstance(second, AttemptBody)
-    assert first.input == "Plan the actual task" and second.input == "Plan it again after the owner's edit"
-    assert isinstance(build_feed(ports, "tasks", "tl-1", "plan", 2, None), FeedPage)
-    assert build_feed(ports, "tasks", "tl-1", "plan", 3, None) is None
-
-
-def unsafe_repeat(con: sqlite3.Connection, listing: str = '["src/link.py", "src/stray.py"]') -> None:
-    """`checking`'s implement attempt answered `implemented` (a valid, committing answer) and its factory commit was unfinished: it was
-    repeated as try 2 for `unsafe`, which stored what the factory commit listed."""
-    con.execute(DONE[0])
-    con.execute(
-        """INSERT INTO attempt (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,
-        input_path,input_digest,schema_version,model,effort,access_policy,deadline,number,seq,slot_head,previous_attempt_id,repeat_reason,
-        repeat_listing,engine_digest,workflow_digest,workflow_sha,
-        admitted_at) SELECT 'again','again-token',2,step,adapter,backlog,task_id,tracker_root,
-        repo_id,slot,input_path,input_digest,
-        schema_version,model,effort,access_policy,deadline,2,3,slot_head,'implement','unsafe',
-        ?,engine_digest,workflow_digest,workflow_sha,admitted_at FROM attempt WHERE attempt_id='implement'""",
-        (listing,))
-
-
-def test_an_unsettled_factory_commit_is_its_own_row_that_names_the_failed_check_and_what_it_listed(
-    checking: sqlite3.Connection, tmp_path: Path,
-) -> None:
-    unsafe_repeat(checking)
-    ports = TaskPorts(reads_of(checking), EvidenceFiles(tmp_path), Tracker())
-    found = build_task(ports, "tasks", "tl-1")
-    assert isinstance(found, TaskDetail)
-    assert [(each.step, each.n) for each in found.attempts] == [("implement", 1), ("commit", 1), ("checks", 1), ("implement", 2)]
-    committing, repeat = found.attempts[1], found.attempts[3]
-    assert (committing.state, committing.summary) == ("failed", "uncommitted:unsafe")
-    assert (repeat.after, repeat.reason, repeat.repeat_of, repeat.led_by) == ("repeat", "unsafe", 1, 1)
-    body = build_body(ports, "tasks", "tl-1", "commit", 1)
-    assert isinstance(body, AttemptBody) and body.input is None and body.result.factory_commit is not None
-    shown = body.result.factory_commit
-    assert (shown.of_step, shown.of, shown.result, shown.listing) == ("implement", 1, "uncommitted:unsafe", ("src/link.py", "src/stray.py"))
-    assert [each.state for each in shown.checks] == ["passed", "failed", "not_run", "not_run", "not_run"]
-
-
-def test_a_stored_verdict_is_a_factory_commit_row_that_passed_or_broke_a_rule(checking: sqlite3.Connection, tmp_path: Path) -> None:
-    checking.execute(DONE[0])
-    checking.execute(DONE[1])
-    ports = TaskPorts(reads_of(checking), EvidenceFiles(tmp_path), Tracker())
-    body = build_body(ports, "tasks", "tl-1", "commit", 1)
-    assert isinstance(body, AttemptBody) and body.result.factory_commit is not None
-    assert body.result.factory_commit.result == "committed" and {each.state for each in body.result.factory_commit.checks} == {"passed"}
-    checking.execute("DELETE FROM factory_commit")
-    checking.execute("INSERT INTO factory_commit (attempt_id,dispatch_token,generation,verdict,reason,observed_at) "
-                     "VALUES ('implement','implement-token',1,'rejected','paths',5)")
-    broken = build_body(ports, "tasks", "tl-1", "commit", 1)
-    assert isinstance(broken, AttemptBody) and broken.result.factory_commit is not None
-    assert broken.result.factory_commit.result == "rejected:paths"
-    assert [each.state for each in broken.result.factory_commit.checks] == ["passed"] * 4 + ["failed"]
-
-
-def test_an_attempt_that_never_reached_factory_commit_has_no_factory_commit_row(checking: sqlite3.Connection, tmp_path: Path) -> None:
-    found = build_task(TaskPorts(reads_of(checking), EvidenceFiles(tmp_path), Tracker()), "tasks", "tl-1")
-    assert isinstance(found, TaskDetail) and [each.step for each in found.attempts] == ["implement", "checks"]
-    assert build_body(TaskPorts(reads_of(checking), EvidenceFiles(tmp_path), Tracker()), "tasks", "tl-1", "commit", 1) is None
-
-
-def test_a_repeats_prompt_marks_the_lines_it_added_to_the_prompt_it_repeats(checking: sqlite3.Connection, tmp_path: Path) -> None:
-    unsafe_repeat(checking)
-    files = EvidenceFiles(tmp_path)
-    for key, text in ((AttemptKey("implement", "implement-token", 1), "Title\n\nDo the thing.\n"),
-                      (AttemptKey("again", "again-token", 2), "A path cannot be committed.\nsrc/link.py\n\nTitle\n\nDo the thing.\n")):
-        ref = files.put_input(key, text)
-        checking.execute("UPDATE attempt SET input_path=?,input_digest=? WHERE attempt_id=?", (ref.path, ref.digest, key.attempt_id))
-    ports = TaskPorts(reads_of(checking), files, Tracker())
-    first, second = (build_body(ports, "tasks", "tl-1", "implement", each) for each in (1, 2))
-    assert isinstance(first, AttemptBody) and isinstance(second, AttemptBody)
-    assert first.added == () and second.added == ((0, 3),)
-
-
-def test_a_plan_repeat_is_a_repeat_on_the_board_and_in_history(registered: sqlite3.Connection, tmp_path: Path) -> None:
-    registered.execute(
-        """INSERT INTO attempt (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,
-        input_path,input_digest,schema_version,model,effort,access_policy,deadline,number,seq,slot_head,previous_attempt_id,
-        repeat_reason,engine_digest,workflow_digest,workflow_sha,admitted_at)
-        SELECT 'again','again-token',2,step,adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,input_digest,
-        schema_version,model,effort,access_policy,deadline,2,2,slot_head,'attempt','unsafe',engine_digest,workflow_digest,workflow_sha,
-        admitted_at FROM attempt WHERE attempt_id='attempt'""")
-    files = EvidenceFiles(tmp_path)
-    board_task, = board_of(registered, files, Tracker()).tasks
-    assert board_task.repeat is not None
-    assert (board_task.repeat.kind, board_task.repeat.reason) == ("repeat", "unsafe")
-    found = build_task(TaskPorts(reads_of(registered), files, Tracker()), "tasks", "tl-1")
-    assert isinstance(found, TaskDetail)
-    assert [(a.step, a.n, a.after) for a in found.attempts] == [("plan", 1, None), ("plan", 2, "repeat")]
-    assert (found.attempts[-1].reason, found.attempts[-1].repeat_of) == ("unsafe", 1)

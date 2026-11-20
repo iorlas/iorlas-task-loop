@@ -38,7 +38,11 @@ class AbortMerge:
         current = self.observe(record, work)
         if saved.abort is None:
             if (current.head, current.branch, current.merging, current.merge_head) != (
-                    saved.head, None, True, f"{saved.target}\n".encode().hex()):
+                saved.head,
+                None,
+                True,
+                f"{saved.target}\n".encode().hex(),
+            ):
                 raise AbortRefused("The active merge no longer matches the retained inputs.")
             slot = p.checkouts(work.slot, git_dir=work.gitdir).worktree(work.slot)
             if str(slot.capture()) != saved.tree:
@@ -72,8 +76,7 @@ class AbortMerge:
     def observe(self, record: Record, work: Work) -> Checkout:
         p = self.preservation
         state = observe_slot(p.checkouts, p.files, record.slot_path, record.request.repo_id)
-        if (not isinstance(state, SlotState) or state.head is None
-                or (state.root, state.gitdir) != (work.root, work.gitdir)):
+        if not isinstance(state, SlotState) or state.head is None or (state.root, state.gitdir) != (work.root, work.gitdir):
             raise GitUnavailable("The reserved checkout's repository or directory identity changed")
         slot = p.checkouts(work.slot, git_dir=work.gitdir).worktree(work.slot)
         merging = slot.merging()
@@ -82,11 +85,18 @@ class AbortMerge:
         tree = p.repo.tree(str(snapshot.tree))
         if tree is None:
             raise GitUnavailable("The checkout's file identity cannot be read")
-        return Checkout(repo_id=p.repo.identity().key, root=state.root, path=work.slot, gitdir=state.gitdir,
-                        head=state.head, branch=state.branch, merging=merging,
-                        merge_head=None if merge_head is None else merge_head.hex(),
-                        index=index_status(p.repo, work.slot),
-                        files={path: (mode, str(blob)) for path, (mode, blob) in tree.files.items()})
+        return Checkout(
+            repo_id=p.repo.identity().key,
+            root=state.root,
+            path=work.slot,
+            gitdir=state.gitdir,
+            head=state.head,
+            branch=state.branch,
+            merging=merging,
+            merge_head=None if merge_head is None else merge_head.hex(),
+            index=index_status(p.repo, work.slot),
+            files={path: (mode, str(blob)) for path, (mode, blob) in tree.files.items()},
+        )
 
     def expected(self, work: Work, before: Checkout) -> Checkout:
         p = self.preservation
@@ -102,6 +112,6 @@ class AbortMerge:
                 if any(path == name or path.startswith(name + "/") or name.startswith(path + "/") for name in files):
                     raise GitUnavailable("A surviving local path overlaps the source checkout; abort waits")
                 files[path] = identity
-        return before.model_copy(update={"head": work.source, "branch": None, "merging": False,
-                                         "merge_head": None, "index": (), "files": files})
-
+        return before.model_copy(
+            update={"head": work.source, "branch": None, "merging": False, "merge_head": None, "index": (), "files": files}
+        )

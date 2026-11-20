@@ -48,9 +48,10 @@ def contract_sources() -> dict[str, bytes]:
     files = {}
     for package, modules in (
         ("any-agent", ("supervisor", "protocol", "watch", "procs", "events")),
-        ("stream-proc", ("registered",)), ("git-porcelain", ("real_write",)),
+        ("stream-proc", ("registered",)),
+        ("git-porcelain", ("real_write",)),
     ):
-        distribution, = InstalledDistributions().find(package)
+        (distribution,) = InstalledDistributions().find(package)
         for module in modules:
             path = f"{package.replace('-', '_')}/{module}.py"
             data = distribution.read(path)
@@ -79,10 +80,12 @@ def complete_case(path: Path, *, commit: str = COMMIT, reverse: bool = False, st
     files.update(contract_sources())
     dependencies = ", ".join(f'"{name}=={stream_version if name == "stream-proc" else "1.0"}"' for name in PACKAGES)
     project = f'[project]\nname = "task-loop"\nversion = "0.1"\ndependencies = [{dependencies}]\n'
-    project += '[tool.uv.sources]\n' + "\n".join(declarations)
-    root = ('[[package]]\nname = "task-loop"\nversion = "0.1"\nsource = {editable = "."}\n'
-            'dependencies = [' + ", ".join(f'{{name = "{name}"}}' for name in PACKAGES) + ']\n'
-            '[package.metadata]\nrequires-dist = [' + ", ".join(metadata) + "]")
+    project += "[tool.uv.sources]\n" + "\n".join(declarations)
+    root = (
+        '[[package]]\nname = "task-loop"\nversion = "0.1"\nsource = {editable = "."}\n'
+        "dependencies = [" + ", ".join(f'{{name = "{name}"}}' for name in PACKAGES) + "]\n"
+        "[package.metadata]\nrequires-dist = [" + ", ".join(metadata) + "]"
+    )
     root_files = {"pyproject.toml": project.encode(), "uv.lock": "\n".join([*records, root]).encode()}
     if reverse:
         files = dict(reversed(list(files.items())))
@@ -126,14 +129,22 @@ def installed_case(case: Case) -> tuple[Identities, MemoryDistributions]:
     assert not isinstance(identities, (IdentityFailure, ReadFailure))
     distributions: dict[str, MemoryDistribution] = {}
     for identity in identities.packages:
-        record = InstalledMetadata(name=identity.name, version=identity.version, direct_url=json.dumps({
-            "url": identity.repository_url, "subdirectory": identity.subdirectory,
-            "vcs_info": {"vcs": "git", "commit_id": identity.commit, "requested_revision": identity.requested_tag},
-        }))
+        record = InstalledMetadata(
+            name=identity.name,
+            version=identity.version,
+            direct_url=json.dumps(
+                {
+                    "url": identity.repository_url,
+                    "subdirectory": identity.subdirectory,
+                    "vcs_info": {"vcs": "git", "commit_id": identity.commit, "requested_revision": identity.requested_tag},
+                }
+            ),
+        )
         prefix = f"{identity.subdirectory}/"
         files: dict[str, bytes | ReadFailure] = {
             path.removeprefix(prefix).removeprefix("src/"): data
-            for path, data in case.shelf_files.items() if path.startswith(prefix) and not path.endswith("pyproject.toml")
+            for path, data in case.shelf_files.items()
+            if path.startswith(prefix) and not path.endswith("pyproject.toml")
         }
         distributions[identity.name] = MemoryDistribution(record, files)
     return identities, MemoryDistributions(distributions)

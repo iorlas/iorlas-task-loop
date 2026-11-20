@@ -61,8 +61,15 @@ class Bench:
         return Merge(self.store, self.views, self.views, self.files, lambda: 10, self.setup, self.resolve)
 
 
-def bench(con: sqlite3.Connection, repo: FakeRepo, remote: FakeRemote, slot: FakeWorktree,
-          files: FakeSlotFiles, views: PinnedViews, conflict: bool = False) -> Bench:
+def bench(
+    con: sqlite3.Connection,
+    repo: FakeRepo,
+    remote: FakeRemote,
+    slot: FakeWorktree,
+    files: FakeSlotFiles,
+    views: PinnedViews,
+    conflict: bool = False,
+) -> Bench:
     base = head(slot)
     task = repo.add_worktree(slot.path.parent / "author", "HEAD")
     task.checkout_new("task/tl-1")
@@ -77,9 +84,22 @@ def bench(con: sqlite3.Connection, repo: FakeRepo, remote: FakeRemote, slot: Fak
     remote.advance("main", {"README": "current main\n", "other": "another landed task\n"})
     assert repo.fetch().ok
     slot.take_branch("task/tl-1", source, mode="resume")
-    work = Work(attempt_id="attempt", dispatch_token="dispatch", generation=1, task_id="tl-1", repo_id=repo.identity().key,
-                root=repo.path, slot=slot.path, gitdir=repo.identity().common_dir / "worktrees" / slot.path.name,
-                base=base, source=source, branch="task/tl-1", deadline=100, setting=AgentSetting(),
-                input_path="input.txt", input_digest="digest")
+    work = Work(
+        attempt_id="attempt",
+        dispatch_token="dispatch",
+        generation=1,
+        task_id="tl-1",
+        repo_id=repo.identity().key,
+        root=repo.path,
+        slot=slot.path,
+        gitdir=repo.identity().common_dir / "worktrees" / slot.path.name,
+        base=base,
+        source=source,
+        branch="task/tl-1",
+        deadline=100,
+        setting=AgentSetting(),
+        input_path="input.txt",
+        input_digest="digest",
+    )
     store = MergeStore(lambda: con)
     return Bench(repo, remote, slot, files, views, store, store.start(work), [])

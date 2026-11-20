@@ -78,8 +78,9 @@ class LandPorts:
 
 def _release(ports: LandPorts, hold: Callable[[str, str], AbstractContextManager[None]]) -> ChecksRelease:
     work = ports.work
-    return ChecksRelease(work.store, work.checkouts, work.slot_files, work.entry_seen, hold, work.clock,
-        work.seen, work.scratch, ids=ports.ids)
+    return ChecksRelease(
+        work.store, work.checkouts, work.slot_files, work.entry_seen, hold, work.clock, work.seen, work.scratch, ids=ports.ids
+    )
 
 
 def checked(ports: LandPorts, row: LandRow) -> LandRow | Failed:
@@ -87,9 +88,13 @@ def checked(ports: LandPorts, row: LandRow) -> LandRow | Failed:
     found = validated(ports, row)
     if isinstance(found, Failed) or found.validation == "passed":
         return found
-    return Failed("refused", "checks_failed", f"The checks of S ({found.commit}) failed ({found.reason}), though they passed on "
-                  "the task's own commit: the change does not hold on the current main. The `Land check:` logs say which. Nothing was "
-                  "pushed; a flaky check may be retried (land the task again), otherwise the task starts again.")
+    return Failed(
+        "refused",
+        "checks_failed",
+        f"The checks of S ({found.commit}) failed ({found.reason}), though they passed on "
+        "the task's own commit: the change does not hold on the current main. The `Land check:` logs say which. Nothing was "
+        "pushed; a flaky check may be retried (land the task again), otherwise the task starts again.",
+    )
 
 
 def released(ports: LandPorts, row: LandRow | None) -> tuple[LandRow | None, str | None] | tuple[Failed, None]:
@@ -111,8 +116,9 @@ def _settled(ports: LandPorts, checks: ChecksRow, squash: Squash, validation: Se
     if con is None:
         raise StoreUnavailable("Factory database unavailable")
     with ports.lands.begin(con):
-        insert(con, LandAdmitted(key, checks.key.attempt_id, number, o, s, same, required, None, None, None, validation,
-                                 ports.work.clock()))
+        insert(
+            con, LandAdmitted(key, checks.key.attempt_id, number, o, s, same, required, None, None, None, validation, ports.work.clock())
+        )
     return ports.lands.row(key) or Failed(UNAVAILABLE, "changed")
 
 
@@ -137,8 +143,12 @@ def _reserved(ports: LandPorts, repo: Repo, checks: ChecksRow, squash: Squash, d
                 return Failed("refused", "landing", f"{RACED} Nothing was recorded.")
             return Failed("unavailable", "no_free_slot", NO_SLOT)
         reserve(con, repo_id, chosen[0], key)
-        insert(con, LandAdmitted(key, checks.key.attempt_id, number, o, s, same, required, chosen[0], chosen[1], deadline, None,
-                                 ports.work.clock()))
+        insert(
+            con,
+            LandAdmitted(
+                key, checks.key.attempt_id, number, o, s, same, required, chosen[0], chosen[1], deadline, None, ports.work.clock()
+            ),
+        )
     return ports.lands.row(key) or Failed("unavailable", "changed")
 
 
@@ -149,7 +159,8 @@ def inserted(ports: LandPorts, repo: Repo, checks: ChecksRow, squash: Squash, se
         return _reserved(ports, repo, checks, squash, deadline) if settled is None else _settled(ports, checks, squash, settled)
     except StoreRefused as refused:
         return (_held(ports, checks) if refused.reason == "landing" else None) or Failed(
-            "refused", refused.reason, f"{RACED} Nothing was recorded.")
+            "refused", refused.reason, f"{RACED} Nothing was recorded."
+        )
 
 
 def _held(ports: LandPorts, checks: ChecksRow) -> Failed | None:
@@ -157,8 +168,12 @@ def _held(ports: LandPorts, checks: ChecksRow) -> Failed | None:
     held = ports.lands.latest(checks.key.attempt_id)
     if held is None or not held.holds_slot or held.pending:
         return None
-    return Failed("refused", "landing", f"The land candidate {held.number} still holds its slot {held.slot} (its release was "
-                  "held): land the task again, which retries the release first, or release the task. Nothing was recorded.")
+    return Failed(
+        "refused",
+        "landing",
+        f"The land candidate {held.number} still holds its slot {held.slot} (its release was "
+        "held): land the task again, which retries the release first, or release the task. Nothing was recorded.",
+    )
 
 
 def _unheld(_slot_path: str, _candidate_id: str) -> AbstractContextManager[None]:
@@ -172,8 +187,11 @@ def _holder(ports: LandPorts, row: LandRow, me: EntryIdentity) -> Failed | None:
     if stored is not None and stored != me:
         seen = ports.work.entry_seen(stored)
         if seen in ("matching", "unknown"):
-            return Failed("unavailable", "land_running" if seen == "matching" else "observe",
-                          f"The land process {stored[0]} of this candidate may still run: rerun once it ended.")
+            return Failed(
+                "unavailable",
+                "land_running" if seen == "matching" else "observe",
+                f"The land process {stored[0]} of this candidate may still run: rerun once it ended.",
+            )
         replacing = Replaced(stored, "gone" if seen == "gone" else "different_process")
     if stored == me:
         return None
@@ -203,8 +221,9 @@ def _custody(ports: LandPorts, row: LandRow, slot_path: str, me: EntryIdentity) 
         lands.start_phase(key, Phase.VALIDATION, ports.work.clock())
     except StoreRefused as refused_by:
         return Failed(UNAVAILABLE, refused_by.reason, "The candidate changed before validation: rerun.")
-    target = Target(key, row.repo_id, slot_path, row.commit, row.required, row.deadline or 0.0, None,
-                    lambda digest: lands.profiled(key, digest))
+    target = Target(
+        key, row.repo_id, slot_path, row.commit, row.required, row.deadline or 0.0, None, lambda digest: lands.profiled(key, digest)
+    )
     ended = _ended(ports, row, target)
     if isinstance(ended, AttemptResult):
         verdict = concluded(ended)

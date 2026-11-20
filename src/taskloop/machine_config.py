@@ -67,10 +67,20 @@ class Effective:
     def pairs(self) -> tuple[tuple[str, Setting[Path] | Setting[int] | Setting[str | None] | Setting[str]], ...]:
         """Every key with its setting, in key order; then each binding's keys (always from the file), sorted by backlog."""
         keys: tuple[tuple[str, Setting[Path] | Setting[int] | Setting[str | None] | Setting[str]], ...] = (
-            ("db", self.db), ("artifacts", self.artifacts), ("slots_root", self.slots_root), ("slot_count", self.slot_count),
-            ("round_seconds", self.round_seconds), ("git_read_seconds", self.git_read_seconds), (BACKLOG, self.backlog))
-        bound = tuple((f"{BACKLOGS}.{name}.{key}", Setting(value, FILE)) for name, binding in sorted(self.backlogs.items())
-                      for key in Bound if (value := getattr(binding, key)) is not None)
+            ("db", self.db),
+            ("artifacts", self.artifacts),
+            ("slots_root", self.slots_root),
+            ("slot_count", self.slot_count),
+            ("round_seconds", self.round_seconds),
+            ("git_read_seconds", self.git_read_seconds),
+            (BACKLOG, self.backlog),
+        )
+        bound = tuple(
+            (f"{BACKLOGS}.{name}.{key}", Setting(value, FILE))
+            for name, binding in sorted(self.backlogs.items())
+            for key in Bound
+            if (value := getattr(binding, key)) is not None
+        )
         return keys + bound
 
 
@@ -235,10 +245,17 @@ def resolve(text: str | None, flags: Flags, home: Path) -> Effective | ConfigRef
             _chosen("slots_root", table, flags.slots_root, built.slots_root, path),
             _chosen("slot_count", table, flags.slot_count, built.slot_count, _count),
             _chosen("round_seconds", table, flags.round_seconds, built.round_seconds, _seconds),
-            _chosen("git_read_seconds", table, flags.git_read_seconds, built.git_read_seconds,
-                    _between(MIN_GIT_READ_SECONDS, MAX_GIT_READ_SECONDS)),
+            _chosen(
+                "git_read_seconds",
+                table,
+                flags.git_read_seconds,
+                built.git_read_seconds,
+                _between(MIN_GIT_READ_SECONDS, MAX_GIT_READ_SECONDS),
+            ),
             _chosen(BACKLOG, table, None, built.backlog, _backlog),
-            agents, sources, MappingProxyType(_bindings(table.get(BACKLOGS, {}), home)),
+            agents,
+            sources,
+            MappingProxyType(_bindings(table.get(BACKLOGS, {}), home)),
         )
     except _Refusal as refusal:
         return refusal.refused

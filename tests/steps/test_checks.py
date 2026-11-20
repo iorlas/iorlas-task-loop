@@ -89,8 +89,9 @@ def test_a_new_checks_attempt_runs_commands_despite_a_previous_pass(bench: Bench
     assert bench.run(CHECK, TEST) is None and bench.verdict() == ("passed", None)
     key = AttemptKey("new-checks", "new-token", 2)
     with begin_immediate(bench.con):
-        bench.con.execute("UPDATE checks_attempt SET phase='concluded',conclusion='passed',concluded_at=11,released_at=12,parked=?",
-                          (bench.x,))
+        bench.con.execute(
+            "UPDATE checks_attempt SET phase='concluded',conclusion='passed',concluded_at=11,released_at=12,parked=?", (bench.x,)
+        )
         bench.con.execute("DELETE FROM reservation WHERE attempt_id=?", (CHECKS.attempt_id,))
         bench.con.execute("INSERT INTO reservation VALUES ('s2','r',2,?)", (key.attempt_id,))
         insert(bench.con, ChecksAdmitted(key, "implement", 2, "s2", bench.x, bench.x, REQUIRED, 100))
@@ -113,8 +114,14 @@ def test_each_command_runs_in_the_slot_with_the_scrubbed_environment_and_the_nea
     first, second = bench.process.calls
     assert (first.cwd, first.timeout, second.timeout) == (str(bench.slot.path), 90, 30)
     assert first.env == {
-        "HOME": "/home/p", "PATH": "/bin", "GIT_CONFIG_COUNT": "1", "GIT_CONFIG_KEY_0": f"url.{PUSH_REFUSED}.pushInsteadOf",
-        "GIT_CONFIG_VALUE_0": "", "TMPDIR": str(found.tmp), "UV_CACHE_DIR": str(found.cache), "UV_TOOL_DIR": str(found.tools),
+        "HOME": "/home/p",
+        "PATH": "/bin",
+        "GIT_CONFIG_COUNT": "1",
+        "GIT_CONFIG_KEY_0": f"url.{PUSH_REFUSED}.pushInsteadOf",
+        "GIT_CONFIG_VALUE_0": "",
+        "TMPDIR": str(found.tmp),
+        "UV_CACHE_DIR": str(found.cache),
+        "UV_TOOL_DIR": str(found.tools),
     }
 
 
@@ -134,12 +141,16 @@ def test_its_own_timeout_is_timed_out_and_the_block_goes_on(bench: Bench) -> Non
     assert bench.log("test") == "$ just test\ndone\ntimed out\n" and bench.verdict() == ("failed", "test:timed_out")
 
 
-@pytest.mark.parametrize(("command", "ending"), [
-    (Command(rc=None, timed_out=True, survivors=True), "timed out"),
-    (Command(rc=None, timed_out=True, lingering=True), "timed out"),
-    (Command(lingering=True), "exit 0"),
-    (Command(rc=2, lingering=True), "exit 2"),
-], ids=["timeout_survivors", "timeout_group", "exit_group", "failed_group"])
+@pytest.mark.parametrize(
+    ("command", "ending"),
+    [
+        (Command(rc=None, timed_out=True, survivors=True), "timed out"),
+        (Command(rc=None, timed_out=True, lingering=True), "timed out"),
+        (Command(lingering=True), "exit 0"),
+        (Command(rc=2, lingering=True), "exit 2"),
+    ],
+    ids=["timeout_survivors", "timeout_group", "exit_group", "failed_group"],
+)
 def test_a_process_left_after_any_end_is_lingering_and_stops_the_block(bench: Bench, command: Command, ending: str) -> None:
     bench.process.script = [command]
     assert bench.run(LINT, CHECK, TEST) is None
@@ -262,7 +273,11 @@ def test_an_interrupted_block_repeats_whole_and_only_the_latest_block_concludes(
     bench.deadline = 1000.0
     assert bench.run(TEST, CHECK) is None
     assert [row[:4] for row in bench.rows()] == [
-        (1, 0, "test", "passed"), (1, 1, "check", "interrupted"), (2, 0, "test", "passed"), (2, 1, "check", "passed")]
+        (1, 0, "test", "passed"),
+        (1, 1, "check", "interrupted"),
+        (2, 0, "test", "passed"),
+        (2, 1, "check", "passed"),
+    ]
     assert completed(bench.store.results(CHECKS), (TEST, CHECK), REQUIRED) and bench.verdict() == ("passed", None)
     assert bench.log("check", 2) == "$ just check\ndone\nexit 0\n"
 
@@ -271,17 +286,33 @@ def result(name: str, found: CommandConclusion | None, digest: str | None = "0" 
     return ResultRow(1, 0, name, digest, None if digest is None else 1, None, 1.0, None if found is None else 2.0, None, found)
 
 
-@pytest.mark.parametrize(("results", "done"), [
-    ((), False),
-    ((result("check", CommandConclusion.PASSED), result("test", CommandConclusion.TIMED_OUT), result("lint",
-        CommandConclusion.FAILED)), True),
-    ((result("check", CommandConclusion.FAILED), result("test", CommandConclusion.PASSED)), False),  # lint missing
-    ((result("check", CommandConclusion.PASSED), result("test", CommandConclusion.PASSED), result("lint",
-        CommandConclusion.INTERRUPTED)), False),
-    ((result("check", CommandConclusion.PASSED), result("test", CommandConclusion.PASSED), result("lint", None)), False),
-    ((result("check", CommandConclusion.PASSED), result("lint", CommandConclusion.DIRTY)), True),
-    ((result("lint", CommandConclusion.LINGERING),), True),
-], ids=["empty", "terminal", "missing", "interrupted", "unfinished", "dirty", "lingering"])
+@pytest.mark.parametrize(
+    ("results", "done"),
+    [
+        ((), False),
+        (
+            (
+                result("check", CommandConclusion.PASSED),
+                result("test", CommandConclusion.TIMED_OUT),
+                result("lint", CommandConclusion.FAILED),
+            ),
+            True,
+        ),
+        ((result("check", CommandConclusion.FAILED), result("test", CommandConclusion.PASSED)), False),  # lint missing
+        (
+            (
+                result("check", CommandConclusion.PASSED),
+                result("test", CommandConclusion.PASSED),
+                result("lint", CommandConclusion.INTERRUPTED),
+            ),
+            False,
+        ),
+        ((result("check", CommandConclusion.PASSED), result("test", CommandConclusion.PASSED), result("lint", None)), False),
+        ((result("check", CommandConclusion.PASSED), result("lint", CommandConclusion.DIRTY)), True),
+        ((result("lint", CommandConclusion.LINGERING),), True),
+    ],
+    ids=["empty", "terminal", "missing", "interrupted", "unfinished", "dirty", "lingering"],
+)
 def test_a_completed_block_is_every_terminal_result_or_a_stopping_one(results: tuple[ResultRow, ...], done: bool) -> None:
     assert completed(results, (CHECK, TEST, LINT), REQUIRED) is done
 
@@ -293,17 +324,31 @@ def test_an_undefined_required_name_needs_its_own_result_for_a_completed_block()
     assert completed((*ran, result("smoke", CommandConclusion.UNDEFINED, None)), (CHECK, TEST), required)
 
 
-@pytest.mark.parametrize(("results", "verdict"), [
-    ((result("check", CommandConclusion.PASSED), result("test", CommandConclusion.PASSED), result("lint",
-        CommandConclusion.FAILED)), ("passed", None)),
-    ((result("check", CommandConclusion.FAILED), result("test", CommandConclusion.TIMED_OUT)), ("failed", "check:failed")),
-    ((result("test", CommandConclusion.TIMED_OUT), result("check", CommandConclusion.FAILED)), ("failed",
-        "check:failed")),  # the target's order, not the block's
-    ((result("check", CommandConclusion.PASSED),), ("failed", "test:not_run")),
-    ((result("check", CommandConclusion.FAILED), result("lint", CommandConclusion.DIRTY)), ("failed", "lint:dirty")),
-    ((result("check", CommandConclusion.PASSED), result("test", CommandConclusion.PASSED), result("lint",
-        CommandConclusion.LINGERING)), ("failed", "lint:lingering")),
-], ids=["passed", "first_required", "target_order", "not_run", "stopping_wins", "stopping_not_required"])
+@pytest.mark.parametrize(
+    ("results", "verdict"),
+    [
+        (
+            (result("check", CommandConclusion.PASSED), result("test", CommandConclusion.PASSED), result("lint", CommandConclusion.FAILED)),
+            ("passed", None),
+        ),
+        ((result("check", CommandConclusion.FAILED), result("test", CommandConclusion.TIMED_OUT)), ("failed", "check:failed")),
+        (
+            (result("test", CommandConclusion.TIMED_OUT), result("check", CommandConclusion.FAILED)),
+            ("failed", "check:failed"),
+        ),  # the target's order, not the block's
+        ((result("check", CommandConclusion.PASSED),), ("failed", "test:not_run")),
+        ((result("check", CommandConclusion.FAILED), result("lint", CommandConclusion.DIRTY)), ("failed", "lint:dirty")),
+        (
+            (
+                result("check", CommandConclusion.PASSED),
+                result("test", CommandConclusion.PASSED),
+                result("lint", CommandConclusion.LINGERING),
+            ),
+            ("failed", "lint:lingering"),
+        ),
+    ],
+    ids=["passed", "first_required", "target_order", "not_run", "stopping_wins", "stopping_not_required"],
+)
 def test_the_conclusion_reads_the_required_names_and_any_stopping_result(
     results: tuple[ResultRow, ...], verdict: tuple[str, str | None]
 ) -> None:

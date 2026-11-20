@@ -79,11 +79,23 @@ def _registration(database: Path, store: Store | None = None) -> tuple[Store, Ca
 
 def _environment(setup: SetupStore, database: Path, artifacts: Path, views: GitViews) -> Preparation:
     """The slot environment's real ports: real Git, files, the registered start, the process table and the probe."""
-    return Preparation(EnvironmentPorts(
-        setup, views.checkouts, views.slot_profiles, RealEnvFiles(), setup_process, setup_seen,
-        group_alive, EvidenceFiles(artifacts), time.time, sys.platform, shutil.rmtree.avoids_symlink_attacks, sandbox_probe,
-        (artifacts.absolute(), database.absolute().parent),
-    ))
+    return Preparation(
+        EnvironmentPorts(
+            setup,
+            views.checkouts,
+            views.slot_profiles,
+            RealEnvFiles(),
+            setup_process,
+            setup_seen,
+            group_alive,
+            EvidenceFiles(artifacts),
+            time.time,
+            sys.platform,
+            shutil.rmtree.avoids_symlink_attacks,
+            sandbox_probe,
+            (artifacts.absolute(), database.absolute().parent),
+        )
+    )
 
 
 def open_recovery_registration(database: Path) -> RecoveryStore:
@@ -98,15 +110,23 @@ def _run(harness: Harness, spec: LaunchSpec, timeout: float, hooks: RunHooks | N
 
 
 def open_continuation(
-    database: Path, artifacts: Path, views: GitViews, claim: Callable[[Admission], Claim] | None = None,
+    database: Path,
+    artifacts: Path,
+    views: GitViews,
+    claim: Callable[[Admission], Claim] | None = None,
     credentials: Credentials = machine_credentials,
 ) -> Continuation:
     """Saved-session continuation with native observations and an injected, read-only claim observation."""
     store = Store(SCHEMA)
     attempts = open_attempts(database, artifacts, views, credentials)
-    recovery = Recovery(RecoveryStore(lambda: store.shared_rw(database), store.begin_immediate), NativeProcesses(),
-                        claim or _recovery_claim(attempts.store),
-                        slot_lock.hold, time.time, NativeIds())
+    recovery = Recovery(
+        RecoveryStore(lambda: store.shared_rw(database), store.begin_immediate),
+        NativeProcesses(),
+        claim or _recovery_claim(attempts.store),
+        slot_lock.hold,
+        time.time,
+        NativeIds(),
+    )
     return Continuation(recovery, attempts, NativeContinuation(attempts, open_recovery_registration(database)))
 
 
@@ -147,8 +167,9 @@ def open_attempts(database: Path, artifacts: Path, views: GitViews, credentials:
         registration_store=AttemptStore(bounded, registration.begin_immediate),
         environment=environment,
         discussion=open_discussion(database, store).for_task,
-        source_preparation=SourcePreparation(attempts, views.checkouts, views.remotes, RealSlotFiles(), time.time,
-                                             environment, agent, evidence, _run, worker_gone),
+        source_preparation=SourcePreparation(
+            attempts, views.checkouts, views.remotes, RealSlotFiles(), time.time, environment, agent, evidence, _run, worker_gone
+        ),
     )
 
 
@@ -176,8 +197,9 @@ class Checking:
     ids: Ids
 
 
-def open_checking(database: Path, artifacts: Path, views: GitViews, store: Store | None = None,
-                  registration: Store | None = None) -> Checking:
+def open_checking(
+    database: Path, artifacts: Path, views: GitViews, store: Store | None = None, registration: Store | None = None
+) -> Checking:
     """Real wiring of the checks entry: per-thread shared writers on factory.db (each command's identity through the
     bounded registration connections), real Git, files and processes, wall clock, this process's scrubbed environment."""
     store = store if store is not None else Store(SCHEMA)
@@ -185,10 +207,20 @@ def open_checking(database: Path, artifacts: Path, views: GitViews, store: Store
     registering = StoreConnection(bounded, registration.begin_immediate)
     setup = SetupStore(lambda: store.shared_rw(database), store.begin_immediate, AttemptReads(bounded, registration.begin_immediate))
     return Checking(
-        CheckStore(lambda: store.shared_rw(database), store.begin_immediate, registering), setup, EvidenceFiles(artifacts), views.checkouts,
-        RealSlotFiles(), views.slot_profiles, _environment(setup, database, artifacts, views),
+        CheckStore(lambda: store.shared_rw(database), store.begin_immediate, registering),
+        setup,
+        EvidenceFiles(artifacts),
+        views.checkouts,
+        RealSlotFiles(),
+        views.slot_profiles,
+        _environment(setup, database, artifacts, views),
         Block(BlockPorts(setup_process, group_alive, time.time)),
-        setup_seen, entry_seen, RealEnvFiles().empty_scratch, time.time, lambda: scrubbed(os.environ), ids=NativeIds(),
+        setup_seen,
+        entry_seen,
+        RealEnvFiles().empty_scratch,
+        time.time,
+        lambda: scrubbed(os.environ),
+        ids=NativeIds(),
     )
 
 
@@ -215,17 +247,34 @@ def open_releaser(database: Path, store: Store, views: GitViews) -> SlotRelease:
     closes it) on factory.db, real Git, the entry and worker observations, the park under the slot's custody lock, the
     tracker's fenced unclaim, wall clock."""
     writer = AttemptStore(lambda: store.shared_rw(database), store.begin_immediate)
-    return SlotRelease(writer, views.checkouts, RealSlotFiles(), entry_seen, worker_gone, slot_lock.custody, tracker_claims().unclaim,
-                       time.time, setup_seen, RealEnvFiles().empty_scratch,
-                       HoldStore(lambda: store.shared_rw(database), store.begin_immediate), ids=NativeIds())
+    return SlotRelease(
+        writer,
+        views.checkouts,
+        RealSlotFiles(),
+        entry_seen,
+        worker_gone,
+        slot_lock.custody,
+        tracker_claims().unclaim,
+        time.time,
+        setup_seen,
+        RealEnvFiles().empty_scratch,
+        HoldStore(lambda: store.shared_rw(database), store.begin_immediate),
+        ids=NativeIds(),
+    )
 
 
 def open_publisher(database: Path, store: Store, views: GitViews, artifacts: Path) -> BranchPublish:
     """Real wiring for `tl step publish` and the publication after `tl step commit`: a shared writer of `store` (the caller
     closes it) on factory.db, the remote-capable Git view, the real slot file port, wall clock."""
     timing = partial(_operation_observer, artifacts)
-    return BranchPublish(AttemptStore(lambda: store.shared_rw(database), store.begin_immediate),
-        views.remotes, RealSlotFiles(), time.time, ids=NativeIds(), timing=timing)
+    return BranchPublish(
+        AttemptStore(lambda: store.shared_rw(database), store.begin_immediate),
+        views.remotes,
+        RealSlotFiles(),
+        time.time,
+        ids=NativeIds(),
+        timing=timing,
+    )
 
 
 def open_launcher(database: Path, artifacts: Path, views: GitViews) -> Launcher:
@@ -234,21 +283,39 @@ def open_launcher(database: Path, artifacts: Path, views: GitViews) -> Launcher:
     The database path is made absolute here: the entry refuses a relative one, after its registration would commit."""
     registration = open_recovery_registration(database.absolute())
     recovery = Recovery(registration, NativeProcesses(), _recovery_claim(registration.attempts), slot_lock.hold, time.time, NativeIds())
-    return Launcher(database.absolute(), EvidenceFiles(artifacts), time.time, popen_registered, observe_owned, sys.executable,
-                    read_seconds=views.read_seconds, ids=NativeIds(), recovery=RecoveryLaunch(recovery))
+    return Launcher(
+        database.absolute(),
+        EvidenceFiles(artifacts),
+        time.time,
+        popen_registered,
+        observe_owned,
+        sys.executable,
+        read_seconds=views.read_seconds,
+        ids=NativeIds(),
+        recovery=RecoveryLaunch(recovery),
+    )
 
 
 def open_checks_launcher(database: Path, artifacts: Path, views: GitViews) -> Launcher:
     """`open_launcher` for checks attempts: `CheckStore`'s attempts and registration, the checks entry module."""
     files = EvidenceFiles(artifacts)
     timing = partial(files.observe_operation, clock=time.monotonic, wall=time.time, ids=NativeIds())
-    return Launcher(database.absolute(), files, time.time, popen_registered, observe_owned, sys.executable,
-                    CheckStore, CHECK_ENTRY_MODULE, read_seconds=views.read_seconds, ids=NativeIds(), timing=timing)
+    return Launcher(
+        database.absolute(),
+        files,
+        time.time,
+        popen_registered,
+        observe_owned,
+        sys.executable,
+        CheckStore,
+        CHECK_ENTRY_MODULE,
+        read_seconds=views.read_seconds,
+        ids=NativeIds(),
+        timing=timing,
+    )
 
 
-def adopt_slots(
-    database: Path, checkout: Path, root: Path, count: int, git: SlotGit
-) -> tuple[Adopted | NotAdopted, ...]:
+def adopt_slots(database: Path, checkout: Path, root: Path, count: int, git: SlotGit) -> tuple[Adopted | NotAdopted, ...]:
     """Adopt worktrees a person already made with `git worktree add --detach <root>/<repo name>/sN`; creates none. `git` is how a slot is
     observed (`real_slots`)."""
     store = Store(SCHEMA)
@@ -280,24 +347,38 @@ def open_admission(database: Path, artifacts: Path, views: GitViews, store: Stor
         slot_lock.probe,
         RealSlotFiles(),
         discussion=open_discussion(database, store).collect,
-        ids=NativeIds(), engine=installed_digest(),
+        ids=NativeIds(),
+        engine=installed_digest(),
     )
 
 
 def open_chain(database: Path, artifacts: Path, views: GitViews, store: Store | None = None) -> ChainAdmission:
     """Real wiring of the admissions that continue a task: per-thread shared writers on factory.db, wall-clock deadlines."""
     store = store if store is not None else Store(SCHEMA)
-    return ChainAdmission(lambda: store.shared_rw(database), store.begin_immediate, EvidenceFiles(artifacts), time.time,
-                          views.checkouts, RealSlotFiles(), ids=NativeIds(),
-                          engine=installed_digest())
+    return ChainAdmission(
+        lambda: store.shared_rw(database),
+        store.begin_immediate,
+        EvidenceFiles(artifacts),
+        time.time,
+        views.checkouts,
+        RealSlotFiles(),
+        ids=NativeIds(),
+        engine=installed_digest(),
+    )
 
 
 def open_answer_repair(database: Path, artifacts: Path, store: Store | None = None) -> AnswerRepair:
     """Repair admission shares the attempt lifecycle; dispatch uses the ordinary launcher and continuation."""
     store = store if store is not None else Store(SCHEMA)
-    return AnswerRepair(AnswerRepairStore(lambda: store.shared_rw(database), store.begin_immediate), EvidenceFiles(artifacts),
-                        NativeProcesses(), slot_lock.hold, time.time, ids=NativeIds(),
-                        engine=installed_digest())
+    return AnswerRepair(
+        AnswerRepairStore(lambda: store.shared_rw(database), store.begin_immediate),
+        EvidenceFiles(artifacts),
+        NativeProcesses(),
+        slot_lock.hold,
+        time.time,
+        ids=NativeIds(),
+        engine=installed_digest(),
+    )
 
 
 def open_advance(database: Path, artifacts: Path, views: GitViews, store: Store | None = None) -> NextAdmission:
@@ -305,10 +386,17 @@ def open_advance(database: Path, artifacts: Path, views: GitViews, store: Store 
     the real Git boundary and slot lock probe, wall-clock deadlines; no claim."""
     store = store if store is not None else Store(SCHEMA)
     return NextAdmission(
-        lambda: store.shared_rw(database), store.begin_immediate, EvidenceFiles(artifacts), inspect_tracker_task, views.checkouts,
-        time.time, slot_lock.probe, RealSlotFiles(),
+        lambda: store.shared_rw(database),
+        store.begin_immediate,
+        EvidenceFiles(artifacts),
+        inspect_tracker_task,
+        views.checkouts,
+        time.time,
+        slot_lock.probe,
+        RealSlotFiles(),
         discussion=open_discussion(database, store).collect,
-        ids=NativeIds(), engine=installed_digest(),
+        ids=NativeIds(),
+        engine=installed_digest(),
     )
 
 
@@ -317,8 +405,17 @@ def open_checks_admission(database: Path, views: GitViews, store: Store | None =
     on factory.db, the task read, the real Git boundary and slot lock probe, the profile read on the person's checkout,
     wall-clock deadlines; no claim, no input file."""
     store = store if store is not None else Store(SCHEMA)
-    return ChecksAdmission(lambda: store.shared_rw(database), store.begin_immediate, inspect_tracker_task, views.checkouts, time.time,
-                           slot_lock.probe, RealSlotFiles(), partial(GitProfileFiles, repos=views.checkouts), ids=NativeIds())
+    return ChecksAdmission(
+        lambda: store.shared_rw(database),
+        store.begin_immediate,
+        inspect_tracker_task,
+        views.checkouts,
+        time.time,
+        slot_lock.probe,
+        RealSlotFiles(),
+        partial(GitProfileFiles, repos=views.checkouts),
+        ids=NativeIds(),
+    )
 
 
 def open_checks_releaser(database: Path, store: Store, views: GitViews) -> ChecksRelease:
@@ -326,5 +423,14 @@ def open_checks_releaser(database: Path, store: Store, views: GitViews) -> Check
     factory.db, real Git, the entry and command observations, the reset and park under the slot's custody lock, wall clock;
     no tracker call."""
     writer = CheckStore(lambda: store.shared_rw(database), store.begin_immediate)
-    return ChecksRelease(writer, views.checkouts, RealSlotFiles(), entry_seen, slot_lock.custody, time.time, setup_seen,
-                         RealEnvFiles().empty_scratch, ids=NativeIds())
+    return ChecksRelease(
+        writer,
+        views.checkouts,
+        RealSlotFiles(),
+        entry_seen,
+        slot_lock.custody,
+        time.time,
+        setup_seen,
+        RealEnvFiles().empty_scratch,
+        ids=NativeIds(),
+    )

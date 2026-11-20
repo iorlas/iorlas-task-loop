@@ -17,8 +17,9 @@ from taskloop.step_guide import guide
 from taskloop.step_render import human
 from taskloop.task_event_codec import reason as event_reason
 
-VIEW = AttemptView("tasks", "tl-1", "plan", "a", "s1", "captured", "gone",
-                   AttemptResult("collected", "needs_owner"), False, "on_hold", label="approved")
+VIEW = AttemptView(
+    "tasks", "tl-1", "plan", "a", "s1", "captured", "gone", AttemptResult("collected", "needs_owner"), False, "on_hold", label="approved"
+)
 ROW = row(label="approved")
 
 
@@ -103,14 +104,20 @@ def test_a_hold_without_a_recorded_approval_label_requires_manual_continuation()
     assert "choose manual continuation" in text and "no approval label was recorded" in text
 
 
-@pytest.mark.parametrize(("reason", "situation", "decision"), [
-    ("failed:run:timeout", "did not finish before its deadline", "allow more time"),
-    ("branch_moved", "Held:", "First restore task/tl-1 to contain the commit accepted by factory commit"),
-    ("claim_lost", "Someone else changed this task's claim", "approval label `approved`"),
-    ("land:checks_failed", "checks failed", "preserve the old task branch and restart from plan"),
-])
+@pytest.mark.parametrize(
+    ("reason", "situation", "decision"),
+    [
+        ("failed:run:timeout", "did not finish before its deadline", "allow more time"),
+        ("branch_moved", "Held:", "First restore task/tl-1 to contain the commit accepted by factory commit"),
+        ("claim_lost", "Someone else changed this task's claim", "approval label `approved`"),
+        ("land:checks_failed", "checks failed", "preserve the old task branch and restart from plan"),
+    ],
+)
 def test_shown_holds_keep_the_cause_and_decision_in_prose(
-    reason: str, situation: str, decision: str, tmp_path: Path,
+    reason: str,
+    situation: str,
+    decision: str,
+    tmp_path: Path,
 ) -> None:
     view = replace(VIEW, hold=ROW.model_copy(update={"event": event_for(reason)}))
     shown = Shown(view, tmp_path, tmp_path / "entry.log", tmp_path / "events.jsonl")
@@ -123,8 +130,7 @@ def test_shown_holds_keep_the_cause_and_decision_in_prose(
 @pytest.mark.parametrize("reason", ["land:conflict", "merge:needs_owner"])
 def test_terminal_holds_stay_held_with_their_retained_work(reason: str, recorded: bool) -> None:
     held = ROW.model_copy(update={"event": event_for(reason)}) if recorded else None
-    view = replace(VIEW, next="on_hold" if recorded else "hold", hold=held,
-                   hold_due=None if recorded else reason)
+    view = replace(VIEW, next="on_hold" if recorded else "hold", hold=held, hold_due=None if recorded else reason)
     text = hold_guide(view)
     assert_prose(text)
     assert "retained task work" in text and "stays held" in text and "do not restart" in text

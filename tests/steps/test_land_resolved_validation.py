@@ -93,8 +93,10 @@ def test_slot_reuse_does_not_reexecute_resolution_or_touch_new_work(b: LandBench
     ports, case, result = completed(b)
     record = case.record
     b.con.execute("UPDATE slot SET generation=generation+1 WHERE name=?", (record.slot,))
-    b.con.execute("INSERT INTO reservation(repo_id,slot,attempt_id,generation) VALUES (?,?,?,?)",
-                  (record.request.repo_id, record.slot, "new-owner", record.key.reservation_generation + 1))
+    b.con.execute(
+        "INSERT INTO reservation(repo_id,slot,attempt_id,generation) VALUES (?,?,?,?)",
+        (record.request.repo_id, record.slot, "new-owner", record.key.reservation_generation + 1),
+    )
     b.slot.write_file("new-owner", "keep new work\n")
     found = land(ports, request(b))
     assert isinstance(found, Failed) and found.reason == "no_free_slot"
@@ -143,7 +145,9 @@ def test_resolution_is_preserved_when_fresh_validation_cannot_deliver(b: LandBen
 
 @pytest.mark.parametrize("evidence", ["ref", "object", "release", "mismatch"])
 def test_incomplete_or_missing_completion_evidence_never_promotes(
-    b: LandBench, monkeypatch: pytest.MonkeyPatch, evidence: str,
+    b: LandBench,
+    monkeypatch: pytest.MonkeyPatch,
+    evidence: str,
 ) -> None:
     ports, case, result = completed(b)
     saved = ports.conflicts.store.completed(case.record.key)
@@ -285,7 +289,9 @@ def test_renewed_conflict_preserves_resolution_without_another_agent(b: LandBenc
 
 @pytest.mark.parametrize("containing_tip", [False, True])
 def test_interrupted_push_is_adopted_after_restart_without_repeating_work(
-    b: LandBench, monkeypatch: pytest.MonkeyPatch, containing_tip: bool,
+    b: LandBench,
+    monkeypatch: pytest.MonkeyPatch,
+    containing_tip: bool,
 ) -> None:
     ports, case, result = completed(b)
 
@@ -325,7 +331,9 @@ def test_interrupted_push_is_adopted_after_restart_without_repeating_work(
 
 @pytest.mark.parametrize("performed", [False, True])
 def test_interrupted_close_is_finished_or_adopted_after_restart(
-    b: LandBench, monkeypatch: pytest.MonkeyPatch, performed: bool,
+    b: LandBench,
+    monkeypatch: pytest.MonkeyPatch,
+    performed: bool,
 ) -> None:
     ports, case, result = completed(b)
 
@@ -351,8 +359,9 @@ def test_interrupted_close_is_finished_or_adopted_after_restart(
     ports = b.ports()
     # Use the adapter's observation contract: an already closed task causes no close effect.
     close = ports.close
-    ports = replace(ports, close=lambda root, task, reason: CloseAnswer("already_closed")
-                    if b.status == "closed" else close(root, task, reason))
+    ports = replace(
+        ports, close=lambda root, task, reason: CloseAnswer("already_closed") if b.status == "closed" else close(root, task, reason)
+    )
     found = land(ports, request(b, None))
     assert isinstance(found, Landed) and found.how == "delivered" and found.row.key == row.key
     assert found.row.close == ("already_closed" if performed else "closed")

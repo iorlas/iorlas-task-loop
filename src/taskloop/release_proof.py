@@ -37,8 +37,9 @@ def recovery_stopped(seen: SetupSeen, intent: Intent | None) -> NotReleased | No
         if found is Seen.UNKNOWN:
             return NotReleased("unavailable", RecoveryReason.UNKNOWN, f"A recovery process or group could not be observed. {NOTHING}")
         if found is Seen.ALIVE:
-            return NotReleased("unsettled", RecoveryReason.RUNNING,
-                               f"A recovery process (pid {process.pid}, group {process.pgid}) still runs. {NOTHING}")
+            return NotReleased(
+                "unsettled", RecoveryReason.RUNNING, f"A recovery process (pid {process.pid}, group {process.pgid}) still runs. {NOTHING}"
+            )
     return None
 
 
@@ -63,7 +64,10 @@ class Stopping:
 
 
 def entry_stopped(
-    observe: Observe, me: EntryIdentity | None, entry: EntryIdentity | None, process: str | None = None,
+    observe: Observe,
+    me: EntryIdentity | None,
+    entry: EntryIdentity | None,
+    process: str | None = None,
 ) -> NotReleased | None:
     """A matching entry refuses release unless releasing itself; unknown observation preserves custody."""
     if entry is None or entry == me:

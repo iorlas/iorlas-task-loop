@@ -51,7 +51,8 @@ def entry(con: sqlite3.Connection) -> tuple[object, ...]:
 
 
 def test_registration_configuration_is_connection_local_and_preserves_transaction(
-    con: sqlite3.Connection, tmp_path: Path,
+    con: sqlite3.Connection,
+    tmp_path: Path,
 ) -> None:
     ordinary = Store(SCHEMA).open_rw(tmp_path / "ordinary.db")
     assert ordinary is not None

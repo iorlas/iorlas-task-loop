@@ -14,6 +14,5 @@ class AnswerRepairing(Protocol):
 
 
 def start_captured(ports: StartPorts, request: StartRequest, key: AttemptKey, entry: EntryIdentity | None) -> Started | Failed:
-    repaired = (None if ports.answer_repair is None else
-                ports.answer_repair.route(request.backlog, request.task_id, key, request.minutes))
+    repaired = None if ports.answer_repair is None else ports.answer_repair.route(request.backlog, request.task_id, key, request.minutes)
     return repaired if repaired is not None else ports.repeat.repeat(request.backlog, request.task_id, key, entry, request.minutes)

@@ -56,8 +56,7 @@ def test_a_symlink_or_submodule_entry_is_not_a_file(tmp_path: Path, monkeypatch:
     files = GitProfileFiles(main, GitViews(DEFAULT_GIT_READ_SECONDS).checkouts)
     assert files.blob("HEAD~1", PROFILE_PATH) == NotAFile("120000")
     assert files.blob("HEAD", PROFILE_PATH) == NotAFile("160000")
-    assert read_profile(files, "HEAD") == Refused(
-        "not_a_file", detail=".task-loop.json at HEAD is not a regular file (mode 160000)")
+    assert read_profile(files, "HEAD") == Refused("not_a_file", detail=".task-loop.json at HEAD is not a regular file (mode 160000)")
 
 
 def test_a_path_that_is_no_repository_is_unavailable_not_no_commit(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

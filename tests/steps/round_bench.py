@@ -156,8 +156,17 @@ class Factory:
     per task and step) and the setup process. `launch` registers the task's current attempt's entry and runs its body at
     once; `failing` answers the next launch instead, with nothing run (an entry that never started)."""
 
-    def __init__(self, con: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: PinnedViews, files: SlotFiles,
-                 tracker: Tracker, *, adopted: bool = False) -> None:
+    def __init__(
+        self,
+        con: sqlite3.Connection,
+        tmp_path: Path,
+        slot: FakeWorktree,
+        checkouts: PinnedViews,
+        files: SlotFiles,
+        tracker: Tracker,
+        *,
+        adopted: bool = False,
+    ) -> None:
         if not adopted:
             con.execute("INSERT INTO slot (repo_id,name,path) VALUES (?,'s1',?)", (slot.repo.identity().key, str(slot.path)))
         self.root = slot.path.parent
@@ -188,9 +197,22 @@ class Factory:
         step = self.store.step_of(key.attempt_id)
         evidence, agent = EvidenceFiles(self.tmp), AgentLaunch(lambda _harness: ("/bin/codex", {}), ids=NativeIds())
         environment = self.environment.preparation()
-        preparation = (SourcePreparation(self.store, self.checkouts, self.checkouts, self.files, lambda: self.now,
-                                        environment, agent, evidence, self.agents[task_id, step or ""], lambda _worker: True)
-                       if self.merge_before_dispatch else None)
+        preparation = (
+            SourcePreparation(
+                self.store,
+                self.checkouts,
+                self.checkouts,
+                self.files,
+                lambda: self.now,
+                environment,
+                agent,
+                evidence,
+                self.agents[task_id, step or ""],
+                lambda _worker: True,
+            )
+            if self.merge_before_dispatch
+            else None
+        )
         attempts = Attempts(
             self.store,
             evidence,
@@ -209,18 +231,59 @@ class Factory:
 
     def starting(self) -> StartPorts:
         files, clock = EvidenceFiles(self.tmp), lambda: self.now
-        fresh = AttemptAdmission(lambda: self.con, begin_immediate, files, self.tracker.inspect, self.checkouts, self.tracker.claim,
-                                 self.tracker.unclaim, clock, lambda _p: True, self.files, ids=NativeIds(), engine=ENGINE)
-        advance = NextAdmission(lambda: self.con, begin_immediate, files, self.tracker.inspect, self.checkouts, clock, lambda _p: True,
-                                self.files, ids=NativeIds(), engine=ENGINE)
+        fresh = AttemptAdmission(
+            lambda: self.con,
+            begin_immediate,
+            files,
+            self.tracker.inspect,
+            self.checkouts,
+            self.tracker.claim,
+            self.tracker.unclaim,
+            clock,
+            lambda _p: True,
+            self.files,
+            ids=NativeIds(),
+            engine=ENGINE,
+        )
+        advance = NextAdmission(
+            lambda: self.con,
+            begin_immediate,
+            files,
+            self.tracker.inspect,
+            self.checkouts,
+            clock,
+            lambda _p: True,
+            self.files,
+            ids=NativeIds(),
+            engine=ENGINE,
+        )
         repairs = AnswerRepair(AnswerRepairStore(lambda: self.con), files, StoppedProcesses(), hold, clock, ids=NativeIds(), engine=ENGINE)
-        return StartPorts(self.store, fresh, self, clock, Never(), advance, ChecksPorts(NoRequired(), NoChecks(), NoChecks()),
-                          answer_repair=AnswerRepairRouting(self.store, repairs, self))
+        return StartPorts(
+            self.store,
+            fresh,
+            self,
+            clock,
+            Never(),
+            advance,
+            ChecksPorts(NoRequired(), NoChecks(), NoChecks()),
+            answer_repair=AnswerRepairRouting(self.store, repairs, self),
+        )
 
     def releaser(self) -> SlotRelease:
-        return SlotRelease(self.store, self.checkouts, self.files, lambda _entry: "gone", lambda _worker: True, custody,
-                           self.tracker.unclaim, lambda: self.now, lambda _setup: "gone", lambda _scratch: True,
-                           HoldStore(lambda: self.con), ids=NativeIds())
+        return SlotRelease(
+            self.store,
+            self.checkouts,
+            self.files,
+            lambda _entry: "gone",
+            lambda _worker: True,
+            custody,
+            self.tracker.unclaim,
+            lambda: self.now,
+            lambda _setup: "gone",
+            lambda _scratch: True,
+            HoldStore(lambda: self.con),
+            ids=NativeIds(),
+        )
 
     def observe(self, _entry: EntryIdentity) -> Seen:
         """Called while the round reads its snapshot: `during` is another actor acting once, right after that read."""
@@ -234,18 +297,37 @@ class Factory:
 
     def holding(self, reads: StatusPorts) -> HoldPorts:
         tracker = TrackerHolds(self.tracker.labels, self.tracker.comment, self.tracker.clear)
-        return HoldPorts(HoldStore(lambda: self.con), self.store, tracker, self.releaser(), self.checks_release(), lambda: self.now,
-                         EvidenceFiles(self.tmp), partial(current_view, reads))
+        return HoldPorts(
+            HoldStore(lambda: self.con),
+            self.store,
+            tracker,
+            self.releaser(),
+            self.checks_release(),
+            lambda: self.now,
+            EvidenceFiles(self.tmp),
+            partial(current_view, reads),
+        )
 
     def ports(self) -> RoundPorts:
         """Fresh ports over the same factory.db each round, as each `tl rounds start` round opens them (a restart too)."""
-        factory_commit = FactoryCommit(self.store, self.checkouts, self.files, lambda _worker: True, lambda: self.now, hold,
-                                       ids=NativeIds())
+        factory_commit = FactoryCommit(
+            self.store, self.checkouts, self.files, lambda _worker: True, lambda: self.now, hold, ids=NativeIds()
+        )
         reads = StatusPorts(self.store, self.observe, lambda: self.now, factory_commit.leftovers, lambda: "boot")
         publisher = BranchPublish(self.store, self.checkouts, self.files, lambda: self.now, ids=NativeIds())
         holding = self.holding(reads)
-        return RoundPorts(reads, self.starting(), factory_commit, self.releaser(), publisher, holding, self.tracker,
-            self.lines.append, repository=partial(repository_of, self.checkouts), ids=NativeIds())
+        return RoundPorts(
+            reads,
+            self.starting(),
+            factory_commit,
+            self.releaser(),
+            publisher,
+            holding,
+            self.tracker,
+            self.lines.append,
+            repository=partial(repository_of, self.checkouts),
+            ids=NativeIds(),
+        )
 
     def round(
         self, quiet: frozenset[tuple[str, str, str, str]] | None = None, label: str = "auto", running: int = 10
@@ -278,9 +360,14 @@ class Factory:
             Started,
         )
         self.now += 1
-        commit_task(self.store, FactoryCommit(self.store, self.checkouts, self.files, lambda _w: True,
-            lambda: self.now, hold, ids=NativeIds()), self.releaser(),
-                    BranchPublish(self.store, self.checkouts, self.files, lambda: self.now, ids=NativeIds()), "tasks", task_id)
+        commit_task(
+            self.store,
+            FactoryCommit(self.store, self.checkouts, self.files, lambda _w: True, lambda: self.now, hold, ids=NativeIds()),
+            self.releaser(),
+            BranchPublish(self.store, self.checkouts, self.files, lambda: self.now, ids=NativeIds()),
+            "tasks",
+            task_id,
+        )
 
     def next_words(self) -> dict[str, tuple[str, str]]:
         listed = list_attempts(StatusPorts(self.store, lambda _entry: "gone", lambda: self.now, lambda _key: None, lambda: "boot"))
@@ -325,8 +412,12 @@ def scripts(factory: Factory, slot: FakeWorktree, *task_ids: str) -> None:
     for task_id in task_ids:
         plan, code, test = f"docs/design/{task_id}/plan.md", f"src/{task_id}.py", f"tests/test_{task_id}.py"
         factory.agents[task_id, "plan"] = scripted(
-            slot.repo, {"disposition": "planned", "plan_path": plan, "paths": [plan], "message": "Plan", "explanation": "planned"},
-            {plan: PLAN_TEXT})
+            slot.repo,
+            {"disposition": "planned", "plan_path": plan, "paths": [plan], "message": "Plan", "explanation": "planned"},
+            {plan: PLAN_TEXT},
+        )
         factory.agents[task_id, "implement"] = scripted(
-            slot.repo, {"disposition": "implemented", "message": "Add it", "explanation": "ran just check"},
-            {code: "X = 1\n", test: "def test_x() -> None: ...\n"})
+            slot.repo,
+            {"disposition": "implemented", "message": "Add it", "explanation": "ran just check"},
+            {code: "X = 1\n", test: "def test_x() -> None: ...\n"},
+        )

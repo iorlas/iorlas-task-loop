@@ -37,14 +37,19 @@ from taskloop.steps import IMPLEMENT, PLAN, StepKind
 
 surroundings = attempt_surroundings
 GLOSSARY = b"| Term | Meaning | Example / distinction |\n|---|---|---|\n| task | Work to accomplish. | Example. |\n"
-PROFILE = {"checks": [{"name": "check", "argv": ["just", "check"], "timeout": 60},
-                      {"name": "test", "argv": ["just", "test"], "timeout": 60}]}
+PROFILE = {
+    "checks": [{"name": "check", "argv": ["just", "check"], "timeout": 60}, {"name": "test", "argv": ["just", "test"], "timeout": 60}]
+}
 
 
 class Files:
-    def __init__(self, glossary: bytes | NotAFile | Unavailable | NoCommit | None = GLOSSARY, profile: bytes = b"{}",
-                 paths: tuple[str, ...] = (),
-                 blobs: Mapping[str, bytes | NotAFile | Unavailable | NoCommit | None] | None = None) -> None:
+    def __init__(
+        self,
+        glossary: bytes | NotAFile | Unavailable | NoCommit | None = GLOSSARY,
+        profile: bytes = b"{}",
+        paths: tuple[str, ...] = (),
+        blobs: Mapping[str, bytes | NotAFile | Unavailable | NoCommit | None] | None = None,
+    ) -> None:
         self.glossary, self.profile = glossary, profile
         self.names = paths
         self.reads: list[tuple[str, str]] = []
@@ -77,8 +82,11 @@ def test_both_steps_supply_the_spec_commands_and_orientation_once(step: StepKind
     assert TASK.acceptance in prefix and SAVED_WORK in closing
     glossary, code_map = block.split("\nCODE MAP\n")
     assert "task: Work to accomplish." in glossary
-    assert code_map.splitlines() == ["In this repository, source modules are primarily src/taskloop/*.py.",
-                                     "Tests: tests/steps/.", *sorted(paths)]
+    assert code_map.splitlines() == [
+        "In this repository, source modules are primarily src/taskloop/*.py.",
+        "Tests: tests/steps/.",
+        *sorted(paths),
+    ]
     assert SAVED_WORK in text
 
 
@@ -130,12 +138,19 @@ def test_tables_keep_whole_rows_skip_oversized_definitions_and_handle_code_pipes
     assert "ignored" not in text and len(text.encode()) <= BUDGET
 
 
-@pytest.mark.parametrize(("blob", "reason"), [
-    (NotAFile("120000"), "not a regular file"), (Unavailable("read failed"), "read failed"),
-    (NoCommit(), "names no commit"), (b"\xff", "utf-8"), (b"not a table", "No glossary term tables"),
-    (GLOSSARY.replace(b"|---|---|---|", b"|---|bad|---|"), "separator"),
-    (GLOSSARY + b"| missing | column |\n", "row"), (b"x" * (MAX_BYTES + 1), "exceeds"),
-])
+@pytest.mark.parametrize(
+    ("blob", "reason"),
+    [
+        (NotAFile("120000"), "not a regular file"),
+        (Unavailable("read failed"), "read failed"),
+        (NoCommit(), "names no commit"),
+        (b"\xff", "utf-8"),
+        (b"not a table", "No glossary term tables"),
+        (GLOSSARY.replace(b"|---|---|---|", b"|---|bad|---|"), "separator"),
+        (GLOSSARY + b"| missing | column |\n", "row"),
+        (b"x" * (MAX_BYTES + 1), "exceeds"),
+    ],
+)
 def test_present_glossary_failures_are_explained(blob, reason: str) -> None:
     with pytest.raises(InputError, match=reason):
         read(Files(glossary=blob), "chosen")
@@ -187,9 +202,7 @@ def test_admission_uses_the_selected_committed_source_not_dirty_checkout(
     assert text.count(SHELF_GUIDANCE) == text.count("Validated shelf digest (") == 1 and "dirty digest" not in text
 
 
-def test_input_failure_precedes_claim_and_reservation(
-    factory: sqlite3.Connection, repo: FakeRepo, root: Path, tmp_path: Path
-) -> None:
+def test_input_failure_precedes_claim_and_reservation(factory: sqlite3.Connection, repo: FakeRepo, root: Path, tmp_path: Path) -> None:
     slots(factory, repo, root, 1)
     tree = repo.worktree(repo.identity().root)
     tree.write_file("docs/glossary.md", "malformed")
@@ -203,8 +216,9 @@ def test_input_failure_precedes_claim_and_reservation(
 
 def test_moved_source_is_refreshed_before_dispatch_and_complete_input_is_retained(surroundings: AttemptSurroundings) -> None:
     con = database(surroundings)
-    before = InputContext("old", ("obsolete check",), extract(GLOSSARY), ("src/obsolete.py",),
-                          shelf=f"{SHELF_GUIDANCE}\nobsolete digest\n").render()
+    before = InputContext(
+        "old", ("obsolete check",), extract(GLOSSARY), ("src/obsolete.py",), shelf=f"{SHELF_GUIDANCE}\nobsolete digest\n"
+    ).render()
     files = EvidenceFiles(surroundings.tmp)
     ref = files.put_input(KEY, f"Complete task spec\n{before}\n{SAVED_WORK}")
     con.execute("UPDATE attempt SET input_path=?, input_digest=?", (ref.path, ref.digest))
@@ -250,18 +264,29 @@ def test_ordinary_repeat_uses_original_spec_and_current_committed_context_once(
     files = EvidenceFiles(tmp_path)
     ref = files.put_input(KEY, IMPLEMENT.input_text(WORKFLOW.table(IMPLEMENT.step), TASK, IMPLEMENT.rules("tl-1"), context))
     registered.execute("UPDATE attempt SET step='implement',after_commit=?,input_path=?,input_digest=?", (commit, ref.path, ref.digest))
-    changed = {"stray": "leftovers",
-               DIGEST_PATH: shelf_files("c" * 40, stale=stale)[DIGEST_PATH].decode()}
-    answer = {"disposition": "implemented",
-              "message": "Update digest", "explanation": "Done"}
-    prior = Attempts(AttemptStore(lambda: registered), files, AgentLaunch(lambda _kind: ("/bin/codex", {}), ids=NativeIds()),
-                     repeat_agent(slot, changed, answer), lambda: 10, checkouts, slot_files,
-                     environment=Environment(registered, checkouts, tmp_path, tmp_bytes=4096).preparation())
+    changed = {"stray": "leftovers", DIGEST_PATH: shelf_files("c" * 40, stale=stale)[DIGEST_PATH].decode()}
+    answer = {"disposition": "implemented", "message": "Update digest", "explanation": "Done"}
+    prior = Attempts(
+        AttemptStore(lambda: registered),
+        files,
+        AgentLaunch(lambda _kind: ("/bin/codex", {}), ids=NativeIds()),
+        repeat_agent(slot, changed, answer),
+        lambda: 10,
+        checkouts,
+        slot_files,
+        environment=Environment(registered, checkouts, tmp_path, tmp_bytes=4096).preparation(),
+    )
     assert prior.execute(KEY, ENTRY, lambda: ClaimWord.HELD).reason == "commit"
     captured = AttemptStore(lambda: registered).load(KEY)
     assert captured is not None
-    settled = settle(checkouts, slot_files, captured.admission, commit,
-                     AnswerState("valid", "implemented", "commit", (DIGEST_PATH,), "Update digest"), lambda: None)
+    settled = settle(
+        checkouts,
+        slot_files,
+        captured.admission,
+        commit,
+        AnswerState("valid", "implemented", "commit", (DIGEST_PATH,), "Update digest"),
+        lambda: None,
+    )
     assert isinstance(settled, Committed)
     slot.write_file("stray", "leftovers created after the factory commit")
     result = repeater(registered, tmp_path, checkouts, slot_files).repeat("tasks", "tl-1", KEY, ENTRY, 30)
@@ -270,9 +295,16 @@ def test_ordinary_repeat_uses_original_spec_and_current_committed_context_once(
     current = store.attempt_of("tasks", "tl-1")
     assert current is not None
     run = fake(json.dumps({"disposition": "unchanged", "message": None, "explanation": "Done"}))
-    attempts = Attempts(store, files, AgentLaunch(lambda _kind: ("/bin/codex", {}), ids=NativeIds()),
-                       run, lambda: 10, checkouts, slot_files,
-                       environment=Environment(registered, checkouts, tmp_path, tmp_bytes=4096).preparation())
+    attempts = Attempts(
+        store,
+        files,
+        AgentLaunch(lambda _kind: ("/bin/codex", {}), ids=NativeIds()),
+        run,
+        lambda: 10,
+        checkouts,
+        slot_files,
+        environment=Environment(registered, checkouts, tmp_path, tmp_bytes=4096).preparation(),
+    )
     outcome = attempts.execute(current[0], SECOND, lambda: ClaimWord.HELD)
     if stale:
         assert outcome.reason == "input" and "package identities" in outcome.explanation and not run.calls
@@ -307,10 +339,17 @@ def test_steps_receive_one_validated_shelf_block_and_refresh_it(step: StepKind) 
     assert ("first", "uv.lock") in files.reads
 
 
-@pytest.mark.parametrize(("blob", "reason"), [
-    (None, "missing"), (NotAFile("120000"), "not a regular file"), (Unavailable("offline"), "offline"),
-    (NoCommit(), "no commit"), (b"{", "Invalid JSON"), (shelf_files(stale=True)[DIGEST_PATH], "package identities"),
-])
+@pytest.mark.parametrize(
+    ("blob", "reason"),
+    [
+        (None, "missing"),
+        (NotAFile("120000"), "not a regular file"),
+        (Unavailable("offline"), "offline"),
+        (NoCommit(), "no commit"),
+        (b"{", "Invalid JSON"),
+        (shelf_files(stale=True)[DIGEST_PATH], "package identities"),
+    ],
+)
 @pytest.mark.parametrize("step", [PLAN, IMPLEMENT], ids=lambda step: step.step)
 def test_required_digest_failures_are_explained(
     blob: bytes | NotAFile | Unavailable | NoCommit | None, reason: str, step: StepKind
@@ -333,9 +372,7 @@ def test_shelf_dependency_declarations_require_the_artifact(dependency: str) -> 
         read(Files(blobs={"pyproject.toml": project}), "selected")
 
 
-def test_stale_digest_prevents_claim_and_reservation(
-    factory: sqlite3.Connection, repo: FakeRepo, root: Path, tmp_path: Path
-) -> None:
+def test_stale_digest_prevents_claim_and_reservation(factory: sqlite3.Connection, repo: FakeRepo, root: Path, tmp_path: Path) -> None:
     slots(factory, repo, root, 1)
     tree = repo.worktree(repo.identity().root)
     write_shelf(tree, stale=True)

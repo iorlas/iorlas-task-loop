@@ -20,25 +20,37 @@ from taskloop.setup_store import running
 
 type Claimed = Literal["kept", "unclaiming", "unclaimed", "not_held"]
 CLAIMS: Final[tuple[Claimed, ...]] = ("kept", "unclaiming", "unclaimed", "not_held")
-ROW: Final = """SELECT p.task_id,p.repo_id,p.slot,p.phase,p.rev,p.entry_pid,p.entry_start,p.entry_boot,p.worker_pid,p.worker_pgid,
+ROW: Final = (
+    """SELECT p.task_id,p.repo_id,p.slot,p.phase,p.rev,p.entry_pid,p.entry_start,p.entry_boot,p.worker_pid,p.worker_pgid,
 p.worker_start,p.worker_boot,p.slot_head,p.tracker_root,
 (SELECT s.path FROM reservation r JOIN slot s ON s.repo_id=r.repo_id AND s.name=r.slot
  WHERE r.repo_id=p.repo_id AND r.slot=p.slot AND r.attempt_id=p.attempt_id AND r.generation=p.generation),
-""" + SUCCESSOR + """,x.claim,
+"""
+    + SUCCESSOR
+    + """,x.claim,
 EXISTS (SELECT 1 FROM execution e WHERE e.attempt_id=p.attempt_id),
 EXISTS (SELECT 1 FROM task_hold h WHERE h.attempt_id=p.attempt_id)
 FROM attempt p LEFT JOIN slot_release x ON x.attempt_id=p.attempt_id
 WHERE p.attempt_id=? AND p.dispatch_token=? AND p.generation=?"""
+)
 # Still the proof's rev and phase, the task's current attempt, the reservation at the key's generation, and no release row.
-FENCE: Final = """SELECT 1 FROM attempt p WHERE p.attempt_id=? AND p.dispatch_token=? AND p.generation=? AND p.rev=? AND p.phase=?
-AND NOT """ + SUCCESSOR + """
+FENCE: Final = (
+    """SELECT 1 FROM attempt p WHERE p.attempt_id=? AND p.dispatch_token=? AND p.generation=? AND p.rev=? AND p.phase=?
+AND NOT """
+    + SUCCESSOR
+    + """
 AND EXISTS (SELECT 1 FROM reservation r WHERE r.repo_id=p.repo_id AND r.slot=p.slot AND r.attempt_id=p.attempt_id
  AND r.generation=p.generation)
 AND NOT EXISTS (SELECT 1 FROM slot_release x WHERE x.attempt_id=p.attempt_id)"""
+)
 
 # An abandon of a settled release: still `kept` and still the task's current attempt.
-FLIP: Final = """UPDATE slot_release SET claim='unclaiming' WHERE attempt_id=? AND claim='kept'
-AND NOT EXISTS (SELECT 1 FROM attempt p WHERE p.attempt_id=slot_release.attempt_id AND """ + SUCCESSOR + ")"
+FLIP: Final = (
+    """UPDATE slot_release SET claim='unclaiming' WHERE attempt_id=? AND claim='kept'
+AND NOT EXISTS (SELECT 1 FROM attempt p WHERE p.attempt_id=slot_release.attempt_id AND """
+    + SUCCESSOR
+    + ")"
+)
 
 
 @dataclass(frozen=True)
@@ -73,15 +85,28 @@ def _row(row: tuple[object, ...], key: AttemptKey) -> ReleaseRow:
     worker = None if row[8] is None else Worker(pid=as_int(row[8]), pgid=as_int(row[9]), start=as_text(row[10]), boot=as_text(row[11]))
     released = None if row[16] is None else _claim(row[16])
     stopping = Stopping(as_text(row[3]), entry, worker)
-    return ReleaseRow(key, as_text(row[0]), as_text(row[1]), as_text(row[2]), as_int(row[4]), stopping,
-                      as_text(row[12]), as_text(row[13]), as_nullable_text(row[14]), bool(as_int(row[15])), released,
-                      bool(as_int(row[17])), bool(as_int(row[18])))
+    return ReleaseRow(
+        key,
+        as_text(row[0]),
+        as_text(row[1]),
+        as_text(row[2]),
+        as_int(row[4]),
+        stopping,
+        as_text(row[12]),
+        as_text(row[13]),
+        as_nullable_text(row[14]),
+        bool(as_int(row[15])),
+        released,
+        bool(as_int(row[17])),
+        bool(as_int(row[18])),
+    )
 
 
 def free(con: sqlite3.Connection, repo_id: str, slot: str, attempt_id: str, generation: int) -> int:
     """Delete a reservation inside the caller's fenced release transaction; return the number removed."""
-    return con.execute("DELETE FROM reservation WHERE repo_id=? AND slot=? AND attempt_id=? AND generation=?",
-                       (repo_id, slot, attempt_id, generation)).rowcount
+    return con.execute(
+        "DELETE FROM reservation WHERE repo_id=? AND slot=? AND attempt_id=? AND generation=?", (repo_id, slot, attempt_id, generation)
+    ).rowcount
 
 
 @dataclass(frozen=True)

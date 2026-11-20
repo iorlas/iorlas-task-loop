@@ -114,8 +114,11 @@ def test_a_command_registers_before_it_runs_and_its_output_and_exit_come_back(tm
     lines: list[bytes] = []
     ended = setup_process(
         ["/bin/sh", "-c", f"touch {marker}; echo out; echo err >&2; exit 3"],
-        registered=lambda process: registered.append((process, marker.exists())), cwd=str(tmp_path),
-        env={"PATH": os.environ["PATH"]}, timeout=30, line=lines.append,
+        registered=lambda process: registered.append((process, marker.exists())),
+        cwd=str(tmp_path),
+        env={"PATH": os.environ["PATH"]},
+        timeout=30,
+        line=lines.append,
     )
     assert (ended.rc, ended.timed_out, ended.exec_failed, ended.uncertain) == (3, False, False, False)
     assert len(registered) == 1 and registered[0][1] is False and registered[0][0].pgid == ended.pgid
@@ -124,15 +127,22 @@ def test_a_command_registers_before_it_runs_and_its_output_and_exit_come_back(tm
 
 
 def test_a_command_that_cannot_exec_never_ran(tmp_path: Path) -> None:
-    ended = setup_process([str(tmp_path / "missing")], registered=lambda _process: None, cwd=str(tmp_path), env={}, timeout=30,
-                          line=lambda _line: None)
+    ended = setup_process(
+        [str(tmp_path / "missing")], registered=lambda _process: None, cwd=str(tmp_path), env={}, timeout=30, line=lambda _line: None
+    )
     assert ended.exec_failed and ended.rc is None
 
 
 def test_a_process_left_in_the_group_is_seen(tmp_path: Path) -> None:
     """The background `sleep` ends by itself within two seconds; nothing is signalled."""
     registered: list[OwnedProcess] = []
-    ended = setup_process(["/bin/sh", "-c", "sleep 2 >/dev/null 2>&1 & exit 0"], registered=registered.append, cwd=str(tmp_path),
-                          env={"PATH": os.environ["PATH"]}, timeout=30, line=lambda _line: None)
+    ended = setup_process(
+        ["/bin/sh", "-c", "sleep 2 >/dev/null 2>&1 & exit 0"],
+        registered=registered.append,
+        cwd=str(tmp_path),
+        env={"PATH": os.environ["PATH"]},
+        timeout=30,
+        line=lambda _line: None,
+    )
     assert ended.rc == 0 and group_alive(ended.pgid)
     assert setup_seen(registered[0]) == "alive"

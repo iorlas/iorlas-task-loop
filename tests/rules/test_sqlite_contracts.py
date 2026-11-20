@@ -90,10 +90,15 @@ def test_ruff_sqlite_permissions_never_exempt_other_banned_apis() -> None:
         assert_no_banned_imports(path.read_text(), banned)
 
 
-@pytest.mark.parametrize("source", [
-    "import sqlite3 as db", "from sqlite3 import Connection as Con",
-    "if TYPE_CHECKING:\n    from sqlite3 import Connection", "import sqlite3.dbapi2 as db",
-])
+@pytest.mark.parametrize(
+    "source",
+    [
+        "import sqlite3 as db",
+        "from sqlite3 import Connection as Con",
+        "if TYPE_CHECKING:\n    from sqlite3 import Connection",
+        "import sqlite3.dbapi2 as db",
+    ],
+)
 def test_sqlite_aliases_and_type_only_imports_are_visible(source: str) -> None:
     with pytest.raises(AssertionError, match="sqlite3"):
         assert_no_banned_imports(source, {"sqlite3"})

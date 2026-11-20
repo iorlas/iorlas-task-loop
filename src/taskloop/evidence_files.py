@@ -130,7 +130,7 @@ class EvidenceFiles:
         try:
             identity = self.directory(key, execution)
             return read_duration(self._path(identity), identity)
-        except (EvidenceError, OSError):
+        except EvidenceError, OSError:
             return None
 
     def write_duration(self, key: AttemptKey, sample: DurationSample, execution: Intent | Callback | None = None) -> None:
@@ -138,10 +138,15 @@ class EvidenceFiles:
         write_duration(self._path(identity), identity, sample)
 
     def observe_duration(
-        self, key: AttemptKey, clock: Callable[[], float], execution: Intent | Callback | None = None,
+        self,
+        key: AttemptKey,
+        clock: Callable[[], float],
+        execution: Intent | Callback | None = None,
     ) -> DurationObserver:
         return DurationObserver(
-            lambda: self.directory(key, execution), clock, lambda sample: self.write_duration(key, sample, execution),
+            lambda: self.directory(key, execution),
+            clock,
+            lambda sample: self.write_duration(key, sample, execution),
             lambda: invalidate_duration(self._path(self.directory(key, execution))),
         )
 
@@ -149,7 +154,7 @@ class EvidenceFiles:
         try:
             identity = self.directory(key)
             return read_operations(self._path(identity), identity)
-        except (EvidenceError, OSError):
+        except EvidenceError, OSError:
             return ()
 
     def write_operation(self, key: AttemptKey, sample: OperationSample) -> None:
@@ -157,10 +162,17 @@ class EvidenceFiles:
         write_operation(self._path(identity), identity, sample)
 
     def observe_operation(
-        self, key: AttemptKey, kind: OperationKind, *, clock: Callable[[], float], wall: Callable[[], float], ids: Ids,
+        self,
+        key: AttemptKey,
+        kind: OperationKind,
+        *,
+        clock: Callable[[], float],
+        wall: Callable[[], float],
+        ids: Ids,
     ) -> OperationObserver:
-        return OperationObserver(lambda: (self.directory(key), ids.hex()), kind, clock, wall,
-                                 lambda sample: self.write_operation(key, sample))
+        return OperationObserver(
+            lambda: (self.directory(key), ids.hex()), kind, clock, wall, lambda sample: self.write_operation(key, sample)
+        )
 
     def entry_log(self, key: AttemptKey) -> Path:
         """The attempt's entry process log (`entry.log` in its key-derived directory), with that directory made."""
@@ -225,7 +237,7 @@ class EvidenceFiles:
                 size = stream.seek(0, 2)
                 stream.seek(max(0, size - cap))
                 return stream.read(cap).decode("utf-8", "replace")
-        except (OSError, EvidenceError):
+        except OSError, EvidenceError:
             return None
 
     def round_tail(self, limit: int) -> tuple[str, ...]:
@@ -237,7 +249,7 @@ class EvidenceFiles:
                 start = max(0, size - TAIL_CAP)
                 stream.seek(start)
                 text = stream.read(TAIL_CAP).decode("utf-8", "replace")
-        except (OSError, EvidenceError):
+        except OSError, EvidenceError:
             return ()
         lines = text.splitlines()
         return tuple((lines[1:] if start else lines)[-limit:]) if limit > 0 else ()
@@ -256,7 +268,7 @@ class EvidenceFiles:
         Display only; creates nothing and does not consult the retired sidecar."""
         try:
             return command_time(self.events_path(key), EVENTS_CAP, TRUNCATED)
-        except (OSError, EvidenceError):
+        except OSError, EvidenceError:
             return "unreadable"
 
     def started_at(self, key: AttemptKey) -> float | None:
@@ -264,14 +276,14 @@ class EvidenceFiles:
         dashboard's time in step); the attempt rows store no start time."""
         try:
             return self._path(self.directory(key) + "/input.txt").stat().st_mtime
-        except (OSError, EvidenceError):
+        except OSError, EvidenceError:
             return None
 
     def captured_at(self, ref: FileRef) -> float | None:
         """Display-only end time from captured evidence; unknown when its file is unavailable."""
         try:
             return self._path(ref.path).stat().st_mtime
-        except (OSError, EvidenceError):
+        except OSError, EvidenceError:
             return None
 
     def text(self, key: AttemptKey, name: Literal["input.txt", "answer.txt"], cap: int = 65536) -> str | None:
@@ -285,7 +297,7 @@ class EvidenceFiles:
         try:
             with self._path(self.directory(key) + "/" + name).open("rb") as stream:
                 data = stream.read(cap + 1)
-        except (OSError, EvidenceError):
+        except OSError, EvidenceError:
             return None
         return data[:cap].decode("utf-8", "replace"), len(data) > cap
 
@@ -297,7 +309,7 @@ class EvidenceFiles:
                 size = stream.seek(0, 2)
                 stream.seek(max(0, size - cap))
                 return stream.read(cap).decode("utf-8", "replace")
-        except (OSError, EvidenceError):
+        except OSError, EvidenceError:
             return None
 
     def check_output(self, key: AttemptKey, block: int, name: str) -> OutputTail:
@@ -308,13 +320,14 @@ class EvidenceFiles:
                 start = max(0, size - TAIL_BYTES)
                 stream.seek(start)
                 data = stream.read(TAIL_BYTES)
-        except (OSError, EvidenceError):
+        except OSError, EvidenceError:
             return OutputTail(availability=Availability.UNAVAILABLE)
         if not data:
             return OutputTail(availability=Availability.EMPTY)
         lines = data.decode("utf-8", "replace").splitlines(keepends=True)
-        return OutputTail(availability=Availability.AVAILABLE, text="".join(lines[-TAIL_LINES:]),
-                          truncated=bool(start) or len(lines) > TAIL_LINES)
+        return OutputTail(
+            availability=Availability.AVAILABLE, text="".join(lines[-TAIL_LINES:]), truncated=bool(start) or len(lines) > TAIL_LINES
+        )
 
     def events_path(self, key: AttemptKey) -> Path:
         """The attempt's agent-activity file (`events.jsonl`), made nothing."""
@@ -379,11 +392,14 @@ class EvidenceFiles:
     def capture_refs(self, key: AttemptKey, raw: RunOutcome, execution: Callback | None = None) -> Evidence:
         """The capture's immutable expected references, for a consumer's intent before the file effects."""
         directory = self.directory(key, execution)
-        return Evidence(*(FileRef(directory + "/" + name, hashlib.sha256(text.encode()).hexdigest())
-                          for name, text in _capture_text(raw)))
+        return Evidence(*(FileRef(directory + "/" + name, hashlib.sha256(text.encode()).hexdigest()) for name, text in _capture_text(raw)))
 
 
 def _capture_text(raw: RunOutcome) -> tuple[tuple[str, str], ...]:
     diagnostic = "\n".join([raw.summary.vendor, raw.summary.tail, raw.watch.msg, raw.watch.words, raw.secret or "", *raw.stream_tail])
-    return (("stdout.txt", capped(raw.out)), ("stderr.txt", capped(raw.err)),
-            ("answer.txt", raw.summary.text), ("diagnostics.txt", diagnostic))
+    return (
+        ("stdout.txt", capped(raw.out)),
+        ("stderr.txt", capped(raw.err)),
+        ("answer.txt", raw.summary.text),
+        ("diagnostics.txt", diagnostic),
+    )

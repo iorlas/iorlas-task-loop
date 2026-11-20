@@ -27,8 +27,11 @@ from taskloop.land_store import LandStore
 from taskloop.setup_store import SetupStore
 from taskloop.validate import Ended, Target, Verdict, reconcile, validate
 
-PROFILE = {"setup": [["just", "bootstrap"]], "required": ["check", "test"], "checks": [
-    {"name": "check", "argv": ["just", "check"], "timeout": 600}, {"name": "test", "argv": ["just", "test"], "timeout": 30}]}
+PROFILE = {
+    "setup": [["just", "bootstrap"]],
+    "required": ["check", "test"],
+    "checks": [{"name": "check", "argv": ["just", "check"], "timeout": 600}, {"name": "test", "argv": ["just", "test"], "timeout": 30}],
+}
 RUN = ["exec just bootstrap", "exec just check", "exec just test"]
 
 
@@ -58,13 +61,34 @@ class Bench:
     def checking(self) -> Checking:
         env = self.environment
         block = Block(BlockPorts(env.process, env.process.lingering, lambda: self.now))
-        return Checking(self.store, SetupStore(lambda: self.con), EvidenceFiles(env.artifacts), self.views, self.files, env.profiles,
-                        env.preparation(), block, env.observe, lambda _entry: "gone", lambda _path: True, lambda: self.now,
-                        lambda: {"HOME": "/home/p"}, ids=NativeIds())
+        return Checking(
+            self.store,
+            SetupStore(lambda: self.con),
+            EvidenceFiles(env.artifacts),
+            self.views,
+            self.files,
+            env.profiles,
+            env.preparation(),
+            block,
+            env.observe,
+            lambda _entry: "gone",
+            lambda _path: True,
+            lambda: self.now,
+            lambda: {"HOME": "/home/p"},
+            ids=NativeIds(),
+        )
 
     def target(self) -> Target:
-        return Target(CANDIDATE, self.slot.repo.identity().key, str(self.slot.path), self.s, REQUIRED, 300.0, None,
-                      lambda digest: self.lands.profiled(CANDIDATE, digest))
+        return Target(
+            CANDIDATE,
+            self.slot.repo.identity().key,
+            str(self.slot.path),
+            self.s,
+            REQUIRED,
+            300.0,
+            None,
+            lambda digest: self.lands.profiled(CANDIDATE, digest),
+        )
 
     def __call__(self) -> Ended:
         return validate(self.checking(), self.target(), lambda: ClaimWord.HELD)
@@ -74,15 +98,28 @@ class Bench:
 
     def result(self, block: int, position: int, name: str, conclusion: str | None, pid: int | None = None) -> None:
         """A result row of an earlier land process, written straight into the table under the candidate's key."""
-        self.con.execute("""INSERT INTO check_result (attempt_id,dispatch_token,generation,block,position,name,argv_digest,timeout,
+        self.con.execute(
+            """INSERT INTO check_result (attempt_id,dispatch_token,generation,block,position,name,argv_digest,timeout,
             pid,pgid,proc_start,boot,started_at,ended_at,conclusion) VALUES ('candidate','candidate-token',1,?,?,?,?,60,?,?,?,?,1,?,?)""",
-                         (block, position, name, "e" * 64, pid, pid, None if pid is None else "start", None if pid is None else "boot",
-                          None if conclusion is None else 2, conclusion))
+            (
+                block,
+                position,
+                name,
+                "e" * 64,
+                pid,
+                pid,
+                None if pid is None else "start",
+                None if pid is None else "boot",
+                None if conclusion is None else 2,
+                conclusion,
+            ),
+        )
 
 
 @pytest.fixture
-def bench(candidate_on_slot: tuple[Path, str], slot: FakeWorktree, checkouts: PinnedViews, slot_files: FakeSlotFiles,
-          tmp_path: Path) -> Generator[Bench]:
+def bench(
+    candidate_on_slot: tuple[Path, str], slot: FakeWorktree, checkouts: PinnedViews, slot_files: FakeSlotFiles, tmp_path: Path
+) -> Generator[Bench]:
     path, s = candidate_on_slot
     con = Store(SCHEMA).open_rw(path)
     assert con is not None
@@ -129,8 +166,12 @@ def test_an_interrupted_candidate_block_repeats_whole(bench: Bench) -> None:
     bench.result(1, 0, "check", "passed")
     bench.result(1, 1, "test", None, pid=901)
     assert bench() == Verdict("passed")
-    assert [row[1:] for row in bench.results()] == [(1, "check", "passed"), (1, "test", "interrupted"), (2, "check", "passed"),
-                                                    (2, "test", "passed")]
+    assert [row[1:] for row in bench.results()] == [
+        (1, "check", "passed"),
+        (1, "test", "interrupted"),
+        (2, "check", "passed"),
+        (2, "test", "passed"),
+    ]
 
 
 def test_a_completed_candidate_block_concludes_as_it_stands_and_past_the_deadline_nothing_runs(bench: Bench) -> None:

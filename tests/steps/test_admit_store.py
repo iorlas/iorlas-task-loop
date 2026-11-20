@@ -24,14 +24,38 @@ FREE = Free("s1", "a" * 40, "b" * 40, "c" * 40)
 
 def values(key: AttemptKey = KEY) -> dict[str, object]:
     return {
-        "attempt_id": key.attempt_id, "dispatch_token": key.dispatch_token, "generation": key.reservation_generation,
-        "step": "plan", "adapter": "beads", "backlog": "tasks", "task_id": "tl-1", "tracker_root": "/tracker",
-        "repo_id": REPO, "slot": "s1", "input_path": "input.txt", "input_digest": "e" * 64, "schema_version": 1,
-        "model": "chosen", "effort": "high", "access_policy": '{"harness":"codex","sandbox":"workspace-write"}',
-        "deadline": 100, "number": 1, "seq": 1, "slot_head": FREE.head, "previous_attempt_id": None,
-        "repeat_reason": None, "repeat_listing": None, "after_commit": None, "label": "approved",
-        "harness": "codex", "provider": "openai", "compaction_token_limit": 12000,
-        "engine_digest": ENGINE, "declared_start": 0, "workflow_digest": PIN_DIGEST, "workflow_sha": PIN_SHA,
+        "attempt_id": key.attempt_id,
+        "dispatch_token": key.dispatch_token,
+        "generation": key.reservation_generation,
+        "step": "plan",
+        "adapter": "beads",
+        "backlog": "tasks",
+        "task_id": "tl-1",
+        "tracker_root": "/tracker",
+        "repo_id": REPO,
+        "slot": "s1",
+        "input_path": "input.txt",
+        "input_digest": "e" * 64,
+        "schema_version": 1,
+        "model": "chosen",
+        "effort": "high",
+        "access_policy": '{"harness":"codex","sandbox":"workspace-write"}',
+        "deadline": 100,
+        "number": 1,
+        "seq": 1,
+        "slot_head": FREE.head,
+        "previous_attempt_id": None,
+        "repeat_reason": None,
+        "repeat_listing": None,
+        "after_commit": None,
+        "label": "approved",
+        "harness": "codex",
+        "provider": "openai",
+        "compaction_token_limit": 12000,
+        "engine_digest": ENGINE,
+        "declared_start": 0,
+        "workflow_digest": PIN_DIGEST,
+        "workflow_sha": PIN_SHA,
         "admitted_at": 1.0,
     }
 
@@ -46,8 +70,13 @@ def con(factory: sqlite3.Connection) -> sqlite3.Connection:
 def test_admission_modules_do_not_execute_sql(module: str) -> None:
     path = Path(__file__).resolve().parents[2] / "src" / "taskloop" / f"{module}.py"
     tree = ast.parse(path.read_text())
-    calls = [node for node in ast.walk(tree) if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
-             and node.func.attr in {"execute", "executemany", "executescript", "cursor"}]
+    calls = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr in {"execute", "executemany", "executescript", "cursor"}
+    ]
     assert not calls, [(call.lineno, ast.unparse(call)) for call in calls]
 
 
@@ -81,11 +110,11 @@ def test_admission_reads_and_effects_share_the_callers_transaction(con: sqlite3.
 
 @pytest.mark.parametrize("evidence_fails", [False, True])
 def test_admission_failure_rolls_back_reservation_generation_attempt_and_evidence(
-    con: sqlite3.Connection, evidence_fails: bool,
+    con: sqlite3.Connection,
+    evidence_fails: bool,
 ) -> None:
     if evidence_fails:
-        con.execute("CREATE TRIGGER reject_evidence BEFORE INSERT ON task_content "
-                    "BEGIN SELECT RAISE(ABORT,'evidence unavailable'); END")
+        con.execute("CREATE TRIGGER reject_evidence BEFORE INSERT ON task_content BEGIN SELECT RAISE(ABORT,'evidence unavailable'); END")
     with pytest.raises(sqlite3.IntegrityError), begin_immediate(con):
         admit_store.reserve(con, REPO, "s1", KEY)
         admit_store.insert_attempt(con, values(), EVIDENCE if evidence_fails else None)

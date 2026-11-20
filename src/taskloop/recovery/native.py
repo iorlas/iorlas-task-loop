@@ -32,10 +32,11 @@ class NativeContinuation:
             prompt = app.files.read(admission.input_ref)
             schema, out = app.files.prepare(admission.key, kind(admission.step).answer_schema, intent)
             root = app.files.launch_root(admission.key, intent)
-        except (EvidenceError, OSError):
+        except EvidenceError, OSError:
             return Result(outcome=Outcome.UNAVAILABLE, explanation="The saved input or continuation artifacts are unavailable.")
-        launch = app.agent.build(admission.setting, Path(admission.slot_path), kind(admission.step).environment,
-                                 root, schema, out, prompt, resume=intent.session)
+        launch = app.agent.build(
+            admission.setting, Path(admission.slot_path), kind(admission.step).environment, root, schema, out, prompt, resume=intent.session
+        )
         if isinstance(launch, LaunchFailure):
             return Result(outcome=Outcome.UNAVAILABLE, explanation=launch.explanation)
         try:
@@ -47,7 +48,12 @@ class NativeContinuation:
             launch.harness.cleanup()
 
     def _run(
-        self, admission: Admission, intent: Intent, harness: Harness, spec: LaunchSpec, remaining: float,
+        self,
+        admission: Admission,
+        intent: Intent,
+        harness: Harness,
+        spec: LaunchSpec,
+        remaining: float,
     ) -> PendingExecution | Result:
         app = self.attempts
         callbacks: Callbacks | None = None
@@ -55,7 +61,9 @@ class NativeContinuation:
         def started(worker: Worker) -> None:
             nonlocal callbacks
             registered = self.registration.register(
-                intent, Identity(pid=worker.pid, pgid=worker.pgid, start=worker.start, boot=worker.boot), app.clock,
+                intent,
+                Identity(pid=worker.pid, pgid=worker.pgid, start=worker.start, boot=worker.boot),
+                app.clock,
             )
             if registered.outcome is not Outcome.REGISTERED or registered.intent is None:
                 raise RegistrationRefused(registered.explanation)
@@ -68,11 +76,17 @@ class NativeContinuation:
 
         stops = AgentStops(StopStore(app.registration_store.connect, app.registration_store.begin), admission, app.clock)
         duration = app.files.observe_duration(admission.key, app.monotonic, intent)
-        hooks = WatchedHooks(started=started, ref=ref, unattended=False, before_stop=stops.before, after_stop=stops.after,
-                             live=CommandSink(app.files, admission.key, app.clock, duration=duration))
+        hooks = WatchedHooks(
+            started=started,
+            ref=ref,
+            unattended=False,
+            before_stop=stops.before,
+            after_stop=stops.after,
+            live=CommandSink(app.files, admission.key, app.clock, duration=duration),
+        )
         try:
             raw = app.execution(harness, spec, remaining, hooks)
-        except (RegistrationRefused, StoreUnavailable):
+        except RegistrationRefused, StoreUnavailable:
             return Result(outcome=Outcome.UNAVAILABLE, explanation="Registration was not acknowledged; reconciliation is required.")
         except Exception as error:
             return Result(outcome=Outcome.UNAVAILABLE, explanation=f"Continuation execution ended unexpectedly ({type(error).__name__}).")

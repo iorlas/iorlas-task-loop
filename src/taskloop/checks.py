@@ -37,10 +37,16 @@ from taskloop.prepare import MAIN
 from taskloop.profile import Check
 from taskloop.slot_state import bounded
 
-TERMINAL: Final[tuple[CommandConclusion, ...]] = (CommandConclusion.PASSED, CommandConclusion.FAILED,
-    CommandConclusion.TIMED_OUT, CommandConclusion.UNDEFINED)
-STOPPING: Final[tuple[CommandConclusion, ...]] = (CommandConclusion.LINGERING,
-    CommandConclusion.DIRTY)  # the block stops; the attempt fails with this result
+TERMINAL: Final[tuple[CommandConclusion, ...]] = (
+    CommandConclusion.PASSED,
+    CommandConclusion.FAILED,
+    CommandConclusion.TIMED_OUT,
+    CommandConclusion.UNDEFINED,
+)
+STOPPING: Final[tuple[CommandConclusion, ...]] = (
+    CommandConclusion.LINGERING,
+    CommandConclusion.DIRTY,
+)  # the block stops; the attempt fails with this result
 type _Next = Literal["next", "stopped"]
 
 
@@ -188,8 +194,9 @@ class Block:
             return _refused(f"expired:{check.name}")
         return "stopped" if judged in STOPPING else "next"
 
-    def _started(self, target: BlockTarget, sink: ResultSink, at: tuple[int, int], argv: Sequence[str], wall: float,
-                 log: CappedLog) -> SetupEnded:
+    def _started(
+        self, target: BlockTarget, sink: ResultSink, at: tuple[int, int], argv: Sequence[str], wall: float, log: CappedLog
+    ) -> SetupEnded:
         """The registered start; a supervision failure after registration is an end of unknown kind (its group is still
         judged), one before it a command that never ran."""
         committed: list[OwnedProcess] = []

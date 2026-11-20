@@ -64,10 +64,13 @@ class _InstalledDistribution:
             for field in ("Name", "Version"):
                 if len(fields.get_all(field) or ()) != 1:
                     return IdentityFailure(IdentityFailureReason.INVALID_METADATA, f"Expected one installed {field} field")
-            return InstalledMetadata.model_validate({
-                "name": fields["Name"], "version": fields["Version"],
-                "direct_url": self.distribution.read_text("direct_url.json"),
-            })
+            return InstalledMetadata.model_validate(
+                {
+                    "name": fields["Name"],
+                    "version": fields["Version"],
+                    "direct_url": self.distribution.read_text("direct_url.json"),
+                }
+            )
         except (OSError, UnicodeError, ValueError) as error:
             return IdentityFailure(IdentityFailureReason.INVALID_METADATA, f"Cannot read installed metadata: {error}")
 
@@ -117,18 +120,26 @@ def _validate(identity: PackageIdentity, distribution: Distribution) -> Identity
     except ValidationError as error:
         return IdentityFailure(IdentityFailureReason.INVALID_METADATA, f"{identity.name}: invalid direct_url.json: {error}")
     observed = {
-        "name": record.name, "version": record.version, "repository URL": direct.url,
-        "commit": direct.vcs_info.commit_id, "requested tag": direct.vcs_info.requested_revision,
+        "name": record.name,
+        "version": record.version,
+        "repository URL": direct.url,
+        "commit": direct.vcs_info.commit_id,
+        "requested tag": direct.vcs_info.requested_revision,
         "subdirectory": direct.subdirectory,
     }
     expected = {
-        "name": identity.name, "version": identity.version, "repository URL": identity.repository_url,
-        "commit": identity.commit, "requested tag": identity.requested_tag, "subdirectory": identity.subdirectory,
+        "name": identity.name,
+        "version": identity.version,
+        "repository URL": identity.repository_url,
+        "commit": identity.commit,
+        "requested tag": identity.requested_tag,
+        "subdirectory": identity.subdirectory,
     }
     for field, value in expected.items():
         if observed[field] != value:
-            return IdentityFailure(IdentityFailureReason.MISMATCH,
-                                   f"{identity.name} installed {field}: expected {value!r}, observed {observed[field]!r}")
+            return IdentityFailure(
+                IdentityFailureReason.MISMATCH, f"{identity.name} installed {field}: expected {value!r}, observed {observed[field]!r}"
+            )
     return None
 
 
@@ -166,7 +177,8 @@ def _capture(identity: PackageIdentity, distribution: Distribution, captured: di
 
 
 def capture_installed_sources(
-    identities: Identities, distributions: Distributions,
+    identities: Identities,
+    distributions: Distributions,
 ) -> Mapping[str, SourceSnapshot] | IdentityFailure | ReadFailure:
     """Validate every identity before reading source; return only complete immutable captures."""
     selected: list[tuple[PackageIdentity, Distribution]] = []
@@ -176,8 +188,9 @@ def capture_installed_sources(
         except (OSError, UnicodeError, ValueError) as error:
             return IdentityFailure(IdentityFailureReason.INVALID_METADATA, f"{identity.name}: cannot read installed metadata: {error}")
         if len(candidates) != 1:
-            return IdentityFailure(IdentityFailureReason.INVALID_METADATA,
-                                   f"{identity.name}: expected one installed distribution, observed {len(candidates)}")
+            return IdentityFailure(
+                IdentityFailureReason.INVALID_METADATA, f"{identity.name}: expected one installed distribution, observed {len(candidates)}"
+            )
         failure = _validate(identity, candidates[0])
         if failure is not None:
             return failure

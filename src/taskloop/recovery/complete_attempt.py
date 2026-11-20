@@ -12,7 +12,11 @@ from taskloop.slot_lock import SlotBusy, SlotLockUnavailable
 
 class CapturedCompletion:
     def __init__(
-        self, attempts: Attempts, holds: HoldStore, custody: Callable[[Admission], AbstractContextManager[None]], observe: Observe,
+        self,
+        attempts: Attempts,
+        holds: HoldStore,
+        custody: Callable[[Admission], AbstractContextManager[None]],
+        observe: Observe,
     ) -> None:
         self.attempts, self.holds, self.custody, self.observe = attempts, holds, custody, observe
 
@@ -27,7 +31,7 @@ class CapturedCompletion:
                 return AttemptResult("refused", "absent")
             with self.custody(record.admission):
                 return self._complete(record)
-        except (StoreUnavailable, SlotBusy, SlotLockUnavailable):
+        except StoreUnavailable, SlotBusy, SlotLockUnavailable:
             return AttemptResult("unavailable", "store")
         except StoreRefused as error:
             return AttemptResult("refused", str(error))
@@ -36,8 +40,13 @@ class CapturedCompletion:
         store, admission = self.attempts.store, record.admission
         key = admission.key
         current = store.attempt_of(admission.task.scope.backlog, admission.task.task_id)
-        if (current is None or current[0] != key or store.load(key) != record or store.release_of(key) is not None
-                or self.holds.held(key.attempt_id)):
+        if (
+            current is None
+            or current[0] != key
+            or store.load(key) != record
+            or store.release_of(key) is not None
+            or self.holds.held(key.attempt_id)
+        ):
             return AttemptResult("refused", "changed")
         if self.observe(admission.entry) not in ("gone", "different_process"):
             return AttemptResult("pending", "entry")

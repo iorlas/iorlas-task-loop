@@ -30,20 +30,26 @@ ABANDONED = replace(VIEW, next="start", entry="gone", release=ReleaseRow(D, 5.0,
 ASKED = Admission(frozenset({"tl-1"}), "auto")
 
 
-@pytest.mark.parametrize(("view", "expected"), [
-    (VIEW, TaskStatus(Status.RUNNING)),
-    (replace(VIEW, step="check"), TaskStatus(Status.CHECKING)),
-    (replace(VIEW, next="commit"), TaskStatus(Status.SETTLING, "commit")),
-    (replace(VIEW, next="land", step="check"), TaskStatus(Status.WAITING_FOR_LAND, land=LandState.UNKNOWN)),
-    (replace(VIEW, next="landed", step="check"), TaskStatus(Status.LANDED)),
-    (replace(VIEW, next="hold", hold=HOLD), TaskStatus(Status.HELD, "failed:needs_owner")),
-    (replace(VIEW, next="hold", hold_due="stuck:entry_lost"), TaskStatus(Status.HELD, "stuck:entry_lost")),
-    (replace(VIEW, next="on_hold", hold=HOLD), TaskStatus(Status.HELD, "failed:needs_owner")),
-    (replace(VIEW, next="stuck:hung"), TaskStatus(Status.STUCK, "stuck:hung")),
-    (replace(VIEW, next="done", result=AttemptResult("collected", "rejected:paths")), TaskStatus(Status.STUCK, "failed:rejected:paths")),
-    (replace(VIEW, next="done", result=PASSED), TaskStatus(Status.FINISHED)),
-    (ABANDONED, TaskStatus(Status.ABANDONED, "start")),
-])
+@pytest.mark.parametrize(
+    ("view", "expected"),
+    [
+        (VIEW, TaskStatus(Status.RUNNING)),
+        (replace(VIEW, step="check"), TaskStatus(Status.CHECKING)),
+        (replace(VIEW, next="commit"), TaskStatus(Status.SETTLING, "commit")),
+        (replace(VIEW, next="land", step="check"), TaskStatus(Status.WAITING_FOR_LAND, land=LandState.UNKNOWN)),
+        (replace(VIEW, next="landed", step="check"), TaskStatus(Status.LANDED)),
+        (replace(VIEW, next="hold", hold=HOLD), TaskStatus(Status.HELD, "failed:needs_owner")),
+        (replace(VIEW, next="hold", hold_due="stuck:entry_lost"), TaskStatus(Status.HELD, "stuck:entry_lost")),
+        (replace(VIEW, next="on_hold", hold=HOLD), TaskStatus(Status.HELD, "failed:needs_owner")),
+        (replace(VIEW, next="stuck:hung"), TaskStatus(Status.STUCK, "stuck:hung")),
+        (
+            replace(VIEW, next="done", result=AttemptResult("collected", "rejected:paths")),
+            TaskStatus(Status.STUCK, "failed:rejected:paths"),
+        ),
+        (replace(VIEW, next="done", result=PASSED), TaskStatus(Status.FINISHED)),
+        (ABANDONED, TaskStatus(Status.ABANDONED, "start")),
+    ],
+)
 def test_each_view_has_one_status_with_its_stored_reason(view: AttemptView, expected: TaskStatus) -> None:
     assert task_status(view) == expected
     assert words(expected)  # every status has plain words
@@ -72,16 +78,26 @@ def test_a_task_a_person_abandoned_is_queued_to_start_once_the_tracker_lists_it_
 
 
 def test_a_hold_abandon_is_taken_again_only_by_the_answer_to_its_label() -> None:
-    held = replace(ABANDONED, next="on_hold", hold=HOLD.model_copy(update={"labels": "moved", "label": "auto"}),
-                   release=ReleaseRow(D, 5.0, "unclaimed"))
+    held = replace(
+        ABANDONED,
+        next="on_hold",
+        hold=HOLD.model_copy(update={"labels": "moved", "label": "auto"}),
+        release=ReleaseRow(D, 5.0, "unclaimed"),
+    )
     assert task_status(held, ASKED).status is Status.QUEUED
     assert task_status(held, replace(ASKED, label="night")).status is Status.HELD  # another round label: not the person's answer
     assert task_status(replace(held, hold=HOLD.model_copy(update={"labels": "not_ours"})), ASKED).status is Status.HELD
 
 
-@pytest.mark.parametrize(("free", "reserve", "running", "bound", "wait"), [
-    (0, 0, 0, 3, Wait.NO_FREE_SLOT), (1, 1, 0, 3, Wait.SLOT_FOR_LAND), (2, 1, 3, 3, Wait.MAX_RUNNING), (2, 1, 2, 3, Wait.READY),
-])
+@pytest.mark.parametrize(
+    ("free", "reserve", "running", "bound", "wait"),
+    [
+        (0, 0, 0, 3, Wait.NO_FREE_SLOT),
+        (1, 1, 0, 3, Wait.SLOT_FOR_LAND),
+        (2, 1, 3, 3, Wait.MAX_RUNNING),
+        (2, 1, 2, 3, Wait.READY),
+    ],
+)
 def test_a_queued_task_says_why_it_does_not_start_yet(free: int, reserve: int, running: int, bound: int, wait: Wait) -> None:
     found = task_status(ABANDONED, replace(ASKED, wait=blocker(free, reserve, running, bound)))
     assert (found.status, found.wait) == (Status.QUEUED, wait)
@@ -94,8 +110,13 @@ def test_a_skip_by_rule_is_queued_with_the_rule_in_its_words() -> None:
 
 
 def test_only_work_that_goes_on_without_the_person_is_in_flight() -> None:
-    views = (VIEW, replace(VIEW, task_id="tl-2", next="stuck:hung"), replace(ABANDONED, task_id="tl-3"),
-             replace(VIEW, task_id="tl-4", next="land"), replace(VIEW, task_id="tl-5", next="hold", hold=HOLD))
+    views = (
+        VIEW,
+        replace(VIEW, task_id="tl-2", next="stuck:hung"),
+        replace(ABANDONED, task_id="tl-3"),
+        replace(VIEW, task_id="tl-4", next="land"),
+        replace(VIEW, task_id="tl-5", next="hold", hold=HOLD),
+    )
     assert in_flight(views) == {"tl-1", "tl-4"}
 
 

@@ -15,23 +15,43 @@ from taskloop.step_render import human
 surroundings = attempt_surroundings
 
 
-@pytest.mark.parametrize(("rc", "timed_out", "stop", "answer", "reason"), [
-    (-9, False, None, "", "run:killed"),
-    (-9, True, "timeout", "", "run:timeout"),
-    (-15, False, "answer", json.dumps(PLAN), "run:killed"),
-    (0, False, "answer", json.dumps(PLAN), "commit"),
-    (0, False, None, "not json", "answer:json_invalid"),
-])
+@pytest.mark.parametrize(
+    ("rc", "timed_out", "stop", "answer", "reason"),
+    [
+        (-9, False, None, "", "run:killed"),
+        (-9, True, "timeout", "", "run:timeout"),
+        (-15, False, "answer", json.dumps(PLAN), "run:killed"),
+        (0, False, "answer", json.dumps(PLAN), "commit"),
+        (0, False, None, "not json", "answer:json_invalid"),
+    ],
+)
 @pytest.mark.parametrize("incomplete", [True, False, None, "invalid", 1])
 def test_usage_survives_endings_and_capture_replay(
-    surroundings: AttemptSurroundings, rc: int, timed_out: bool, stop: str | None, answer: str, reason: str,
+    surroundings: AttemptSurroundings,
+    rc: int,
+    timed_out: bool,
+    stop: str | None,
+    answer: str,
+    reason: str,
     incomplete: bool | str | int | None,
 ) -> None:
     con = database(surroundings)
-    raw = RunOutcome(rc=rc, timed_out=timed_out, stop=stop, worker=WORKER, summary=Summary(
-        rc=rc, text=answer, res={"tokens": {"in": 740000, "cached": 600000, "out": 1500},
-                               "cumulative": {"in": 1790000, "cached": 1000000, "out": 3000},
-                               "requests": 16, "usage_incomplete": incomplete}))
+    raw = RunOutcome(
+        rc=rc,
+        timed_out=timed_out,
+        stop=stop,
+        worker=WORKER,
+        summary=Summary(
+            rc=rc,
+            text=answer,
+            res={
+                "tokens": {"in": 740000, "cached": 600000, "out": 1500},
+                "cumulative": {"in": 1790000, "cached": 1000000, "out": 3000},
+                "requests": 16,
+                "usage_incomplete": incomplete,
+            },
+        ),
+    )
     execution = FakeRun(raw)
     owner = app(con, surroundings, execution)
     result = owner.execute(KEY, ENTRY)
@@ -42,7 +62,15 @@ def test_usage_survives_endings_and_capture_replay(
     assert facts.cumulative == (1790000, 1000000, 3000) and facts.turns == 16
     assert facts.usage_incomplete is (incomplete if isinstance(incomplete, bool) else None)
     assert con.execute("SELECT t_in,t_cached,t_out,c_in,c_cached,c_out,turns,usage_incomplete FROM execution").fetchone() == (
-        740000, 600000, 1500, 1790000, 1000000, 3000, 16, facts.usage_incomplete)
+        740000,
+        600000,
+        1500,
+        1790000,
+        1000000,
+        3000,
+        16,
+        facts.usage_incomplete,
+    )
     loaded = owner.store.load(KEY)
     assert loaded is not None
     assert owner.store.capture(loaded.admission, WORKER, facts, stored.evidence, "complete", now=10.0) == "already_same"
@@ -64,18 +92,25 @@ def test_usage_survives_endings_and_capture_replay(
         assert "in-flight request is missing" in "\n".join(human("show", shown, None))
 
 
-@pytest.mark.parametrize(("tokens", "turns", "words"), [
-    (None, None, "Usage was not reported by the agent stream."),
-    ((0, 0, 0), 0, ""),
-    ((20, None, 3), None, "Usage was not reported for: cached input tokens, turns."),
-])
+@pytest.mark.parametrize(
+    ("tokens", "turns", "words"),
+    [
+        (None, None, "Usage was not reported by the agent stream."),
+        ((0, 0, 0), 0, ""),
+        ((20, None, 3), None, "Usage was not reported for: cached input tokens, turns."),
+    ],
+)
 def test_missing_and_zero_usage_in_attempt_views(
-    surroundings: AttemptSurroundings, tokens: tuple[int | None, int | None, int | None] | None, turns: int | None, words: str,
+    surroundings: AttemptSurroundings,
+    tokens: tuple[int | None, int | None, int | None] | None,
+    turns: int | None,
+    words: str,
 ) -> None:
     con = database(surroundings)
     counts = None if tokens is None else dict(zip(("in", "cached", "out"), tokens, strict=True))
-    execution = FakeRun(RunOutcome(rc=0, stop="answer", worker=WORKER, summary=Summary(
-        text=json.dumps(PLAN), res={"tokens": counts, "requests": turns})))
+    execution = FakeRun(
+        RunOutcome(rc=0, stop="answer", worker=WORKER, summary=Summary(text=json.dumps(PLAN), res={"tokens": counts, "requests": turns}))
+    )
     owner = app(con, surroundings, execution)
     result = owner.execute(KEY, ENTRY)
     assert result.execution is not None

@@ -154,7 +154,12 @@ class Bench:
     slot (another repo's) without a reservation row, so the free-slot read lets admission read the tracker."""
 
     def __init__(
-        self, con: sqlite3.Connection, ready: ReadyTracker | None = None, admission: Admission | None = None, *, free: bool = True,
+        self,
+        con: sqlite3.Connection,
+        ready: ReadyTracker | None = None,
+        admission: Admission | None = None,
+        *,
+        free: bool = True,
     ) -> None:
         if free:
             con.execute("INSERT OR IGNORE INTO slot (repo_id,name,path) VALUES ('other','s1','/other/s1')")
@@ -183,10 +188,28 @@ class Bench:
     def ports(self) -> RoundPorts:
         reads = StatusPorts(self.store, self.observe, lambda: self.now, self.leftovers, lambda: "boot")
         starting = StartPorts(self.store, self.admission, self.launcher, lambda: self.now, self.repeats, self.advance, NO_CHECKS)
-        holding = HoldPorts(HoldStore(self.store.connect), self.store, no_holds(), self.releaser, NoChecks(), lambda: self.now,
-                            EvidenceFiles(Path("/artifacts")), lambda _backlog, _task: None)  # no label here: nothing is held
-        return RoundPorts(reads, starting, self.factory_commit, self.releaser, self.publisher, holding, self.ready,
-            self.log, self.stopping, ids=NativeIds())
+        holding = HoldPorts(
+            HoldStore(self.store.connect),
+            self.store,
+            no_holds(),
+            self.releaser,
+            NoChecks(),
+            lambda: self.now,
+            EvidenceFiles(Path("/artifacts")),
+            lambda _backlog, _task: None,
+        )  # no label here: nothing is held
+        return RoundPorts(
+            reads,
+            starting,
+            self.factory_commit,
+            self.releaser,
+            self.publisher,
+            holding,
+            self.ready,
+            self.log,
+            self.stopping,
+            ids=NativeIds(),
+        )
 
     def round(self, request: NextRequest = REQUEST) -> Round:
         found = run_round(self.ports(), request)
@@ -231,23 +254,32 @@ def moves(found: Round) -> list[tuple[str, str, str]]:
     return [(each.task_id, each.action, each.word) for each in found.moves]
 
 
-@pytest.mark.parametrize("phase, entry, seen, now, claim, expected, launched", [
-    ("admitted", None, "gone", 10, None, ("relaunch", "relaunched"), 1),
-    ("admitted", ENTRY, "gone", 10, None, ("relaunch", "relaunched"), 1),
-    ("admitted", ENTRY, "different_process", 10, None, ("relaunch", "relaunched"), 1),
-    ("admitted", ENTRY, "matching", 10, None, ("report", "running"), 0),
-    ("admitted", ENTRY, "gone", 200, None, ("report", "stuck:expired_admitted"), 0),
-    ("admitted", BEFORE_REBOOT, "different_process", 200, None, ("relaunch", "relaunched"), 1),
-    ("dispatching", BEFORE_REBOOT, "different_process", 200, None, ("report", "unknown"), 0),
-    ("admitted", ENTRY, "unknown", 10, None, ("report", "unknown"), 0),
-    ("dispatching", ENTRY, "gone", 10, None, ("report", "unknown"), 0),
-    ("registered", ENTRY, "matching", 200, None, ("report", "unknown"), 0),
-    ("admitted", None, "gone", 10, "unclaimed", None, 0),
-    ("admitted", None, "gone", 10, "unclaiming", ("release", "released"), 0),
-])
+@pytest.mark.parametrize(
+    "phase, entry, seen, now, claim, expected, launched",
+    [
+        ("admitted", None, "gone", 10, None, ("relaunch", "relaunched"), 1),
+        ("admitted", ENTRY, "gone", 10, None, ("relaunch", "relaunched"), 1),
+        ("admitted", ENTRY, "different_process", 10, None, ("relaunch", "relaunched"), 1),
+        ("admitted", ENTRY, "matching", 10, None, ("report", "running"), 0),
+        ("admitted", ENTRY, "gone", 200, None, ("report", "stuck:expired_admitted"), 0),
+        ("admitted", BEFORE_REBOOT, "different_process", 200, None, ("relaunch", "relaunched"), 1),
+        ("dispatching", BEFORE_REBOOT, "different_process", 200, None, ("report", "unknown"), 0),
+        ("admitted", ENTRY, "unknown", 10, None, ("report", "unknown"), 0),
+        ("dispatching", ENTRY, "gone", 10, None, ("report", "unknown"), 0),
+        ("registered", ENTRY, "matching", 200, None, ("report", "unknown"), 0),
+        ("admitted", None, "gone", 10, "unclaimed", None, 0),
+        ("admitted", None, "gone", 10, "unclaiming", ("release", "released"), 0),
+    ],
+)
 def test_each_existing_attempt_by_its_next_word(
-    factory: sqlite3.Connection, phase: str, entry: EntryIdentity | None, seen: Seen, now: float, claim: str | None,
-    expected: tuple[str, str] | None, launched: int,
+    factory: sqlite3.Connection,
+    phase: str,
+    entry: EntryIdentity | None,
+    seen: Seen,
+    now: float,
+    claim: str | None,
+    expected: tuple[str, str] | None,
+    launched: int,
 ) -> None:
     seed(factory, "tl-1", "attempt", phase=phase, entry=entry)
     if claim is not None:
@@ -286,21 +318,35 @@ def captured(con: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checko
 
     store = AttemptStore(lambda: con)
     Attempts(
-        store, EvidenceFiles(tmp_path), AgentLaunch(lambda _harness: ("/bin/codex", {}), ids=NativeIds()),
-            agent, lambda: 10, checkouts, slot_files
+        store,
+        EvidenceFiles(tmp_path),
+        AgentLaunch(lambda _harness: ("/bin/codex", {}), ids=NativeIds()),
+        agent,
+        lambda: 10,
+        checkouts,
+        slot_files,
     ).execute(KEY, ENTRY)
 
 
-@pytest.mark.parametrize("case, expected, calls", [
-    ("commit", ("commit", "committed release=released branch=published"), ["commit", "release", "publish"]),
-    ("repeat", ("repeat", "repeated"), []),
-    ("repeats_exhausted", ("report", "repeats_exhausted"), []),
-    ("failed", ("report", "failed:run:worker_failed"), []),
-    ("held", ("release", "released"), ["release", "release"]),
-])
+@pytest.mark.parametrize(
+    "case, expected, calls",
+    [
+        ("commit", ("commit", "committed release=released branch=published"), ["commit", "release", "publish"]),
+        ("repeat", ("repeat", "repeated"), []),
+        ("repeats_exhausted", ("report", "repeats_exhausted"), []),
+        ("failed", ("report", "failed:run:worker_failed"), []),
+        ("held", ("release", "released"), ["release", "release"]),
+    ],
+)
 def test_a_step_that_ran_is_committed_repeated_or_reported_every_round(
-    registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles,
-    case: str, expected: tuple[str, str], calls: list[str],
+    registered: sqlite3.Connection,
+    tmp_path: Path,
+    slot: FakeWorktree,
+    checkouts: Checkouts,
+    slot_files: SlotFiles,
+    case: str,
+    expected: tuple[str, str],
+    calls: list[str],
 ) -> None:
     captured(registered, tmp_path, slot, checkouts, slot_files, rc=1 if case in ("failed", "held") else 0)
     bench = Bench(registered)
@@ -309,9 +355,7 @@ def test_a_step_that_ran_is_committed_repeated_or_reported_every_round(
     if case == "repeats_exhausted":
         registered.execute("UPDATE attempt SET seq=2")
         seed(registered, "tl-1", "older", phase="captured")
-        registered.execute(
-            "UPDATE attempt SET number=3,previous_attempt_id='older',repeat_reason='uncommitted' WHERE attempt_id='attempt'"
-        )
+        registered.execute("UPDATE attempt SET number=3,previous_attempt_id='older',repeat_reason='uncommitted' WHERE attempt_id='attempt'")
     if case == "failed":
         registered.execute("DELETE FROM reservation")
         released(registered, "attempt", "kept")
@@ -332,8 +376,19 @@ def committed_released(
     held = Recorded(NotReleased("unavailable", "slot_busy"))
     checked = commit_task(store, factory_commit, held, held, "tasks", "tl-1")  # its own publication is the recording stub's
     assert isinstance(checked, CommittedTask) and checked.release == "unavailable:slot_busy"
-    real = SlotRelease(store, checkouts, slot_files, lambda _entry: "gone", lambda _worker: True, custody, lambda _r, _t: True, lambda: 30,
-                       lambda _setup: "gone", lambda _scratch: True, ids=NativeIds())
+    real = SlotRelease(
+        store,
+        checkouts,
+        slot_files,
+        lambda _entry: "gone",
+        lambda _worker: True,
+        custody,
+        lambda _r, _t: True,
+        lambda: 30,
+        lambda _setup: "gone",
+        lambda _scratch: True,
+        ids=NativeIds(),
+    )
     assert isinstance(real.release(KEY, False), Released)
     return store
 
@@ -353,18 +408,32 @@ def test_a_committed_released_plan_is_published_once_then_advanced_never_before(
     assert bench.lines[-2].endswith(" tasks tl-1 plan skip claim_lost attempt")
 
 
-@pytest.mark.parametrize("answer, expected, stopped, code", [
-    (AdmitRefused("not_advanceable"), [("tl-1", "skip", "not_advanceable")], "", 0),
-    (AdmitRefused("branch_moved"), [("tl-1", "skip", "branch_moved")], "", 0),
-    (AdmitRefused("branch_diverged"), [("tl-1", "skip", "branch_diverged")], "", 0),
-    (AdmitRefused("no_free_slot"), [], "no_free_slot", 0),
-    (AdmitUnavailable("tracker"), [("tl-1", "advance", "unavailable:tracker")], "unavailable:tracker", 3),
-    *[(AdmitRefused(reason), [("tl-1", "skip", reason)], "", 0) for reason in ("task", "task_missing", "checkout", "input", "constraint")],
-    (AdmitRefused("deadline"), [("tl-1", "advance", "refused:deadline")], "refused:deadline", 1),
-], ids=lambda value: getattr(value, "reason", getattr(value, "what", None)))
+@pytest.mark.parametrize(
+    "answer, expected, stopped, code",
+    [
+        (AdmitRefused("not_advanceable"), [("tl-1", "skip", "not_advanceable")], "", 0),
+        (AdmitRefused("branch_moved"), [("tl-1", "skip", "branch_moved")], "", 0),
+        (AdmitRefused("branch_diverged"), [("tl-1", "skip", "branch_diverged")], "", 0),
+        (AdmitRefused("no_free_slot"), [], "no_free_slot", 0),
+        (AdmitUnavailable("tracker"), [("tl-1", "advance", "unavailable:tracker")], "unavailable:tracker", 3),
+        *[
+            (AdmitRefused(reason), [("tl-1", "skip", reason)], "", 0)
+            for reason in ("task", "task_missing", "checkout", "input", "constraint")
+        ],
+        (AdmitRefused("deadline"), [("tl-1", "advance", "refused:deadline")], "refused:deadline", 1),
+    ],
+    ids=lambda value: getattr(value, "reason", getattr(value, "what", None)),
+)
 def test_an_advance_refusal_is_a_skip_of_the_done_step_and_a_stop_word_ends_admission_too(
-    registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles,
-    answer: AdmitResult, expected: list[tuple[str, str, str]], stopped: str, code: int,
+    registered: sqlite3.Connection,
+    tmp_path: Path,
+    slot: FakeWorktree,
+    checkouts: Checkouts,
+    slot_files: SlotFiles,
+    answer: AdmitResult,
+    expected: list[tuple[str, str, str]],
+    stopped: str,
+    code: int,
 ) -> None:
     """The advance carries the round's checkout and choices and no label; a refusal about the task, also one from its
     stored facts (`task`, `checkout`, `input`, `constraint`), skips it and admission goes on to the ready task; a round-wide
@@ -375,8 +444,11 @@ def test_an_advance_refusal_is_a_skip_of_the_done_step_and_a_stop_word_ends_admi
     bench = Bench(registered, ready)
     bench.advance = advances = Advances(answer)
     found = bench.round(replace(REQUEST, quiet=frozenset()))
-    assert (moves(found), found.stopped, exit_code(found)) == (expected + ([("t-9", "start", "started")] if not stopped else []), stopped,
-                                                               code)
+    assert (moves(found), found.stopped, exit_code(found)) == (
+        expected + ([("t-9", "start", "started")] if not stopped else []),
+        stopped,
+        code,
+    )
     sent = advances.requests[0]
     assert (sent.previous, sent.checkout, sent.setting, sent.overrides, sent.deadline) == (
         KEY,
@@ -433,8 +505,11 @@ def test_admission_follows_selection_and_stops_at_no_free_slot(factory: sqlite3.
     assert ready.ready_reads == ["auto"] and exit_code(found) == 0
 
 
-@pytest.mark.parametrize("refusal", [AdmitRefused(reason, detail="bd said: secret detail") for reason in (
-    "claimed_elsewhere", "branch_diverged", "branch_held")], ids=lambda refusal: refusal.reason)
+@pytest.mark.parametrize(
+    "refusal",
+    [AdmitRefused(reason, detail="bd said: secret detail") for reason in ("claimed_elsewhere", "branch_diverged", "branch_held")],
+    ids=lambda refusal: refusal.reason,
+)
 def test_a_refusal_about_one_task_moves_on_to_the_next(factory: sqlite3.Connection, refusal: AdmitRefused) -> None:
     ready = ReadyTracker([bead("t-1", 0), bead("t-2", 1)], ready=["t-1", "t-2"])
     admission = Admission({"t-1": refusal})
@@ -465,9 +540,13 @@ def test_an_advance_refused_branch_held_reports_the_slot_unusable_too(
     assert ("tl-1", "report", "unusable:s1:attached") in moves(bench.round())
 
 
-@pytest.mark.parametrize("fault, stopped, code", [
-    (BdError("timeout", "bd failed"), "unavailable:tracker", 3), (BdError("malformed", "bd failed"), "refused:tracker", 1),
-])
+@pytest.mark.parametrize(
+    "fault, stopped, code",
+    [
+        (BdError("timeout", "bd failed"), "unavailable:tracker", 3),
+        (BdError("malformed", "bd failed"), "refused:tracker", 1),
+    ],
+)
 def test_a_failed_ready_read_stops_admission_but_settling_still_ran(
     factory: sqlite3.Connection, fault: BdError, stopped: str, code: int
 ) -> None:
@@ -479,9 +558,14 @@ def test_a_failed_ready_read_stops_admission_but_settling_still_ran(
     assert bench.lines[-1].endswith(f" tasks round moves=1 stopped={stopped}")
 
 
-@pytest.mark.parametrize("label, minutes, model, effort, reason", [
-    (" ", 30, "m", "high", "label"), ("auto", 0, "m", "high", "choices"), ("auto", 7 * 24 * 60 + 1, "m", "high", "choices"),
-])
+@pytest.mark.parametrize(
+    "label, minutes, model, effort, reason",
+    [
+        (" ", 30, "m", "high", "label"),
+        ("auto", 0, "m", "high", "choices"),
+        ("auto", 7 * 24 * 60 + 1, "m", "high", "choices"),
+    ],
+)
 def test_an_empty_label_a_bad_choice_or_minutes_out_of_range_are_refused_before_any_read(
     factory: sqlite3.Connection, label: str, minutes: int, model: str, effort: str, reason: str
 ) -> None:
@@ -519,8 +603,14 @@ def test_skips_abandoned_attempted_assigned_and_ancestry_and_a_second_round_admi
     bench = Bench(factory, ready, admission)
     bench.seen = "matching"
     first = bench.round()
-    assert moves(first) == [("t-2", "report", "running"), ("t-1", "skip", "abandoned"), ("t-2", "skip", "attempted"),
-                            ("t-3", "skip", "assigned"), ("t-4", "skip", "ancestry"), ("t-5", "start", "started")]
+    assert moves(first) == [
+        ("t-2", "report", "running"),
+        ("t-1", "skip", "abandoned"),
+        ("t-2", "skip", "attempted"),
+        ("t-3", "skip", "assigned"),
+        ("t-4", "skip", "ancestry"),
+        ("t-5", "start", "started"),
+    ]
     skips = {(each.task_id, each.word): each.attempt_id for each in first.moves if each.action == "skip"}
     assert (skips[("t-1", "abandoned")], skips[("t-2", "attempted")], skips[("t-3", "assigned")]) == ("gone-1", "lapsed", "")
     assert any(line.endswith(" tasks t-1 plan skip abandoned gone-1") for line in bench.lines)
@@ -531,8 +621,9 @@ def test_skips_abandoned_attempted_assigned_and_ancestry_and_a_second_round_admi
 
 def test_the_round_log_holds_fixed_words_one_line_per_move_and_a_closing_line(factory: sqlite3.Connection) -> None:
     ready = ReadyTracker([bead("t-1"), bead("t 2\nforged line")], ready=["t-1", "t 2\nforged line"])
-    admission = Admission({"t-1": AdmitRefused("claimed_elsewhere", detail="/home/person/.secret")},
-                          effect=lambda task: seed(factory, task, f"a-{task}"))
+    admission = Admission(
+        {"t-1": AdmitRefused("claimed_elsewhere", detail="/home/person/.secret")}, effect=lambda task: seed(factory, task, f"a-{task}")
+    )
     bench = Bench(factory, ready, admission)
     found = bench.round()
     assert len(bench.lines) == len(found.moves) + 1 == 3
@@ -566,11 +657,10 @@ def test_an_attempt_abandoned_after_the_snapshot_is_skipped_never_admitted_afres
     assert bench.round().moves == ()  # the next snapshot sees the abandon: nothing
 
 
-@pytest.mark.parametrize("refusal", [LaunchRefused("registration_conflict"), LaunchRefused("registration_refused")],
-                         ids=lambda refusal: refusal.reason)
-def test_a_candidate_another_start_admitted_meanwhile_is_a_per_task_refusal(
-    factory: sqlite3.Connection, refusal: LaunchRefused
-) -> None:
+@pytest.mark.parametrize(
+    "refusal", [LaunchRefused("registration_conflict"), LaunchRefused("registration_refused")], ids=lambda refusal: refusal.reason
+)
+def test_a_candidate_another_start_admitted_meanwhile_is_a_per_task_refusal(factory: sqlite3.Connection, refusal: LaunchRefused) -> None:
     """Between the round's snapshot and its admission another start admits t-2: start launches that existing attempt, whose
     launcher refusal is about t-2 alone; the round goes on to t-3 and exits 0."""
     seed(factory, "tl-0", "running", entry=ENTRY)
@@ -586,23 +676,45 @@ def test_a_candidate_another_start_admitted_meanwhile_is_a_per_task_refusal(
 LEAK = leaked_claim("t-1")
 
 
-@pytest.mark.parametrize("admit, launch, expected, stopped, code", [
-    (AdmitUnavailable("tracker", claim_leaked=True, detail="bd"), None,
-     [("t-1", "start", "unavailable:tracker"), ("t-1", "report", "claim_leaked")], "unavailable:tracker", 3),
-    (AdmitRefused("no_free_slot", claim_leaked=True), None, [("t-1", "report", "claim_leaked")], "no_free_slot", 0),
-    (AdmitRefused("claimed_elsewhere", claim_leaked=True), None,
-     [("t-1", "start", "refused:claimed_elsewhere"), ("t-1", "report", "claim_leaked"), ("t-2", "start", "started")], "", 0),
-    (AdmitRefused("checkout"), None, [("t-1", "start", "refused:checkout")], "refused:checkout", 1),
-    (AdmitRefused("task"), None, [("t-1", "start", "refused:task")], "refused:task", 1),
-    (AdmitRefused("input"), None, [("t-1", "start", "refused:input")], "refused:input", 1),
-    (None, LaunchUncertain(KEY, ENTRY), [("t-1", "start", "uncertain:launch")], "uncertain:launch", 3),
-    (None, LaunchUnavailable("start"), [("t-1", "start", "unavailable:start")], "unavailable:start", 3),
-    (None, LaunchRefused("registration_refused"),
-     [("t-1", "start", "refused:registration_refused"), ("t-2", "start", "started")], "", 0),
-])
+@pytest.mark.parametrize(
+    "admit, launch, expected, stopped, code",
+    [
+        (
+            AdmitUnavailable("tracker", claim_leaked=True, detail="bd"),
+            None,
+            [("t-1", "start", "unavailable:tracker"), ("t-1", "report", "claim_leaked")],
+            "unavailable:tracker",
+            3,
+        ),
+        (AdmitRefused("no_free_slot", claim_leaked=True), None, [("t-1", "report", "claim_leaked")], "no_free_slot", 0),
+        (
+            AdmitRefused("claimed_elsewhere", claim_leaked=True),
+            None,
+            [("t-1", "start", "refused:claimed_elsewhere"), ("t-1", "report", "claim_leaked"), ("t-2", "start", "started")],
+            "",
+            0,
+        ),
+        (AdmitRefused("checkout"), None, [("t-1", "start", "refused:checkout")], "refused:checkout", 1),
+        (AdmitRefused("task"), None, [("t-1", "start", "refused:task")], "refused:task", 1),
+        (AdmitRefused("input"), None, [("t-1", "start", "refused:input")], "refused:input", 1),
+        (None, LaunchUncertain(KEY, ENTRY), [("t-1", "start", "uncertain:launch")], "uncertain:launch", 3),
+        (None, LaunchUnavailable("start"), [("t-1", "start", "unavailable:start")], "unavailable:start", 3),
+        (
+            None,
+            LaunchRefused("registration_refused"),
+            [("t-1", "start", "refused:registration_refused"), ("t-2", "start", "started")],
+            "",
+            0,
+        ),
+    ],
+)
 def test_admission_stops_on_unknowns_and_its_own_inputs_and_reports_every_leaked_claim(
-    factory: sqlite3.Connection, admit: AdmitResult | None, launch: LaunchResult | None,
-    expected: list[tuple[str, str, str]], stopped: str, code: int,
+    factory: sqlite3.Connection,
+    admit: AdmitResult | None,
+    launch: LaunchResult | None,
+    expected: list[tuple[str, str, str]],
+    stopped: str,
+    code: int,
 ) -> None:
     ready = ReadyTracker([bead("t-1", 0), bead("t-2", 1)], ready=["t-1", "t-2"])
     bench = Bench(factory, ready, Admission({} if admit is None else {"t-1": admit}))
@@ -640,8 +752,10 @@ def test_a_move_identical_to_the_previous_rounds_is_not_written_again(factory: s
     assert second.moves == first.moves and len(bench.lines) == 2  # still in the result, not in the log
     bench.now = 200
     third = bench.round(replace(REQUEST, quiet=second.written))
-    assert [line.split(" ")[2:] for line in bench.lines[2:]] == [["tl-1", "plan", "report", "stuck:expired_admitted", "attempt"],
-                                                                ["round", "moves=1"]]
+    assert [line.split(" ")[2:] for line in bench.lines[2:]] == [
+        ["tl-1", "plan", "report", "stuck:expired_admitted", "attempt"],
+        ["round", "moves=1"],
+    ]
     bench.round(replace(REQUEST, quiet=third.written))
     assert len(bench.lines) == 4
 

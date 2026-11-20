@@ -57,8 +57,21 @@ def test_retry_limits_and_claim_boundaries_remain_explicit() -> None:
     assert "compare" in PUBLISH and "never forces" in PUBLISH
 
 
-@pytest.mark.parametrize("reason", ["not_committed", "read_only", "dirty", "uncommitted", "session_pending",
-                                  "branch", "unborn", "changed_answer", "not_advanceable", "plan_empty"])
+@pytest.mark.parametrize(
+    "reason",
+    [
+        "not_committed",
+        "read_only",
+        "dirty",
+        "uncommitted",
+        "session_pending",
+        "branch",
+        "unborn",
+        "changed_answer",
+        "not_advanceable",
+        "plan_empty",
+    ],
+)
 def test_completion_refusals_name_factory_commit(reason: str) -> None:
     text = " ".join(human("tl step commit", Failed("refused", reason), None))
     assert "factory commit" in text.lower()

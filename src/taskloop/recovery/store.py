@@ -30,8 +30,11 @@ def permitted(observed: Observations, owner: Identity, token: str) -> Result | N
         if seen.seen is not Seen.GONE:
             return Result(outcome=Outcome.UNRESOLVED, explanation=seen.explanation)
     previous = observed.snapshot.intent
-    if (previous is not None and (previous.owner != owner or previous.token != token)
-            and (observed.owner is None or observed.owner.seen is not Seen.GONE)):
+    if (
+        previous is not None
+        and (previous.owner != owner or previous.token != token)
+        and (observed.owner is None or observed.owner.seen is not Seen.GONE)
+    ):
         explanation = "The previous recovery owner has no stop proof." if observed.owner is None else observed.owner.explanation
         return Result(outcome=Outcome.OCCUPIED, explanation=explanation, intent=previous)
     if observed.claim.state is not ClaimState.OWNED:
@@ -42,7 +45,8 @@ def permitted(observed: Observations, owner: Identity, token: str) -> Result | N
 
 class RecoveryStore(StoreConnection):
     def __init__(
-        self, connect: Callable[[], sqlite3.Connection | None],
+        self,
+        connect: Callable[[], sqlite3.Connection | None],
         begin: Callable[[sqlite3.Connection], AbstractContextManager[None]] = begin_immediate,
     ) -> None:
         super().__init__(connect, begin)
@@ -72,9 +76,13 @@ class RecoveryStore(StoreConnection):
             if isinstance(snapshot, Result):
                 return snapshot
             current = snapshot.intent
-            if (current is None or current.execution is None or expected.execution is None
-                    or current.execution.drain != snapshot.drain
-                    or current.model_dump(exclude={"execution"}) != expected.model_dump(exclude={"execution"})):
+            if (
+                current is None
+                or current.execution is None
+                or expected.execution is None
+                or current.execution.drain != snapshot.drain
+                or current.model_dump(exclude={"execution"}) != expected.model_dump(exclude={"execution"})
+            ):
                 return Result(outcome=Outcome.CHANGED, explanation="The execution intent, owner, generation or drain boundary changed.")
             execution = current.execution
             if execution.phase is Phase.REGISTERED:
@@ -91,7 +99,12 @@ class RecoveryStore(StoreConnection):
             return Result(outcome=Outcome.REGISTERED, explanation="The authorized worker registration is durable.", intent=value)
 
     def _snapshot(
-        self, con: sqlite3.Connection, key: AttemptKey, now: float, *, allow_expired: bool = False,
+        self,
+        con: sqlite3.Connection,
+        key: AttemptKey,
+        now: float,
+        *,
+        allow_expired: bool = False,
     ) -> Snapshot | Result:
         record = self.attempts.recovery(con, key, now, allow_expired=allow_expired)
         if isinstance(record, Result):
@@ -108,16 +121,26 @@ class RecoveryStore(StoreConnection):
             return self._snapshot(con, key, now, allow_expired=allow_expired)
 
     def _compare(
-        self, con: sqlite3.Connection, expected: Snapshot, now: float, *, allow_expired: bool = False,
+        self,
+        con: sqlite3.Connection,
+        expected: Snapshot,
+        now: float,
+        *,
+        allow_expired: bool = False,
     ) -> Snapshot | Result:
         current = self._snapshot(con, expected.attempt.admission.key, now, allow_expired=allow_expired)
         if isinstance(current, Snapshot) and current != expected:
-            return Result(outcome=Outcome.CHANGED, explanation="Recovery facts or ownership changed after observation.",
-                          intent=current.intent)
+            return Result(
+                outcome=Outcome.CHANGED, explanation="Recovery facts or ownership changed after observation.", intent=current.intent
+            )
         return current
 
     def compare(
-        self, expected: Snapshot, clock: Callable[[], float], *, allow_expired: bool = False,
+        self,
+        expected: Snapshot,
+        clock: Callable[[], float],
+        *,
+        allow_expired: bool = False,
     ) -> Snapshot | Result:
         """Revalidate every local fact without granting or changing authorization."""
         with self._connection() as con, con:
@@ -125,7 +148,13 @@ class RecoveryStore(StoreConnection):
             return self._compare(con, expected, clock(), allow_expired=allow_expired)
 
     def authorize(
-        self, observed: Observations, owner: Identity, token: str, clock: Callable[[], float], *, deadline: float | None = None,
+        self,
+        observed: Observations,
+        owner: Identity,
+        token: str,
+        clock: Callable[[], float],
+        *,
+        deadline: float | None = None,
     ) -> Result:
         refusal = permitted(observed, owner, token)
         if refusal is not None:
@@ -156,9 +185,15 @@ class RecoveryStore(StoreConnection):
         worker = record.worker
         if worker is None or record.session_ref is None:
             raise StoreUnavailable("Recovery snapshot has incomplete registration")
-        intent = Intent(key=record.admission.key, generation=1 if old is None else old.generation + 1,
-                        token=token, owner=owner, attempt_revision=record.revision, session=record.session_ref,
-                        entry=record.admission.entry,
-                        worker=Identity(pid=worker.pid, pgid=worker.pgid, start=worker.start, boot=worker.boot))
+        intent = Intent(
+            key=record.admission.key,
+            generation=1 if old is None else old.generation + 1,
+            token=token,
+            owner=owner,
+            attempt_revision=record.revision,
+            session=record.session_ref,
+            entry=record.admission.entry,
+            worker=Identity(pid=worker.pid, pgid=worker.pgid, start=worker.start, boot=worker.boot),
+        )
         save(con, intent, old)
         return Result(outcome=Outcome.AUTHORIZED, explanation="Stopped eligible work has a durable recovery owner.", intent=intent)

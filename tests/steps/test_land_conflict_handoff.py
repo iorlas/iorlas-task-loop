@@ -187,11 +187,14 @@ def test_running_resolution_is_retryable_and_restart_keeps_its_original_admissio
     unchanged_input(b, target)
 
 
-@pytest.mark.parametrize("answer", [
-    InProgress(reason=Reason.RUNNING, explanation="Resolution is running."),
-    InProgress(reason=Reason.UNKNOWN, explanation="Resolution cannot be observed yet."),
-    Unavailable(reason=Reason.UNKNOWN, explanation="Resolution evidence is temporarily unavailable."),
-])
+@pytest.mark.parametrize(
+    "answer",
+    [
+        InProgress(reason=Reason.RUNNING, explanation="Resolution is running."),
+        InProgress(reason=Reason.UNKNOWN, explanation="Resolution cannot be observed yet."),
+        Unavailable(reason=Reason.UNKNOWN, explanation="Resolution evidence is temporarily unavailable."),
+    ],
+)
 def test_active_results_keep_the_admission_deadline_and_execution_count(b: LandBench, answer: Result) -> None:
     b.advance({"README": "current main\n"})
     ports, cases = executing(b, interrupt=True)

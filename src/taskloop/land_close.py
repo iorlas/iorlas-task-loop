@@ -46,8 +46,9 @@ def _recorded(lands: LandStore, now: float, row: LandRow, close: Close) -> LandR
         again = lands.row(row.key)
         if again is not None and again.close is not None:
             return again
-        return Failed(UNAVAILABLE, "changed", f"{_on_main(row)} and the task is closed; the candidate changed meanwhile: rerun "
-                      "to record it.")
+        return Failed(
+            UNAVAILABLE, "changed", f"{_on_main(row)} and the task is closed; the candidate changed meanwhile: rerun to record it."
+        )
     except StoreUnavailable:
         return Failed("unavailable", "store", f"{_on_main(row)} and the task is closed; nothing was recorded: rerun to record it.")
     return lands.row(row.key) or row
@@ -57,12 +58,16 @@ def _by_hand(task: str, holder: str | None) -> str:
     """How the person closes the task by hand, from the assignee the close read (bd refuses a close by an actor other
     than the assignee unless forced: measured)."""
     if holder is None:
-        return "another actor took it meanwhile: look at it in the tracker, then close it there by hand (the tracker refuses a close " \
+        return (
+            "another actor took it meanwhile: look at it in the tracker, then close it there by hand (the tracker refuses a close "
             "by an actor that does not hold the claim unless forced)"
+        )
     if not holder:
         return "it is unassigned (its claim lapsed): close it in the tracker by hand"
-    return f"it is assigned to {one_line(holder, 80)}: close it in the tracker by hand, forced (the tracker refuses a close by an " \
+    return (
+        f"it is assigned to {one_line(holder, 80)}: close it in the tracker by hand, forced (the tracker refuses a close by an "
         "actor other than the assignee unless forced)"
+    )
 
 
 def _refused(row: LandRow, answer: CloseAnswer) -> Failed:
@@ -72,14 +77,25 @@ def _refused(row: LandRow, answer: CloseAnswer) -> Failed:
     if answer.word == "claim_lost":
         return Failed("refused", "claim_lost", f"{on_main}, but {_by_hand(task, answer.assignee)}; {rerun}.")
     if answer.word == "blocked":
-        return Failed("refused", "blocked", f"{on_main}, but the tracker refuses to close {task} ({one_line(answer.detail, 300)}): "
-                      f"close or unblock what it names, or close it in the tracker by hand, forced; landing the task again then "
-                      "closes or records it.")
+        return Failed(
+            "refused",
+            "blocked",
+            f"{on_main}, but the tracker refuses to close {task} ({one_line(answer.detail, 300)}): "
+            f"close or unblock what it names, or close it in the tracker by hand, forced; landing the task again then "
+            "closes or records it.",
+        )
     if answer.word == "missing":
-        return Failed("refused", "task", f"{on_main}, but the tracker has no task {task}: look in the tracker; landing "
-                      "the task again closes it once it is found.")
-    return Failed("unavailable", "tracker", f"{on_main}; the tracker could not close {task} ({answer.detail or 'no answer'}): "
-                  "land the task again to close it (nothing else is repeated).")
+        return Failed(
+            "refused",
+            "task",
+            f"{on_main}, but the tracker has no task {task}: look in the tracker; landing the task again closes it once it is found.",
+        )
+    return Failed(
+        "unavailable",
+        "tracker",
+        f"{on_main}; the tracker could not close {task} ({answer.detail or 'no answer'}): "
+        "land the task again to close it (nothing else is repeated).",
+    )
 
 
 def closed(lands: LandStore, close: Callable[[str, str, str], CloseAnswer], now: Callable[[], float], row: LandRow) -> LandRow | Failed:
@@ -89,8 +105,11 @@ def closed(lands: LandStore, close: Callable[[str, str, str], CloseAnswer], now:
         lands.start_phase(row.key, Phase.CLOSE, now())
     except StoreRefused:
         found = lands.row(row.key)
-        return found if found is not None and found.close is not None else Failed(
-            UNAVAILABLE, "changed", "The candidate changed before task completion: rerun.")
+        return (
+            found
+            if found is not None and found.close is not None
+            else Failed(UNAVAILABLE, "changed", "The candidate changed before task completion: rerun.")
+        )
     except StoreUnavailable:
         return Failed(UNAVAILABLE, "store", "Task completion could not be recorded: rerun.")
     answer = close(row.tracker_root, row.task_id, reason(row))

@@ -81,7 +81,10 @@ def captured(
 
 
 def factory_commit(
-    con: sqlite3.Connection, checkouts: Checkouts, files: SlotFiles, gone: WorkerGone = lambda _worker: True,
+    con: sqlite3.Connection,
+    checkouts: Checkouts,
+    files: SlotFiles,
+    gone: WorkerGone = lambda _worker: True,
 ) -> FactoryCommit:
     return FactoryCommit(AttemptStore(lambda: con), checkouts, files, gone, lambda: 20, hold, ids=NativeIds())
 
@@ -106,7 +109,12 @@ def writes(monkeypatch: pytest.MonkeyPatch) -> list[str]:
 
 
 def test_a_held_slot_refuses_commit_before_any_git_write_and_then_it_settles(
-    registered: sqlite3.Connection, slot: FakeWorktree, tmp_path: Path, checkouts: Checkouts, slot_files: SlotFiles, writes: list[str],
+    registered: sqlite3.Connection,
+    slot: FakeWorktree,
+    tmp_path: Path,
+    checkouts: Checkouts,
+    slot_files: SlotFiles,
+    writes: list[str],
     occupy: Occupy,
 ) -> None:
     captured(registered, tmp_path, slot, checkouts, slot_files, {P: PLAN_TEXT})
@@ -165,15 +173,29 @@ class NoLaunch:
 
 
 def test_a_repeat_whose_commit_finds_the_slot_held_admits_nothing(
-    registered: sqlite3.Connection, slot: FakeWorktree, tmp_path: Path, checkouts: Checkouts, slot_files: SlotFiles, writes: list[str],
+    registered: sqlite3.Connection,
+    slot: FakeWorktree,
+    tmp_path: Path,
+    checkouts: Checkouts,
+    slot_files: SlotFiles,
+    writes: list[str],
     occupy: Occupy,
 ) -> None:
     captured(registered, tmp_path, slot, checkouts, slot_files, {P: PLAN_TEXT, "stray.txt": "s"})
     store, admits = AttemptStore(lambda: registered), Admits()
     repeat = StepRepeat(
-        store, factory_commit(registered, checkouts, slot_files), EvidenceFiles(tmp_path), admits, NoLaunch(), lambda _worker: True,
-        lambda _entry: "gone", lambda: 10, repeating,
-    ids=NativeIds(), discussion=refresh_discussion)
+        store,
+        factory_commit(registered, checkouts, slot_files),
+        EvidenceFiles(tmp_path),
+        admits,
+        NoLaunch(),
+        lambda _worker: True,
+        lambda _entry: "gone",
+        lambda: 10,
+        repeating,
+        ids=NativeIds(),
+        discussion=refresh_discussion,
+    )
     with occupy(lock_path(str(slot.path))):
         found = repeat.repeat("tasks", "tl-1", KEY, None, 30)
     assert found == Failed("waiting", "slot_busy") and admits.calls == [] and writes == []
@@ -183,13 +205,19 @@ def test_a_read_only_factory_commit_asked_to_write_is_its_own_unknown(
     registered: sqlite3.Connection, slot: FakeWorktree, tmp_path: Path, checkouts: Checkouts, slot_files: SlotFiles, writes: list[str]
 ) -> None:
     captured(registered, tmp_path, slot, checkouts, slot_files, {P: PLAN_TEXT})
-    found = FactoryCommit(AttemptStore(lambda: registered), checkouts, slot_files, lambda _worker: True,
-        lambda: 20, refused, ids=NativeIds()).commit(KEY)
+    found = FactoryCommit(
+        AttemptStore(lambda: registered), checkouts, slot_files, lambda _worker: True, lambda: 20, refused, ids=NativeIds()
+    ).commit(KEY)
     assert found == CommitRefused("read_only") and writes == []
 
 
 def test_a_commit_reads_the_attempt_again_under_the_lock(
-    registered: sqlite3.Connection, slot: FakeWorktree, tmp_path: Path, checkouts: Checkouts, slot_files: SlotFiles, writes: list[str],
+    registered: sqlite3.Connection,
+    slot: FakeWorktree,
+    tmp_path: Path,
+    checkouts: Checkouts,
+    slot_files: SlotFiles,
+    writes: list[str],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Another factory commit settles between this one's first read and its lock: this one returns that stored verdict with
@@ -199,8 +227,15 @@ def test_a_commit_reads_the_attempt_again_under_the_lock(
     settled: list[str] = []
     real = commit_module.settle
 
-    def settle(checkouts: Checkouts, files: SlotFiles, admission: Admission, base: str, answer: AnswerState, quiet: GitQuiet,
-               timing: OperationTiming | None = None) -> Settled:
+    def settle(
+        checkouts: Checkouts,
+        files: SlotFiles,
+        admission: Admission,
+        base: str,
+        answer: AnswerState,
+        quiet: GitQuiet,
+        timing: OperationTiming | None = None,
+    ) -> Settled:
         settled.append(admission.key.attempt_id)
         return real(checkouts, files, admission, base, answer, quiet, timing)
 
@@ -212,6 +247,7 @@ def test_a_commit_reads_the_attempt_again_under_the_lock(
         with hold(admission):
             yield
 
-    found = FactoryCommit(AttemptStore(lambda: registered), checkouts, slot_files, lambda _worker: True,
-        lambda: 20, late, ids=NativeIds()).commit(KEY)
+    found = FactoryCommit(
+        AttemptStore(lambda: registered), checkouts, slot_files, lambda _worker: True, lambda: 20, late, ids=NativeIds()
+    ).commit(KEY)
     assert isinstance(found, Committed) and other == [found] and writes == ["stage", "record"] and settled == ["attempt"]

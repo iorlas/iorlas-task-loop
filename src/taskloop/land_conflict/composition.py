@@ -36,8 +36,7 @@ def conflict_handoff(work: Checking, views: GitViews, heartbeat_for: HeartbeatFo
     merges = MergeStore(work.store.connect, work.store.begin)
 
     def admission(repo: Repo) -> AdmissionPorts:
-        return AdmissionPorts(store, attempts, work.files, repo, SlotGit(work.checkouts, work.slot_files),
-                              probe, work.clock, work.ids)
+        return AdmissionPorts(store, attempts, work.files, repo, SlotGit(work.checkouts, work.slot_files), probe, work.clock, work.ids)
 
     def execution(repo: Repo, record: Record) -> Result:
         try:
@@ -45,9 +44,23 @@ def conflict_handoff(work: Checking, views: GitViews, heartbeat_for: HeartbeatFo
         except CredentialsUnavailable as error:
             return Unavailable(reason=Reason.UNKNOWN, explanation=str(error))
         alive = KeepAlive(heartbeat_for(record.request.tracker_root, record.request.task_id), threading.Event(), work.clock)
-        ports = ExecutionPorts(store, merges, repo, work.checkouts, views.remotes, work.slot_files, work.files,
-            AgentLaunch(machine_credentials, ids=work.ids), _run, worker_gone, work.clock, work.preparation,
-            renewal(alive), credentials, probe_for(record.inputs.setting, Path(record.slot_path), credentials[0]))
+        ports = ExecutionPorts(
+            store,
+            merges,
+            repo,
+            work.checkouts,
+            views.remotes,
+            work.slot_files,
+            work.files,
+            AgentLaunch(machine_credentials, ids=work.ids),
+            _run,
+            worker_gone,
+            work.clock,
+            work.preparation,
+            renewal(alive),
+            credentials,
+            probe_for(record.inputs.setting, Path(record.slot_path), credentials[0]),
+        )
         with keeping(alive):
             return execute(ports, record.key)
 
@@ -56,7 +69,19 @@ def conflict_handoff(work: Checking, views: GitViews, heartbeat_for: HeartbeatFo
 
 def land_ports(work: Checking, views: GitViews) -> LandPorts:
     claims = tracker_claims()
-    return LandPorts(work, LandStore(work.store.connect, work.store.begin), views.remotes,
-        partial(GitProfileFiles, repos=views.remotes), inspect_tracker_task, claims.heartbeat_for,
-        threading.Event, this_process, probe, landing, os.environ, claims.close,
-        conflict_handoff(work, views, claims.heartbeat_for), ids=NativeIds())
+    return LandPorts(
+        work,
+        LandStore(work.store.connect, work.store.begin),
+        views.remotes,
+        partial(GitProfileFiles, repos=views.remotes),
+        inspect_tracker_task,
+        claims.heartbeat_for,
+        threading.Event,
+        this_process,
+        probe,
+        landing,
+        os.environ,
+        claims.close,
+        conflict_handoff(work, views, claims.heartbeat_for),
+        ids=NativeIds(),
+    )

@@ -121,8 +121,9 @@ def slots(con: sqlite3.Connection, repo: FakeRepo, root: Path, count: int) -> No
     adopt(SlotsStore(lambda: con, begin_immediate), repo, SlotGit(PinnedViews(repo), FakeSlotFiles(repo)), root, count)
 
 
-def request(tmp_path: Path, repo: FakeRepo, *, deadline: float = 100, model: str = "chosen", task_id: str = "tl-1",
-            label: str | None = None) -> AdmitRequest:
+def request(
+    tmp_path: Path, repo: FakeRepo, *, deadline: float = 100, model: str = "chosen", task_id: str = "tl-1", label: str | None = None
+) -> AdmitRequest:
     return AdmitRequest(
         task_id,
         "tasks",
@@ -145,10 +146,20 @@ def unlocked(_slot_path: str) -> bool:
 
 def admission(con: sqlite3.Connection, tmp_path: Path, tracker: Tracker, repo: FakeRepo) -> AttemptAdmission:
     return AttemptAdmission(
-        lambda: con, begin_immediate, tracker.files, outside_transaction(con, tasks), PinnedViews(repo),
-        tracker.claim, tracker.unclaim, time, unlocked,
+        lambda: con,
+        begin_immediate,
+        tracker.files,
+        outside_transaction(con, tasks),
+        PinnedViews(repo),
+        tracker.claim,
+        tracker.unclaim,
+        time,
+        unlocked,
         FakeSlotFiles(repo),
-        ids=NativeIds(), discussion=outside_transaction(con, empty), engine=ENGINE)
+        ids=NativeIds(),
+        discussion=outside_transaction(con, empty),
+        engine=ENGINE,
+    )
 
 
 @pytest.fixture(autouse=True)
@@ -189,8 +200,13 @@ def breaking(error: BaseException) -> Callable[[sqlite3.Connection], AbstractCon
 def attempts(con: sqlite3.Connection, tmp_path: Path, run: FakeRun, checkouts: Checkouts, files: SlotFiles) -> Attempts:
     artifacts = EvidenceFiles(tmp_path / "artifacts")
     return Attempts(
-        AttemptStore(lambda: con), artifacts, AgentLaunch(lambda _harness: ("/bin/codex", {}),
-            ids=NativeIds()), run, lambda: 10, checkouts, files
+        AttemptStore(lambda: con),
+        artifacts,
+        AgentLaunch(lambda _harness: ("/bin/codex", {}), ids=NativeIds()),
+        run,
+        lambda: 10,
+        checkouts,
+        files,
     )
 
 
@@ -200,7 +216,12 @@ def rows(con: sqlite3.Connection) -> tuple[int, int]:
 
 @pytest.mark.parametrize("limit", [None, 100000])
 def test_admitted_rows_are_what_the_body_loads_and_stay_unregistered(
-    factory: sqlite3.Connection, repo: FakeRepo, root: Path, tmp_path: Path, checkouts: Checkouts, slot_files: SlotFiles,
+    factory: sqlite3.Connection,
+    repo: FakeRepo,
+    root: Path,
+    tmp_path: Path,
+    checkouts: Checkouts,
+    slot_files: SlotFiles,
     limit: int | None,
 ) -> None:
     slots(factory, repo, root, 2)
@@ -246,13 +267,12 @@ def test_the_admission_stores_the_workflow_bytes_once_and_names_them_and_their_c
     assert factory.execute("SELECT digest, content FROM workflow_file").fetchall() == [(digest, WORKFLOW_BYTES)]
 
 
-def test_a_named_workflow_is_the_file_read_at_the_source_commit_and_pinned(
-    factory: sqlite3.Connection, root: Path, tmp_path: Path
-) -> None:
+def test_a_named_workflow_is_the_file_read_at_the_source_commit_and_pinned(factory: sqlite3.Connection, root: Path, tmp_path: Path) -> None:
     variant = WORKFLOW_BYTES.replace(b"AGENTS.md is already in context", b"VARIANT PROMPT")
     remote = FakeRemote("https://example.invalid/variant.git")
-    remote.advance("main", {"README": "one", ".task-loop.json": "{}", **WORKFLOW_FILES,
-                            ".task-loop/workflows/variant.toml": variant.decode()})
+    remote.advance(
+        "main", {"README": "one", ".task-loop.json": "{}", **WORKFLOW_FILES, ".task-loop/workflows/variant.toml": variant.decode()}
+    )
     repo = FakeRepo.clone(remote, tmp_path / "variant")
     slots(factory, repo, root, 1)
     wanted = replace(request(tmp_path, repo), new=NewTask(workflow="variant"))
@@ -266,8 +286,7 @@ def test_the_workflow_agent_keys_set_the_stored_choice_and_a_flag_still_wins(
 ) -> None:
     agent = '\n[step.plan.agent]\nmodel = "wf-model"\neffort = "low"\ncompaction_token_limit = 5000\n'
     remote = FakeRemote("https://example.invalid/agent.git")
-    remote.advance("main", {"README": "one", ".task-loop.json": "{}", **WORKFLOW_FILES,
-                            WORKFLOW_PATH: WORKFLOW_BYTES.decode() + agent})
+    remote.advance("main", {"README": "one", ".task-loop.json": "{}", **WORKFLOW_FILES, WORKFLOW_PATH: WORKFLOW_BYTES.decode() + agent})
     repo = FakeRepo.clone(remote, tmp_path / "agent")
     slots(factory, repo, root, 1)
     wanted = replace(request(tmp_path, repo), overrides=Overrides(effort="max"))
@@ -279,8 +298,10 @@ def committed_plan(tmp_path: Path, *, valid: bool = True) -> FakeRepo:
     """A repository whose origin `main` commits a plan for `tl-1` and its metadata (cited path `README`), none of it in the database."""
     remote = FakeRemote("https://example.invalid/plan.git")
     prepared = remote.advance("main", {"README": "one", ".task-loop.json": "{}", **WORKFLOW_FILES})
-    files = {"docs/design/tl-1/plan.md": PLAN_TEXT,
-             "docs/design/tl-1/plan-metadata.json": PlanMetadata(prepared_commit=prepared, cited_paths=("README",)).model_dump_json()}
+    files = {
+        "docs/design/tl-1/plan.md": PLAN_TEXT,
+        "docs/design/tl-1/plan-metadata.json": PlanMetadata(prepared_commit=prepared, cited_paths=("README",)).model_dump_json(),
+    }
     remote.advance("main", files if valid else {"docs/design/tl-1/plan.md": PLAN_TEXT})
     return FakeRepo.clone(remote, tmp_path / "planned")
 
@@ -319,17 +340,27 @@ def test_an_unknown_named_workflow_refuses_the_admission_as_workflow(
     assert factory.execute("SELECT count(*) FROM attempt").fetchone() == (0,)
 
 
-@pytest.mark.parametrize(("harness", "model", "provider"), [
-    (HarnessKind.CODEX, "gpt-5.5", Provider.OPENAI), (HarnessKind.CLAUDE, "opus", Provider.ANTHROPIC),
-    (HarnessKind.OPENCODE, "opencode/deepseek-v4.1-flash-free", Provider.DEEPSEEK), (HarnessKind.OPENCODE, "mystery", Provider.UNKNOWN),
-])
+@pytest.mark.parametrize(
+    ("harness", "model", "provider"),
+    [
+        (HarnessKind.CODEX, "gpt-5.5", Provider.OPENAI),
+        (HarnessKind.CLAUDE, "opus", Provider.ANTHROPIC),
+        (HarnessKind.OPENCODE, "opencode/deepseek-v4.1-flash-free", Provider.DEEPSEEK),
+        (HarnessKind.OPENCODE, "mystery", Provider.UNKNOWN),
+    ],
+)
 def test_the_admission_stores_the_harness_and_the_provider_derived_from_it_and_the_model(
     factory: sqlite3.Connection, repo: FakeRepo, root: Path, tmp_path: Path, harness: HarnessKind, model: str, provider: Provider
 ) -> None:
     slots(factory, repo, root, 1)
     tracker = Tracker(factory, tmp_path / "artifacts")
-    policy = (CodexPolicy() if harness is HarnessKind.CODEX else
-              ClaudePolicy(settings_file=tmp_path / "policy.json", settings="{}") if harness is HarnessKind.CLAUDE else OpenCodePolicy())
+    policy = (
+        CodexPolicy()
+        if harness is HarnessKind.CODEX
+        else ClaudePolicy(settings_file=tmp_path / "policy.json", settings="{}")
+        if harness is HarnessKind.CLAUDE
+        else OpenCodePolicy()
+    )
     wanted = replace(request(tmp_path, repo), settings=StepSettings(plan=AgentSetting(harness=harness, model=model, access=policy)))
     assert isinstance(admission(factory, tmp_path, tracker, repo).admit(wanted), Admitted)
     assert factory.execute("SELECT harness,provider,model FROM attempt").fetchall() == [(harness, provider, model)]
@@ -417,7 +448,10 @@ def test_one_attempt_per_task_even_when_every_slot_is_held(
 
 
 def test_a_concurrent_admission_cannot_overtake_a_pending_claim(
-    factory: sqlite3.Connection, repo: FakeRepo, root: Path, tmp_path: Path,
+    factory: sqlite3.Connection,
+    repo: FakeRepo,
+    root: Path,
+    tmp_path: Path,
 ) -> None:
     """The first durable intent wins; a second caller never touches or returns its claim."""
     slots(factory, repo, root, 1)
@@ -461,7 +495,12 @@ def test_claim_refusal_and_unknown_claim(
 @pytest.mark.parametrize("unclaim", [True, False])
 @pytest.mark.parametrize("table", ["attempt", "task_content"])
 def test_constraint_is_caught_after_rollback_and_compensated(
-    factory: sqlite3.Connection, repo: FakeRepo, root: Path, tmp_path: Path, unclaim: bool, table: str,
+    factory: sqlite3.Connection,
+    repo: FakeRepo,
+    root: Path,
+    tmp_path: Path,
+    unclaim: bool,
+    table: str,
 ) -> None:
     slots(factory, repo, root, 1)
     factory.execute(f"CREATE TEMP TRIGGER mismatch BEFORE INSERT ON {table} BEGIN SELECT RAISE(ABORT, 'schema mismatch'); END")
@@ -673,8 +712,19 @@ def test_after_an_abandon_the_task_is_admitted_afresh_on_its_existing_branch_wit
     path = root.resolve() / folder_name(repo.identity()) / "s1"
     d = factory.execute("SELECT slot_head FROM attempt").fetchone()[0]
     repo.worktree(path).take_branch("task/tl-1", "HEAD", mode="resume")  # as its entry prepared it
-    release = SlotRelease(AttemptStore(lambda: factory), checkouts, slot_files, lambda _entry: "gone", lambda _w: True, custody,
-                          tracker.unclaim, time, lambda _setup: "gone", lambda _scratch: True, ids=NativeIds())
+    release = SlotRelease(
+        AttemptStore(lambda: factory),
+        checkouts,
+        slot_files,
+        lambda _entry: "gone",
+        lambda _w: True,
+        custody,
+        tracker.unclaim,
+        time,
+        lambda _setup: "gone",
+        lambda _scratch: True,
+        ids=NativeIds(),
+    )
     assert release.release(first.key, True) == Released("s1", d, True, "unclaimed", True)
     again = admit(factory, tmp_path, repo, tracker)
     assert isinstance(again, Admitted) and again.slot == "s1" and again.key.reservation_generation == 2  # never reused
@@ -729,9 +779,18 @@ def test_an_abandon_still_returning_its_claim_keeps_the_task_attempted(
         return True
 
     release = SlotRelease(
-        AttemptStore(lambda: factory), checkouts, slot_files, lambda _entry: "gone", lambda _w: True, custody, unclaim, time,
-        lambda _setup: "gone", lambda _scratch: True,
-    ids=NativeIds())
+        AttemptStore(lambda: factory),
+        checkouts,
+        slot_files,
+        lambda _entry: "gone",
+        lambda _w: True,
+        custody,
+        unclaim,
+        time,
+        lambda _setup: "gone",
+        lambda _scratch: True,
+        ids=NativeIds(),
+    )
     failed = release.release(first.key, True)
     assert isinstance(failed, NotReleased) and failed.detail.endswith("The reservation was removed, no Git write.")
     assert admit(factory, tmp_path, repo, contender) == AdmitRefused("task_attempted")
@@ -751,6 +810,7 @@ def test_a_task_deleted_from_the_tracker_is_refused_by_name_with_the_command_tha
 
 def test_a_checkout_that_is_not_a_repository_is_a_refusal_naming_the_path_and_other_git_faults_stay_unavailable(tmp_path: Path) -> None:
     """tl-8bh9.14.60: a missing path or a directory outside any repository is the person's input (exit 1), not `unavailable git`."""
+
     def missing(_path: Path, *, git_dir: Path | None = None) -> Repo:
         raise NotARepo("git rev-parse exited 128")
 
@@ -762,9 +822,11 @@ def test_a_checkout_that_is_not_a_repository_is_a_refusal_naming_the_path_and_ot
     assert isinstance(checkout_repo(broken, tmp_path), AdmitUnavailable)
 
 
-
 def test_admission_uses_the_id_port_in_storage_and_evidence(
-    factory: sqlite3.Connection, repo: FakeRepo, root: Path, tmp_path: Path,
+    factory: sqlite3.Connection,
+    repo: FakeRepo,
+    root: Path,
+    tmp_path: Path,
 ) -> None:
     slots(factory, repo, root, 1)
     tracker = Tracker(factory, tmp_path / "artifacts")
@@ -775,10 +837,8 @@ def test_admission_uses_the_id_port_in_storage_and_evidence(
     assert isinstance(found, Admitted)
     assert found.key == AttemptKey(ids.fresh[0], ids.tokens[0][1], 1)
     assert ids.tokens == [(16, "0" * 31 + "1")]
-    assert factory.execute("SELECT attempt_id,dispatch_token FROM attempt").fetchone() == (
-        ids.fresh[0], ids.tokens[0][1])
+    assert factory.execute("SELECT attempt_id,dispatch_token FROM attempt").fetchone() == (ids.fresh[0], ids.tokens[0][1])
     assert (tmp_path / "artifacts" / tracker.files.directory(found.key)).is_dir()
     again = operation.admit(request(tmp_path, repo))
     assert isinstance(again, AdmitRefused)
-    assert factory.execute("SELECT attempt_id,dispatch_token FROM attempt").fetchall() == [(
-        found.key.attempt_id, found.key.dispatch_token)]
+    assert factory.execute("SELECT attempt_id,dispatch_token FROM attempt").fetchall() == [(found.key.attempt_id, found.key.dispatch_token)]

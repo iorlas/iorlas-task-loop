@@ -6,8 +6,9 @@ from typing import Literal
 from taskloop.machine_config import ConfigRefused
 from taskloop.slots import SlotView
 
-type FailureKind = Literal["refused", "unavailable", "uncertain", "rejected", "not_applicable", "unsettled",
-                          "uncommitted", "waiting", "defect"]
+type FailureKind = Literal[
+    "refused", "unavailable", "uncertain", "rejected", "not_applicable", "unsettled", "uncommitted", "waiting", "defect"
+]
 
 
 @dataclass(frozen=True)

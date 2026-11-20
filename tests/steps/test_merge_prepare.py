@@ -31,8 +31,9 @@ def repo(tmp_path: Path, remote: FakeRemote) -> FakeRepo:
 
 
 @pytest.fixture
-def clean(factory: sqlite3.Connection, repo: FakeRepo, remote: FakeRemote, slot: FakeWorktree,
-          slot_files: FakeSlotFiles, checkouts: PinnedViews) -> Bench:
+def clean(
+    factory: sqlite3.Connection, repo: FakeRepo, remote: FakeRemote, slot: FakeWorktree, slot_files: FakeSlotFiles, checkouts: PinnedViews
+) -> Bench:
     return bench(factory, repo, remote, slot, slot_files, checkouts)
 
 
@@ -51,8 +52,9 @@ def test_clean_merge_retains_plan_and_main_without_resolution_or_local_main_move
     assert stored is not None and stored.phase is Phase.COMPLETE and stored.target == found.target
 
 
-def test_textual_conflict_resolves_without_replanning(factory: sqlite3.Connection, repo: FakeRepo, remote: FakeRemote,
-              slot: FakeWorktree, slot_files: FakeSlotFiles, checkouts: PinnedViews) -> None:
+def test_textual_conflict_resolves_without_replanning(
+    factory: sqlite3.Connection, repo: FakeRepo, remote: FakeRemote, slot: FakeWorktree, slot_files: FakeSlotFiles, checkouts: PinnedViews
+) -> None:
     case = bench(factory, repo, remote, slot, slot_files, checkouts, conflict=True)
     found = case.operation().resume(case.work)
     assert isinstance(found, Completed) and case.calls == ["setup", "resolve"]
@@ -160,8 +162,7 @@ def test_merging_saved_work_keeps_its_ordinary_review_requirement(clean: Bench, 
     assert isinstance(found, Completed) and wip.needs_review(clean.repo, found.commit)
     record = AttemptStore(lambda: registered).load(AttemptKey("attempt", "dispatch", 1))
     assert record is not None
-    reviewed = settle(clean.views, clean.files, record.admission, found.commit,
-                      AnswerState("valid", "unchanged", "keep"), lambda: None)
+    reviewed = settle(clean.views, clean.files, record.admission, found.commit, AnswerState("valid", "unchanged", "keep"), lambda: None)
     assert isinstance(reviewed, Committed) and reviewed.sha != found.commit
     before, after = clean.repo.tree(found.commit), clean.repo.tree(reviewed.sha)
     assert before is not None and after is not None and before.files == after.files

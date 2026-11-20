@@ -122,14 +122,33 @@ class Step:
         return f"{found.status} {found.reason}"
 
     def admission(self) -> ChainAdmission:
-        return ChainAdmission(lambda: self.con, begin_immediate, EvidenceFiles(self.tmp), lambda: 10,
-                              self.checkouts, self.files, ids=NativeIds(), engine=ENGINE)
+        return ChainAdmission(
+            lambda: self.con,
+            begin_immediate,
+            EvidenceFiles(self.tmp),
+            lambda: 10,
+            self.checkouts,
+            self.files,
+            ids=NativeIds(),
+            engine=ENGINE,
+        )
 
     def repeat(self, current: AttemptKey) -> Started | Failed:
         found = self.store.attempt_of("tasks", "tl-1")
         assert found is not None and found[0] == current
-        repeat = StepRepeat(self.store, self.factory_commit, EvidenceFiles(self.tmp), self.admission(), self.launcher, lambda _worker: True,
-                            lambda _entry: "gone", lambda: 10, repeating, ids=NativeIds(), discussion=refresh_discussion)
+        repeat = StepRepeat(
+            self.store,
+            self.factory_commit,
+            EvidenceFiles(self.tmp),
+            self.admission(),
+            self.launcher,
+            lambda _worker: True,
+            lambda _entry: "gone",
+            lambda: 10,
+            repeating,
+            ids=NativeIds(),
+            discussion=refresh_discussion,
+        )
         return repeat.repeat("tasks", "tl-1", current, found[2], 30)
 
     def next_attempt(self, current: AttemptKey) -> tuple[AttemptKey, EntryIdentity]:
@@ -233,8 +252,12 @@ def test_three_attempts_then_the_owner(step: Step, slot: FakeWorktree, tmp_path:
     shown_three = show_attempt(reads, tmp_path / "art", "tasks", "tl-1")
     assert not isinstance(shown_three, Failed)
     each = shown_three.view
-    assert (each.number, each.next, each.result.reason, each.leftovers) == (3, "repeats_exhausted", "repeats_exhausted",
-                                                                             ("uncommitted", f"?? {STRAY}"))
+    assert (each.number, each.next, each.result.reason, each.leftovers) == (
+        3,
+        "repeats_exhausted",
+        "repeats_exhausted",
+        ("uncommitted", f"?? {STRAY}"),
+    )
     assert [attempt_id for attempt_id, _reason in each.earlier] == [second.attempt_id, "attempt"]
     assert step.repeat(third) == Failed("refused", "repeats_exhausted")
     assert step.con.execute("SELECT count(*) FROM attempt").fetchone() == (3,)
@@ -270,10 +293,14 @@ def test_a_takeover_during_the_commit_is_superseded_before_any_git_write(
     assert step.con.execute("SELECT count(*) FROM factory_commit").fetchone() == (0,)
 
 
-@pytest.mark.parametrize(("before", "written", "expected"), [
-    (None, {P: PLAN_TEXT, ".gitattributes": "* filter=x\n"}, Uncommitted("unsafe", (".gitattributes",))),
-    ({".gitignore": "*.log\n"}, {P: PLAN_TEXT, D + "x.log": "x"}, Uncommitted("ignored", (D + "x.log",))),
-], ids=["git_file", "ignored"])
+@pytest.mark.parametrize(
+    ("before", "written", "expected"),
+    [
+        (None, {P: PLAN_TEXT, ".gitattributes": "* filter=x\n"}, Uncommitted("unsafe", (".gitattributes",))),
+        ({".gitignore": "*.log\n"}, {P: PLAN_TEXT, D + "x.log": "x"}, Uncommitted("ignored", (D + "x.log",))),
+    ],
+    ids=["git_file", "ignored"],
+)
 def test_show_judges_leftovers_before_the_commit_as_the_commit_does(
     step: Step, slot: FakeWorktree, before: Files | None, written: Files, expected: Uncommitted
 ) -> None:
@@ -300,8 +327,7 @@ def test_judge_requires_each_attempts_paths_only_for_plan_commits(repo: FakeRepo
     first = attempt(1, base, x1, (P, NOTE))
     operation = kind(step)
     assert isinstance(judge(repo, repo.path, x2, operation, rules(), (first, attempt(2, x1, None, (P, NOTE)))), Committed)
-    for chain in ((first, attempt(2, x1, None, (P,))),
-                  (attempt(1, base, x1, (P,)), attempt(2, x1, None, (P, NOTE)))):
+    for chain in ((first, attempt(2, x1, None, (P,))), (attempt(1, base, x1, (P,)), attempt(2, x1, None, (P, NOTE)))):
         result = judge(repo, repo.path, x2, operation, rules(), chain)
         assert result == Rejected("paths") if step == "plan" else isinstance(result, Committed)
     unchanged = judge(repo, repo.path, x1, operation, rules(), (first, attempt(2, x1, x1, (), "keep")))
@@ -410,9 +436,7 @@ def test_a_superseded_commit_that_staged_leaves_the_next_attempt_undispatched(
     assert step.run(found[0], (9, "s", "boot"), Agent(slot, {}, UNCHANGED)) == "refused slot_staged"
 
 
-def test_a_path_staged_beside_the_listed_ones_is_never_committed(
-    step: Step, slot: FakeWorktree, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_a_path_staged_beside_the_listed_ones_is_never_committed(step: Step, slot: FakeWorktree, monkeypatch: pytest.MonkeyPatch) -> None:
     base = head(slot)
     step.run(KEY, ENTRY, Agent(slot, {P: PLAN_TEXT, STRAY: "s"}, PLAN))
     stage = FakeWorktree.stage
@@ -429,8 +453,19 @@ def test_a_start_that_lost_the_takeover_launches_the_winner(step: Step, slot: Fa
     step.run(KEY, ENTRY, Agent(slot, {P: PLAN_TEXT, STRAY: "s"}, PLAN))
     taken = step.admission().admit_repeat(REPEAT)
     assert isinstance(taken, Admitted)
-    repeat = StepRepeat(step.store, step.factory_commit, EvidenceFiles(step.tmp), step.admission(), step.launcher, lambda _worker: True,
-                        lambda _entry: "gone", lambda: 10, repeating, ids=NativeIds(), discussion=refresh_discussion)
+    repeat = StepRepeat(
+        step.store,
+        step.factory_commit,
+        EvidenceFiles(step.tmp),
+        step.admission(),
+        step.launcher,
+        lambda _worker: True,
+        lambda _entry: "gone",
+        lambda: 10,
+        repeating,
+        ids=NativeIds(),
+        discussion=refresh_discussion,
+    )
     found = repeat.repeat("tasks", "tl-1", KEY, ENTRY, 30)  # its read of the current attempt predates the takeover
     assert found == Started("relaunched", "tasks", "tl-1", taken.key.attempt_id, True, (8, "start", "boot"))
     assert step.con.execute("SELECT count(*) FROM attempt").fetchone() == (2,)
@@ -450,10 +485,22 @@ def test_a_takeover_during_the_repeats_commit_launches_the_winner(step: Step, sl
         def staged(self, key: AttemptKey) -> tuple[str, ...] | None:
             return step.factory_commit.staged(key)
 
-    repeat = StepRepeat(step.store, Racing(), EvidenceFiles(step.tmp), step.admission(), step.launcher, lambda _worker: True,
-                        lambda _entry: "gone", lambda: 10, repeating, ids=NativeIds(), discussion=refresh_discussion)
-    assert repeat.repeat("tasks", "tl-1", KEY, ENTRY, 30) == Started("relaunched", "tasks", "tl-1", taken[0].attempt_id, True,
-                                                                      (8, "start", "boot"))
+    repeat = StepRepeat(
+        step.store,
+        Racing(),
+        EvidenceFiles(step.tmp),
+        step.admission(),
+        step.launcher,
+        lambda _worker: True,
+        lambda _entry: "gone",
+        lambda: 10,
+        repeating,
+        ids=NativeIds(),
+        discussion=refresh_discussion,
+    )
+    assert repeat.repeat("tasks", "tl-1", KEY, ENTRY, 30) == Started(
+        "relaunched", "tasks", "tl-1", taken[0].attempt_id, True, (8, "start", "boot")
+    )
 
 
 def test_judge_refuses_a_chain_whose_commit_does_not_sit_on_the_stored_one(repo: FakeRepo, slot: FakeWorktree) -> None:
@@ -496,4 +543,7 @@ def test_show_says_why_an_admitted_attempts_entry_gave_up(step: Step, slot: Fake
     found = show_attempt(reads, tmp_path, "tasks", "tl-1")
     assert not isinstance(found, Failed)
     assert (found.view.phase, found.view.next, found.view.last_entry) == (
-        "admitted", "start", "refused slot_staged commit=refused:not_captured")
+        "admitted",
+        "start",
+        "refused slot_staged commit=refused:not_captured",
+    )

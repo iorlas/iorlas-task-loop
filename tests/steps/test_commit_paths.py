@@ -26,11 +26,11 @@ from taskloop.attempt_types import (
     Rejected,
     Uncommitted,
 )
+from taskloop.commit_failure import commit_failure
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.factory_commit import Committed, leftovers, settle
 from taskloop.ids import NativeIds
 from taskloop.operation_evidence import OperationKind, OperationState
-from taskloop.operations import commit_failure
 from taskloop.prepare import task_branch
 from taskloop.repo import RepoId
 from taskloop.step import Step
@@ -42,9 +42,19 @@ FIXTURE = b"-----BEGIN " + b"OPENSSH PRIVATE " + b"KEY-----\n" + b'{"access_' + 
 @pytest.fixture
 def admission(slot: FakeWorktree) -> Admission:
     slot.checkout_new(task_branch("tl-1"))
-    return Admission(AttemptKey("attempt", "dispatch", 1), TaskReference(TaskScope("tasks"), "tl-1"),
-                     RepoId(slot.repo.identity().key), "s1", str(slot.path), FileRef("input", "digest"), AgentSetting(),
-                     100, (7, "start", "boot"), 1, Step.IMPLEMENT)
+    return Admission(
+        AttemptKey("attempt", "dispatch", 1),
+        TaskReference(TaskScope("tasks"), "tl-1"),
+        RepoId(slot.repo.identity().key),
+        "s1",
+        str(slot.path),
+        FileRef("input", "digest"),
+        AgentSetting(),
+        100,
+        (7, "start", "boot"),
+        1,
+        Step.IMPLEMENT,
+    )
 
 
 @pytest.fixture
@@ -76,8 +86,13 @@ def head(slot: FakeWorktree) -> str | None:
 
 @pytest.mark.parametrize("broken_evidence", [False, True])
 def test_commit_retry_measures_staging_through_record_and_suppresses_adoption(
-    tmp_path: Path, admission: Admission, slot: FakeWorktree, slot_files: FakeSlotFiles, checkouts: PinnedViews,
-    monkeypatch: pytest.MonkeyPatch, broken_evidence: bool,
+    tmp_path: Path,
+    admission: Admission,
+    slot: FakeWorktree,
+    slot_files: FakeSlotFiles,
+    checkouts: PinnedViews,
+    monkeypatch: pytest.MonkeyPatch,
+    broken_evidence: bool,
 ) -> None:
     base = record(slot)
     slot.write_file("edit.txt", "changed")
@@ -122,13 +137,19 @@ def test_commit_retry_measures_staging_through_record_and_suppresses_adoption(
     else:
         assert len(samples) == 2 and all(sample.kind is OperationKind.COMMIT for sample in samples)
         assert {(sample.state, sample.elapsed) for sample in samples} == {
-            (OperationState.FAILED, 3.0), (OperationState.COMPLETED, 5.0),
+            (OperationState.FAILED, 3.0),
+            (OperationState.COMPLETED, 5.0),
         }
 
 
 @pytest.mark.parametrize("saved", [False, True])
 def test_keep_only_measures_saved_work_review(
-    tmp_path: Path, admission: Admission, slot: FakeWorktree, slot_files: FakeSlotFiles, checkouts: PinnedViews, saved: bool,
+    tmp_path: Path,
+    admission: Admission,
+    slot: FakeWorktree,
+    slot_files: FakeSlotFiles,
+    checkouts: PinnedViews,
+    saved: bool,
 ) -> None:
     message = "Saved\n\nTask-Loop-Wip: preserved" if saved else "Baseline"
     made = slot.record(message, paths="all", allow_empty=True)
@@ -144,8 +165,12 @@ def test_keep_only_measures_saved_work_review(
 
 @pytest.mark.parametrize("existing", [False, True])
 def test_changed_or_added_credential_fixture_names_the_real_predicate_without_staging(
-    admission: Admission, slot: FakeWorktree, slot_files: FakeSlotFiles, checkouts: PinnedViews,
-    stages: list[tuple[str, ...]], existing: bool,
+    admission: Admission,
+    slot: FakeWorktree,
+    slot_files: FakeSlotFiles,
+    checkouts: PinnedViews,
+    stages: list[tuple[str, ...]],
+    existing: bool,
 ) -> None:
     path = "tests/steps/test_commit.py"
     slot.write_file(path, "ordinary old source" if existing else b"")
@@ -160,23 +185,36 @@ def test_changed_or_added_credential_fixture_names_the_real_predicate_without_st
     assert leftovers(checkouts, slot_files, admission, base, answer("unrelated.txt"), None) == found
 
 
-@pytest.mark.parametrize(("stat", "unreadable", "words"), [
-    (FileStat("file", 8, True), False, "execute bit"),
-    (FileStat("file", (1 << 20) + 1, False), False, "1048576 bytes"),
-    (FileStat("file", 8, False), True, "cannot read"),
-    (FileStat("link", 8, False), False, "symlink"),
-    (FileStat("dir", 8, False), False, "not a plain file"),
-    (None, False, "missing"),
-])
-@pytest.mark.parametrize(("ancestor_stat", "ancestor_words"), [
-    (FileStat("link", 8, False), "a symlink"),
-    (FileStat("file", 8, False), "not a directory"),
-    (None, "missing or unreadable"),
-])
+@pytest.mark.parametrize(
+    ("stat", "unreadable", "words"),
+    [
+        (FileStat("file", 8, True), False, "execute bit"),
+        (FileStat("file", (1 << 20) + 1, False), False, "1048576 bytes"),
+        (FileStat("file", 8, False), True, "cannot read"),
+        (FileStat("link", 8, False), False, "symlink"),
+        (FileStat("dir", 8, False), False, "not a plain file"),
+        (None, False, "missing"),
+    ],
+)
+@pytest.mark.parametrize(
+    ("ancestor_stat", "ancestor_words"),
+    [
+        (FileStat("link", 8, False), "a symlink"),
+        (FileStat("file", 8, False), "not a directory"),
+        (None, "missing or unreadable"),
+    ],
+)
 def test_multiple_refusals_keep_each_predicate_and_leftovers_in_both_step_prompts(
-    admission: Admission, slot: FakeWorktree, slot_files: FakeSlotFiles, checkouts: PinnedViews,
-    stages: list[tuple[str, ...]], stat: FileStat | None, unreadable: bool, words: str,
-    ancestor_stat: FileStat | None, ancestor_words: str,
+    admission: Admission,
+    slot: FakeWorktree,
+    slot_files: FakeSlotFiles,
+    checkouts: PinnedViews,
+    stages: list[tuple[str, ...]],
+    stat: FileStat | None,
+    unreadable: bool,
+    words: str,
+    ancestor_stat: FileStat | None,
+    ancestor_words: str,
 ) -> None:
     base = record(slot)
     path, linked = "src/a\x1b.py", "linked/file.py"
@@ -208,7 +246,11 @@ def test_multiple_refusals_keep_each_predicate_and_leftovers_in_both_step_prompt
 
 
 def test_unchanged_credential_ordinary_and_over_cap_files_are_omitted_from_the_commit(
-    admission: Admission, slot: FakeWorktree, slot_files: FakeSlotFiles, checkouts: PinnedViews, stages: list[tuple[str, ...]],
+    admission: Admission,
+    slot: FakeWorktree,
+    slot_files: FakeSlotFiles,
+    checkouts: PinnedViews,
+    stages: list[tuple[str, ...]],
 ) -> None:
     unchanged = ("tests/fixture.py", "ordinary.txt", "large.txt")
     for path, data in zip(unchanged, (FIXTURE, b"plain", b"x" * ((1 << 20) + 1)), strict=True):
@@ -227,7 +269,11 @@ def test_unchanged_credential_ordinary_and_over_cap_files_are_omitted_from_the_c
 
 
 def test_all_unchanged_is_nothing_written_without_staging(
-    admission: Admission, slot: FakeWorktree, slot_files: FakeSlotFiles, checkouts: PinnedViews, stages: list[tuple[str, ...]],
+    admission: Admission,
+    slot: FakeWorktree,
+    slot_files: FakeSlotFiles,
+    checkouts: PinnedViews,
+    stages: list[tuple[str, ...]],
 ) -> None:
     slot.write_file("fixture.py", FIXTURE)
     base = record(slot)
@@ -238,8 +284,13 @@ def test_all_unchanged_is_nothing_written_without_staging(
 
 @pytest.mark.parametrize("change", ["execute", "link", "unreadable", "ancestor", "delete"])
 def test_unchanged_content_does_not_hide_file_changes_or_unreadability(
-    admission: Admission, slot: FakeWorktree, slot_files: FakeSlotFiles, checkouts: PinnedViews,
-    stages: list[tuple[str, ...]], change: str, monkeypatch: pytest.MonkeyPatch,
+    admission: Admission,
+    slot: FakeWorktree,
+    slot_files: FakeSlotFiles,
+    checkouts: PinnedViews,
+    stages: list[tuple[str, ...]],
+    change: str,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     path = "src/file.py"
     slot.write_file(path, "ordinary")
@@ -272,8 +323,13 @@ def test_unchanged_content_does_not_hide_file_changes_or_unreadability(
 
 @pytest.mark.parametrize(("ancestor", "expected"), [(False, "baseline Git mode is 100755"), (True, "baseline ancestor 'src'")])
 def test_baseline_mode_and_type_changes_are_explained(
-    admission: Admission, slot: FakeWorktree, slot_files: FakeSlotFiles, checkouts: PinnedViews,
-    ancestor: bool, expected: str, monkeypatch: pytest.MonkeyPatch,
+    admission: Admission,
+    slot: FakeWorktree,
+    slot_files: FakeSlotFiles,
+    checkouts: PinnedViews,
+    ancestor: bool,
+    expected: str,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     path = "src/file.py"
     slot.write_file("src" if ancestor else path, "old")
@@ -301,8 +357,7 @@ def test_empty_explanation_is_invalid() -> None:
 
 def test_diagnostic_bounds_keep_the_predicate_after_a_long_escaped_path() -> None:
     path = "src/" + "x" * 230 + "\x1b.py"
-    found = Uncommitted("unsafe", explanations=tuple(PathExplanation(path + str(n), "The file has an execute bit set.")
-                                                 for n in range(96)))
+    found = Uncommitted("unsafe", explanations=tuple(PathExplanation(path + str(n), "The file has an execute bit set.") for n in range(96)))
     text = step_text.unsafe_details(found)
     assert json.dumps(path + "0") in text.splitlines()[0]
     assert "execute bit" in text.splitlines()[0] and "\x1b" not in text
@@ -310,7 +365,11 @@ def test_diagnostic_bounds_keep_the_predicate_after_a_long_escaped_path() -> Non
 
 
 def test_omitting_an_unchanged_path_does_not_allow_its_foreign_index_entry(
-    admission: Admission, slot: FakeWorktree, slot_files: FakeSlotFiles, checkouts: PinnedViews, stages: list[tuple[str, ...]],
+    admission: Admission,
+    slot: FakeWorktree,
+    slot_files: FakeSlotFiles,
+    checkouts: PinnedViews,
+    stages: list[tuple[str, ...]],
 ) -> None:
     slot.write_file("unchanged.txt", "original")
     base = record(slot)
@@ -325,7 +384,11 @@ def test_omitting_an_unchanged_path_does_not_allow_its_foreign_index_entry(
 
 
 def test_unchanged_plan_path_is_filtered_with_the_same_rules(
-    admission: Admission, slot: FakeWorktree, slot_files: FakeSlotFiles, checkouts: PinnedViews, stages: list[tuple[str, ...]],
+    admission: Admission,
+    slot: FakeWorktree,
+    slot_files: FakeSlotFiles,
+    checkouts: PinnedViews,
+    stages: list[tuple[str, ...]],
 ) -> None:
     path = "docs/design/tl-1/plan.md"
     slot.write_file(path, FIXTURE)
@@ -339,7 +402,11 @@ def test_unchanged_plan_path_is_filtered_with_the_same_rules(
 
 
 def test_implement_commits_all_slot_changes_with_the_answer_message_and_attempt_trailer(
-    admission: Admission, slot: FakeWorktree, slot_files: FakeSlotFiles, checkouts: PinnedViews, stages: list[tuple[str, ...]],
+    admission: Admission,
+    slot: FakeWorktree,
+    slot_files: FakeSlotFiles,
+    checkouts: PinnedViews,
+    stages: list[tuple[str, ...]],
 ) -> None:
     for path in ("edit.txt", "delete.txt", "old-name.txt", "unchanged.txt"):
         slot.write_file(path, "original")
@@ -359,14 +426,26 @@ def test_implement_commits_all_slot_changes_with_the_answer_message_and_attempt_
     assert len(commits) == 1 and commits[0].subject == "Edit the file" and commits[0].body == "Task-Loop-Attempt: attempt"
 
 
-@pytest.mark.parametrize(("path", "predicate"), [
-    (".Beads/data", "excluded"), (".task-loop/workflows/default.toml", "excluded"), (".task-loop.json", "excluded"),
-    ("src/.github/data", "changed Git file"),
-    ("docs/PLAN.MD", "cannot change plan.md"), ("line\nbreak.txt", "newline"), ("x" * 256, "255 bytes"),
-])
+@pytest.mark.parametrize(
+    ("path", "predicate"),
+    [
+        (".Beads/data", "excluded"),
+        (".task-loop/workflows/default.toml", "excluded"),
+        (".task-loop.json", "excluded"),
+        ("src/.github/data", "changed Git file"),
+        ("docs/PLAN.MD", "cannot change plan.md"),
+        ("line\nbreak.txt", "newline"),
+        ("x" * 256, "255 bytes"),
+    ],
+)
 def test_unlisted_forbidden_paths_refuse_before_staging_and_match_preview(
-    admission: Admission, slot: FakeWorktree, slot_files: FakeSlotFiles, checkouts: PinnedViews,
-    stages: list[tuple[str, ...]], path: str, predicate: str,
+    admission: Admission,
+    slot: FakeWorktree,
+    slot_files: FakeSlotFiles,
+    checkouts: PinnedViews,
+    stages: list[tuple[str, ...]],
+    path: str,
+    predicate: str,
 ) -> None:
     base = record(slot)
     slot.write_file("edit.txt", "allowed")
@@ -380,8 +459,12 @@ def test_unlisted_forbidden_paths_refuse_before_staging_and_match_preview(
 
 @pytest.mark.parametrize("count", [96, 97])
 def test_actual_changed_path_limit_is_applied_without_truncating_the_selection(
-    admission: Admission, slot: FakeWorktree, slot_files: FakeSlotFiles, checkouts: PinnedViews,
-    stages: list[tuple[str, ...]], count: int,
+    admission: Admission,
+    slot: FakeWorktree,
+    slot_files: FakeSlotFiles,
+    checkouts: PinnedViews,
+    stages: list[tuple[str, ...]],
+    count: int,
 ) -> None:
     base = record(slot)
     paths = tuple(f"src/file-{index:03}.py" for index in range(count))
@@ -400,7 +483,11 @@ def test_actual_changed_path_limit_is_applied_without_truncating_the_selection(
 
 
 def test_ignored_attributes_for_an_unlisted_change_refuse_and_match_preview(
-    admission: Admission, slot: FakeWorktree, slot_files: FakeSlotFiles, checkouts: PinnedViews, stages: list[tuple[str, ...]],
+    admission: Admission,
+    slot: FakeWorktree,
+    slot_files: FakeSlotFiles,
+    checkouts: PinnedViews,
+    stages: list[tuple[str, ...]],
 ) -> None:
     slot.write_file(".gitignore", "nested/.gitattributes\n")
     base = record(slot)
@@ -415,7 +502,11 @@ def test_ignored_attributes_for_an_unlisted_change_refuse_and_match_preview(
 
 
 def test_a_foreign_index_entry_with_no_worktree_changes_still_refuses(
-    admission: Admission, slot: FakeWorktree, slot_files: FakeSlotFiles, checkouts: PinnedViews, stages: list[tuple[str, ...]],
+    admission: Admission,
+    slot: FakeWorktree,
+    slot_files: FakeSlotFiles,
+    checkouts: PinnedViews,
+    stages: list[tuple[str, ...]],
 ) -> None:
     slot.write_file("file.txt", "original")
     base = record(slot)
@@ -428,8 +519,12 @@ def test_a_foreign_index_entry_with_no_worktree_changes_still_refuses(
 
 
 def test_unknown_dirty_evidence_propagates_without_staging(
-    admission: Admission, slot: FakeWorktree, slot_files: FakeSlotFiles, checkouts: PinnedViews,
-    stages: list[tuple[str, ...]], monkeypatch: pytest.MonkeyPatch,
+    admission: Admission,
+    slot: FakeWorktree,
+    slot_files: FakeSlotFiles,
+    checkouts: PinnedViews,
+    stages: list[tuple[str, ...]],
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     base = record(slot)
     original = FakeWorktree.dirty

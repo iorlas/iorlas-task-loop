@@ -105,11 +105,13 @@ def as_text(value: object) -> str:
     raise StoreUnavailable("Malformed stored text")
 
 
-def stored_setting(harness: object, provider: object, model: object, effort: object, policy: object,
-                   compaction_token_limit: object) -> AgentSetting:
+def stored_setting(
+    harness: object, provider: object, model: object, effort: object, policy: object, compaction_token_limit: object
+) -> AgentSetting:
     try:
-        return decode_setting(as_text(harness), as_text(provider), as_text(model), as_text(effort), as_text(policy),
-                              as_nullable_int(compaction_token_limit))
+        return decode_setting(
+            as_text(harness), as_text(provider), as_text(model), as_text(effort), as_text(policy), as_nullable_int(compaction_token_limit)
+        )
     except ValueError as error:
         raise StoreUnavailable("Malformed stored agent setting") from error
 
@@ -213,11 +215,30 @@ def attempt_row(row: tuple[object, ...]) -> AttemptRow:
     key = AttemptKey(as_text(row[0]), as_text(row[1]), as_int(row[2]))
     worker = None if row[11] is None or row[12] is None else (as_int(row[11]), as_int(row[12]))
     return AttemptRow(
-        key, as_text(row[3]), as_text(row[4]), as_text(row[5]), as_text(row[6]), entry, float(row[10]), worker,
-        as_int(row[13]), as_nullable_text(row[14]), as_nullable_text(row[15]), bool(as_int(row[16])), as_text(row[25]),
-        as_int(row[17]), bool(as_int(row[18])), _released(row[19:22]), _published(row[22:25]),
-        as_nullable_text(row[26]), as_nullable_text(row[27]), as_listed(row[28]), _source(row[34], row[15]),
-        stored_setting(row[29], row[30], row[31], row[32], row[33], row[37]), as_nullable_int(row[35]), as_text(row[36]),
+        key,
+        as_text(row[3]),
+        as_text(row[4]),
+        as_text(row[5]),
+        as_text(row[6]),
+        entry,
+        float(row[10]),
+        worker,
+        as_int(row[13]),
+        as_nullable_text(row[14]),
+        as_nullable_text(row[15]),
+        bool(as_int(row[16])),
+        as_text(row[25]),
+        as_int(row[17]),
+        bool(as_int(row[18])),
+        _released(row[19:22]),
+        _published(row[22:25]),
+        as_nullable_text(row[26]),
+        as_nullable_text(row[27]),
+        as_listed(row[28]),
+        _source(row[34], row[15]),
+        stored_setting(row[29], row[30], row[31], row[32], row[33], row[37]),
+        as_nullable_int(row[35]),
+        as_text(row[36]),
         as_nullable_text(row[38]),
     )
 

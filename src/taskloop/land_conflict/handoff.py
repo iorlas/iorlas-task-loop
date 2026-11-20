@@ -17,9 +17,17 @@ from taskloop.operations import Failed, deadline_after
 
 
 def request_for(source: AttemptKey, checks: ChecksRow, target: str, deadline: float) -> Request:
-    return Request(source=source, checks=checks.key, repo_id=checks.repo_id, backlog=checks.backlog,
-                   task_id=checks.task_id, tracker_root=checks.tracker_root, checked=checks.commit,
-                   target=target, deadline=deadline)
+    return Request(
+        source=source,
+        checks=checks.key,
+        repo_id=checks.repo_id,
+        backlog=checks.backlog,
+        task_id=checks.task_id,
+        tracker_root=checks.tracker_root,
+        checked=checks.commit,
+        target=target,
+        deadline=deadline,
+    )
 
 
 def refused(outcome: Outcome) -> Failed:
@@ -48,17 +56,22 @@ class Handoff:
             if not isinstance(result, Completed):
                 return stopped(result)
             saved = self.store.completed(record.key)
-            if (saved is None or not saved.accepted or saved.release is None or saved.release.result != result
-                    or (saved.source, saved.target, saved.commit) != (result.source, result.target, result.commit)
-                    or (result.source, result.target) != (record.request.checked, record.request.target)
-                    or saved.repo_id != record.request.repo_id):
+            if (
+                saved is None
+                or not saved.accepted
+                or saved.release is None
+                or saved.release.result != result
+                or (saved.source, saved.target, saved.commit) != (result.source, result.target, result.commit)
+                or (result.source, result.target) != (record.request.checked, record.request.target)
+                or saved.repo_id != record.request.repo_id
+            ):
                 return stopped(result)
             tip = next((ref.sha for ref in repo.refs([saved.ref]) if ref.name == saved.ref), None)
             tree = repo.tree(result.commit)
             if tip != result.commit or tree is None or str(tree.sha) != result.commit:
                 return Failed("refused", "conflict", "The retained resolution's ref or commit is missing or changed; delivery stopped.")
             return result
-        except (StoreUnavailable, GitUnavailable, MissingRevision, ValueError):
+        except StoreUnavailable, GitUnavailable, MissingRevision, ValueError:
             return Failed("unavailable", "conflict", "The retained resolution evidence cannot be verified; delivery stopped.")
 
     def resume(self, repo: Repo, source: AttemptKey, checks: ChecksRow) -> Completed | Failed | None:
@@ -67,7 +80,7 @@ class Handoff:
             record = self.store.find(request_for(source, checks, checks.commit, 0.0))
         except AdmissionRefused as error:
             return refused(error.outcome)
-        except (StoreUnavailable, ValueError):
+        except StoreUnavailable, ValueError:
             return refused(Outcome.UNAVAILABLE)
         return None if record is None else self._result(repo, record)
 
@@ -79,8 +92,9 @@ class Handoff:
             case models.Result():
                 return refused(found.outcome)
 
-    def conflicted(self, repo: Repo, request: Request, minutes: int | None, no_change: bool,
-                   clock: Callable[[], float]) -> Completed | Failed:
+    def conflicted(
+        self, repo: Repo, request: Request, minutes: int | None, no_change: bool, clock: Callable[[], float]
+    ) -> Completed | Failed:
         if no_change:
             return Failed("refused", "conflict", "The checked changes conflict with main; no completion was recorded.")
         if minutes is None:

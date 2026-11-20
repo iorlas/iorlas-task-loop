@@ -40,10 +40,19 @@ class Candidates(LandStore):
 
 def test_candidate_context_preserves_retry_and_each_recorded_time(world: LandBench) -> None:
     world.land()
-    original, = world.rows()
-    times = {"admitted_at": 19.0, "validation_started_at": 20.0, "validated_at": 18.0,
-             "release_started_at": 21.0, "released_at": 22.0, "delivery_started_at": None,
-             "delivered_at": 23.0, "close_started_at": 24.0, "closed_at": 25.0, "superseded_at": None}
+    (original,) = world.rows()
+    times = {
+        "admitted_at": 19.0,
+        "validation_started_at": 20.0,
+        "validated_at": 18.0,
+        "release_started_at": 21.0,
+        "released_at": 22.0,
+        "delivery_started_at": None,
+        "delivered_at": 23.0,
+        "close_started_at": 24.0,
+        "closed_at": 25.0,
+        "superseded_at": None,
+    }
     row = replace(original, retry_cause=RetryCause.MOVED, **times)
     before = (tuple(world.tracker), world.repo.pushes, world.reservations())
     ready, tried, landed = build_events(Candidates((row,)), ((checked(world), 1, False),), lambda _entry: "matching")
@@ -60,7 +69,7 @@ def test_candidate_context_preserves_retry_and_each_recorded_time(world: LandBen
 def test_readiness_needs_passed_released_checks_and_never_creates_a_candidate(world: LandBench) -> None:
     row = checked(world)
     events = build_events(world.lands, ((row, 1, False),), lambda _entry: "matching")
-    ready, = events
+    (ready,) = events
     assert ready.kind is LandEventKind.READY and ready.candidate_id is None
     assert ready.at == iso(max(row.concluded_at or 0, row.released_at or 0))
     assert ready.waits[0].open and ready.waits[0].ended_at is None
@@ -71,17 +80,31 @@ def test_readiness_needs_passed_released_checks_and_never_creates_a_candidate(wo
 
 def test_every_candidate_stays_in_checks_chain_order_with_unknown_try_times(world: LandBench) -> None:
     world.land()
-    original, = world.rows()
+    (original,) = world.rows()
     old = replace(checked(world), abandoned=True)
     current = replace(old, key=replace(old.key, attempt_id="next-checks"), abandoned=False)
-    first = replace(original, validation="failed", reason="validation failed", delivery=None, delivered_at=None,
-                    close=None, closed_at=None, superseded="moved", superseded_at=20)
+    first = replace(
+        original,
+        validation="failed",
+        reason="validation failed",
+        delivery=None,
+        delivered_at=None,
+        close=None,
+        closed_at=None,
+        superseded="moved",
+        superseded_at=20,
+    )
     second = replace(original, key=replace(original.key, attempt_id="second"), number=2)
     third = replace(first, key=replace(original.key, attempt_id="third"), checks=current.key.attempt_id)
     events = build_events(Candidates((first, second, third)), ((old, 1, False), (current, 2, False)), lambda _entry: "matching")
     assert [(event.kind, event.checks_n, event.candidate_n) for event in events] == [
-        (LandEventKind.READY, 1, None), (LandEventKind.TRIED, 1, 1), (LandEventKind.TRIED, 1, 2),
-        (LandEventKind.LANDED, 1, 2), (LandEventKind.READY, 2, None), (LandEventKind.TRIED, 2, 1)]
+        (LandEventKind.READY, 1, None),
+        (LandEventKind.TRIED, 1, 1),
+        (LandEventKind.TRIED, 1, 2),
+        (LandEventKind.LANDED, 1, 2),
+        (LandEventKind.READY, 2, None),
+        (LandEventKind.TRIED, 2, 1),
+    ]
     assert all(event.past for event in events[:4]) and not any(event.past for event in events[4:])
     assert len({event.id for event in events}) == len(events)
     assert all(event.at == iso(original.admitted_at) for event in events if event.kind is LandEventKind.TRIED)
@@ -92,9 +115,16 @@ def test_every_candidate_stays_in_checks_chain_order_with_unknown_try_times(worl
 @pytest.mark.parametrize("closed,released", [(False, True), (True, False), (True, True)])
 def test_landed_requires_delivery_completion_and_release(world: LandBench, closed: bool, released: bool) -> None:
     world.land()
-    row, = world.rows()
-    row = replace(row, slot="s1", validated_at=11, delivered_at=15, close=row.close if closed else None,
-                  closed_at=20 if closed else None, released_at=25 if released else None)
+    (row,) = world.rows()
+    row = replace(
+        row,
+        slot="s1",
+        validated_at=11,
+        delivered_at=15,
+        close=row.close if closed else None,
+        closed_at=20 if closed else None,
+        released_at=25 if released else None,
+    )
     events = build_events(Candidates((row,)), ((checked(world), 1, False),), lambda _entry: "matching")
     assert (events[-1].kind is LandEventKind.LANDED) == (closed and released)
     if closed and released:
@@ -108,12 +138,15 @@ def test_landed_requires_delivery_completion_and_release(world: LandBench, close
 
 def test_completed_waits_and_missing_completion_times_are_retained(world: LandBench) -> None:
     world.land()
-    row, = world.rows()
+    (row,) = world.rows()
     row = replace(row, slot="s1", validated_at=10, released_at=12, delivered_at=15, closed_at=20)
     events = build_events(Candidates((row,)), ((checked(world), 1, False),), lambda _entry: "matching")
     tried = events[1]
     assert [(wait.started_at, wait.ended_at, wait.open) for wait in tried.waits] == [
-        (iso(10), iso(12), False), (iso(12), iso(15), False), (iso(15), iso(20), False)]
+        (iso(10), iso(12), False),
+        (iso(12), iso(15), False),
+        (iso(15), iso(20), False),
+    ]
     missing = replace(row, closed_at=None)
     assert build_events(Candidates((missing,)), ((checked(world), 1, False),), lambda _entry: "matching")[-1].at is None
     invalid = replace(row, delivered_at=5)
@@ -129,26 +162,38 @@ def test_completed_waits_and_missing_completion_times_are_retained(world: LandBe
 
 def test_active_validation_has_no_wait_and_unknown_process_has_no_invented_start(world: LandBench) -> None:
     world.land()
-    row, = world.rows()
-    row = replace(row, slot="s1", validation=None, validated_at=None, released_at=None,
-                  delivery=None, delivered_at=None, close=None, closed_at=None, entry=(99, "start", "boot"), deadline=999)
+    (row,) = world.rows()
+    row = replace(
+        row,
+        slot="s1",
+        validation=None,
+        validated_at=None,
+        released_at=None,
+        delivery=None,
+        delivered_at=None,
+        close=None,
+        closed_at=None,
+        entry=(99, "start", "boot"),
+        deadline=999,
+    )
     chain = ((checked(world), 1, False),)
     active = build_events(Candidates((row,)), chain, lambda _entry: "matching")
     assert active[-1].waits == ()
     unknown = build_events(Candidates((row,)), chain, lambda _entry: "unknown")
-    wait, = unknown[-1].waits
+    (wait,) = unknown[-1].waits
     assert wait.open and wait.started_at is None and "unconfirmed" in wait.awaited
     assert unknown[-1].model_dump(mode="json")["kind"] == "tried"
 
 
 def test_failed_validation_waits_for_release_before_another_try(world: LandBench) -> None:
     world.land()
-    row, = world.rows()
-    row = replace(row, slot="s1", validation="failed", validated_at=10, released_at=None,
-                  delivery=None, delivered_at=None, close=None, closed_at=None)
+    (row,) = world.rows()
+    row = replace(
+        row, slot="s1", validation="failed", validated_at=10, released_at=None, delivery=None, delivered_at=None, close=None, closed_at=None
+    )
     chain = ((checked(world), 1, False),)
     events = build_events(Candidates((row,)), chain, lambda _entry: "matching")
-    wait, = events[-1].waits
+    (wait,) = events[-1].waits
     assert wait.open and wait.started_at == iso(10) and "slot" in wait.awaited
     released = replace(row, released_at=20)
     events = build_events(Candidates((released,)), chain, lambda _entry: "matching")

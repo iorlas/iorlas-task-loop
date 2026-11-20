@@ -31,8 +31,9 @@ def matches(expected: Intent, snapshot: Snapshot) -> bool:
     if current is None or current.model_dump(exclude={"execution"}) != expected.model_dump(exclude={"execution"}):
         return False
     execution, previous = current.execution, expected.execution
-    if previous is not None and (execution is None or execution.drain != previous.drain
-                                 or (previous.phase is Phase.REGISTERED and execution != previous)):
+    if previous is not None and (
+        execution is None or execution.drain != previous.drain or (previous.phase is Phase.REGISTERED and execution != previous)
+    ):
         return False
     if execution is not None and execution.drain != snapshot.drain:
         return False
@@ -40,9 +41,14 @@ def matches(expected: Intent, snapshot: Snapshot) -> bool:
     if execution is not None and execution.phase is Phase.REGISTERED:
         worker, revision = execution.worker, execution.revision
     saved = record.worker
-    return (saved is not None and worker is not None and record.revision == revision
-            and (saved.pid, saved.pgid, saved.start, saved.boot) == (worker.pid, worker.pgid, worker.start, worker.boot)
-            and record.admission.entry == current.entry and record.session_ref == current.session)
+    return (
+        saved is not None
+        and worker is not None
+        and record.revision == revision
+        and (saved.pid, saved.pgid, saved.start, saved.boot) == (worker.pid, worker.pgid, worker.start, worker.boot)
+        and record.admission.entry == current.entry
+        and record.session_ref == current.session
+    )
 
 
 def classify(observed: Observations) -> Reconciliation:
@@ -54,8 +60,7 @@ def classify(observed: Observations) -> Reconciliation:
         state, explanation = ReconciliationState.LIVE, observed.worker.explanation
     elif observed.entry.seen is Seen.GONE and observed.worker.seen is Seen.GONE:
         state, explanation = ReconciliationState.GONE, "The entry and worker, including its process group, are confirmed absent."
-    return Reconciliation(key=snapshot.attempt.admission.key, state=state, explanation=explanation,
-                          snapshot=snapshot, owner=observed.owner)
+    return Reconciliation(key=snapshot.attempt.admission.key, state=state, explanation=explanation, snapshot=snapshot, owner=observed.owner)
 
 
 def captured(key: AttemptKey, result: Result) -> Reconciliation | Result:
@@ -72,14 +77,23 @@ class Processes(Protocol):
 
 class Recovery:
     def __init__(
-        self, store: RecoveryStore, processes: Processes, claim: Callable[[Admission], Claim],
-        custody: Callable[[Admission], AbstractContextManager[None]], clock: Callable[[], float], ids: Ids,
+        self,
+        store: RecoveryStore,
+        processes: Processes,
+        claim: Callable[[Admission], Claim],
+        custody: Callable[[Admission], AbstractContextManager[None]],
+        clock: Callable[[], float],
+        ids: Ids,
     ) -> None:
         self.store, self.processes, self.claim = store, processes, claim
         self.custody, self.clock, self.ids = custody, clock, ids
 
     def observe(
-        self, key: AttemptKey, *, custody: AbstractContextManager[None] | None = None, allow_expired: bool = False,
+        self,
+        key: AttemptKey,
+        *,
+        custody: AbstractContextManager[None] | None = None,
+        allow_expired: bool = False,
     ) -> Observations | Result:
         """Read consistent world facts under custody, without granting or renewing authority."""
         try:
@@ -91,8 +105,9 @@ class Recovery:
         except SlotBusy:
             return Result(outcome=Outcome.CUSTODY_BUSY, explanation="The slot's custody is held by another operation.")
         except (StoreUnavailable, ValueError, TypeError, SlotLockUnavailable) as error:
-            return Result(outcome=Outcome.UNAVAILABLE,
-                          explanation=f"Recovery observations or storage are unavailable ({type(error).__name__}).")
+            return Result(
+                outcome=Outcome.UNAVAILABLE, explanation=f"Recovery observations or storage are unavailable ({type(error).__name__})."
+            )
 
     def status(self, key: AttemptKey) -> Observations | Result:
         """Observe process facts without custody, tracker access or execution authority, even after expiry."""
@@ -102,12 +117,16 @@ class Recovery:
                 return snapshot
             return self._observations(snapshot, allow_expired=True, authority=False)
         except (StoreUnavailable, ValueError, TypeError) as error:
-            return Result(outcome=Outcome.UNAVAILABLE,
-                          explanation=f"Recovery status is unavailable ({type(error).__name__}).")
+            return Result(outcome=Outcome.UNAVAILABLE, explanation=f"Recovery status is unavailable ({type(error).__name__}).")
 
     def authorize(
-        self, key: AttemptKey, owner: Identity, *, token: str | None = None,
-        custody: AbstractContextManager[None] | None = None, deadline: float | None = None,
+        self,
+        key: AttemptKey,
+        owner: Identity,
+        *,
+        token: str | None = None,
+        custody: AbstractContextManager[None] | None = None,
+        deadline: float | None = None,
     ) -> Result:
         """An already-held custody scope bypasses acquisition of the nonreentrant slot lock."""
         try:
@@ -124,11 +143,15 @@ class Recovery:
         except SlotBusy:
             return Result(outcome=Outcome.CUSTODY_BUSY, explanation="The slot's custody is held by another operation.")
         except (StoreUnavailable, ValueError, TypeError, SlotLockUnavailable) as error:
-            return Result(outcome=Outcome.UNAVAILABLE,
-                          explanation=f"Recovery observations or storage are unavailable ({type(error).__name__}).")
+            return Result(
+                outcome=Outcome.UNAVAILABLE, explanation=f"Recovery observations or storage are unavailable ({type(error).__name__})."
+            )
 
     def reconcile(
-        self, expected: Intent, *, custody: AbstractContextManager[None] | None = None,
+        self,
+        expected: Intent,
+        *,
+        custody: AbstractContextManager[None] | None = None,
     ) -> Reconciliation | Result:
         """Observe saved execution under custody; never grant a permit or transfer ownership."""
         try:
@@ -140,8 +163,9 @@ class Recovery:
         except SlotBusy:
             return Result(outcome=Outcome.CUSTODY_BUSY, explanation="The slot's custody is held by another operation.")
         except (StoreUnavailable, ValueError, TypeError, SlotLockUnavailable) as error:
-            return Result(outcome=Outcome.UNAVAILABLE,
-                          explanation=f"Recovery observations or storage are unavailable ({type(error).__name__}).")
+            return Result(
+                outcome=Outcome.UNAVAILABLE, explanation=f"Recovery observations or storage are unavailable ({type(error).__name__})."
+            )
 
     def _reconcile(self, expected: Intent, initial: Snapshot) -> Reconciliation | Result:
         observed = self._observations(initial, expected=expected)
@@ -153,7 +177,12 @@ class Recovery:
         return classify(observed)
 
     def _observations(
-        self, initial: Snapshot, *, allow_expired: bool = False, expected: Intent | None = None, authority: bool = True,
+        self,
+        initial: Snapshot,
+        *,
+        allow_expired: bool = False,
+        expected: Intent | None = None,
+        authority: bool = True,
     ) -> Observations | Result:
         snapshot = self.store.compare(initial, self.clock, allow_expired=allow_expired)
         if isinstance(snapshot, Result):
@@ -170,9 +199,11 @@ class Recovery:
         if worker is None:
             raise StoreUnavailable("Worker registration is incomplete")
         return Observations(
-            snapshot=snapshot, entry=self.processes.entry(record.admission.entry),
+            snapshot=snapshot,
+            entry=self.processes.entry(record.admission.entry),
             worker=self.processes.process(Identity(pid=worker.pid, pgid=worker.pgid, start=worker.start, boot=worker.boot)),
             owner=None if snapshot.intent is None else self.processes.process(snapshot.intent.owner),
-            claim=self.claim(record.admission) if authority else Claim(
-                state=ClaimState.UNKNOWN, explanation="Status has not checked claim authority."),
+            claim=self.claim(record.admission)
+            if authority
+            else Claim(state=ClaimState.UNKNOWN, explanation="Status has not checked claim authority."),
         )

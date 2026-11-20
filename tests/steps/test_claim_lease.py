@@ -66,8 +66,17 @@ class Beats:
         ((TypeError("bug"),), 0, 5, ClaimWord.FAULT, 1),
     ],
     ids=[
-        "all_held", "all_held_slowly", "lost_stops_beating", "never_held", "held_after_one_failure", "one_failure",
-        "two_failures_then_held", "two_timeouts_then_held", "stopped_before_the_ttl", "fault", "fault_before_the_agent",
+        "all_held",
+        "all_held_slowly",
+        "lost_stops_beating",
+        "never_held",
+        "held_after_one_failure",
+        "one_failure",
+        "two_failures_then_held",
+        "two_timeouts_then_held",
+        "stopped_before_the_ttl",
+        "fault",
+        "fault_before_the_agent",
     ],
 )
 def test_the_first_renewal_then_the_loop_record_one_word(

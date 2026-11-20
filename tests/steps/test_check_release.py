@@ -77,17 +77,20 @@ class Bench:
         return True
 
     def release(self, abandon: bool = False, me: EntryIdentity | None = None, key: AttemptKey = CHECKS) -> ReleaseResult:
-        released = ChecksRelease(self.store, self.views, self.files, self.observe, self.hold, lambda: 30,
-            self.setup_seen, self.scratch, ids=NativeIds())
+        released = ChecksRelease(
+            self.store, self.views, self.files, self.observe, self.hold, lambda: 30, self.setup_seen, self.scratch, ids=NativeIds()
+        )
         return released.release(key, abandon, me)
 
     def candidate(self, abandon: bool = False, me: EntryIdentity | None = None) -> ReleaseResult:
-        released = ChecksRelease(self.store, self.views, self.files, self.observe, self.hold, lambda: 30,
-            self.setup_seen, self.scratch, ids=NativeIds())
+        released = ChecksRelease(
+            self.store, self.views, self.files, self.observe, self.hold, lambda: 30, self.setup_seen, self.scratch, ids=NativeIds()
+        )
         return released.release_of(CandidateTarget(LandStore(lambda: self.con)), CANDIDATE, abandon, me)
 
     def implement(self) -> ReleaseResult:
         """The task's abandon, second half: the implement attempt's own `SlotRelease` (its release row is `kept`)."""
+
         def unclaim(_root: str, task_id: str) -> bool:
             self.unclaimed.append(task_id)
             return True
@@ -95,8 +98,19 @@ class Bench:
         def nowhere(_path: str, _attempt: str) -> AbstractContextManager[None]:
             raise AssertionError("an implement attempt released before needs no lock")
 
-        released = SlotRelease(AttemptStore(lambda: self.con), self.views, self.files, self.observe, lambda _w: True, nowhere, unclaim,
-                               lambda: 40, self.setup_seen, self.scratch, ids=NativeIds())
+        released = SlotRelease(
+            AttemptStore(lambda: self.con),
+            self.views,
+            self.files,
+            self.observe,
+            lambda _w: True,
+            nowhere,
+            unclaim,
+            lambda: 40,
+            self.setup_seen,
+            self.scratch,
+            ids=NativeIds(),
+        )
         return released.release(IMPLEMENT, True)
 
     def at_x(self) -> None:
@@ -168,15 +182,19 @@ def running_setup(bench: Bench) -> None:
 
 
 @pytest.mark.parametrize("abandon", [False, True], ids=["settled", "abandon"])
-@pytest.mark.parametrize(("arrange", "word"), [
-    (lambda b: (b.store.register_entry(CHECKS, ENTRY, 10), setattr(b, "entry", "matching")), "refused:entry_running"),
-    (lambda b: (b.store.register_entry(CHECKS, ENTRY, 10), setattr(b, "entry", "unknown")), "unavailable:observe"),
-    (lambda b: (running_setup(b), b.seen.update({700: "alive"})), "held:setup_running"),
-    (lambda b: (running_setup(b), b.seen.update({700: "unknown"})), "unavailable:setup_unknown"),
-    (lambda b: (running_check(b), b.seen.update({600: "alive"})), "held:check_running"),
-    (lambda b: (running_check(b, "lingering"), b.seen.update({600: "alive"})), "held:check_running"),
-    (lambda b: (running_check(b, "timed_out"), b.seen.update({600: "unknown"})), "unavailable:check_unknown"),
-], ids=["entry_running", "entry_unknown", "setup_running", "setup_unknown", "check_running", "lingering_alive", "check_unknown"])
+@pytest.mark.parametrize(
+    ("arrange", "word"),
+    [
+        (lambda b: (b.store.register_entry(CHECKS, ENTRY, 10), setattr(b, "entry", "matching")), "refused:entry_running"),
+        (lambda b: (b.store.register_entry(CHECKS, ENTRY, 10), setattr(b, "entry", "unknown")), "unavailable:observe"),
+        (lambda b: (running_setup(b), b.seen.update({700: "alive"})), "held:setup_running"),
+        (lambda b: (running_setup(b), b.seen.update({700: "unknown"})), "unavailable:setup_unknown"),
+        (lambda b: (running_check(b), b.seen.update({600: "alive"})), "held:check_running"),
+        (lambda b: (running_check(b, "lingering"), b.seen.update({600: "alive"})), "held:check_running"),
+        (lambda b: (running_check(b, "timed_out"), b.seen.update({600: "unknown"})), "unavailable:check_unknown"),
+    ],
+    ids=["entry_running", "entry_unknown", "setup_running", "setup_unknown", "check_running", "lingering_alive", "check_unknown"],
+)
 def test_the_stop_proof_holds_the_slot_in_both_modes_and_changes_nothing(
     bench: Bench, arrange: Callable[[Bench], object], word: str, abandon: bool
 ) -> None:
@@ -188,13 +206,17 @@ def test_the_stop_proof_holds_the_slot_in_both_modes_and_changes_nothing(
     assert bench.stored() == UNRELEASED and bench.holds == 0 and bench.slot.read_file("left") == "untracked"
 
 
-@pytest.mark.parametrize("arrange", [
-    lambda b: (b.store.register_entry(CHECKS, ENTRY, 10), setattr(b, "entry", "matching")),
-    lambda b: running_check(b, "passed"),
-    lambda b: running_check(b, None, None),
-    lambda b: running_check(b, "interrupted"),
-    running_setup,
-], ids=["me", "settled_result", "never_registered", "gone_interrupted", "setup_gone"])
+@pytest.mark.parametrize(
+    "arrange",
+    [
+        lambda b: (b.store.register_entry(CHECKS, ENTRY, 10), setattr(b, "entry", "matching")),
+        lambda b: running_check(b, "passed"),
+        lambda b: running_check(b, None, None),
+        lambda b: running_check(b, "interrupted"),
+        running_setup,
+    ],
+    ids=["me", "settled_result", "never_registered", "gone_interrupted", "setup_gone"],
+)
 def test_the_entry_itself_a_settled_or_gone_command_passes_the_proof(bench: Bench, arrange: Callable[[Bench], object]) -> None:
     arrange(bench)
     bench.concluded()
@@ -268,10 +290,13 @@ def test_an_abandon_of_a_released_attempt_that_is_not_the_latest_changes_nothing
     assert bench.stored() == ([("s1", "rerun")], (30.0, bench.d, 0))
 
 
-
-@pytest.mark.parametrize(("delivery", "word"), [
-    ("", "refused:landing"), (",delivery='pushed',delivered_at=4,remote_head=commit_sha", "refused:landed"),
-])
+@pytest.mark.parametrize(
+    ("delivery", "word"),
+    [
+        ("", "refused:landing"),
+        (",delivery='pushed',delivered_at=4,remote_head=commit_sha", "refused:landed"),
+    ],
+)
 def test_an_abandon_of_released_checks_with_a_pushable_or_delivered_land_candidate_is_refused_with_its_guide(
     bench: Bench, delivery: str, word: str
 ) -> None:
@@ -279,10 +304,12 @@ def test_an_abandon_of_released_checks_with_a_pushable_or_delivered_land_candida
     withdraws it."""
     bench.concluded()
     assert release_word(bench.release()) == "released"
-    bench.con.execute("""INSERT INTO land_candidate (candidate_id,dispatch_token,generation,checks_attempt_id,number,origin_commit,
+    bench.con.execute(
+        """INSERT INTO land_candidate (candidate_id,dispatch_token,generation,checks_attempt_id,number,origin_commit,
     commit_sha,tree_same,required,validation,validated_at,admitted_at)
     VALUES ('candidate','candidate-token',1,'checks',1,?,?,1,'[]','same_tree',3,2)""",
-                      (bench.d, bench.x))
+        (bench.d, bench.x),
+    )
     bench.con.execute(f"UPDATE land_candidate SET validated_at=3{delivery}")
     found = bench.release(abandon=True)
     assert isinstance(found, NotReleased) and found.word == word and "land the task again" in found.detail
@@ -348,12 +375,16 @@ def running_land_setup(b: Bench) -> None:
 
 
 @pytest.mark.parametrize("abandon", [False, True], ids=["settled", "abandon"])
-@pytest.mark.parametrize(("arrange", "word"), [
-    (lambda b: setattr(b, "entry", "matching"), "refused:entry_running"),
-    (lambda b: setattr(b, "entry", "unknown"), "unavailable:observe"),
-    (lambda b: (running_land_check(b), b.seen.update({600: "alive"})), "held:check_running"),
-    (lambda b: (running_land_setup(b), b.seen.update({700: "alive"})), "held:setup_running"),
-], ids=["land_running", "land_unknown", "check_running", "setup_running"])
+@pytest.mark.parametrize(
+    ("arrange", "word"),
+    [
+        (lambda b: setattr(b, "entry", "matching"), "refused:entry_running"),
+        (lambda b: setattr(b, "entry", "unknown"), "unavailable:observe"),
+        (lambda b: (running_land_check(b), b.seen.update({600: "alive"})), "held:check_running"),
+        (lambda b: (running_land_setup(b), b.seen.update({700: "alive"})), "held:setup_running"),
+    ],
+    ids=["land_running", "land_unknown", "check_running", "setup_running"],
+)
 def test_the_candidate_stop_proof_holds_its_slot_in_both_modes_and_changes_nothing(
     lands: Bench, arrange: Callable[[Bench], object], word: str, abandon: bool
 ) -> None:

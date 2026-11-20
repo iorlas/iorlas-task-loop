@@ -29,9 +29,13 @@ SAVED_SESSION = "saved-session-reference"
 
 
 def setting(harness: HarnessKind, tmp_path: Path) -> AgentSetting:
-    policy = (CodexPolicy() if harness is HarnessKind.CODEX else
-              ClaudePolicy(settings_file=tmp_path / "deleted.json", settings='{"env":{"OPAQUE":"value"}}')
-              if harness is HarnessKind.CLAUDE else OpenCodePolicy())
+    policy = (
+        CodexPolicy()
+        if harness is HarnessKind.CODEX
+        else ClaudePolicy(settings_file=tmp_path / "deleted.json", settings='{"env":{"OPAQUE":"value"}}')
+        if harness is HarnessKind.CLAUDE
+        else OpenCodePolicy()
+    )
     return AgentSetting(harness=harness, model="chosen", effort="medium", access=policy)
 
 
@@ -80,8 +84,7 @@ def assert_disposition_guidance(text: str, step: str, success: str) -> None:
         assert f"With `{success}`, list in `paths` every file" in text
         assert "one-line commit `message`; the factory commits exactly those paths." in text
         assert "`docs/design/tl-1/plan.md`" in text
-        assert ("If the assessed plan is still valid for the task and code as they are now, "
-                "change nothing and answer `unchanged`") in text
+        assert ("If the assessed plan is still valid for the task and code as they are now, change nothing and answer `unchanged`") in text
         assert "If you could not finish planning, answer `incomplete` and explain why in `explanation`" in text
         assert "If the task cannot be planned as written" in text
         assert "answer `needs_owner` and say in `explanation` what the owner must decide" in text
@@ -100,38 +103,64 @@ def assert_disposition_guidance(text: str, step: str, success: str) -> None:
 
 
 @pytest.mark.parametrize("harness", list(HarnessKind))
-@pytest.mark.parametrize(("step", "unrecorded", "failed_check"), [
-    pytest.param("plan", None, False, id="plan-initial"),
-    pytest.param("plan", False, False, id="plan-recorded-leftovers"),
-    pytest.param("plan", True, False, id="plan-unrecorded-leftovers"),
-    pytest.param("implement", None, False, id="implement-initial"),
-    pytest.param("implement", False, False, id="implement-recorded-leftovers"),
-    pytest.param("implement", True, False, id="implement-unrecorded-leftovers"),
-    pytest.param("implement", None, True, id="implement-failed-check"),
-])
+@pytest.mark.parametrize(
+    ("step", "unrecorded", "failed_check"),
+    [
+        pytest.param("plan", None, False, id="plan-initial"),
+        pytest.param("plan", False, False, id="plan-recorded-leftovers"),
+        pytest.param("plan", True, False, id="plan-unrecorded-leftovers"),
+        pytest.param("implement", None, False, id="implement-initial"),
+        pytest.param("implement", False, False, id="implement-recorded-leftovers"),
+        pytest.param("implement", True, False, id="implement-unrecorded-leftovers"),
+        pytest.param("implement", None, True, id="implement-failed-check"),
+    ],
+)
 def test_dispatched_step_inputs_carry_their_answer_contract(
-    tmp_path: Path, harness: HarnessKind, step: str, unrecorded: bool | None, failed_check: bool,
+    tmp_path: Path,
+    harness: HarnessKind,
+    step: str,
+    unrecorded: bool | None,
+    failed_check: bool,
 ) -> None:
-    task = TaskInspection(TaskReference(TaskScope("tasks"), "tl-1"), "Add a widget", "Persist widgets.",
-                          "Widgets survive restart.", (), "in_progress", "taskloop")
+    task = TaskInspection(
+        TaskReference(TaskScope("tasks"), "tl-1"),
+        "Add a widget",
+        "Persist widgets.",
+        "Widgets survive restart.",
+        (),
+        "in_progress",
+        "taskloop",
+    )
     context = InputContext("a" * 40, ("just check", "just test"), "task: Work to accomplish.", ())
     operation = kind(step)
     rules = operation.rules(task.reference.task_id)
     initial = operation.input_text(WORKFLOW.table(operation.step), task, rules, context)
     prompt = initial
     if failed_check:
-        found = FailedCheck(source=AttemptKey("check", "dispatch", 1), block=1, commit="a" * 40, name="test",
-                            argv=("just", "test"), rc=1, output=OutputTail(availability=Availability.EMPTY))
+        found = FailedCheck(
+            source=AttemptKey("check", "dispatch", 1),
+            block=1,
+            commit="a" * 40,
+            name="test",
+            argv=("just", "test"),
+            rc=1,
+            output=OutputTail(availability=Availability.EMPTY),
+        )
         prompt = failed_check_feedback(found, initial, "nonce", FEEDBACK_OPENING)
     elif unrecorded is not None:
-        prompt = operation.feedback(Uncommitted("uncommitted", ("?? widget.txt",)), rules, 1, initial, "nonce",
-                                    unrecorded=unrecorded)
+        prompt = operation.feedback(Uncommitted("uncommitted", ("?? widget.txt",)), rules, 1, initial, "nonce", unrecorded=unrecorded)
         assert ("Nothing of attempt 1 was committed" in prompt) is unrecorded
     assert prompt.endswith(initial)
     files = EvidenceFiles(tmp_path)
     schema, out = files.prepare(KEY, operation.answer_schema)
     result = AgentLaunch(lambda _kind: (f"/bin/{harness}", {"HOME": str(tmp_path)}), ids=FixedIds()).build(
-        setting(harness, tmp_path), tmp_path / "slot", operation.environment, files.launch_root(KEY), schema, out, prompt,
+        setting(harness, tmp_path),
+        tmp_path / "slot",
+        operation.environment,
+        files.launch_root(KEY),
+        schema,
+        out,
+        prompt,
     )
     assert isinstance(result, LaunchedAgent)
     try:
@@ -164,7 +193,14 @@ def test_native_continuation_keeps_the_saved_session(tmp_path: Path, harness: Ha
     credentials = (f"/bin/{harness}", {"HOME": str(tmp_path)})
     ids = FixedIds()
     result = AgentLaunch(lambda _kind: credentials, ids=ids).build(
-        setting(harness, tmp_path), slot, prepared, root, schema, out, "Continue task", resume=SAVED_SESSION,
+        setting(harness, tmp_path),
+        slot,
+        prepared,
+        root,
+        schema,
+        out,
+        "Continue task",
+        resume=SAVED_SESSION,
     )
     assert isinstance(result, LaunchedAgent)
     try:
@@ -216,7 +252,11 @@ def test_ordinary_builds_allocate_fresh_sessions(tmp_path: Path, harness: Harnes
 @pytest.mark.parametrize("resume", [None, SAVED_SESSION])
 @pytest.mark.parametrize("limit", [None, 100000])
 def test_codex_launch_limits_automatic_context_and_preserves_access(
-    tmp_path: Path, sandbox: CodexSandbox, prepared: bool, host_tmp: str | None, resume: str | None,
+    tmp_path: Path,
+    sandbox: CodexSandbox,
+    prepared: bool,
+    host_tmp: str | None,
+    resume: str | None,
     limit: int | None,
 ) -> None:
     files = EvidenceFiles(tmp_path)
@@ -239,9 +279,12 @@ def test_codex_launch_limits_automatic_context_and_preserves_access(
         assert settings["features.recommended_plugins"] == "false"
         prefix = "shell_environment_policy.set."
         shell_env = {key.removeprefix(prefix): json.loads(value) for key, value in settings.items() if key.startswith(prefix)}
-        expected = {"TMPDIR": str(slot.parent / ".t" / "s1"),
-                    "UV_CACHE_DIR": str(slot.parent / ".env" / "s1" / "uv-cache"),
-                    "UV_TOOL_DIR": str(slot.parent / ".env" / "s1" / "uv-tools"), "UV_OFFLINE": "1"}
+        expected = {
+            "TMPDIR": str(slot.parent / ".t" / "s1"),
+            "UV_CACHE_DIR": str(slot.parent / ".env" / "s1" / "uv-cache"),
+            "UV_TOOL_DIR": str(slot.parent / ".env" / "s1" / "uv-tools"),
+            "UV_OFFLINE": "1",
+        }
         assert shell_env == (expected if prepared else {})
         assert result.spec.env == credentials
         if resume is None:
@@ -285,11 +328,20 @@ def test_consecutive_compaction_overrides_are_isolated_and_leave_user_config_unt
 @pytest.mark.parametrize("harness", list(HarnessKind))
 @pytest.mark.parametrize("resume", ["", " ", "saved session", "saved\n", "\tsaved", "--last", "-session"])
 def test_invalid_continuation_is_explained_without_allocating_a_session(
-    tmp_path: Path, harness: HarnessKind, resume: str,
+    tmp_path: Path,
+    harness: HarnessKind,
+    resume: str,
 ) -> None:
     ids = FixedIds()
     result = AgentLaunch(lambda kind: (f"/bin/{kind}", {}), ids=ids).build(
-        setting(harness, tmp_path), tmp_path, False, tmp_path, "unused", "unused", "Task", resume=resume,
+        setting(harness, tmp_path),
+        tmp_path,
+        False,
+        tmp_path,
+        "unused",
+        "unused",
+        "Task",
+        resume=resume,
     )
     assert isinstance(result, LaunchFailure) and result.reason == "launch:ValueError"
     assert "session reference" in result.explanation and ids.sessions == []
@@ -311,7 +363,14 @@ def test_failed_preparation_cleans_up_harness_resources(tmp_path: Path, monkeypa
     files = EvidenceFiles(tmp_path)
     schema, out = files.prepare(KEY, {"type": "object"})
     result = AgentLaunch(lambda _kind: ("/bin/opencode", {"HOME": str(tmp_path)}), ids=FixedIds()).build(
-        setting(HarnessKind.OPENCODE, tmp_path), tmp_path, False, files.launch_root(KEY), schema, out, "Task", resume=resume,
+        setting(HarnessKind.OPENCODE, tmp_path),
+        tmp_path,
+        False,
+        files.launch_root(KEY),
+        schema,
+        out,
+        "Task",
+        resume=resume,
     )
     assert isinstance(result, LaunchFailure) and result.reason == "launch:ValueError" and result.explanation
     assert len(shells) == 1 and not shells[0].exists()
@@ -344,16 +403,23 @@ def test_every_typed_credential_failure_has_a_useful_explanation(tmp_path: Path,
 @pytest.mark.parametrize("harness", list(HarnessKind))
 @pytest.mark.parametrize("answer,kind", [(json.dumps(PLAN), "valid"), ("{", "json_invalid"), ("{}", "schema_invalid")])
 def test_all_harnesses_use_the_same_strict_step_decoder(
-    tmp_path: Path, surroundings: AttemptSurroundings, harness: HarnessKind, answer: str, kind: str,
+    tmp_path: Path,
+    surroundings: AttemptSurroundings,
+    harness: HarnessKind,
+    answer: str,
+    kind: str,
 ) -> None:
     con = database(surroundings)
     chosen = setting(harness, tmp_path)
-    con.execute("UPDATE attempt SET harness=?,provider=?,model=?,effort=?,access_policy=?",
-                (chosen.harness, chosen.provider, chosen.model, chosen.effort, encode_policy(chosen.access)))
+    con.execute(
+        "UPDATE attempt SET harness=?,provider=?,model=?,effort=?,access_policy=?",
+        (chosen.harness, chosen.provider, chosen.model, chosen.effort, encode_policy(chosen.access)),
+    )
     run = FakeRun(RunOutcome(rc=0, worker=WORKER, summary=Summary(text=answer, rc=0, stands=True)))
     result = app(con, surroundings, run).execute(KEY, ENTRY)
     assert result.execution is not None and result.execution.answer.kind == kind and len(run.calls) == 1
     assert run.calls[0][0].kind == harness
+
 
 surroundings = attempt_surroundings
 

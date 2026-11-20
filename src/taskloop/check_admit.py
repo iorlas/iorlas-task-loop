@@ -93,16 +93,20 @@ def next_number(con: sqlite3.Connection, previous: AttemptKey) -> int | AdmitRef
     found = task_of(con, previous)
     row = None if found is None else current(con, found.backlog, found.task_id)
     if row is None or row.key != previous or not row.done or following(row.step) != CHECK:
-        return AdmitRefused("not_advanceable", detail="The implement attempt is not the task's current, done "
-                            "(accepted by factory commit, released with its claim kept, published) attempt")
+        return AdmitRefused(
+            "not_advanceable",
+            detail="The implement attempt is not the task's current, done "
+            "(accepted by factory commit, released with its claim kept, published) attempt",
+        )
     checks = latest(con, previous)
     if checks is None:
         return 1
     if checks.abandoned:
         return AdmitRefused("not_advanceable", detail=HALF_DONE)
     if checks.landed or checks.landing:
-        return (AdmitRefused("landed", detail=LAND_GUIDE["landed"]) if checks.landed
-                else AdmitRefused("landing", detail=LAND_GUIDE["landing"]))
+        return (
+            AdmitRefused("landed", detail=LAND_GUIDE["landed"]) if checks.landed else AdmitRefused("landing", detail=LAND_GUIDE["landing"])
+        )
     if checks.failed_released:
         return checks.number + 1
     return AdmitRefused("task_attempted", detail="The task's latest checks attempt is current")
@@ -119,7 +123,8 @@ class ChecksAdmission:
         probe: Probe,
         slot_files: SlotFiles,
         profiles: Profiles,
-        *, ids: Ids,
+        *,
+        ids: Ids,
     ) -> None:
         """The ports of an advance (`admit_chain.NextAdmission`) without the input files, plus the profile port on the
         person's checkout."""
@@ -206,8 +211,10 @@ class ChecksAdmission:
         if not isinstance(task, TaskInspection):
             return task
         if task.status != "in_progress" or task.assignee != ACTOR:
-            return AdmitRefused("claim_lost", detail=f"The tracker shows {found.task_id} {task.status or 'without status'}, "
-                                f"assigned to {task.assignee or 'nobody'}")
+            return AdmitRefused(
+                "claim_lost",
+                detail=f"The tracker shows {found.task_id} {task.status or 'without status'}, assigned to {task.assignee or 'nobody'}",
+            )
         return None
 
     def _commit(self, ready: _Ready, request: ChecksRequest, key: AttemptKey) -> Admitted | AdmitRefused:
@@ -228,8 +235,9 @@ class ChecksAdmission:
                 return AdmitRefused("no_free_slot")
             name, head = chosen
             reserve(con, repo_id, name, key)
-            insert(con, ChecksAdmitted(key, request.previous.attempt_id, number, name, head, ready.target, ready.required,
-                                       request.deadline))
+            insert(
+                con, ChecksAdmitted(key, request.previous.attempt_id, number, name, head, ready.target, ready.required, request.deadline)
+            )
         return Admitted(key, name)
 
 

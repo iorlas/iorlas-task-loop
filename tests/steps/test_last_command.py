@@ -38,8 +38,9 @@ def sink_of(files: EvidenceFiles, wall: Clock) -> CommandSink:
 
 def seen(con: sqlite3.Connection, files: EvidenceFiles, now: float, entry: Seen = "matching") -> tuple[list[str], list[str], object]:
     """`tl attempt show`'s lines, `tl attempt list`'s lines and the listed attempt's JSON `last_command`."""
-    reads = StatusPorts(AttemptStore(lambda: con), lambda _entry: entry, lambda: now, lambda _key: None, lambda: "boot",
-                        last_command=files.last_command)
+    reads = StatusPorts(
+        AttemptStore(lambda: con), lambda _entry: entry, lambda: now, lambda _key: None, lambda: "boot", last_command=files.last_command
+    )
     shown, listed = show_attempt(reads, files.root, "tasks", "tl-1"), list_attempts(reads)
     assert isinstance(shown, Shown) and isinstance(listed, Listed)
     rows = as_data(listed)["attempts"]
@@ -78,7 +79,9 @@ def test_no_or_unreadable_evidence_shows_its_word(registered: sqlite3.Connection
 
 @pytest.mark.parametrize("entry", ["gone", "different_process", "unknown"])
 def test_an_agent_that_cannot_be_running_shows_no_time_even_with_a_stored_worker(
-    registered: sqlite3.Connection, tmp_path: Path, entry: Seen,
+    registered: sqlite3.Connection,
+    tmp_path: Path,
+    entry: Seen,
 ) -> None:
     files = EvidenceFiles(tmp_path)
     sink = sink_of(files, Clock(10.0))
@@ -136,9 +139,16 @@ def test_each_start_is_recorded_even_when_the_wall_clock_moves_backwards(tmp_pat
 
 def test_only_a_command_counts(tmp_path: Path) -> None:
     files, sink = EvidenceFiles(tmp_path), sink_of(EvidenceFiles(tmp_path), Clock(1.0))
-    for other in (events.Msg(text="thinking"), events.CmdEnd(id="1", text="just test", exit=0), events.Think(text="hm"),
-                  events.Tool(id="tool", name="read", arg="README"), events.ToolEnd(id="tool", name="read"),
-                  events.WaitingForNetwork(), events.Stall(secs=10), events.HarnessError(text="oops")):
+    for other in (
+        events.Msg(text="thinking"),
+        events.CmdEnd(id="1", text="just test", exit=0),
+        events.Think(text="hm"),
+        events.Tool(id="tool", name="read", arg="README"),
+        events.ToolEnd(id="tool", name="read"),
+        events.WaitingForNetwork(),
+        events.Stall(secs=10),
+        events.HarnessError(text="oops"),
+    ):
         sink.feed(other)
     sink.end("done")
     assert files.last_command(KEY) == "none"
@@ -186,7 +196,10 @@ def test_a_future_command_start_clamps_displayed_seconds_to_zero(registered: sql
 
 @pytest.mark.parametrize(("now", "next_word"), [(20.0, "wait"), (200.0, "stuck:hung")])
 def test_command_evidence_changes_only_display_even_after_the_deadline(
-    registered: sqlite3.Connection, tmp_path: Path, now: float, next_word: str,
+    registered: sqlite3.Connection,
+    tmp_path: Path,
+    now: float,
+    next_word: str,
 ) -> None:
     stored = tuple(registered.iterdump())
     displays: list[int | str | None] = []
@@ -201,8 +214,14 @@ def test_command_evidence_changes_only_display_even_after_the_deadline(
             path = files.events_path(KEY)
             path.parent.mkdir(parents=True)
             path.write_text("broken complete record\n")
-        reads = StatusPorts(AttemptStore(lambda: registered), lambda _entry: "matching", lambda: now,
-                            lambda _key: None, lambda: "boot", last_command=files.last_command)
+        reads = StatusPorts(
+            AttemptStore(lambda: registered),
+            lambda _entry: "matching",
+            lambda: now,
+            lambda _key: None,
+            lambda: "boot",
+            last_command=files.last_command,
+        )
         shown, listed = show_attempt(reads, files.root, "tasks", "tl-1"), list_attempts(reads)
         assert isinstance(shown, Shown) and isinstance(listed, Listed)
         view = shown.view

@@ -16,8 +16,10 @@ HARDENED = (("core.hooksPath", "/dev/null"), ("core.fsmonitor", "false"), ("comm
 # The identity of every commit the factory makes in a slot, whatever the repository's or the person's config (the agent may
 # have rewritten `user.email` in the shared config). Environment variables beat every config file.
 IDENTITY = {
-    "GIT_AUTHOR_NAME": "task-loop", "GIT_AUTHOR_EMAIL": "task-loop@localhost",
-    "GIT_COMMITTER_NAME": "task-loop", "GIT_COMMITTER_EMAIL": "task-loop@localhost",
+    "GIT_AUTHOR_NAME": "task-loop",
+    "GIT_AUTHOR_EMAIL": "task-loop@localhost",
+    "GIT_COMMITTER_NAME": "task-loop",
+    "GIT_COMMITTER_EMAIL": "task-loop@localhost",
 }
 PUSH_TIMEOUT = 120.0  # seconds a publication's push or ls-remote may take (the library's default is 600)
 
@@ -145,4 +147,3 @@ class GitProfileFiles:
         except GitUnavailable as error:
             return Unavailable(str(error))
         return Unavailable(f"{path} at {commit} is listed but unreadable") if data is None else data
-

@@ -29,7 +29,8 @@ from taskloop.slot_release import NotReleased, Released, SlotRelease
 
 
 def test_full_access_scratch_exists_at_dispatch_and_is_emptied_after_stopped_release(
-    entry: Entry, slot: FakeWorktree,
+    entry: Entry,
+    slot: FakeWorktree,
 ) -> None:
     env, files = entry.environment, RealEnvFiles()
     env.con.execute("UPDATE attempt SET access_policy=?", (encode_policy(CodexPolicy(sandbox=CodexSandbox.DANGER_FULL_ACCESS)),))
@@ -53,17 +54,36 @@ def test_full_access_scratch_exists_at_dispatch_and_is_emptied_after_stopped_rel
     env.process.script = [Command(effect=setup)]
     preparation = Preparation(replace(env.preparation().ports, files=files, tmp_bytes=4096))
     store = AttemptStore(lambda: env.con)
-    attempts = Attempts(store, EvidenceFiles(env.artifacts),
-                        AgentLaunch(lambda _harness: ("/bin/codex", {"HOME": "/home/p"}), ids=NativeIds()),
-                        agent, env.clock, entry.checkouts, entry.files, environment=preparation)
+    attempts = Attempts(
+        store,
+        EvidenceFiles(env.artifacts),
+        AgentLaunch(lambda _harness: ("/bin/codex", {"HOME": "/home/p"}), ids=NativeIds()),
+        agent,
+        env.clock,
+        entry.checkouts,
+        entry.files,
+        environment=preparation,
+    )
     result = attempts.execute(KEY, ENTRY, entry.renew)
     assert result.execution is not None and result.execution.answer.kind == "valid"
     assert env.probes == [] and "UV_OFFLINE" not in env.process.calls[0].env
     assert (found.tmp / "agent-scratch").read_text() == "agent"
-    assert isinstance(FactoryCommit(store, entry.checkouts, entry.files, lambda _worker: True, env.clock, hold,
-                               ids=NativeIds()).commit(KEY), Committed)
-    releaser = SlotRelease(store, entry.checkouts, entry.files, lambda _entry: "gone", lambda _worker: True,
-                           custody, lambda _root, _task: True, env.clock, env.observe, files.empty_scratch, ids=NativeIds())
+    assert isinstance(
+        FactoryCommit(store, entry.checkouts, entry.files, lambda _worker: True, env.clock, hold, ids=NativeIds()).commit(KEY), Committed
+    )
+    releaser = SlotRelease(
+        store,
+        entry.checkouts,
+        entry.files,
+        lambda _entry: "gone",
+        lambda _worker: True,
+        custody,
+        lambda _root, _task: True,
+        env.clock,
+        env.observe,
+        files.empty_scratch,
+        ids=NativeIds(),
+    )
     refused = replace(releaser, gone=lambda _worker: False).release(KEY, False)
     assert isinstance(refused, NotReleased) and refused.reason == "worker_alive"
     assert (found.tmp / "agent-scratch").exists()

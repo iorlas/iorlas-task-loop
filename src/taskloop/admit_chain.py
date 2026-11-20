@@ -90,7 +90,9 @@ class ChainAdmission:
         clock: Callable[[], float],
         checkouts: Checkouts,
         slot_files: SlotFiles,
-        *, ids: Ids, engine: str,
+        *,
+        ids: Ids,
+        engine: str,
     ) -> None:
         self.ids, self.engine = ids, engine
         self.connect, self.begin, self.files, self.clock = connect, begin, files, clock
@@ -108,8 +110,13 @@ class ChainAdmission:
             earlier = reader.earlier_for(previous)
             if earlier is not None and earlier.key != previous:
                 return AdmitRefused("task_attempted")
-            text = request.text if earlier is None else EarlierInput(
-                reader, self.files, HoldStore(self.connect, self.begin)).attach_slot(request.text, earlier, self.checkouts, self.slot_files)
+            text = (
+                request.text
+                if earlier is None
+                else EarlierInput(reader, self.files, HoldStore(self.connect, self.begin)).attach_slot(
+                    request.text, earlier, self.checkouts, self.slot_files
+                )
+            )
             ref = self.files.put_input(key, text)
             return self._takeover(open_store(self.connect), request, key, ref, earlier)
         except (_Lost, sqlite3.IntegrityError) as error:
@@ -119,8 +126,9 @@ class ChainAdmission:
         except (EvidenceError, InputError, UnicodeError, OSError) as error:
             return AdmitRefused("input", detail=why(error))
 
-    def _takeover(self, con: sqlite3.Connection, request: RepeatRequest, key: AttemptKey, ref: FileRef,
-                  earlier: EarlierAttempt | None) -> Admitted | AdmitRefused:
+    def _takeover(
+        self, con: sqlite3.Connection, request: RepeatRequest, key: AttemptKey, ref: FileRef, earlier: EarlierAttempt | None
+    ) -> Admitted | AdmitRefused:
         with self.begin(con):
             if blocked(con):
                 return AdmitRefused(Reason.DRAINING, detail=BLOCKED)
@@ -145,19 +153,44 @@ class ChainAdmission:
             return refused
         if row.step is Step.PLAN and request.content_digest is None:
             raise InputError("A plan repeat requires freshly collected task-content evidence")
-        insert_attempt(con, {
-            "attempt_id": key.attempt_id, "dispatch_token": key.dispatch_token, "generation": key.reservation_generation,
-            "adapter": row.adapter, "backlog": row.backlog, "task_id": row.task_id, "tracker_root": row.tracker_root,
-            "repo_id": row.repo_id, "slot": row.slot,
-            "input_path": ref.path, "input_digest": ref.digest, "schema_version": 1, "model": row.model, "effort": row.effort,
-            "access_policy": row.access_policy, "deadline": request.deadline, "number": number + 1,
-            "previous_attempt_id": previous.attempt_id,
-            "repeat_reason": request.reason, "repeat_listing": json.dumps(request.listing), "seq": row.seq + 1,
-            "slot_head": row.slot_head, "step": row.step,
-            "harness": row.harness, "provider": row.provider, "engine_digest": self.engine, "admitted_at": self.clock(),
-            **copied_pin(con, previous.attempt_id), "declared_start": 0, "compaction_token_limit": row.compaction_token_limit,
-            "after_commit": None, "label": row.label,  # a repeat starts at E, the chain's own
-        }, request.content_digest)
+        insert_attempt(
+            con,
+            {
+                "attempt_id": key.attempt_id,
+                "dispatch_token": key.dispatch_token,
+                "generation": key.reservation_generation,
+                "adapter": row.adapter,
+                "backlog": row.backlog,
+                "task_id": row.task_id,
+                "tracker_root": row.tracker_root,
+                "repo_id": row.repo_id,
+                "slot": row.slot,
+                "input_path": ref.path,
+                "input_digest": ref.digest,
+                "schema_version": 1,
+                "model": row.model,
+                "effort": row.effort,
+                "access_policy": row.access_policy,
+                "deadline": request.deadline,
+                "number": number + 1,
+                "previous_attempt_id": previous.attempt_id,
+                "repeat_reason": request.reason,
+                "repeat_listing": json.dumps(request.listing),
+                "seq": row.seq + 1,
+                "slot_head": row.slot_head,
+                "step": row.step,
+                "harness": row.harness,
+                "provider": row.provider,
+                "engine_digest": self.engine,
+                "admitted_at": self.clock(),
+                **copied_pin(con, previous.attempt_id),
+                "declared_start": 0,
+                "compaction_token_limit": row.compaction_token_limit,
+                "after_commit": None,
+                "label": row.label,  # a repeat starts at E, the chain's own
+            },
+            request.content_digest,
+        )
         if not transfer(con, previous, key, row.repo_id, row.slot):
             raise _Lost
         return Admitted(key, row.slot)
@@ -199,7 +232,10 @@ class NextAdmission:
         clock: Callable[[], float],
         probe: Probe,
         slot_files: SlotFiles,
-        *, ids: Ids, engine: str, discussion: CollectDiscussion = empty,
+        *,
+        ids: Ids,
+        engine: str,
+        discussion: CollectDiscussion = empty,
     ) -> None:
         """The ports of a fresh admission (`admit.AttemptAdmission`) without the claim: an advance never claims."""
         self.ids, self.engine = ids, engine
@@ -224,8 +260,10 @@ class NextAdmission:
             ready = replace(ready, earlier=earlier)
             setting = choose(request.setting, pin.workflow.table(ready.step).agent, request.overrides)
             text = EarlierInput(reader, self.files, HoldStore(self.connect, self.begin)).attach(
-                task_text(ready.task, ready.step, context, pin.workflow, discussion.text), earlier,
-                partial(commit_names, self.checkouts(request.checkout), request.checkout))
+                task_text(ready.task, ready.step, context, pin.workflow, discussion.text),
+                earlier,
+                partial(commit_names, self.checkouts(request.checkout), request.checkout),
+            )
             ref = self.files.put_input(key, text)
         except (sqlite3.Error, StoreUnavailable) as error:
             return AdmitUnavailable("store", detail=why(error))
@@ -276,8 +314,10 @@ class NextAdmission:
         if not isinstance(task, TaskInspection):
             return task
         if task.status != "in_progress" or task.assignee != ACTOR:
-            return AdmitRefused("claim_lost", detail=f"The tracker shows {found.task_id} {task.status or 'without status'}, "
-                                f"assigned to {task.assignee or 'nobody'}")
+            return AdmitRefused(
+                "claim_lost",
+                detail=f"The tracker shows {found.task_id} {task.status or 'without status'}, assigned to {task.assignee or 'nobody'}",
+            )
         return _Ready(con, found, step, task, free)
 
     def _free(self, con: sqlite3.Connection, request: NextStepRequest, found: Task) -> tuple[Free, ...] | AdmitRefused | AdmitUnavailable:
@@ -346,8 +386,11 @@ class NextAdmission:
                     "after_commit": row.end_commit,
                     "label": row.label,
                     "harness": setting.harness,
-                    "provider": setting.provider, "engine_digest": self.engine, "admitted_at": self.clock(),
-                    **named_pin(pin), "declared_start": 0,
+                    "provider": setting.provider,
+                    "engine_digest": self.engine,
+                    "admitted_at": self.clock(),
+                    **named_pin(pin),
+                    "declared_start": 0,
                 },
             )
         return Admitted(key, name)

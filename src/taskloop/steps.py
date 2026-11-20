@@ -48,12 +48,23 @@ class StepKind:
 
 
 PLAN: Final = StepKind(
-    Step.PLAN, plan_step.step_rules, plan_step.input_text, plan_step.ANSWER_SCHEMA, plan_step.decode, plan_step.artifact,
+    Step.PLAN,
+    plan_step.step_rules,
+    plan_step.input_text,
+    plan_step.ANSWER_SCHEMA,
+    plan_step.decode,
+    plan_step.artifact,
     plan_step.feedback,
 )
 IMPLEMENT: Final = StepKind(
-    Step.IMPLEMENT, implement_step.step_rules, implement_step.input_text, implement_step.ANSWER_SCHEMA, implement_step.decode,
-    implement_step.artifact, implement_step.feedback, environment=True,
+    Step.IMPLEMENT,
+    implement_step.step_rules,
+    implement_step.input_text,
+    implement_step.ANSWER_SCHEMA,
+    implement_step.decode,
+    implement_step.artifact,
+    implement_step.feedback,
+    environment=True,
 )
 KINDS: Final[Mapping[Step, StepKind]] = {each.step: each for each in (PLAN, IMPLEMENT)}  # the registry, one kind per `Step`
 CHECK: Final = "check"  # the checks step: no kind, its own tables (`check_store`)

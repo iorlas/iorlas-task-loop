@@ -112,8 +112,16 @@ class Observe:
 
 
 def launcher(db: Path, start: FakeStart, observe: Observe | None = None, now: float = 10) -> Launcher:
-    return Launcher(db, EvidenceFiles(db.parent), lambda: now, start, observe or Observe(), "/venv/bin/python",
-                    read_seconds=DEFAULT_GIT_READ_SECONDS, ids=NativeIds())
+    return Launcher(
+        db,
+        EvidenceFiles(db.parent),
+        lambda: now,
+        start,
+        observe or Observe(),
+        "/venv/bin/python",
+        read_seconds=DEFAULT_GIT_READ_SECONDS,
+        ids=NativeIds(),
+    )
 
 
 def stored(db: Path) -> tuple[object, ...]:
@@ -134,8 +142,9 @@ def register(db: Path, entry: EntryIdentity) -> None:
 
 def test_the_launchers_git_bound_is_in_the_entry_argv(admitted: Path) -> None:
     start = FakeStart()
-    built = Launcher(admitted, EvidenceFiles(admitted.parent), lambda: 10, start, Observe(),
-        "/venv/bin/python", read_seconds=45, ids=NativeIds())
+    built = Launcher(
+        admitted, EvidenceFiles(admitted.parent), lambda: 10, start, Observe(), "/venv/bin/python", read_seconds=45, ids=NativeIds()
+    )
     assert isinstance(built.launch("tasks", "tl-1", 30), Launched)
     argv = start.calls[0]["argv"]
     assert isinstance(argv, list) and argv[-3:] == ["45", "tasks", "tl-1"]
@@ -164,7 +173,6 @@ def test_launch_registers_before_the_permit_and_leaves_the_child_alone(admitted:
     assert result == Launched(KEY, (9, "new-start", "boot"))
     assert seen == [(None, None, None, "admitted"), (9, "new-start", "boot", "admitted")]
     assert stored(admitted) == seen[-1]
-
 
     call = start.calls[0]
     root = str(admitted.parent)
@@ -310,8 +318,16 @@ def test_composition_starts_with_the_released_registered_start(tmp_path: Path) -
 def test_a_relative_database_is_refused_before_any_read_registration_or_start(admitted: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(admitted.parent)
     start = FakeStart()
-    built = Launcher(Path(admitted.name), EvidenceFiles(admitted.parent), lambda: 10, start, Observe(), "/venv/bin/python",
-                     read_seconds=DEFAULT_GIT_READ_SECONDS, ids=NativeIds())
+    built = Launcher(
+        Path(admitted.name),
+        EvidenceFiles(admitted.parent),
+        lambda: 10,
+        start,
+        Observe(),
+        "/venv/bin/python",
+        read_seconds=DEFAULT_GIT_READ_SECONDS,
+        ids=NativeIds(),
+    )
     assert built.launch("tasks", "tl-1", 30) == LaunchRefused("database")
     assert start.calls == [] and stored(admitted) == (None, None, None, "admitted")
 
@@ -341,14 +357,20 @@ def test_the_registration_write_waits_briefly_and_a_busy_store_registers_nothing
 CHECKS = AttemptKey("checks", "checks-token", 1)
 
 
-@pytest.mark.parametrize(("mode", "result_type", "state"), [
-    ("popen", LaunchUnavailable, OperationState.FAILED),
-    ("exec_failed", LaunchUnavailable, OperationState.FAILED),
-    ("uncertain", LaunchUncertain, OperationState.UNCERTAIN),
-    ("exec", Launched, OperationState.COMPLETED),
-])
+@pytest.mark.parametrize(
+    ("mode", "result_type", "state"),
+    [
+        ("popen", LaunchUnavailable, OperationState.FAILED),
+        ("exec_failed", LaunchUnavailable, OperationState.FAILED),
+        ("uncertain", LaunchUncertain, OperationState.UNCERTAIN),
+        ("exec", Launched, OperationState.COMPLETED),
+    ],
+)
 def test_checks_start_measures_each_retry_and_suppresses_running_and_dispatched(
-    on_slot: Path, mode: str, result_type: type, state: OperationState,
+    on_slot: Path,
+    mode: str,
+    result_type: type,
+    state: OperationState,
 ) -> None:
     files, now = EvidenceFiles(on_slot.parent), [0.0]
 
@@ -359,7 +381,7 @@ def test_checks_start_measures_each_retry_and_suppresses_running_and_dispatched(
     app = checks_launcher(on_slot, start)
     app.timing = partial(files.observe_operation, clock=lambda: now[0], wall=lambda: 100.0, ids=NativeIds())
     assert isinstance(app.launch("tasks", "tl-1", 30), result_type)
-    first, = files.operations(CHECKS)
+    (first,) = files.operations(CHECKS)
     assert first.kind is OperationKind.CHECKS_START and first.state is state
     assert first.elapsed == (0.0 if mode == "popen" else 4.0)
     start.mode = "exec"
@@ -382,7 +404,9 @@ def test_checks_start_measures_each_retry_and_suppresses_running_and_dispatched(
 
 @pytest.mark.parametrize("broken_evidence", [False, True])
 def test_checks_interruption_and_evidence_failure_preserve_registration_and_retry(
-    on_slot: Path, monkeypatch: pytest.MonkeyPatch, broken_evidence: bool,
+    on_slot: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    broken_evidence: bool,
 ) -> None:
     files = EvidenceFiles(on_slot.parent)
 
@@ -412,8 +436,18 @@ def test_checks_interruption_and_evidence_failure_preserve_registration_and_retr
 
 
 def checks_launcher(db: Path, start: FakeStart, observe: Observe | None = None, now: float = 10) -> Launcher:
-    return Launcher(db, EvidenceFiles(db.parent), lambda: now, start, observe or Observe(), "/venv/bin/python", CheckStore,
-                    CHECK_ENTRY_MODULE, read_seconds=DEFAULT_GIT_READ_SECONDS, ids=NativeIds())
+    return Launcher(
+        db,
+        EvidenceFiles(db.parent),
+        lambda: now,
+        start,
+        observe or Observe(),
+        "/venv/bin/python",
+        CheckStore,
+        CHECK_ENTRY_MODULE,
+        read_seconds=DEFAULT_GIT_READ_SECONDS,
+        ids=NativeIds(),
+    )
 
 
 def checks_row(db: Path) -> tuple[object, ...]:
@@ -437,8 +471,14 @@ def test_a_checks_attempt_past_its_deadline_is_still_launched_to_conclude_expire
     assert checks_launcher(on_slot, FakeStart(), observe).launch("tasks", "tl-1", 30) == AlreadyRunning(CHECKS, (9, "new-start", "boot"))
 
 
-@pytest.mark.parametrize("change", ["UPDATE checks_attempt SET phase='concluded',conclusion='passed',concluded_at=1",
-                                    "UPDATE checks_attempt SET released_at=1,parked=slot_head,abandoned=1"], ids=["concluded", "released"])
+@pytest.mark.parametrize(
+    "change",
+    [
+        "UPDATE checks_attempt SET phase='concluded',conclusion='passed',concluded_at=1",
+        "UPDATE checks_attempt SET released_at=1,parked=slot_head,abandoned=1",
+    ],
+    ids=["concluded", "released"],
+)
 def test_only_an_admitted_unreleased_checks_attempt_launches(on_slot: Path, change: str) -> None:
     start = FakeStart()
     assert checks_launcher(on_slot, start).launch("tasks", "tl-9", 30) == LaunchRefused("absent")

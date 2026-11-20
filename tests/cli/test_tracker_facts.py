@@ -25,14 +25,35 @@ class Commented:
 
 def test_facts_map_every_field_and_default_the_absent_ones() -> None:
     full = Bead(
-        "t-1", "Widget", "open", priority=1, assignee="ann", labels=("auto", "ui"), description="why", design="how",
-        acceptance_criteria="done when", notes="n", dependencies=(Dep("t-0", "blocks"), Dep("t-p", "parent-child")),
-        created_at="2026-01-01T00:00:00Z", updated_at="2026-01-02T00:00:00Z",
+        "t-1",
+        "Widget",
+        "open",
+        priority=1,
+        assignee="ann",
+        labels=("auto", "ui"),
+        description="why",
+        design="how",
+        acceptance_criteria="done when",
+        notes="n",
+        dependencies=(Dep("t-0", "blocks"), Dep("t-p", "parent-child")),
+        created_at="2026-01-01T00:00:00Z",
+        updated_at="2026-01-02T00:00:00Z",
     )
     client = FakeTaskReadClient((full, Bead("t-2")))
     assert task_facts(client, "t-1") == TaskFacts(
-        "t-1", "Widget", "open", 1, ("auto", "ui"), "ann", "why", "how", "done when", "n", ("t-0", "t-p"),
-        "2026-01-01T00:00:00Z", "2026-01-02T00:00:00Z",
+        "t-1",
+        "Widget",
+        "open",
+        1,
+        ("auto", "ui"),
+        "ann",
+        "why",
+        "how",
+        "done when",
+        "n",
+        ("t-0", "t-p"),
+        "2026-01-01T00:00:00Z",
+        "2026-01-02T00:00:00Z",
     )
     assert task_facts(client, "t-2") == TaskFacts("t-2", "", "", None, (), None, "", "", "", "", (), "", "")
     assert task_facts(client, "t-9") is None
@@ -55,12 +76,16 @@ def test_ready_listing_is_the_trackers_order_for_the_label() -> None:
     assert ready_titles(client, "auto") == (ReadyTitle("t-3", "C", 2, "c"), ReadyTitle("t-1", "A", None, ""))
 
 
-@pytest.mark.parametrize("read", [
-    lambda: task_facts(FakeTaskReadClient(faults={"t-1": DOWN}), "t-1"),
-    lambda: task_titles(FakeTaskReadClient(faults={"t-1": DOWN}), ["t-1"]),
-    lambda: task_comments(Commented([], DOWN), "t-1"),
-    lambda: ready_titles(FakeTaskReadClient(ready_fault=DOWN), "auto"),
-], ids=["facts", "titles", "comments", "ready"])
+@pytest.mark.parametrize(
+    "read",
+    [
+        lambda: task_facts(FakeTaskReadClient(faults={"t-1": DOWN}), "t-1"),
+        lambda: task_titles(FakeTaskReadClient(faults={"t-1": DOWN}), ["t-1"]),
+        lambda: task_comments(Commented([], DOWN), "t-1"),
+        lambda: ready_titles(FakeTaskReadClient(ready_fault=DOWN), "auto"),
+    ],
+    ids=["facts", "titles", "comments", "ready"],
+)
 def test_a_failed_read_raises_and_is_never_empty(read: Callable[[], object]) -> None:
     with pytest.raises(TaskInspectionError) as raised:
         read()

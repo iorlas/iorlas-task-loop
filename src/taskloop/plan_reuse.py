@@ -33,8 +33,12 @@ class PlanMetadata(BaseModel):
         if len(values) != len(set(values)):
             raise ValueError("cited_paths must be unique")
         for value in values:
-            if (not value or value.startswith("/") or any(part in ("", ".", "..") for part in value.split("/"))
-                    or any(char in ":*?[]\\" or ord(char) < 32 or ord(char) == 127 for char in value)):
+            if (
+                not value
+                or value.startswith("/")
+                or any(part in ("", ".", "..") for part in value.split("/"))
+                or any(char in ":*?[]\\" or ord(char) < 32 or ord(char) == 127 for char in value)
+            ):
                 raise ValueError("cited_paths must be literal repository-relative files or folders")
         return values
 
@@ -64,12 +68,16 @@ class ReuseResult:
 
 
 def evaluate(
-    checkouts: Checkouts, root: Path, plan_path: str, *, git_dir: Path | None = None, source: str | None = None,
+    checkouts: Checkouts,
+    root: Path,
+    plan_path: str,
+    *,
+    git_dir: Path | None = None,
+    source: str | None = None,
 ) -> ReuseResult:
     """Read committed evidence at the selected source, defaulting to this worktree's HEAD."""
     location = PurePosixPath(plan_path)
-    if (len(location.parts) != 4 or location.parts[:2] != ("docs", "design")
-            or location.name != "plan.md" or str(location) != plan_path):
+    if len(location.parts) != 4 or location.parts[:2] != ("docs", "design") or location.name != "plan.md" or str(location) != plan_path:
         return ReuseResult(ReuseDecision.PLAN, ReuseReason.INVALID_PLAN, "The committed plan location is invalid.")
     try:
         repo = checkouts(root, git_dir=git_dir)
@@ -118,5 +126,7 @@ def _evaluate(repo: Repo, wt: Worktree, tip: Tree, rules: StepRules) -> ReuseRes
     if changed:
         return ReuseResult(ReuseDecision.PLAN, ReuseReason.CITED_PATHS_CHANGED, "Paths cited by the committed plan have changed.")
     return ReuseResult(
-        ReuseDecision.REUSE, ReuseReason.UNCHANGED, "The committed plan's cited paths are unchanged, with no newer saved work.",
+        ReuseDecision.REUSE,
+        ReuseReason.UNCHANGED,
+        "The committed plan's cited paths are unchanged, with no newer saved work.",
     )

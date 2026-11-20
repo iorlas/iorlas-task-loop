@@ -13,19 +13,69 @@ from textwrap import dedent
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2] / "src/taskloop"
-GIT_METHODS = frozenset({
-    "identity", "refs", "tree", "blob", "merge_base", "is_ancestor", "worktrees", "worktree_state", "worktree", "dirty", "diff",
-    "head", "branch", "remote_url", "stage", "stage_tracked", "record", "take_branch", "park", "push", "fetch", "sync",
-    "delete_remote_at", "push_refspecs", "push_request", "push_lease", "delete_branch", "clean", "reset", "squash",
-    "start_merge", "finish_merge", "abort_merge", "commit_tree", "update_ref",
-})
+GIT_METHODS = frozenset(
+    {
+        "identity",
+        "refs",
+        "tree",
+        "blob",
+        "merge_base",
+        "is_ancestor",
+        "worktrees",
+        "worktree_state",
+        "worktree",
+        "dirty",
+        "diff",
+        "head",
+        "branch",
+        "remote_url",
+        "stage",
+        "stage_tracked",
+        "record",
+        "take_branch",
+        "park",
+        "push",
+        "fetch",
+        "sync",
+        "delete_remote_at",
+        "push_refspecs",
+        "push_request",
+        "push_lease",
+        "delete_branch",
+        "clean",
+        "reset",
+        "squash",
+        "start_merge",
+        "finish_merge",
+        "abort_merge",
+        "commit_tree",
+        "update_ref",
+    }
+)
 TRACKER_METHODS = frozenset({"ready", "show", "inspect", "claim", "unclaim", "close", "comment", "labels", "titles", "discussion"})
 GIT_RECEIVERS = frozenset({"git", "repo", "repository", "worktree", "checkout", "checkouts", "views", "Repo", "Worktree", "Checkouts"})
 TRACKER_RECEIVERS = frozenset({"tracker", "tasks", "Tracker", "Tasks", "TaskReadClient", "TaskWriteClient"})
-CALLABLE_PORTS = frozenset({
-    "checkouts", "tasks", "claim", "unclaim", "discussion", "start", "spawn", "popen_registered", "run_registered",
-    "inspect_task", "collect_discussion", "Checkouts", "Tasks", "Claim", "Unclaim", "Start", "CollectDiscussion",
-})
+CALLABLE_PORTS = frozenset(
+    {
+        "checkouts",
+        "tasks",
+        "claim",
+        "unclaim",
+        "discussion",
+        "start",
+        "spawn",
+        "popen_registered",
+        "run_registered",
+        "inspect_task",
+        "collect_discussion",
+        "Checkouts",
+        "Tasks",
+        "Claim",
+        "Unclaim",
+        "Start",
+        "CollectDiscussion",
+    }
+)
 EXTERNAL_TYPES = GIT_RECEIVERS | TRACKER_RECEIVERS | CALLABLE_PORTS
 
 
@@ -141,7 +191,8 @@ class Boundaries(ast.NodeVisitor):
             return False
         name = self.reference(node.func).split(".")[-1]
         return name in {"begin", "begin_immediate"} or (
-            name == "_connection" and any(
+            name == "_connection"
+            and any(
                 keyword.arg == "write" and isinstance(keyword.value, ast.Constant) and keyword.value.value is True
                 for keyword in node.keywords
             )
@@ -165,9 +216,14 @@ class Boundaries(ast.NodeVisitor):
         receiver, method = set(parts[:-1]), parts[-1]
         if method in CALLABLE_PORTS:
             # Store.start is database work; Start and injected process ports spawn.
-            return (method != "start" or len(parts) == 1 or parts[:-1] == ["self"]
-                    or bool(receiver & EXTERNAL_TYPES) or parts[-2] in {"ports", "process", "launcher"}
-                    or parts[0] == "stream_proc")
+            return (
+                method != "start"
+                or len(parts) == 1
+                or parts[:-1] == ["self"]
+                or bool(receiver & EXTERNAL_TYPES)
+                or parts[-2] in {"ports", "process", "launcher"}
+                or parts[0] == "stream_proc"
+            )
         if receiver & GIT_RECEIVERS and method in GIT_METHODS:
             return True
         if receiver & TRACKER_RECEIVERS and method in TRACKER_METHODS:
@@ -191,40 +247,63 @@ def test_no_external_port_executes_in_a_write_transaction() -> None:
     assert not found, "\n".join(map(str, found))
 
 
-@pytest.mark.parametrize("boundary", [
-    "begin(con)", "begin_immediate(con)", "store.begin(con)", "self.begin(con)",
-    "self._connection(write=True)", "self.registering._connection(write=True)",
-])
-@pytest.mark.parametrize("call", [
-    "repo.refs([])", "repo.push('task')", "tracker.claim('task')", "self.checkouts(path)", "self.start(argv)",
-])
+@pytest.mark.parametrize(
+    "boundary",
+    [
+        "begin(con)",
+        "begin_immediate(con)",
+        "store.begin(con)",
+        "self.begin(con)",
+        "self._connection(write=True)",
+        "self.registering._connection(write=True)",
+    ],
+)
+@pytest.mark.parametrize(
+    "call",
+    [
+        "repo.refs([])",
+        "repo.push('task')",
+        "tracker.claim('task')",
+        "self.checkouts(path)",
+        "self.start(argv)",
+    ],
+)
 def test_external_calls_are_rejected_in_each_write_scope(boundary: str, call: str) -> None:
     source = f"def record():\n    with {boundary}:\n        {call}\n"
     assert violations(source, Path("slice/store.py")) == [Violation(Path("slice/store.py"), "record", 3, call.split("(", 1)[0])]
 
 
-@pytest.mark.parametrize("source, call", [
-    ("from sqlite_store import begin_immediate as tx\nwith tx(con):\n    repo.tree('HEAD')", "repo.tree"),
-    ("import sqlite_store as db\nwith db.begin_immediate(con):\n    tracker.show('task')", "tracker.show"),
-    ("tx = self.begin\nread = repo.refs\nwith tx(con):\n    read([])", "read"),
-    ("git = repo\nread = git.tree\nagain = read\nwith begin(con):\n    again('HEAD')", "again"),
-    ("from stream_proc import popen_registered as launch\nwith begin(con):\n    launch(argv)", "launch"),
-    ("from git_porcelain import Repo as Git\ndef save(r: Git):\n    with begin(con):\n        r.record('message')", "r.record"),
-    ("from taskloop.launch import Start\ndef save(launch: Start):\n    with begin(con):\n        launch(argv)", "launch"),
-    ("def save(claim: Claim):\n    with begin(con):\n        claim('task')", "claim"),
-    ("with begin(con), repo.worktree(path):\n    pass", "repo.worktree"),
-    ("with reading(), begin(con), ports.claim('task'):\n    pass", "ports.claim"),
-    ("with begin(con):\n    ports.start(argv)", "ports.start"),
-    ("start = ports.start\nwith begin(con):\n    start(argv)", "start"),
-    ("claim, read = tracker.claim, repo.refs\nwith begin(con):\n    read([])", "read"),
-    ("with begin(con):\n    with reading():\n        repo.diff()", "repo.diff"),
-    ("with begin(con):\n    def later(value=repo.tree('HEAD')):\n        pass", "repo.tree"),
-    ("with begin(con):\n    later = lambda value=tracker.show('task'): None", "tracker.show"),
-    ("class Writer:\n    def __init__(self, source: Repo):\n        self.retained = source\n"
-     "    def save(self):\n        with self.begin(con):\n            self.retained.fetch('origin')", "self.retained.fetch"),
-    ("class Writer:\n    def __init__(self, launch: Start):\n        self.go = launch\n"
-     "    def save(self):\n        with self.begin(con):\n            self.go(argv)", "self.go"),
-])
+@pytest.mark.parametrize(
+    "source, call",
+    [
+        ("from sqlite_store import begin_immediate as tx\nwith tx(con):\n    repo.tree('HEAD')", "repo.tree"),
+        ("import sqlite_store as db\nwith db.begin_immediate(con):\n    tracker.show('task')", "tracker.show"),
+        ("tx = self.begin\nread = repo.refs\nwith tx(con):\n    read([])", "read"),
+        ("git = repo\nread = git.tree\nagain = read\nwith begin(con):\n    again('HEAD')", "again"),
+        ("from stream_proc import popen_registered as launch\nwith begin(con):\n    launch(argv)", "launch"),
+        ("from git_porcelain import Repo as Git\ndef save(r: Git):\n    with begin(con):\n        r.record('message')", "r.record"),
+        ("from taskloop.launch import Start\ndef save(launch: Start):\n    with begin(con):\n        launch(argv)", "launch"),
+        ("def save(claim: Claim):\n    with begin(con):\n        claim('task')", "claim"),
+        ("with begin(con), repo.worktree(path):\n    pass", "repo.worktree"),
+        ("with reading(), begin(con), ports.claim('task'):\n    pass", "ports.claim"),
+        ("with begin(con):\n    ports.start(argv)", "ports.start"),
+        ("start = ports.start\nwith begin(con):\n    start(argv)", "start"),
+        ("claim, read = tracker.claim, repo.refs\nwith begin(con):\n    read([])", "read"),
+        ("with begin(con):\n    with reading():\n        repo.diff()", "repo.diff"),
+        ("with begin(con):\n    def later(value=repo.tree('HEAD')):\n        pass", "repo.tree"),
+        ("with begin(con):\n    later = lambda value=tracker.show('task'): None", "tracker.show"),
+        (
+            "class Writer:\n    def __init__(self, source: Repo):\n        self.retained = source\n"
+            "    def save(self):\n        with self.begin(con):\n            self.retained.fetch('origin')",
+            "self.retained.fetch",
+        ),
+        (
+            "class Writer:\n    def __init__(self, launch: Start):\n        self.go = launch\n"
+            "    def save(self):\n        with self.begin(con):\n            self.go(argv)",
+            "self.go",
+        ),
+    ],
+)
 def test_imports_receivers_and_retained_port_aliases_are_checked(source: str, call: str) -> None:
     found = violations(source, Path("nested/store.py"))
     assert len(found) == 1 and found[0].call == call
@@ -232,17 +311,20 @@ def test_imports_receivers_and_retained_port_aliases_are_checked(source: str, ca
     assert "external call" in str(found[0])
 
 
-@pytest.mark.parametrize("source", [
-    "with begin(con):\n    con.execute('UPDATE slot SET value=1')\n    store.record(con, encode(value), clock())",
-    "with self._connection(write=True) as con:\n    target.record_release(con, value, self.clock(), False)",
-    "with self._connection():\n    repo.refs([])",
-    "with self._connection(write=False):\n    tracker.show('task')",
-    "repo.fetch('origin')\nwith begin(con):\n    con.execute(sql)\nrepo.push('task')",
-    "with begin(con):\n    def later():\n        repo.push('task')\n    callback = lambda: tracker.claim('task')",
-    "with begin(con):\n    pass\nwith reading():\n    self.start(argv)",
-    "with begin(con):\n    def later():\n        pass\n    store.start(value)",
-    "with begin(con):\n    ports.store.start(value)\n    row = decode(con.execute(sql).fetchone())",
-    "with repo.worktree(path), begin(con):\n    con.execute(sql)",
-])
+@pytest.mark.parametrize(
+    "source",
+    [
+        "with begin(con):\n    con.execute('UPDATE slot SET value=1')\n    store.record(con, encode(value), clock())",
+        "with self._connection(write=True) as con:\n    target.record_release(con, value, self.clock(), False)",
+        "with self._connection():\n    repo.refs([])",
+        "with self._connection(write=False):\n    tracker.show('task')",
+        "repo.fetch('origin')\nwith begin(con):\n    con.execute(sql)\nrepo.push('task')",
+        "with begin(con):\n    def later():\n        repo.push('task')\n    callback = lambda: tracker.claim('task')",
+        "with begin(con):\n    pass\nwith reading():\n    self.start(argv)",
+        "with begin(con):\n    def later():\n        pass\n    store.start(value)",
+        "with begin(con):\n    ports.store.start(value)\n    row = decode(con.execute(sql).fetchone())",
+        "with repo.worktree(path), begin(con):\n    con.execute(sql)",
+    ],
+)
 def test_database_work_and_calls_outside_write_scopes_are_permitted(source: str) -> None:
     assert violations(source, Path("store.py")) == []

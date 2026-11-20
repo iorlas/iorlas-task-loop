@@ -49,8 +49,10 @@ HELD: Final = "SELECT 1 " + RESERVED + " AND c.phase='admitted'"
 # The result and block writes only, bound with the key twice: the checks attempt's fence or a pending land candidate's
 # (`land_store.HELD`). Also the checks and land part of `setup_store.HELD`.
 RESULT_HELD: Final = HELD + "\nUNION ALL " + CANDIDATE_HELD
-LOADED: Final = (f"SELECT {prefixed('c', CHECKS_LOADED)},a.backlog,a.task_id,a.repo_id,a.tracker_root,a.end_commit "
-                 "FROM checks_attempt c JOIN attempt a ON a.attempt_id=c.after_attempt_id")
+LOADED: Final = (
+    f"SELECT {prefixed('c', CHECKS_LOADED)},a.backlog,a.task_id,a.repo_id,a.tracker_root,a.end_commit "
+    "FROM checks_attempt c JOIN attempt a ON a.attempt_id=c.after_attempt_id"
+)
 LATEST_BLOCK: Final = "(SELECT coalesce(max(block),0) FROM check_result WHERE attempt_id=?)"
 
 
@@ -193,24 +195,55 @@ def _checks(row: tuple[object, ...]) -> ChecksRow:
     if phase is None:
         raise StoreUnavailable("Malformed checks phase")
     return ChecksRow(
-        AttemptKey(as_text(row[0]), as_text(row[1]), as_int(row[2])), as_text(row[3]), as_int(row[4]), as_text(row[5]),
-        as_text(row[6]), as_text(row[7]), as_nullable_text(row[8]), stored_required(row[9]), as_nullable_text(row[10]),
-        stored_real(row[11]), entry, phase, as_int(row[16]), as_nullable_text(row[17]), as_int(row[18]), stored_word(row[19], OUTCOMES),
-        as_nullable_text(row[20]), stored_nullable_real(row[21]), stored_nullable_real(row[22]), as_nullable_text(row[23]),
+        AttemptKey(as_text(row[0]), as_text(row[1]), as_int(row[2])),
+        as_text(row[3]),
+        as_int(row[4]),
+        as_text(row[5]),
+        as_text(row[6]),
+        as_text(row[7]),
+        as_nullable_text(row[8]),
+        stored_required(row[9]),
+        as_nullable_text(row[10]),
+        stored_real(row[11]),
+        entry,
+        phase,
+        as_int(row[16]),
+        as_nullable_text(row[17]),
+        as_int(row[18]),
+        stored_word(row[19], OUTCOMES),
+        as_nullable_text(row[20]),
+        stored_nullable_real(row[21]),
+        stored_nullable_real(row[22]),
+        as_nullable_text(row[23]),
         bool(as_int(row[24])),
-        as_text(row[25]), as_text(row[26]), as_text(row[27]), as_text(row[28]), as_text(row[29]),
+        as_text(row[25]),
+        as_text(row[26]),
+        as_text(row[27]),
+        as_text(row[28]),
+        as_text(row[29]),
     )
 
 
 def _result(row: tuple[object, ...]) -> ResultRow:
-    return ResultRow(as_int(row[0]), as_int(row[1]), as_text(row[2]), as_nullable_text(row[3]), as_nullable_int(row[4]), _process(row[5:9]),
-                     stored_real(row[9]), stored_nullable_real(row[10]), as_nullable_int(row[11]), _conclusion(row[12]))
+    return ResultRow(
+        as_int(row[0]),
+        as_int(row[1]),
+        as_text(row[2]),
+        as_nullable_text(row[3]),
+        as_nullable_int(row[4]),
+        _process(row[5:9]),
+        stored_real(row[9]),
+        stored_nullable_real(row[10]),
+        as_nullable_int(row[11]),
+        _conclusion(row[12]),
+    )
 
 
 def latest_results(con: sqlite3.Connection, attempt_id: str) -> tuple[ResultRow, ...]:
     """The latest block's results, by position (empty before the first)."""
-    rows = con.execute(f"SELECT {CHECK_RESULT} FROM check_result WHERE attempt_id=? AND block={LATEST_BLOCK} ORDER BY position",
-                       (attempt_id, attempt_id)).fetchall()
+    rows = con.execute(
+        f"SELECT {CHECK_RESULT} FROM check_result WHERE attempt_id=? AND block={LATEST_BLOCK} ORDER BY position", (attempt_id, attempt_id)
+    ).fetchall()
     return tuple(_result(row) for row in rows)
 
 
@@ -233,8 +266,16 @@ def insert(con: sqlite3.Connection, admitted: ChecksAdmitted) -> None:
     taken = "SELECT 1 FROM checks_attempt WHERE after_attempt_id=? AND number=?"
     if con.execute(taken, (admitted.after, admitted.number)).fetchone() is not None:
         raise StoreRefused("task_attempted")
-    values = (*astuple(admitted.key), admitted.after, admitted.number, admitted.slot, admitted.slot_head, admitted.target,
-              required_json(admitted.required), admitted.deadline)
+    values = (
+        *astuple(admitted.key),
+        admitted.after,
+        admitted.number,
+        admitted.slot,
+        admitted.slot_head,
+        admitted.target,
+        required_json(admitted.required),
+        admitted.deadline,
+    )
     con.execute(f"INSERT INTO checks_attempt ({CHECKS_ADMITTED}) VALUES ({marks(CHECKS_ADMITTED)})", values)
 
 
@@ -243,7 +284,12 @@ def _landing(landed: object, landing: object, closed: object) -> Recorded | None
 
 
 def record_release(
-    con: sqlite3.Connection, key: AttemptKey, read: tuple[int, str], parked: str, now: float, abandoned: bool,
+    con: sqlite3.Connection,
+    key: AttemptKey,
+    read: tuple[int, str],
+    parked: str,
+    now: float,
+    abandoned: bool,
 ) -> Recorded:
     """The release's record, in the release's (immediate) transaction: fenced on the `rev` and phase its stop proof
     `read`, the held reservation and no earlier release; settled (not `abandoned`) only once concluded; an abandon also
@@ -254,8 +300,9 @@ def record_release(
     landing = _landing(fenced[3], fenced[4], fenced[5]) if abandoned else None
     if landing is not None:
         return landing
-    con.execute("UPDATE checks_attempt SET released_at=?,parked=?,abandoned=? WHERE attempt_id=?",
-                (now, parked, int(abandoned), key.attempt_id))
+    con.execute(
+        "UPDATE checks_attempt SET released_at=?,parked=?,abandoned=? WHERE attempt_id=?", (now, parked, int(abandoned), key.attempt_id)
+    )
     return "abandoned" if abandoned else "released"
 
 
@@ -268,9 +315,14 @@ class CheckStore(StoreConnection):
     def owns_entry(self, key: AttemptKey, identity: Identity) -> bool:
         """Whether this process is the registered entry of this exact attempt; no unrelated execution reads."""
         with self._connection() as con:
-            return con.execute("SELECT 1 FROM checks_attempt WHERE attempt_id=? AND dispatch_token=? AND generation=? "
-                               "AND entry_pid=? AND entry_start=? AND entry_boot=?",
-                               (*astuple(key), identity.pid, identity.start, identity.boot)).fetchone() is not None
+            return (
+                con.execute(
+                    "SELECT 1 FROM checks_attempt WHERE attempt_id=? AND dispatch_token=? AND generation=? "
+                    "AND entry_pid=? AND entry_start=? AND entry_boot=?",
+                    (*astuple(key), identity.pid, identity.start, identity.boot),
+                ).fetchone()
+                is not None
+            )
 
     def drain_processes(self) -> tuple[Owner, ...]:
         """Every recorded execution identity, including historical and already concluded work."""
@@ -297,7 +349,9 @@ class CheckStore(StoreConnection):
                 """SELECT attempt_id,dispatch_token,generation,CASE WHEN released_at IS NULL THEN phase ELSE 'released' END,
                 entry_pid,entry_start,entry_boot FROM checks_attempt
                 WHERE after_attempt_id=(SELECT attempt_id FROM attempt WHERE adapter='beads' AND backlog=? AND task_id=?
-                ORDER BY seq DESC LIMIT 1) ORDER BY number DESC LIMIT 1""", (backlog, task_id)).fetchone()
+                ORDER BY seq DESC LIMIT 1) ORDER BY number DESC LIMIT 1""",
+                (backlog, task_id),
+            ).fetchone()
         if row is None:
             return None
         return AttemptKey(as_text(row[0]), as_text(row[1]), as_int(row[2])), as_text(row[3]), stored_entry(row[4:7])
@@ -323,15 +377,19 @@ class CheckStore(StoreConnection):
             return latest_results(con, key.attempt_id)
 
     def register_entry(
-        self, key: AttemptKey, entry: EntryIdentity, now: float, replacing: Replaced | None = None, renewed: float | None = None,
+        self,
+        key: AttemptKey,
+        entry: EntryIdentity,
+        now: float,
+        replacing: Replaced | None = None,
+        renewed: float | None = None,
     ) -> Literal["accepted", "conflict", "refused"]:
         """`AttemptStore.register_entry`'s rule (one winner while `admitted`; a replacement names the exact stored
         identity; a replacement of another boot's entry renews the deadline to the later of the two, once per reboot)
         without its deadline refusal: an entry past the deadline runs nothing and concludes `expired`. `now` is unused."""
         del now
         with self._connection(write=True) as con:
-            if blocked(con) and not any(action.kind is ActionKind.DISPATCH and action.subject == key.attempt_id
-                                        for action in pending(con)):
+            if blocked(con) and not any(action.kind is ActionKind.DISPATCH and action.subject == key.attempt_id for action in pending(con)):
                 return "refused"
             row = con.execute("SELECT c.phase,c.deadline,c.entry_pid,c.entry_start,c.entry_boot " + RESERVED, astuple(key)).fetchone()
             if row is None:
@@ -342,8 +400,10 @@ class CheckStore(StoreConnection):
                 deadline = max(deadline, renewed)
             if row[0] != "admitted" or entry == stored or stored != (None if replacing is None else replacing.identity):
                 return "conflict"
-            con.execute("UPDATE checks_attempt SET entry_pid=?,entry_start=?,entry_boot=?,deadline=?,rev=rev+1 WHERE attempt_id=?",
-                        (*entry, deadline, key.attempt_id))
+            con.execute(
+                "UPDATE checks_attempt SET entry_pid=?,entry_start=?,entry_boot=?,deadline=?,rev=rev+1 WHERE attempt_id=?",
+                (*entry, deadline, key.attempt_id),
+            )
             return "accepted"
 
     def _held(self, con: sqlite3.Connection, key: AttemptKey) -> None:
@@ -391,19 +451,30 @@ class CheckStore(StoreConnection):
         with self._connection(write=True) as con:
             self._result_held(con, key)
             latest = as_int(con.execute(f"SELECT {LATEST_BLOCK}", (key.attempt_id,)).fetchone()[0])
-            taken = con.execute("SELECT 1 FROM check_result WHERE attempt_id=? AND block=? AND (position=? OR name=?)",
-                                (key.attempt_id, block, position, name)).fetchone()
+            taken = con.execute(
+                "SELECT 1 FROM check_result WHERE attempt_id=? AND block=? AND (position=? OR name=?)",
+                (key.attempt_id, block, position, name),
+            ).fetchone()
             if block not in (latest, latest + 1) or taken is not None:
                 raise StoreRefused("check_changed")
             con.execute(
                 """INSERT INTO check_result (block,position,name,argv_digest,timeout,started_at,ended_at,conclusion,
-                attempt_id,dispatch_token,generation) VALUES (?,?,?,?,?,?,?,?,?,?,?)""", (*values, *astuple(key)))
+                attempt_id,dispatch_token,generation) VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
+                (*values, *astuple(key)),
+            )
 
     def registered(self, key: AttemptKey, block: int, position: int, process: OwnedProcess) -> None:
         """The check command's identity, committed before it executes (the registered start's callback); once."""
         with self.registering._connection(write=True) as con:
-            self._changed(con, key, block, position, "pid=?,pgid=?,proc_start=?,boot=?",
-                          (process.pid, process.pgid, process.start, process.boot), " AND pid IS NULL")
+            self._changed(
+                con,
+                key,
+                block,
+                position,
+                "pid=?,pgid=?,proc_start=?,boot=?",
+                (process.pid, process.pgid, process.start, process.boot),
+                " AND pid IS NULL",
+            )
 
     def finish(self, key: AttemptKey, block: int, position: int, conclusion: CommandConclusion, rc: int | None, now: float) -> None:
         """A started check's conclusion (never `undefined`, which only `undefined` writes); `interrupted` is the
@@ -413,12 +484,15 @@ class CheckStore(StoreConnection):
         with self._connection(write=True) as con:
             self._changed(con, key, block, position, "conclusion=?,rc=?,ended_at=?", (encode(conclusion), rc, now), "")
 
-    def _changed(self, con: sqlite3.Connection, key: AttemptKey, block: int, position: int, assignments: str,
-                 values: tuple[object, ...], also: str) -> None:
+    def _changed(
+        self, con: sqlite3.Connection, key: AttemptKey, block: int, position: int, assignments: str, values: tuple[object, ...], also: str
+    ) -> None:
         self._result_held(con, key)
         changed = con.execute(
             f"UPDATE check_result SET {assignments} WHERE attempt_id=? AND block=? AND position=? AND conclusion IS NULL"
-            f" AND block={LATEST_BLOCK}{also}", (*values, key.attempt_id, block, position, key.attempt_id)).rowcount
+            f" AND block={LATEST_BLOCK}{also}",
+            (*values, key.attempt_id, block, position, key.attempt_id),
+        ).rowcount
         if changed != 1:
             raise StoreRefused("check_changed")
 
@@ -430,19 +504,24 @@ class CheckStore(StoreConnection):
             con.execute(
                 """UPDATE checks_attempt SET phase='concluded',conclusion=?,reason=?,concluded_at=?,
                 target_seen=coalesce(?,target_seen),refusal=NULL,refusals=0,rev=rev+1 WHERE attempt_id=?""",
-                (conclusion, reason, now, seen, key.attempt_id))
+                (conclusion, reason, now, seen, key.attempt_id),
+            )
 
     def abandon_released(self, key: AttemptKey) -> Recorded:
         """The abandon of an already released checks attempt: the latest one of its implement attempt, not abandoned,
         with no delivered, slot-holding or pushable land candidate (`NOT LANDING`), flipped in one fenced write. `landed`
         or `landing` when a candidate refuses it, `changed` when another call changed it first or it is not the latest."""
         with self._connection(write=True) as con:
-            if con.execute(
-                f"""UPDATE checks_attempt SET abandoned=1 WHERE attempt_id=? AND dispatch_token=? AND generation=?
+            if (
+                con.execute(
+                    f"""UPDATE checks_attempt SET abandoned=1 WHERE attempt_id=? AND dispatch_token=? AND generation=?
                 AND released_at IS NOT NULL AND abandoned=0 AND number=(SELECT max(d.number) FROM checks_attempt d
                 WHERE d.after_attempt_id=checks_attempt.after_attempt_id)
                 AND NOT EXISTS (SELECT 1 FROM checks_attempt c WHERE c.attempt_id=checks_attempt.attempt_id AND {LANDING})""",
-                astuple(key)).rowcount == 1:
+                    astuple(key),
+                ).rowcount
+                == 1
+            ):
                 return "abandoned"
             found = con.execute(f"SELECT {LANDED},{LANDING},{CLOSED} FROM checks_attempt c{KEYED}", astuple(key)).fetchone()
             return ("changed" if found is None else _landing(found[0], found[1], found[2])) or "changed"

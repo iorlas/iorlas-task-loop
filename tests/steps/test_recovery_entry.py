@@ -35,7 +35,9 @@ ENTRY_OWNER = OwnedProcess(30, 30, "owner", "boot")
 
 
 def entry_apps(
-    con: sqlite3.Connection, surroundings: AttemptSurroundings, execution: NativeRun,
+    con: sqlite3.Connection,
+    surroundings: AttemptSurroundings,
+    execution: NativeRun,
 ) -> tuple[Attempts, Continuation, Intent]:
     attempts = prepared(con, surroundings, execution)
     app = recovery(con)
@@ -46,22 +48,41 @@ def entry_apps(
 
 
 def run_entry(
-    tmp_path: Path, attempts: Attempts, continuation: Continuation, lines: list[str], beat: Callable[[], Beat],
-    *, identity: OwnedProcess = ENTRY_OWNER,
+    tmp_path: Path,
+    attempts: Attempts,
+    continuation: Continuation,
+    lines: list[str],
+    beat: Callable[[], Beat],
+    *,
+    identity: OwnedProcess = ENTRY_OWNER,
 ) -> int:
     def heartbeat(root: str, task: str) -> Callable[[], Beat]:
         assert (root, task) == ("/tracker", "tl-1")
         return beat
 
-    return enter(EntryArgs(tmp_path / "factory.db", tmp_path, 600, "tasks", "tl-1"), lambda _db, _root: attempts,
-                 lambda _pid: ProcessObservation("matching", identity), lambda: 10, lambda _seconds: None, lines.append,
-                 lambda _worker: True, heartbeat, threading.Event(), lambda _root, _task: True, attempts.checkouts,
-                 lambda: continuation)
+    return enter(
+        EntryArgs(tmp_path / "factory.db", tmp_path, 600, "tasks", "tl-1"),
+        lambda _db, _root: attempts,
+        lambda _pid: ProcessObservation("matching", identity),
+        lambda: 10,
+        lambda _seconds: None,
+        lines.append,
+        lambda _worker: True,
+        heartbeat,
+        threading.Event(),
+        lambda _root, _task: True,
+        attempts.checkouts,
+        lambda: continuation,
+    )
 
 
 @pytest.mark.parametrize("busy_capture", [False, True])
 def test_saved_owner_continues_under_custody_and_a_renewed_claim(
-    con: sqlite3.Connection, surroundings: AttemptSurroundings, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, busy_capture: bool,
+    con: sqlite3.Connection,
+    surroundings: AttemptSurroundings,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    busy_capture: bool,
 ) -> None:
     execution = NativeRun()
     attempts, continuation, intent = entry_apps(con, surroundings, execution)
@@ -111,7 +132,10 @@ def test_saved_owner_continues_under_custody_and_a_renewed_claim(
 
 @pytest.mark.parametrize("refusal", ["identity", "revision", "session", "claim_lost", "claim_fault"])
 def test_changed_authority_and_failed_initial_renewal_run_no_harness(
-    con: sqlite3.Connection, surroundings: AttemptSurroundings, tmp_path: Path, refusal: str,
+    con: sqlite3.Connection,
+    surroundings: AttemptSurroundings,
+    tmp_path: Path,
+    refusal: str,
 ) -> None:
     execution = NativeRun()
     attempts, continuation, _intent = entry_apps(con, surroundings, execution)
@@ -134,7 +158,10 @@ def test_changed_authority_and_failed_initial_renewal_run_no_harness(
 
 @pytest.mark.parametrize("ending", ["accepted", "conflict", "deadline"])
 def test_capture_retries_the_same_execution_without_another_harness(
-    con: sqlite3.Connection, surroundings: AttemptSurroundings, monkeypatch: pytest.MonkeyPatch, ending: str,
+    con: sqlite3.Connection,
+    surroundings: AttemptSurroundings,
+    monkeypatch: pytest.MonkeyPatch,
+    ending: str,
 ) -> None:
     execution = NativeRun()
     attempts, continuation, intent = entry_apps(con, surroundings, execution)

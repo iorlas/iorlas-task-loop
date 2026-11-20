@@ -44,15 +44,22 @@ class CheckRepeatStore(StoreConnection):
         """Current, done, still claimed, no hold or active/delivered land; the latest released failure below the cap."""
         attempts = AttemptStore(self.connect, self.begin)
         with self._connection() as con:
-            task = con.execute("SELECT backlog,task_id FROM attempt WHERE attempt_id=? AND dispatch_token=? AND generation=?",
-                               (previous.attempt_id, previous.dispatch_token, previous.reservation_generation)).fetchone()
+            task = con.execute(
+                "SELECT backlog,task_id FROM attempt WHERE attempt_id=? AND dispatch_token=? AND generation=?",
+                (previous.attempt_id, previous.dispatch_token, previous.reservation_generation),
+            ).fetchone()
         rows = () if task is None else attempts.attempts(as_text(task[0]), as_text(task[1]))
         if not rows or rows[0].key != previous:
             return None
         current = rows[0]
-        if (decode_step(current.step) is not Step.IMPLEMENT or current.release is None or current.release.claim != "kept"
-                or current.published is None or current.published.commit != current.end_commit
-                or not succeeded(collect(attempts, previous))):
+        if (
+            decode_step(current.step) is not Step.IMPLEMENT
+            or current.release is None
+            or current.release.claim != "kept"
+            or current.published is None
+            or current.published.commit != current.end_commit
+            or not succeeded(collect(attempts, previous))
+        ):
             return None
         checks = CheckStore(self.connect, self.begin)
         latest = checks.of_attempt(previous.attempt_id)
@@ -85,8 +92,17 @@ class CheckRepeatStore(StoreConnection):
         with self._connection() as con:
             return issued(con, RepoId(repo_id), tuple(each.name for each in free)) + 1
 
-    def admit(self, previous: AttemptKey, evidence: FailedCheck, key: AttemptKey, ref: FileRef,
-              free: tuple[Free, ...], deadline: float, engine: str, admitted_at: float) -> Admitted | AdmitRefused:
+    def admit(
+        self,
+        previous: AttemptKey,
+        evidence: FailedCheck,
+        key: AttemptKey,
+        ref: FileRef,
+        free: tuple[Free, ...],
+        deadline: float,
+        engine: str,
+        admitted_at: float,
+    ) -> Admitted | AdmitRefused:
         """Fenced source, current attempt, completed block, cap, release, hold and successor uniqueness under one lock."""
         with self._connection(write=True) as con:
             if blocked(con):
@@ -106,17 +122,42 @@ class CheckRepeatStore(StoreConnection):
             if choices is None:
                 raise StoreRefused("choices")
             reserve(con, repo_id, name, key)
-            insert_attempt(con, {
-                "attempt_id": key.attempt_id, "dispatch_token": key.dispatch_token, "generation": key.reservation_generation,
-                "step": Step.IMPLEMENT, "adapter": "beads", "backlog": row.backlog, "task_id": row.task_id,
-                "tracker_root": source.tracker_root, "repo_id": repo_id, "slot": name,
-                "input_path": ref.path, "input_digest": ref.digest, "schema_version": 1,
-                "model": choices.model, "effort": choices.effort, "access_policy": encode_policy(choices.access),
-                "compaction_token_limit": choices.compaction_token_limit,
-                "harness": choices.harness, "provider": choices.provider, "deadline": deadline,
-                "engine_digest": engine, "admitted_at": admitted_at, **copied_pin(con, previous.attempt_id), "declared_start": 0,
-                "number": row.number + 1, "seq": row.seq + 1, "previous_attempt_id": previous.attempt_id,
-                "repeat_reason": CheckRepeatReason.FAILED_CHECK.value, "repeat_listing": None,
-                "source_checks_id": source.key.attempt_id, "slot_head": head, "after_commit": source.commit, "label": row.label,
-            })
+            insert_attempt(
+                con,
+                {
+                    "attempt_id": key.attempt_id,
+                    "dispatch_token": key.dispatch_token,
+                    "generation": key.reservation_generation,
+                    "step": Step.IMPLEMENT,
+                    "adapter": "beads",
+                    "backlog": row.backlog,
+                    "task_id": row.task_id,
+                    "tracker_root": source.tracker_root,
+                    "repo_id": repo_id,
+                    "slot": name,
+                    "input_path": ref.path,
+                    "input_digest": ref.digest,
+                    "schema_version": 1,
+                    "model": choices.model,
+                    "effort": choices.effort,
+                    "access_policy": encode_policy(choices.access),
+                    "compaction_token_limit": choices.compaction_token_limit,
+                    "harness": choices.harness,
+                    "provider": choices.provider,
+                    "deadline": deadline,
+                    "engine_digest": engine,
+                    "admitted_at": admitted_at,
+                    **copied_pin(con, previous.attempt_id),
+                    "declared_start": 0,
+                    "number": row.number + 1,
+                    "seq": row.seq + 1,
+                    "previous_attempt_id": previous.attempt_id,
+                    "repeat_reason": CheckRepeatReason.FAILED_CHECK.value,
+                    "repeat_listing": None,
+                    "source_checks_id": source.key.attempt_id,
+                    "slot_head": head,
+                    "after_commit": source.commit,
+                    "label": row.label,
+                },
+            )
         return Admitted(key, name)

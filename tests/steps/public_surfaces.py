@@ -30,8 +30,10 @@ def declaration(value: object) -> dict[str, object]:
         elif is_dataclass(value):
             result["fields"] = {field.name: str(field.type) for field in fields(value)}
         result["methods"] = {
-            name: str(inspect.signature(member)) for name, member in inspect.getmembers(value)
-            if not name.startswith("_") and (inspect.isfunction(member) or inspect.ismethod(member))
+            name: str(inspect.signature(member))
+            for name, member in inspect.getmembers(value)
+            if not name.startswith("_")
+            and (inspect.isfunction(member) or inspect.ismethod(member))
             and (not issubclass(value, BaseModel) or name not in dir(BaseModel) or name in value.__dict__)
         }
         return result

@@ -58,8 +58,15 @@ def failed(surroundings: AttemptSurroundings) -> Generator[sqlite3.Connection]:
 
 
 def operation(con: sqlite3.Connection, surroundings: AttemptSurroundings, processes: Processes | None = None) -> AnswerRepair:
-    return AnswerRepair(AnswerRepairStore(lambda: con), EvidenceFiles(surroundings.tmp), processes or Processes(),
-                        hold, lambda: 10, ids=NativeIds(), engine=ENGINE)
+    return AnswerRepair(
+        AnswerRepairStore(lambda: con),
+        EvidenceFiles(surroundings.tmp),
+        processes or Processes(),
+        hold,
+        lambda: 10,
+        ids=NativeIds(),
+        engine=ENGINE,
+    )
 
 
 def successor(con: sqlite3.Connection, surroundings: AttemptSurroundings) -> AttemptKey:
@@ -69,7 +76,8 @@ def successor(con: sqlite3.Connection, surroundings: AttemptSurroundings) -> Att
 
 
 def test_repair_retains_settings_claim_slot_deadline_work_and_evidence(
-    failed: sqlite3.Connection, surroundings: AttemptSurroundings,
+    failed: sqlite3.Connection,
+    surroundings: AttemptSurroundings,
 ) -> None:
     store = AttemptStore(lambda: failed)
     before = store.load(KEY)
@@ -105,13 +113,16 @@ def test_repair_retains_settings_claim_slot_deadline_work_and_evidence(
 
 
 def test_restart_and_lost_admission_acknowledgement_find_one_saved_successor(
-    failed: sqlite3.Connection, surroundings: AttemptSurroundings, monkeypatch: pytest.MonkeyPatch,
+    failed: sqlite3.Connection,
+    surroundings: AttemptSurroundings,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     repair = operation(failed, surroundings)
     admit = repair.store.admit
 
-    def lost(expected: AttemptRecord, execution: StoredExecution, context: RepairContext,
-             key: AttemptKey, ref: FileRef, now: float, engine: str) -> RepairResult:
+    def lost(
+        expected: AttemptRecord, execution: StoredExecution, context: RepairContext, key: AttemptKey, ref: FileRef, now: float, engine: str
+    ) -> RepairResult:
         admit(expected, execution, context, key, ref, now, engine)
         raise StoreUnavailable("admission acknowledgement lost")
 
@@ -163,15 +174,18 @@ def test_two_admitters_converge_on_one_successor(failed: sqlite3.Connection, sur
     assert operation(failed, surroundings).admit(KEY).key == next(iter(keys))
 
 
-@pytest.mark.parametrize("change", [
-    "UPDATE attempt SET deadline=10",
-    "UPDATE attempt SET session_conflict=1",
-    "UPDATE execution SET session_state='pending'",
-    "UPDATE execution SET session='different'",
-    "UPDATE reservation SET generation=2",
-    STUCK_SQL,
-    "INSERT INTO drain_state VALUES(1,1,'draining')",
-])
+@pytest.mark.parametrize(
+    "change",
+    [
+        "UPDATE attempt SET deadline=10",
+        "UPDATE attempt SET session_conflict=1",
+        "UPDATE execution SET session_state='pending'",
+        "UPDATE execution SET session='different'",
+        "UPDATE reservation SET generation=2",
+        STUCK_SQL,
+        "INSERT INTO drain_state VALUES(1,1,'draining')",
+    ],
+)
 def test_ineligible_work_is_not_repaired(failed: sqlite3.Connection, surroundings: AttemptSurroundings, change: str) -> None:
     failed.execute(change)
     result = operation(failed, surroundings).admit(KEY)
@@ -189,7 +203,9 @@ def test_process_absence_is_required(failed: sqlite3.Connection, surroundings: A
 
 
 def test_expiration_and_changes_after_process_observation_are_rechecked(
-    failed: sqlite3.Connection, surroundings: AttemptSurroundings, monkeypatch: pytest.MonkeyPatch,
+    failed: sqlite3.Connection,
+    surroundings: AttemptSurroundings,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     repair = operation(failed, surroundings)
     put = repair.files.put_input
@@ -208,7 +224,9 @@ def test_expiration_and_changes_after_process_observation_are_rechecked(
 
 
 def test_registration_lost_acknowledgement_requires_reconciliation(
-    failed: sqlite3.Connection, surroundings: AttemptSurroundings, monkeypatch: pytest.MonkeyPatch,
+    failed: sqlite3.Connection,
+    surroundings: AttemptSurroundings,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     key = successor(failed, surroundings)
     run = fake(refs=("saved",))
@@ -231,7 +249,9 @@ def test_registration_lost_acknowledgement_requires_reconciliation(
 
 
 def test_returned_execution_capture_retry_never_invokes_another_agent(
-    failed: sqlite3.Connection, surroundings: AttemptSurroundings, monkeypatch: pytest.MonkeyPatch,
+    failed: sqlite3.Connection,
+    surroundings: AttemptSurroundings,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     key = successor(failed, surroundings)
     run = fake(refs=("saved",))
@@ -251,9 +271,11 @@ def test_returned_execution_capture_retry_never_invokes_another_agent(
     assert saved.execution.facts.tokens == (8, None, 3) and len(run.calls) == 1
 
 
-@pytest.mark.parametrize("context", ['{}', '{"session":"-unsafe","base_commit":"b","failure":{}}'])
+@pytest.mark.parametrize("context", ["{}", '{"session":"-unsafe","base_commit":"b","failure":{}}'])
 def test_malformed_saved_context_cannot_launch(
-    failed: sqlite3.Connection, surroundings: AttemptSurroundings, context: str,
+    failed: sqlite3.Connection,
+    surroundings: AttemptSurroundings,
+    context: str,
 ) -> None:
     key = successor(failed, surroundings)
     store = AttemptStore(lambda: failed)
@@ -264,7 +286,9 @@ def test_malformed_saved_context_cannot_launch(
 
 
 def test_capture_lost_acknowledgement_reopens_and_collects_saved_facts(
-    failed: sqlite3.Connection, surroundings: AttemptSurroundings, monkeypatch: pytest.MonkeyPatch,
+    failed: sqlite3.Connection,
+    surroundings: AttemptSurroundings,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     key = successor(failed, surroundings)
     run = fake(refs=("saved",))
@@ -272,9 +296,16 @@ def test_capture_lost_acknowledgement_reopens_and_collects_saved_facts(
     assert attempts.store.register_entry(key, ENTRY, 10) == "accepted"
     capture = attempts.store.capture
 
-    def lost(admission: Admission, worker: Worker | None, facts: ExecutionFacts, evidence: Evidence,
-             session_state: Literal["complete", "pending", "conflict", "fault"], callback: Callback | None = None,
-             *, now: float) -> None:
+    def lost(
+        admission: Admission,
+        worker: Worker | None,
+        facts: ExecutionFacts,
+        evidence: Evidence,
+        session_state: Literal["complete", "pending", "conflict", "fault"],
+        callback: Callback | None = None,
+        *,
+        now: float,
+    ) -> None:
         capture(admission, worker, facts, evidence, session_state, callback, now=now)
         raise StoreUnavailable("capture acknowledgement lost")
 
@@ -304,8 +335,7 @@ def test_repair_restart_never_renews_the_original_deadline(failed: sqlite3.Conne
     record = store.load(key)
     assert record is not None and record.admission.deadline == 100
     assert store.renew(failed, record, 2000) == record
-    assert store.register_entry(key, (18, "later", "later-boot"), 100,
-                                Replaced(rebooted, "gone"), renewed=2000) == "refused"
+    assert store.register_entry(key, (18, "later", "later-boot"), 100, Replaced(rebooted, "gone"), renewed=2000) == "refused"
     run = fake(refs=("saved",))
     assert app(failed, surroundings, run).execute(key, rebooted).execution is not None
     failed.execute("DELETE FROM execution WHERE attempt_id=?", (key.attempt_id,))
@@ -331,8 +361,16 @@ def test_implement_repair_preserves_work_without_running_setup(failed: sqlite3.C
 
 def test_repairs_preserve_commit_repeat_numbers_and_cap(failed: sqlite3.Connection, surroundings: AttemptSurroundings) -> None:
     repair = operation(failed, surroundings)
-    chain = ChainAdmission(repair.store.connect, repair.store.begin, repair.files, lambda: 10,
-                           surroundings.checkouts, surroundings.files, ids=NativeIds(), engine=ENGINE)
+    chain = ChainAdmission(
+        repair.store.connect,
+        repair.store.begin,
+        repair.files,
+        lambda: 10,
+        surroundings.checkouts,
+        surroundings.files,
+        ids=NativeIds(),
+        engine=ENGINE,
+    )
     store, current = repair.store, KEY
     unchanged = json.dumps(PLAN | {"disposition": "unchanged", "paths": [], "message": None})
     for number in range(1, 4):
@@ -343,8 +381,7 @@ def test_repairs_preserve_commit_repeat_numbers_and_cap(failed: sqlite3.Connecti
         assert app(failed, surroundings, fake(unchanged, refs=("saved",))).execute(key, ENTRY).execution is not None
         assert store.chain(key)[-1].number == number
         assert [link.number for link in store.chain(key)] == list(range(1, number + 1))
-        request = RepeatRequest(key, "Repeat factory commit feedback", 100, "uncommitted",
-                                content_digest=TaskContentDigest(value="f" * 64))
+        request = RepeatRequest(key, "Repeat factory commit feedback", 100, "uncommitted", content_digest=TaskContentDigest(value="f" * 64))
         repeated = chain.admit_repeat(request)
         if number == 3:
             assert isinstance(repeated, AdmitRefused) and repeated.reason == "repeat_cap"

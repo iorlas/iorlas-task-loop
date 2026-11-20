@@ -36,16 +36,31 @@ def running(con: sqlite3.Connection) -> Admission:
     return record.admission
 
 
-@pytest.mark.parametrize(("reason", "cause"), [
-    ("timeout", StopCause.DEADLINE), ("hung:first_event", StopCause.FIRST_OUTPUT), ("hung:silence", StopCause.INACTIVITY),
-    ("hung:stall", StopCause.STALLED),
-    ("stall", StopCause.STALLED), ("answer", StopCause.ANSWER), ("secret", StopCause.POLICY),
-    ("limit", StopCause.LIMIT), ("credit", StopCause.CREDIT), ("logged_out", StopCause.AUTHENTICATION),
-    ("network", StopCause.NETWORK), ("watchdog", StopCause.WATCHDOG), ("entry_signal", StopCause.ENTRY_SIGNAL),
-    ("interrupt", StopCause.INTERRUPT), ("parent_gone", StopCause.PARENT_LOST), ("caller", StopCause.CALLER_EXIT),
-])
+@pytest.mark.parametrize(
+    ("reason", "cause"),
+    [
+        ("timeout", StopCause.DEADLINE),
+        ("hung:first_event", StopCause.FIRST_OUTPUT),
+        ("hung:silence", StopCause.INACTIVITY),
+        ("hung:stall", StopCause.STALLED),
+        ("stall", StopCause.STALLED),
+        ("answer", StopCause.ANSWER),
+        ("secret", StopCause.POLICY),
+        ("limit", StopCause.LIMIT),
+        ("credit", StopCause.CREDIT),
+        ("logged_out", StopCause.AUTHENTICATION),
+        ("network", StopCause.NETWORK),
+        ("watchdog", StopCause.WATCHDOG),
+        ("entry_signal", StopCause.ENTRY_SIGNAL),
+        ("interrupt", StopCause.INTERRUPT),
+        ("parent_gone", StopCause.PARENT_LOST),
+        ("caller", StopCause.CALLER_EXIT),
+    ],
+)
 def test_callbacks_commit_before_action_and_preserve_each_initiator(
-    registered: sqlite3.Connection, reason: str, cause: StopCause,
+    registered: sqlite3.Connection,
+    reason: str,
+    cause: StopCause,
 ) -> None:
     admission = running(registered)
     store = StopStore(lambda: registered)
@@ -81,14 +96,21 @@ def test_entry_signal_is_separate_from_the_signal_requested_for_its_agent(regist
 
 @pytest.mark.parametrize("sent,delivered,error", [(False, False, True), (True, False, False), (True, False, True), (True, True, False)])
 def test_actual_signal_flags_are_copied_without_inference_from_grace(
-    registered: sqlite3.Connection, sent: bool, delivered: bool, error: bool,
+    registered: sqlite3.Connection,
+    sent: bool,
+    delivered: bool,
+    error: bool,
 ) -> None:
     store = StopStore(lambda: registered)
     callbacks = AgentStops(store, running(registered), lambda: 12)
     intent = StopIntent(worker=WORKER, reason="timeout")
     callbacks.before(intent)
-    callbacks.after(intent, StopReport(term_sent=sent, term_delivered=delivered, waited_s=1000, error=error,
-                                      survivors=[ProcessSurvivor(pid=43, start="child-start")]))
+    callbacks.after(
+        intent,
+        StopReport(
+            term_sent=sent, term_delivered=delivered, waited_s=1000, error=error, survivors=[ProcessSurvivor(pid=43, start="child-start")]
+        ),
+    )
     record = store.get(KEY.attempt_id)
     assert record is not None and record.proof is not None
     assert (record.proof.term_attempted, record.proof.term_delivered, record.proof.error) == (sent, delivered, error)
@@ -243,14 +265,14 @@ def test_concurrent_callbacks_cannot_replace_the_first_cause(admitted: Path) -> 
 
 @pytest.mark.parametrize("start", ["survivor-start", None])
 def test_survivors_outside_the_original_group_prevent_reconciliation_until_proven_gone(
-    registered: sqlite3.Connection, start: str | None,
+    registered: sqlite3.Connection,
+    start: str | None,
 ) -> None:
     store = StopStore(lambda: registered)
     callbacks = AgentStops(store, running(registered), lambda: 12)
     intent = StopIntent(worker=WORKER, reason="timeout")
     callbacks.before(intent)
-    callbacks.after(intent, StopReport(term_sent=True, term_delivered=True,
-                                      survivors=[ProcessSurvivor(pid=43, start=start)]))
+    callbacks.after(intent, StopReport(term_sent=True, term_delivered=True, survivors=[ProcessSurvivor(pid=43, start=start)]))
     seen: list[Worker] = []
     survivor_gone = False
 

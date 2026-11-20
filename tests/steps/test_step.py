@@ -25,8 +25,15 @@ def test_step_codec_rejects_every_noncanonical_spelling(text: str) -> None:
 @pytest.mark.parametrize("step", list(Step))
 def test_earlier_attempt_requires_an_enum_member_in_process(step: Step) -> None:
     fields = {
-        "key": AttemptKey("attempt", "dispatch", 1), "revision": 1, "repo_id": "repo", "backlog": "tasks",
-        "task_id": "tl-1", "tracker_root": "/tracker", "slot": "slot", "step": step, "end_commit": None,
+        "key": AttemptKey("attempt", "dispatch", 1),
+        "revision": 1,
+        "repo_id": "repo",
+        "backlog": "tasks",
+        "task_id": "tl-1",
+        "tracker_root": "/tracker",
+        "slot": "slot",
+        "step": step,
+        "end_commit": None,
     }
     earlier = EarlierAttempt.model_validate(fields)
     assert earlier.step is step

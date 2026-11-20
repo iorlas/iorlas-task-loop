@@ -25,7 +25,10 @@ def run(script: str, flag: str, monkeypatch: pytest.MonkeyPatch) -> int:
 
 @pytest.mark.parametrize("script", SCRIPTS)
 def test_help_prints_usage_and_exits_zero(
-    script: str, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], tmp_path: Path,
+    script: str,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
 ) -> None:
     monkeypatch.chdir(tmp_path)
     assert run(script, "--help", monkeypatch) == 0
@@ -35,7 +38,10 @@ def test_help_prints_usage_and_exits_zero(
 
 @pytest.mark.parametrize("script", SCRIPTS)
 def test_unknown_flag_exits_two(
-    script: str, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], tmp_path: Path,
+    script: str,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
 ) -> None:
     monkeypatch.chdir(tmp_path)
     assert run(script, "--no-such-flag", monkeypatch) == 2

@@ -17,7 +17,7 @@ def test_reduced_motion_disables_effects_on_elements_and_pseudo_elements(name: s
     rules = list(REDUCED_MOTION.finditer(css))
     assert len(rules) == 1, "Both source and shipped CSS must honor reduced motion"
     rule = rules[0]
-    before = css[:rule.start()]
+    before = css[: rule.start()]
     assert before.count("{") == before.count("}"), "The override must be outside cascade layers"
     selectors = {selector.strip().replace("::", ":") for selector in rule[1].split(",")}
     assert selectors == {"*", ":before", ":after"}

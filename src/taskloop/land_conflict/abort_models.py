@@ -40,5 +40,9 @@ class Abort(Value):
 def transition(previous: Abort | None, updated: Abort | None) -> bool:
     if previous is None:
         return updated is not None and updated.phase is AbortPhase.PENDING
-    return (updated is not None and previous.phase is AbortPhase.PENDING and updated.phase is AbortPhase.COMPLETE
-            and previous.model_dump(exclude={"phase"}) == updated.model_dump(exclude={"phase"}))
+    return (
+        updated is not None
+        and previous.phase is AbortPhase.PENDING
+        and updated.phase is AbortPhase.COMPLETE
+        and previous.model_dump(exclude={"phase"}) == updated.model_dump(exclude={"phase"})
+    )

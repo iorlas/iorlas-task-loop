@@ -15,10 +15,35 @@ from taskloop.harness_choice import HarnessKind
 # set there). Compared exactly; lower-case proxy names are the usual ones.
 BASE_NAMES = frozenset(
     {
-        "PATH", "HOME", "USER", "LOGNAME", "SHELL", "LANG", "LANGUAGE", "TERM", "TZ", "TMPDIR", "CODEX_HOME",
-        "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY", "http_proxy", "https_proxy", "all_proxy", "no_proxy",
-        "SSL_CERT_FILE", "SSL_CERT_DIR", "REQUESTS_CA_BUNDLE", "NODE_EXTRA_CA_CERTS", "CURL_CA_BUNDLE", "UV_NATIVE_TLS",
-        "XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_CACHE_HOME", "XDG_STATE_HOME",
+        "PATH",
+        "HOME",
+        "USER",
+        "LOGNAME",
+        "SHELL",
+        "LANG",
+        "LANGUAGE",
+        "TERM",
+        "TZ",
+        "TMPDIR",
+        "CODEX_HOME",
+        "HTTP_PROXY",
+        "HTTPS_PROXY",
+        "ALL_PROXY",
+        "NO_PROXY",
+        "http_proxy",
+        "https_proxy",
+        "all_proxy",
+        "no_proxy",
+        "SSL_CERT_FILE",
+        "SSL_CERT_DIR",
+        "REQUESTS_CA_BUNDLE",
+        "NODE_EXTRA_CA_CERTS",
+        "CURL_CA_BUNDLE",
+        "UV_NATIVE_TLS",
+        "XDG_CONFIG_HOME",
+        "XDG_DATA_HOME",
+        "XDG_CACHE_HOME",
+        "XDG_STATE_HOME",
     }
 )
 PASS_NAMES = "TASKLOOP_ENV_PASS"
@@ -78,7 +103,9 @@ def push_bar() -> dict[str, str]:
 
 
 def machine_credentials(
-    harness: HarnessKind, environ: Mapping[str, str] = os.environ, which: Which = shutil.which,
+    harness: HarnessKind,
+    environ: Mapping[str, str] = os.environ,
+    which: Which = shutil.which,
     exists: Callable[[Path], bool] = Path.is_file,
 ) -> tuple[str, dict[str, str]]:
     """Selected local executable; Claude uses its subscription login, OpenCode its local configuration."""

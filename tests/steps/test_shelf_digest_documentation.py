@@ -20,8 +20,8 @@ PREFIX = "packages/example/"
 def test_complete_text_and_alias_member_overload_provenance(tmp_path: Path) -> None:
     implementation = (
         '"""Implementation: only safe while idle."""\n'
-        'from typing import overload\n'
-        'class Example:\n'
+        "from typing import overload\n"
+        "class Example:\n"
         '    """Warning: acquire first.\n\n    Example:\n        with lock: ...\n    """\n'
         '    def __init__(self):\n        """Does not acquire."""\n'
         '    async def read(self):\n        """May fail. Retry only after release."""\n'
@@ -39,9 +39,12 @@ def test_complete_text_and_alias_member_overload_provenance(tmp_path: Path) -> N
     files = {
         PREFIX + "src/demo/__init__.py": b'"""Public module."""\nfrom ._impl import Example as API, call\nfrom . import _impl as tools\n',
         PREFIX + "src/demo/_impl.py": implementation.encode(),
-        PREFIX + "README": readme.encode(), PREFIX + "guide.rst": b"Qualifications\n=============\nAll conditions apply.\n",
-        PREFIX + "docs/warning.txt": b"Warning without a final newline", PREFIX + "docs/example": b"Complete example\n",
-        PREFIX + "docs/picture.png": b"\xff", "packages/elsewhere/README.md": b"irrelevant",
+        PREFIX + "README": readme.encode(),
+        PREFIX + "guide.rst": b"Qualifications\n=============\nAll conditions apply.\n",
+        PREFIX + "docs/warning.txt": b"Warning without a final newline",
+        PREFIX + "docs/example": b"Complete example\n",
+        PREFIX + "docs/picture.png": b"\xff",
+        "packages/elsewhere/README.md": b"irrelevant",
     }
     repo = objects(tmp_path, {COMMIT: files})
     identities = Identities(SOURCE_COMMIT, (IDENTITY,))
@@ -62,7 +65,9 @@ def test_complete_text_and_alias_member_overload_provenance(tmp_path: Path) -> N
     assert not any("Private text" in item.text for item in docs)
     calls = [item for item in docs if item.public_name == "demo.call"]
     assert [item.text for item in calls] == [
-        "Integer overload restriction.", "String overload restriction.", "Implementation warning.",
+        "Integer overload restriction.",
+        "String overload restriction.",
+        "Implementation warning.",
     ]
     assert all(item.defining_name == "demo._impl.call" for item in calls)
     assert len([item for item in docs if item.public_name == "demo.tools" and item.kind == DocumentationKind.MODULE]) == 1
@@ -89,11 +94,18 @@ def test_invalid_late_document_returns_only_explained_failure(tmp_path: Path, da
     assert "later" in result.explanation and "docs/end.txt" in result.explanation and COMMIT in result.explanation
 
 
-@pytest.mark.parametrize(("mode", "data", "reason"), [
-    ("120000", b"target", ReadFailureReason.NOT_A_FILE), ("100644", None, ReadFailureReason.UNREADABLE),
-])
+@pytest.mark.parametrize(
+    ("mode", "data", "reason"),
+    [
+        ("120000", b"target", ReadFailureReason.NOT_A_FILE),
+        ("100644", None, ReadFailureReason.UNREADABLE),
+    ],
+)
 def test_listed_docs_must_be_readable_regular_files(
-    tmp_path: Path, mode: str, data: bytes | None, reason: ReadFailureReason,
+    tmp_path: Path,
+    mode: str,
+    data: bytes | None,
+    reason: ReadFailureReason,
 ) -> None:
     path = PREFIX + "README.md"
     repo = objects(tmp_path, {})

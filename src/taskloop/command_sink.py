@@ -23,7 +23,11 @@ class WatchedHooks(RunHooks):
 
 class CommandSink:
     def __init__(
-        self, files: EvidenceFiles, key: AttemptKey, clock: Callable[[], float], observe: Callable[[], None] = lambda: None,
+        self,
+        files: EvidenceFiles,
+        key: AttemptKey,
+        clock: Callable[[], float],
+        observe: Callable[[], None] = lambda: None,
         duration: DurationObserver | None = None,
     ) -> None:
         """`clock`: the wall time written for each observed action."""

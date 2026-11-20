@@ -292,7 +292,15 @@ class RoundCause(Context):
 
 
 type TaskEventCause = Annotated[
-    DispositionCause | RunCause | AnswerCause | RejectionCause | ChecksCause | StuckCause | RepeatCause
-    | MergeCause | LandCause | RoundCause,
+    DispositionCause
+    | RunCause
+    | AnswerCause
+    | RejectionCause
+    | ChecksCause
+    | StuckCause
+    | RepeatCause
+    | MergeCause
+    | LandCause
+    | RoundCause,
     Field(discriminator="family"),
 ]

@@ -26,8 +26,13 @@ def dispatched(con: sqlite3.Connection, worker: bool) -> None:
 @pytest.mark.parametrize("worker", [False, True])
 @pytest.mark.parametrize("claim_failure", [False, True])
 def test_reopened_status_requires_explicit_release_then_round_finishes_claim_return(
-    registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts,
-    slot_files: SlotFiles, worker: bool, claim_failure: bool,
+    registered: sqlite3.Connection,
+    tmp_path: Path,
+    slot: FakeWorktree,
+    checkouts: Checkouts,
+    slot_files: SlotFiles,
+    worker: bool,
+    claim_failure: bool,
 ) -> None:
     dispatched(registered, worker)
     path = tmp_path / "restart.db"
@@ -67,13 +72,23 @@ def test_reopened_status_requires_explicit_release_then_round_finishes_claim_ret
         con.close()
 
 
-@pytest.mark.parametrize(("seen", "worker", "alive", "reason"), [
-    ("matching", False, False, "entry_running"), ("unknown", False, False, "observe"),
-    ("gone", True, True, "worker_alive"), ("different_process", True, True, "worker_alive"),
-])
+@pytest.mark.parametrize(
+    ("seen", "worker", "alive", "reason"),
+    [
+        ("matching", False, False, "entry_running"),
+        ("unknown", False, False, "observe"),
+        ("gone", True, True, "worker_alive"),
+        ("different_process", True, True, "worker_alive"),
+    ],
+)
 def test_uncertain_or_running_processes_preserve_reservation_without_git(
-    registered: sqlite3.Connection, checkouts: Checkouts, slot_files: SlotFiles,
-    seen: Seen, worker: bool, alive: bool, reason: str,
+    registered: sqlite3.Connection,
+    checkouts: Checkouts,
+    slot_files: SlotFiles,
+    seen: Seen,
+    worker: bool,
+    alive: bool,
+    reason: str,
 ) -> None:
     dispatched(registered, worker)
     ports = Ports(registered, checkouts, slot_files, seen, alive)
@@ -87,8 +102,13 @@ def test_uncertain_or_running_processes_preserve_reservation_without_git(
 @pytest.mark.parametrize("race", [False, True])
 @pytest.mark.parametrize("capture", [False, True])
 def test_capture_and_explicit_hold_prevent_reconciliation_even_after_stop_proof(
-    registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts,
-    slot_files: SlotFiles, race: bool, capture: bool,
+    registered: sqlite3.Connection,
+    tmp_path: Path,
+    slot: FakeWorktree,
+    checkouts: Checkouts,
+    slot_files: SlotFiles,
+    race: bool,
+    capture: bool,
 ) -> None:
     if capture:
         assert executed(registered, tmp_path, slot, checkouts, slot_files, {}) == "commit"
@@ -129,12 +149,21 @@ def test_absence_and_self_release_are_not_external_entry_death_proof() -> None:
     assert stop_proof(lambda _entry: "gone", lambda _worker: True, None, row) is None
 
 
-@pytest.mark.parametrize("change", [
-    "rev=rev+1", "entry_start='replacement'", "worker_pid=42,worker_pgid=42,worker_start='new',worker_boot='boot'",
-    "phase='admitted'", "generation=generation+1",
-])
+@pytest.mark.parametrize(
+    "change",
+    [
+        "rev=rev+1",
+        "entry_start='replacement'",
+        "worker_pid=42,worker_pgid=42,worker_start='new',worker_boot='boot'",
+        "phase='admitted'",
+        "generation=generation+1",
+    ],
+)
 def test_attempt_changed_between_observation_and_custody_is_preserved_before_git(
-    registered: sqlite3.Connection, checkouts: Checkouts, slot_files: SlotFiles, change: str,
+    registered: sqlite3.Connection,
+    checkouts: Checkouts,
+    slot_files: SlotFiles,
+    change: str,
 ) -> None:
     dispatched(registered, False)
     ports = Ports(registered, checkouts, slot_files)
@@ -146,7 +175,9 @@ def test_attempt_changed_between_observation_and_custody_is_preserved_before_git
 
 
 def test_missing_entry_registration_cannot_authorize_automatic_release(
-    registered: sqlite3.Connection, checkouts: Checkouts, slot_files: SlotFiles,
+    registered: sqlite3.Connection,
+    checkouts: Checkouts,
+    slot_files: SlotFiles,
 ) -> None:
     dispatched(registered, False)
     registered.execute("UPDATE attempt SET entry_pid=NULL,entry_start=NULL,entry_boot=NULL")
@@ -159,7 +190,11 @@ def test_missing_entry_registration_cannot_authorize_automatic_release(
 
 @pytest.mark.parametrize("unsafe", ["dirty", "diverted", "generation"])
 def test_unsafe_slot_or_changed_ownership_keeps_reservation(
-    registered: sqlite3.Connection, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles, unsafe: str,
+    registered: sqlite3.Connection,
+    slot: FakeWorktree,
+    checkouts: Checkouts,
+    slot_files: SlotFiles,
+    unsafe: str,
 ) -> None:
     dispatched(registered, False)
     if unsafe == "dirty":

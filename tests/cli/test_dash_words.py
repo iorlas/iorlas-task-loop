@@ -9,10 +9,31 @@ from taskloop.dash_commit import CHECKS
 
 PAGE = Path(__file__).resolve().parents[2] / "src/taskloop/dash/static"
 REQUIRED = (
-    "needs_owner", "failed:needs_owner", "answer:schema_invalid", "failed:answer:schema_invalid", "failed:test:failed", "held:slot_dirty",
-    "committed", "reused", "refused:branch", "uncommitted:unsafe", "uncommitted:ignored", "uncommitted:uncommitted",
-    "uncommitted:staged", "uncommitted:dirty",
-    "pending", "registered", "passed", "commit", "unsafe", "uncommitted", "ignored", "branch", "rejected", "repeat", "failed_check",
+    "needs_owner",
+    "failed:needs_owner",
+    "answer:schema_invalid",
+    "failed:answer:schema_invalid",
+    "failed:test:failed",
+    "held:slot_dirty",
+    "committed",
+    "reused",
+    "refused:branch",
+    "uncommitted:unsafe",
+    "uncommitted:ignored",
+    "uncommitted:uncommitted",
+    "uncommitted:staged",
+    "uncommitted:dirty",
+    "pending",
+    "registered",
+    "passed",
+    "commit",
+    "unsafe",
+    "uncommitted",
+    "ignored",
+    "branch",
+    "rejected",
+    "repeat",
+    "failed_check",
 )
 
 
@@ -28,8 +49,11 @@ def test_a_typed_code_of_the_data_shapes_has_words(code: str) -> None:
 
 
 def test_the_factory_commit_reasons_the_backend_names_are_all_worded() -> None:
-    assert {("uncommitted:" if reason in {"unsafe", "ignored", "uncommitted"} else "refused:") + reason
-            for _text, reason in CHECKS if reason != "rejected"} <= set(table())
+    assert {
+        ("uncommitted:" if reason in {"unsafe", "ignored", "uncommitted"} else "refused:") + reason
+        for _text, reason in CHECKS
+        if reason != "rejected"
+    } <= set(table())
 
 
 def test_the_page_prints_its_codes_through_the_table() -> None:
@@ -37,15 +61,18 @@ def test_the_page_prints_its_codes_through_the_table() -> None:
         assert "words.js" in (PAGE / name).read_text(), name
 
 
-@pytest.mark.parametrize("code,expected", [
-    ("needs_owner", "The agent needs your decision"),
-    ("failed:test:failed", "Checks failed: test"),
-    ("answer:schema_invalid", "The agent's answer was in the wrong format"),
-    ("commit", "Factory commit has no successful verdict"),
-    ("unsafe", "A listed path is unsafe"),
-    ("uncommitted:unsafe", "Not committed: a listed path is unsafe"),
-    ("rejected", "The commit broke a rule"),
-])
+@pytest.mark.parametrize(
+    "code,expected",
+    [
+        ("needs_owner", "The agent needs your decision"),
+        ("failed:test:failed", "Checks failed: test"),
+        ("answer:schema_invalid", "The agent's answer was in the wrong format"),
+        ("commit", "Factory commit has no successful verdict"),
+        ("unsafe", "A listed path is unsafe"),
+        ("uncommitted:unsafe", "Not committed: a listed path is unsafe"),
+        ("rejected", "The commit broke a rule"),
+    ],
+)
 def test_outcomes_repeat_causes_and_factory_commit_failures_have_readable_words(code: str, expected: str) -> None:
     assert table()[code] == expected
 
@@ -58,10 +85,16 @@ def test_rejected_rules_and_check_repeat_reasons_keep_their_specific_tail() -> N
     assert families["run:"] == families["failed:run:"] == "The agent attempt failed: "
 
 
-@pytest.mark.parametrize("code,label", [
-    ("waiting", "Waiting"), ("checks", "Check"), ("held", "Hold"),
-    ("succeeded", "Success"), ("failed", "Failure"),
-])
+@pytest.mark.parametrize(
+    "code,label",
+    [
+        ("waiting", "Waiting"),
+        ("checks", "Check"),
+        ("held", "Hold"),
+        ("succeeded", "Success"),
+        ("failed", "Failure"),
+    ],
+)
 def test_serialized_states_keep_their_codes_and_use_glossary_labels(code: str, label: str) -> None:
     source = (PAGE / "ui.js").read_text()
     assert re.search(rf'(?:id: "{code}",|{code}: \{{) label: "{label}"', source)
@@ -70,7 +103,7 @@ def test_serialized_states_keep_their_codes_and_use_glossary_labels(code: str, l
 @pytest.mark.parametrize("name", ["ui.js", "app.js", "drawer.js", "rail.js", "result.js", "taskview.js", "lines.js"])
 def test_owned_labels_do_not_use_the_retired_execution_and_status_words(name: str) -> None:
     source = (PAGE / name).read_text()
-    assert not re.search(r'\b(?:try \$\{|Try again|Trying again|Quiet \$\{)', source), name
+    assert not re.search(r"\b(?:try \$\{|Try again|Trying again|Quiet \$\{)", source), name
     assert not re.search(r'label: "(?:Ready|Checks|Held|Succeeded|Failed)"', source), name
 
 

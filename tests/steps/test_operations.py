@@ -145,8 +145,19 @@ class Publishes:
 
 def releaser(store: AttemptStore, checkouts: Checkouts, slot_files: SlotFiles) -> SlotRelease:
     """The real release over the fakes: the entry gone, the agent gone, the real slot lock, a claim that returns."""
-    return SlotRelease(store, checkouts, slot_files, lambda _entry: "gone", gone, custody, lambda _root, _task: True, lambda: 30,
-                       lambda _setup: "gone", lambda _scratch: True, ids=NativeIds())
+    return SlotRelease(
+        store,
+        checkouts,
+        slot_files,
+        lambda _entry: "gone",
+        gone,
+        custody,
+        lambda _root, _task: True,
+        lambda: 30,
+        lambda _setup: "gone",
+        lambda _scratch: True,
+        ids=NativeIds(),
+    )
 
 
 class FakeFactoryCommit:
@@ -202,8 +213,9 @@ def test_a_failed_step_read_back_never_turns_a_launched_start_into_a_failure(tmp
     con = Store(SCHEMA).open_rw(tmp_path / "empty.db")
     assert con is not None
     launcher = FakeLauncher(Launched(KEY, ENTRY))
-    ports = StartPorts(UnreadableStep(
-                       lambda: con), Admission(Admitted(KEY, "s1")), launcher, lambda: 1000, Repeats(), NoAdvance(), NO_CHECKS)
+    ports = StartPorts(
+        UnreadableStep(lambda: con), Admission(Admitted(KEY, "s1")), launcher, lambda: 1000, Repeats(), NoAdvance(), NO_CHECKS
+    )
     started = start(ports, REQUEST)
     con.close()
     assert isinstance(started, Started) and started.step is None
@@ -214,15 +226,25 @@ def test_a_failed_step_read_back_never_turns_a_launched_start_into_a_failure(tmp
 def test_minutes_out_of_range_are_refused_before_any_read_or_launch(minutes: int) -> None:
     admission, launcher = Admission(Admitted(KEY, "s1")), FakeLauncher(Launched(KEY, ENTRY))
     unread = AttemptStore(lambda: None)  # any read would raise StoreUnavailable
-    found = start(StartPorts(unread, admission, launcher,
-                             lambda: 1000, Repeats(), NoAdvance(), NO_CHECKS), replace(REQUEST, minutes=minutes))
+    found = start(
+        StartPorts(unread, admission, launcher, lambda: 1000, Repeats(), NoAdvance(), NO_CHECKS), replace(REQUEST, minutes=minutes)
+    )
     assert found == Failed("refused", "choices", f"Minutes must be from 1 to {MAX_MINUTES}")
     assert admission.requests == [] and launcher.calls == []
 
 
-@pytest.mark.parametrize(("model", "effort"), [
-    ("", "high"), ("-x", "high"), ("a b", "high"), ("a\nb", "high"), ("m", "-high"), ("m", "a b"), ("m", ""),
-])
+@pytest.mark.parametrize(
+    ("model", "effort"),
+    [
+        ("", "high"),
+        ("-x", "high"),
+        ("a b", "high"),
+        ("a\nb", "high"),
+        ("m", "-high"),
+        ("m", "a b"),
+        ("m", ""),
+    ],
+)
 def test_an_impossible_model_or_effort_is_refused_before_any_read_or_launch(model: str, effort: str) -> None:
     admission, launcher = Admission(Admitted(KEY, "s1")), FakeLauncher(Launched(KEY, ENTRY))
     unread = AttemptStore(lambda: None)
@@ -233,8 +255,9 @@ def test_an_impossible_model_or_effort_is_refused_before_any_read_or_launch(mode
 
 
 def test_a_launch_failure_after_a_fresh_admission_says_the_attempt_is_admitted(empty: AttemptStore, reader: AttemptStore) -> None:
-    ports = StartPorts(empty, Admission(Admitted(KEY, "s1")), FakeLauncher(LaunchUnavailable("start")),
-                       lambda: 10, Repeats(), NoAdvance(), NO_CHECKS)
+    ports = StartPorts(
+        empty, Admission(Admitted(KEY, "s1")), FakeLauncher(LaunchUnavailable("start")), lambda: 10, Repeats(), NoAdvance(), NO_CHECKS
+    )
     fresh = start(ports, REQUEST)
     assert fresh == Failed("unavailable", "start", admitted=True)
     failing = FakeLauncher(LaunchUnavailable("start"))
@@ -242,15 +265,20 @@ def test_a_launch_failure_after_a_fresh_admission_says_the_attempt_is_admitted(e
     assert existing == Failed("unavailable", "start")
 
 
-@pytest.mark.parametrize("launched, expected", [
-    (Launched(KEY, ENTRY), Started("relaunched", "tasks", "tl-1", "attempt", True, ENTRY, step="plan")),
-    (AlreadyRunning(KEY, ENTRY), Started("already_running", "tasks", "tl-1", "attempt", True, ENTRY, step="plan")),
-    (LaunchRefused("dispatched"), Started("already_dispatched", "tasks", "tl-1", "attempt", True, step="plan")),
-    (LaunchRefused("registration_refused"), Failed("refused", "registration_refused")),
-    (LaunchUnavailable("store"), Failed("unavailable", "store")),
-    (LaunchUncertain(KEY, ENTRY),
-     Failed("uncertain", "launch", "The registered entry may already run. Confirm its identity before another launch.")),
-])
+@pytest.mark.parametrize(
+    "launched, expected",
+    [
+        (Launched(KEY, ENTRY), Started("relaunched", "tasks", "tl-1", "attempt", True, ENTRY, step="plan")),
+        (AlreadyRunning(KEY, ENTRY), Started("already_running", "tasks", "tl-1", "attempt", True, ENTRY, step="plan")),
+        (LaunchRefused("dispatched"), Started("already_dispatched", "tasks", "tl-1", "attempt", True, step="plan")),
+        (LaunchRefused("registration_refused"), Failed("refused", "registration_refused")),
+        (LaunchUnavailable("store"), Failed("unavailable", "store")),
+        (
+            LaunchUncertain(KEY, ENTRY),
+            Failed("uncertain", "launch", "The registered entry may already run. Confirm its identity before another launch."),
+        ),
+    ],
+)
 def test_an_existing_attempt_is_launched_as_admitted_without_the_tracker(
     reader: AttemptStore, launched: LaunchResult, expected: Started | Failed
 ) -> None:
@@ -263,8 +291,9 @@ def test_an_existing_attempt_is_launched_as_admitted_without_the_tracker(
 def test_a_concurrent_start_that_won_is_launched_as_existing(admitted: Path, reader: AttemptStore) -> None:
     write(admitted, "UPDATE attempt SET task_id='hidden'")
     admission = Admission(AdmitRefused("task_attempted"), lambda: write(admitted, "UPDATE attempt SET task_id='tl-1'"))
-    launched = start(StartPorts(reader, admission, FakeLauncher(AlreadyRunning(KEY, ENTRY)),
-                                lambda: 10, Repeats(), NoAdvance(), NO_CHECKS), REQUEST)
+    launched = start(
+        StartPorts(reader, admission, FakeLauncher(AlreadyRunning(KEY, ENTRY)), lambda: 10, Repeats(), NoAdvance(), NO_CHECKS), REQUEST
+    )
     assert launched == Started("already_running", "tasks", "tl-1", "attempt", True, ENTRY, step="plan")
     assert len(admission.requests) == 1
 
@@ -272,13 +301,16 @@ def test_a_concurrent_start_that_won_is_launched_as_existing(admitted: Path, rea
 VIEW = SlotView("s1", Path("/slots/s1"), "held", attempt_id="other")
 
 
-@pytest.mark.parametrize("admit, expected", [
-    (AdmitRefused("no_free_slot", (VIEW,)), Failed("refused", "no_free_slot", slots=(VIEW,))),
-    (AdmitRefused("claimed_elsewhere"), Failed("refused", "claimed_elsewhere")),
-    (AdmitRefused("constraint", claim_leaked=True, detail="x"), Failed("refused", "constraint", "x", claim_leaked=True)),
-    (AdmitUnavailable("tracker", claim_leaked=True, detail="bd"), Failed("unavailable", "tracker", "bd", claim_leaked=True)),
-    (AdmitUnavailable("store"), Failed("unavailable", "store")),
-])
+@pytest.mark.parametrize(
+    "admit, expected",
+    [
+        (AdmitRefused("no_free_slot", (VIEW,)), Failed("refused", "no_free_slot", slots=(VIEW,))),
+        (AdmitRefused("claimed_elsewhere"), Failed("refused", "claimed_elsewhere")),
+        (AdmitRefused("constraint", claim_leaked=True, detail="x"), Failed("refused", "constraint", "x", claim_leaked=True)),
+        (AdmitUnavailable("tracker", claim_leaked=True, detail="bd"), Failed("unavailable", "tracker", "bd", claim_leaked=True)),
+        (AdmitUnavailable("store"), Failed("unavailable", "store")),
+    ],
+)
 def test_a_refusal_or_unknown_stops_before_any_launch(empty: AttemptStore, admit: AdmitResult, expected: Failed) -> None:
     launcher = FakeLauncher(Launched(KEY, ENTRY))
     assert start(StartPorts(empty, Admission(admit), launcher, lambda: 10, Repeats(), NoAdvance(), NO_CHECKS), REQUEST) == expected
@@ -313,9 +345,14 @@ def test_the_next_action_table(phase: str, entry: EntryState, collected: Attempt
     assert next_action(phase, entry, collected, expired) == expected
 
 
-@pytest.mark.parametrize("phase, expected", [
-    ("admitted", "start"), ("dispatching", "release"), ("registered", "release"),
-])
+@pytest.mark.parametrize(
+    "phase, expected",
+    [
+        ("admitted", "start"),
+        ("dispatching", "release"),
+        ("registered", "release"),
+    ],
+)
 def test_an_entry_from_another_boot_is_relaunched_past_the_deadline_only_while_admitted(phase: str, expected: Next) -> None:
     pending = AttemptResult("pending", phase)
     assert next_action(phase, "different_process", pending, True, rebooted=True) == expected
@@ -337,28 +374,33 @@ def observe(seen: Seen, calls: list[EntryIdentity]) -> Callable[[EntryIdentity],
     return observed
 
 
-@pytest.mark.parametrize("seen, now, entry, expected", [
-    ("matching", 10, "running", "wait"),
-    ("matching", 200, "running", "stuck:hung"),
-    ("gone", 10, "gone", "start"),
-    ("different_process", 10, "different_process", "start"),
-    ("unknown", 10, "unknown", "unknown"),
-    ("gone", 200, "gone", "stuck:expired_admitted"),
-])
+@pytest.mark.parametrize(
+    "seen, now, entry, expected",
+    [
+        ("matching", 10, "running", "wait"),
+        ("matching", 200, "running", "stuck:hung"),
+        ("gone", 10, "gone", "start"),
+        ("different_process", 10, "different_process", "start"),
+        ("unknown", 10, "unknown", "unknown"),
+        ("gone", 200, "gone", "stuck:expired_admitted"),
+    ],
+)
 def test_show_observes_the_registered_entry(
     admitted: Path, reader: AttemptStore, tmp_path: Path, seen: Seen, now: float, entry: EntryState, expected: Next
 ) -> None:
     write(admitted, "UPDATE attempt SET entry_pid=?,entry_start=?,entry_boot=?", *ENTRY)
     calls: list[EntryIdentity] = []
     shown = show_attempt(
-        StatusPorts(reader, observe(seen, calls), lambda: now, nothing_left, lambda: "boot"), tmp_path / "art", "tasks", "tl-1")
+        StatusPorts(reader, observe(seen, calls), lambda: now, nothing_left, lambda: "boot"), tmp_path / "art", "tasks", "tl-1"
+    )
     assert isinstance(shown, Shown)
     assert (shown.view.entry, shown.view.next, shown.view.deadline_passed) == (entry, expected, now >= 100)
     assert calls == [ENTRY]
     assert (shown.view.entry_process, shown.view.worker) == (ENTRY, None)
     write(admitted, "UPDATE attempt SET phase='dispatching',base_commit=?,worker_pid=42,worker_pgid=41", "a" * 40)
     again = show_attempt(
-        StatusPorts(reader, observe(seen, calls), lambda: now, nothing_left, lambda: "boot"), tmp_path / "art", "tasks", "tl-1")
+        StatusPorts(reader, observe(seen, calls), lambda: now, nothing_left, lambda: "boot"), tmp_path / "art", "tasks", "tl-1"
+    )
     assert isinstance(again, Shown) and again.view.worker == (42, 41)
 
 
@@ -386,7 +428,8 @@ def test_show_creates_nothing_and_computes_the_attempt_directory(admitted: Path,
 
     before, stored = files(), rows()
     shown = show_attempt(
-        StatusPorts(reader, observe("gone", []), lambda: 10, nothing_left, lambda: "boot"), tmp_path / "art", "tasks", "tl-1")
+        StatusPorts(reader, observe("gone", []), lambda: 10, nothing_left, lambda: "boot"), tmp_path / "art", "tasks", "tl-1"
+    )
     assert isinstance(shown, Shown)
     directory = EvidenceFiles(tmp_path / "art").root / EvidenceFiles(tmp_path / "art").directory(KEY)
     assert (shown.directory, shown.entry_log) == (directory, directory / "entry.log")
@@ -403,21 +446,27 @@ def test_list_keeps_only_stuck_or_unknown_when_asked(reader: AttemptStore, now: 
     assert isinstance(listed, Listed) and len(listed.attempts) == rows
 
 
-@pytest.mark.parametrize("verdict, expected", [
-    (Committed("blob"), CommittedTask(
-        CommittedStatus.COMMITTED, "tasks", "tl-1", "attempt", "released", "published")),
-    (Committed("blob", reused=True), CommittedTask(
-        CommittedStatus.REUSED, "tasks", "tl-1", "attempt", "released", "published")),
-    (Rejected("paths"), Failed("rejected", "paths", "Release: released")),
-    (NotApplicable("incomplete"), Failed("not_applicable", "incomplete")),
-    (CommitRefused("session"), Failed("refused", "session")),
-    (CommitRefused("head_moved", ("refs/tags/task/evil",)), Failed("refused", "head_moved", "refs/tags/task/evil")),
-    *[(Uncommitted(reason, ("file.py",)), Failed("uncommitted", reason, "file.py"))
-      for reason in ("staged", "uncommitted", "unsafe", "ignored", "dirty")],
-    (CommitWaiting(CommitWaitingReason.GIT, "NotARepo"), Failed("waiting", "git:NotARepo")),
-    *[(CommitWaiting(reason), Failed("waiting", str(reason))) for reason in CommitWaitingReason],
-    (CommitRefused("inconsistent"), Failed("refused", "inconsistent", "Contradictory retained facts: inconsistent verdict or end commit.")),
-])
+@pytest.mark.parametrize(
+    "verdict, expected",
+    [
+        (Committed("blob"), CommittedTask(CommittedStatus.COMMITTED, "tasks", "tl-1", "attempt", "released", "published")),
+        (Committed("blob", reused=True), CommittedTask(CommittedStatus.REUSED, "tasks", "tl-1", "attempt", "released", "published")),
+        (Rejected("paths"), Failed("rejected", "paths", "Release: released")),
+        (NotApplicable("incomplete"), Failed("not_applicable", "incomplete")),
+        (CommitRefused("session"), Failed("refused", "session")),
+        (CommitRefused("head_moved", ("refs/tags/task/evil",)), Failed("refused", "head_moved", "refs/tags/task/evil")),
+        *[
+            (Uncommitted(reason, ("file.py",)), Failed("uncommitted", reason, "file.py"))
+            for reason in ("staged", "uncommitted", "unsafe", "ignored", "dirty")
+        ],
+        (CommitWaiting(CommitWaitingReason.GIT, "NotARepo"), Failed("waiting", "git:NotARepo")),
+        *[(CommitWaiting(reason), Failed("waiting", str(reason))) for reason in CommitWaitingReason],
+        (
+            CommitRefused("inconsistent"),
+            Failed("refused", "inconsistent", "Contradictory retained facts: inconsistent verdict or end commit."),
+        ),
+    ],
+)
 def test_commit_maps_every_verdict(reader: AttemptStore, verdict: CommitResult, expected: CommittedTask | Failed) -> None:
     factory_commit, releases, publishes = FakeFactoryCommit(verdict), Releases(), Publishes()
     assert commit_task(reader, factory_commit, releases, publishes, "tasks", "tl-1") == expected
@@ -443,15 +492,20 @@ def test_commit_returns_a_stored_verdict_with_no_git_read(
 
     store = AttemptStore(lambda: registered)
     attempts = Attempts(
-        store, EvidenceFiles(tmp_path), AgentLaunch(lambda _harness: ("/bin/codex", {}), ids=NativeIds()),
-            agent, lambda: 10, checkouts, slot_files
+        store,
+        EvidenceFiles(tmp_path),
+        AgentLaunch(lambda _harness: ("/bin/codex", {}), ids=NativeIds()),
+        agent,
+        lambda: 10,
+        checkouts,
+        slot_files,
     )
     assert attempts.execute(KEY, ENTRY).reason == "commit"
     releasing, publishing = releaser(store, checkouts, slot_files), BranchPublish(store, checkouts, slot_files, lambda: 40, ids=NativeIds())
-    first = commit_task(store, FactoryCommit(store, checkouts, slot_files, gone, lambda: 20, hold,
-        ids=NativeIds()), releasing, publishing, "tasks", "tl-1")
-    assert first == CommittedTask(
-        CommittedStatus.COMMITTED, "tasks", "tl-1", "attempt", "released", "published") and slot.branch() is None
+    first = commit_task(
+        store, FactoryCommit(store, checkouts, slot_files, gone, lambda: 20, hold, ids=NativeIds()), releasing, publishing, "tasks", "tl-1"
+    )
+    assert first == CommittedTask(CommittedStatus.COMMITTED, "tasks", "tl-1", "attempt", "released", "published") and slot.branch() is None
     slot.repo.drop_checkout(slot.path)
     opened: list[Path] = []
 
@@ -461,11 +515,11 @@ def test_commit_returns_a_stored_verdict_with_no_git_read(
 
     again = releaser(store, counted, slot_files)  # already released and published: nothing pending, no Git
     factory_commit = FactoryCommit(store, counted, slot_files, gone, lambda: 20, hold, ids=NativeIds())
-    second = commit_task(store, factory_commit, again, BranchPublish(store, counted, slot_files, lambda: 50, ids=NativeIds()),
-                         "tasks", "tl-1")
+    second = commit_task(
+        store, factory_commit, again, BranchPublish(store, counted, slot_files, lambda: 50, ids=NativeIds()), "tasks", "tl-1"
+    )
     # the fresh call said released/published; the same verdict again says the already-done words
-    assert second == CommittedTask(
-        CommittedStatus.COMMITTED, "tasks", "tl-1", "attempt", "already_released", "already_published")
+    assert second == CommittedTask(CommittedStatus.COMMITTED, "tasks", "tl-1", "attempt", "already_released", "already_published")
     assert opened == []
 
 
@@ -483,8 +537,13 @@ def test_show_reads_leftovers_fresh_and_names_the_repeat(
 
     store = AttemptStore(lambda: registered)
     attempts = Attempts(
-        store, EvidenceFiles(tmp_path), AgentLaunch(lambda _harness: ("/bin/codex", {}), ids=NativeIds()),
-            agent, lambda: 10, checkouts, slot_files
+        store,
+        EvidenceFiles(tmp_path),
+        AgentLaunch(lambda _harness: ("/bin/codex", {}), ids=NativeIds()),
+        agent,
+        lambda: 10,
+        checkouts,
+        slot_files,
     )
     assert attempts.execute(KEY, ENTRY).reason == "commit"
     factory_commit = FactoryCommit(store, checkouts, slot_files, gone, lambda: 20, hold, ids=NativeIds())
@@ -528,8 +587,13 @@ def test_show_and_commit_agree_on_a_slot_moved_off_its_task_branch(
 
     store = AttemptStore(lambda: registered)
     attempts = Attempts(
-        store, EvidenceFiles(tmp_path), AgentLaunch(lambda _harness: ("/bin/codex", {}), ids=NativeIds()),
-            agent, lambda: 10, checkouts, slot_files
+        store,
+        EvidenceFiles(tmp_path),
+        AgentLaunch(lambda _harness: ("/bin/codex", {}), ids=NativeIds()),
+        agent,
+        lambda: 10,
+        checkouts,
+        slot_files,
     )
     assert attempts.execute(KEY, ENTRY).reason == "commit"
     factory_commit = FactoryCommit(store, checkouts, slot_files, gone, lambda: 20, hold, ids=NativeIds())
@@ -566,11 +630,14 @@ def fail(error: Exception) -> Checkouts:
     return opened
 
 
-@pytest.mark.parametrize("checkout, repos, kind, reason", [
-    ("missing", None, "refused", "checkout"),
-    (".", fail(NotARepo("not a repository")), "refused", "checkout"),
-    (".", fail(GitUnavailable("git exited 128")), "unavailable", "git"),
-])
+@pytest.mark.parametrize(
+    "checkout, repos, kind, reason",
+    [
+        ("missing", None, "refused", "checkout"),
+        (".", fail(NotARepo("not a repository")), "refused", "checkout"),
+        (".", fail(GitUnavailable("git exited 128")), "unavailable", "git"),
+    ],
+)
 def test_adopt_refuses_a_bad_checkout_before_making_anything(
     tmp_path: Path, checkout: str, repos: Checkouts | None, kind: str, reason: str
 ) -> None:
@@ -597,31 +664,41 @@ def test_adopt_refuses_another_schema_and_otherwise_creates_the_database(
 
 
 # the entry's longest line: a retried publication, its collected outcome, the commit, claim and release words
-LONGEST = ("unavailable evidence publish=accepted then=collected:committed commit=unavailable:git claim=unrenewed release=held:slot_dirty "
-           "branch=unavailable:remote")
+LONGEST = (
+    "unavailable evidence publish=accepted then=collected:committed commit=unavailable:git claim=unrenewed release=held:slot_dirty "
+    "branch=unavailable:remote"
+)
 
 
-@pytest.mark.parametrize(("tail", "expected"), [
-    (None, None),
-    ("", None),
-    ("refused slot_staged commit=refused:not_captured\n", "refused slot_staged commit=refused:not_captured"),
-    ("unavailable credentials:auth commit=refused:not_captured\nnoise\n", "unavailable credentials:auth commit=refused:not_captured"),
-    ("collected committed commit=committed\nrefused \x1b]0;owned\x07\n", "collected committed commit=committed"),
-    ("refused slot_staged\x9b31m\n", None),
-    ("Traceback (most recent call last):\n", None),
-    ("failed TypeError\n", "failed TypeError"),
-    ("refused claim_lost\n", "refused claim_lost"),
-    (LONGEST + "\n", LONGEST),
-    (LONGEST + " x=y\n", None),
-    ("refused " + "x" * 65 + "\n", None),
-    ("refused -x\n", None),
-    ("collected failed:type-check:failed claim=held release=released\n", "collected failed:type-check:failed claim=held release=released"),
-    ("collected failed:" + "a.b-c" * 12 + "z" * 4 + ":not_run\n", "collected failed:" + "a.b-c" * 12 + "z" * 4 + ":not_run"),
-    ("collected failed:expired:a.b-c claim=lost release=held:check_running\n",
-     "collected failed:expired:a.b-c claim=lost release=held:check_running"),
-    ("refused a b c d e f g h\n", None),
-    ("failed terminated_by_signal\n", "failed terminated_by_signal"),
-])
+@pytest.mark.parametrize(
+    ("tail", "expected"),
+    [
+        (None, None),
+        ("", None),
+        ("refused slot_staged commit=refused:not_captured\n", "refused slot_staged commit=refused:not_captured"),
+        ("unavailable credentials:auth commit=refused:not_captured\nnoise\n", "unavailable credentials:auth commit=refused:not_captured"),
+        ("collected committed commit=committed\nrefused \x1b]0;owned\x07\n", "collected committed commit=committed"),
+        ("refused slot_staged\x9b31m\n", None),
+        ("Traceback (most recent call last):\n", None),
+        ("failed TypeError\n", "failed TypeError"),
+        ("refused claim_lost\n", "refused claim_lost"),
+        (LONGEST + "\n", LONGEST),
+        (LONGEST + " x=y\n", None),
+        ("refused " + "x" * 65 + "\n", None),
+        ("refused -x\n", None),
+        (
+            "collected failed:type-check:failed claim=held release=released\n",
+            "collected failed:type-check:failed claim=held release=released",
+        ),
+        ("collected failed:" + "a.b-c" * 12 + "z" * 4 + ":not_run\n", "collected failed:" + "a.b-c" * 12 + "z" * 4 + ":not_run"),
+        (
+            "collected failed:expired:a.b-c claim=lost release=held:check_running\n",
+            "collected failed:expired:a.b-c claim=lost release=held:check_running",
+        ),
+        ("refused a b c d e f g h\n", None),
+        ("failed terminated_by_signal\n", "failed terminated_by_signal"),
+    ],
+)
 def test_only_a_line_of_the_entrys_fixed_words_is_shown(tail: str | None, expected: str | None, tmp_path: Path) -> None:
     files = EvidenceFiles(tmp_path)
     if tail is not None:
@@ -642,8 +719,13 @@ def test_a_step_that_ended_on_a_dirty_slot_says_release_then_done_then_start_aft
 
     store = AttemptStore(lambda: registered)
     attempts = Attempts(
-        store, EvidenceFiles(tmp_path), AgentLaunch(lambda _harness: ("/bin/codex", {}), ids=NativeIds()),
-            failed, lambda: 10, checkouts, slot_files
+        store,
+        EvidenceFiles(tmp_path),
+        AgentLaunch(lambda _harness: ("/bin/codex", {}), ids=NativeIds()),
+        failed,
+        lambda: 10,
+        checkouts,
+        slot_files,
     )
     assert attempts.execute(KEY, ENTRY).status == "collected"
     reads = StatusPorts(store, observe("gone", []), lambda: 10, nothing_left, lambda: "boot")
@@ -669,10 +751,9 @@ def test_a_step_that_ended_on_a_dirty_slot_says_release_then_done_then_start_aft
     assert abandoned.next == "start" and abandoned.release is not None and abandoned.release.abandoned
     fresh = AttemptKey("fresh", "token", 2)
     admission = Admission(Admitted(fresh, "s1"))
-    assert start(StartPorts(store, admission, FakeLauncher(Launched(fresh, ENTRY)),
-                            lambda: 10, repeats, NoAdvance(), NO_CHECKS), REQUEST) == Started(
-        "started", "tasks", "tl-1", "fresh", False, ENTRY
-    )
+    assert start(
+        StartPorts(store, admission, FakeLauncher(Launched(fresh, ENTRY)), lambda: 10, repeats, NoAdvance(), NO_CHECKS), REQUEST
+    ) == Started("started", "tasks", "tl-1", "fresh", False, ENTRY)
     assert len(admission.requests) == 1
 
 
@@ -702,7 +783,8 @@ def test_an_abandon_whose_claim_is_still_unclaiming_says_release_and_start_refus
     registered.execute("INSERT INTO slot_release SELECT attempt_id,dispatch_token,generation,slot_head,5,'unclaiming' FROM attempt")
     store = AttemptStore(lambda: registered)
     found = show_attempt(
-        StatusPorts(store, observe("gone", []), lambda: 10, nothing_left, lambda: "boot"), tmp_path / "art", "tasks", "tl-1")
+        StatusPorts(store, observe("gone", []), lambda: 10, nothing_left, lambda: "boot"), tmp_path / "art", "tasks", "tl-1"
+    )
     assert isinstance(found, Shown) and found.view.next == "release"
     admission, launcher = Admission(Admitted(AttemptKey("fresh", "token", 2), "s1")), FakeLauncher(Launched(KEY, ENTRY))
     ports = StartPorts(store, admission, launcher, lambda: 10, Repeats(), NoAdvance(), NO_CHECKS)
@@ -713,15 +795,20 @@ def test_an_abandon_whose_claim_is_still_unclaiming_says_release_and_start_refus
 def test_commit_reports_a_failed_publication_without_changing_its_result(reader: AttemptStore) -> None:
     publishes = Publishes(NotPublished("unavailable", "remote"))
     checked = commit_task(reader, FakeFactoryCommit(Committed("blob")), Releases(), publishes, "tasks", "tl-1")
-    assert checked == CommittedTask(
-        CommittedStatus.COMMITTED, "tasks", "tl-1", "attempt", "released", "unavailable:remote") and exit_code(checked) == 0
+    assert (
+        checked == CommittedTask(CommittedStatus.COMMITTED, "tasks", "tl-1", "attempt", "released", "unavailable:remote")
+        and exit_code(checked) == 0
+    )
 
 
-@pytest.mark.parametrize("result, expected, code", [
-    (BranchPublished("x" * 40, "y" * 40), PublishedTask("tasks", "tl-1", "attempt", BranchPublished("x" * 40, "y" * 40)), 0),
-    (NotPublished("refused", "diverged", "d"), Failed("refused", "diverged", "d"), 1),
-    (NotPublished("unavailable", "remote", "r"), Failed("unavailable", "remote", "r"), 3),
-])
+@pytest.mark.parametrize(
+    "result, expected, code",
+    [
+        (BranchPublished("x" * 40, "y" * 40), PublishedTask("tasks", "tl-1", "attempt", BranchPublished("x" * 40, "y" * 40)), 0),
+        (NotPublished("refused", "diverged", "d"), Failed("refused", "diverged", "d"), 1),
+        (NotPublished("unavailable", "remote", "r"), Failed("unavailable", "remote", "r"), 3),
+    ],
+)
 def test_publish_task_maps_every_result_and_its_exit_code(
     reader: AttemptStore, result: PublishResult, expected: PublishedTask | Failed, code: int
 ) -> None:
@@ -744,8 +831,13 @@ def test_a_committed_plan_is_release_first_then_publish_then_advance(
 
     store = AttemptStore(lambda: registered)
     attempts = Attempts(
-        store, EvidenceFiles(tmp_path), AgentLaunch(lambda _harness: ("/bin/codex", {}), ids=NativeIds()),
-            agent, lambda: 10, checkouts, slot_files
+        store,
+        EvidenceFiles(tmp_path),
+        AgentLaunch(lambda _harness: ("/bin/codex", {}), ids=NativeIds()),
+        agent,
+        lambda: 10,
+        checkouts,
+        slot_files,
     )
     assert attempts.execute(KEY, ENTRY).reason == "commit"
     factory_commit = FactoryCommit(store, checkouts, slot_files, gone, lambda: 20, hold, ids=NativeIds())
@@ -758,7 +850,8 @@ def test_a_committed_plan_is_release_first_then_publish_then_advance(
 
     held = NotReleased("unavailable", "slot_busy")
     assert commit_task(store, factory_commit, Releases(held), Publishes(), "tasks", "tl-1") == CommittedTask(
-        CommittedStatus.COMMITTED, "tasks", "tl-1", "attempt", "unavailable:slot_busy", "published")  # the stub publishes nothing
+        CommittedStatus.COMMITTED, "tasks", "tl-1", "attempt", "unavailable:slot_busy", "published"
+    )  # the stub publishes nothing
     assert shown().next == "release"  # freeing the slot comes first
     assert isinstance(releaser(store, checkouts, slot_files).release(KEY, False), Released)
     assert (shown().next, shown().published) == ("publish", None)
@@ -768,19 +861,22 @@ def test_a_committed_plan_is_release_first_then_publish_then_advance(
     assert (shown().next, shown().published) == ("advance", PublishedRow(x, x, 40.0))  # implement follows plan
 
 
-@pytest.mark.parametrize("stopped, word, code", [
-    ("", "started", 0),
-    ("no_free_slot", "refused:claimed_elsewhere", 0),
-    ("", "committed release=unavailable:slot_busy branch=published", 0),  # a held release: as commit's own exit
-    ("", "committed release=released branch=unavailable:remote", 3),  # as a publish move's
-    ("", "claim_leaked", 0),
-    ("", "unavailable:ancestry", 3),
-    ("", "unavailable:store", 3),
-    ("", "uncertain:launch", 3),
-    ("", "unknown", 3),
-    ("unavailable:tracker", "started", 3),
-    ("refused:checkout", "started", 1),
-])
+@pytest.mark.parametrize(
+    "stopped, word, code",
+    [
+        ("", "started", 0),
+        ("no_free_slot", "refused:claimed_elsewhere", 0),
+        ("", "committed release=unavailable:slot_busy branch=published", 0),  # a held release: as commit's own exit
+        ("", "committed release=released branch=unavailable:remote", 3),  # as a publish move's
+        ("", "claim_leaked", 0),
+        ("", "unavailable:ancestry", 3),
+        ("", "unavailable:store", 3),
+        ("", "uncertain:launch", 3),
+        ("", "unknown", 3),
+        ("unavailable:tracker", "started", 3),
+        ("refused:checkout", "started", 1),
+    ],
+)
 def test_a_rounds_exit_code(stopped: str, word: str, code: int) -> None:
     assert exit_code(Round("tasks", (Move("tl-1", "start", word),), stopped)) == code
 

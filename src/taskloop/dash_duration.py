@@ -32,8 +32,13 @@ def project(sample: DurationSample | None, *, terminal: bool) -> Duration | None
         return None
     frozen = terminal or sample.state is DurationState.SEALED
     quiet = sample.elapsed - (sample.command_offset or 0)
-    return Duration(execution=sample.execution, number=sample.number, elapsed_ms=_milliseconds(sample.elapsed),
-                    quiet_ms=None if frozen else _milliseconds(quiet), frozen=frozen)
+    return Duration(
+        execution=sample.execution,
+        number=sample.number,
+        elapsed_ms=_milliseconds(sample.elapsed),
+        quiet_ms=None if frozen else _milliseconds(quiet),
+        frozen=frozen,
+    )
 
 
 def read(store: StoreConnection, files: EvidenceFiles, row: AttemptRow, result: AttemptResult) -> Duration | None:

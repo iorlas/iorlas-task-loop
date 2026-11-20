@@ -56,8 +56,10 @@ class InputContext:
     def render(self) -> str:
         commands = "\n".join(f"- {command}" for command in self.commands) or "(none)"
         names = "\n".join(self.paths) or "(no tracked paths under src/, tests/ or docs/design/)"
-        return (f"{BEGIN}\nSource commit: {self.commit}\nCheck commands:\n{commands}\n\n"
-                f"{self.glossary}\n{self.shelf}CODE MAP\n{self.layout}{names}\n{END}")
+        return (
+            f"{BEGIN}\nSource commit: {self.commit}\nCheck commands:\n{commands}\n\n"
+            f"{self.glossary}\n{self.shelf}CODE MAP\n{self.layout}{names}\n{END}"
+        )
 
 
 def read(files: InputFiles, commit: str) -> InputContext:
@@ -85,8 +87,9 @@ def read(files: InputFiles, commit: str) -> InputContext:
     if isinstance(names, NoCommit):
         raise InputError(f"Code map source {commit} names no commit")
     paths = tuple(sorted(path for path in names if path.startswith(("src/", "tests/", "docs/design/"))))
-    return InputContext(commit, tuple(join(check.argv) for check in profile.checks), glossary, paths,
-                        _layout(files, commit, names), _shelf(files, commit))
+    return InputContext(
+        commit, tuple(join(check.argv) for check in profile.checks), glossary, paths, _layout(files, commit, names), _shelf(files, commit)
+    )
 
 
 def _shelf_blob(files: InputFiles, commit: str, path: str) -> bytes | None:
@@ -109,7 +112,8 @@ def _shelf(files: InputFiles, commit: str) -> str:
         settings = _ShelfSettings() if project is None else _ShelfSettings.model_validate(tomllib.loads(project.decode("utf-8")))
         required = bool(set(settings.sources) & set(PACKAGES)) or any(
             re.sub(r"[-_.]+", "-", re.split(r"[\s<>=!~\[;@]", dependency, maxsplit=1)[0]).lower() in PACKAGES
-            for dependency in settings.dependencies)
+            for dependency in settings.dependencies
+        )
         if data is None and not required:
             return ""
         if data is None:
@@ -130,8 +134,11 @@ def _layout(files: InputFiles, commit: str, names: tuple[str, ...]) -> str:
     if not any(path.startswith("src/taskloop/") and path.count("/") == 2 and path.endswith(".py") for path in names):
         return ""
     hints = ["In this repository, source modules are primarily src/taskloop/*.py."]
-    folders = tuple(folder for folder in ("agents", "drain", "check_repeat", "dash")
-                    if any(path.startswith(f"src/taskloop/{folder}/") for path in names))
+    folders = tuple(
+        folder
+        for folder in ("agents", "drain", "check_repeat", "dash")
+        if any(path.startswith(f"src/taskloop/{folder}/") for path in names)
+    )
     if folders:
         hints.append("Feature subfolders: " + ", ".join(f"src/taskloop/{folder}/" for folder in folders) + ".")
     tests = tuple(folder for folder in ("steps", "cli", "rules") if any(path.startswith(f"tests/{folder}/") for path in names))
@@ -147,8 +154,10 @@ def _layout(files: InputFiles, commit: str, names: tuple[str, ...]) -> str:
             raise InputError(f"Code map pytest configuration at {commit}: {error}") from error
         options = config.addopts.split() if isinstance(config.addopts, str) else config.addopts
         if config.pythonpath == ("tests/steps",) and "--import-mode=importlib" in options:
-            hints.append('Shared test helpers such as doubles.py live in tests/steps; committed pytest settings use '
-                         'importlib mode and pythonpath = ["tests/steps"].')
+            hints.append(
+                "Shared test helpers such as doubles.py live in tests/steps; committed pytest settings use "
+                'importlib mode and pythonpath = ["tests/steps"].'
+            )
     return "\n".join(hints) + "\n"
 
 
@@ -161,5 +170,5 @@ def refresh(text: str, context: InputContext) -> str:
         return text + "\n\n" + context.render() + "\n"
     if len(starts) != 1 or len(ends) != 1 or starts[0] >= ends[0]:
         raise InputError("Input has malformed or duplicate factory context")
-    lines[starts[0]:ends[0] + 1] = [context.render() + "\n"]
+    lines[starts[0] : ends[0] + 1] = [context.render() + "\n"]
     return "".join(lines)

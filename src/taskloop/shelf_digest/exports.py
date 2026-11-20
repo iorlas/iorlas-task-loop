@@ -49,7 +49,7 @@ def _import_target(module: Module, node: ast.ImportFrom) -> str:
     if node.level:
         if node.level > len(parts):
             return ""
-        parts = parts[:len(parts) - node.level + 1]
+        parts = parts[: len(parts) - node.level + 1]
     else:
         parts = []
     return ".".join([*parts, *([node.module] if node.module else [])])
@@ -190,8 +190,11 @@ class PackageExports:
                 if self._local(target) and target not in self.modules:
                     self.fail(SignatureFailureReason.UNRESOLVED_EXPORT, module.path, f"Missing star re-export module {target}")
         names = {
-            module.name: set(module.exports) if module.exports is not None else {
-                name for name in {*module.declarations, *(name for name, target in module.links.items() if self._local(target))}
+            module.name: set(module.exports)
+            if module.exports is not None
+            else {
+                name
+                for name in {*module.declarations, *(name for name, target in module.links.items() if self._local(target))}
                 if not name.startswith("_")
             }
             for module in self.modules.values()

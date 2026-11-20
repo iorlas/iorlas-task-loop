@@ -29,7 +29,9 @@ captured_work = captured_attempt
 
 
 def test_production_launch_and_entry_share_the_saved_authorization(
-    tmp_path: Path, surroundings: AttemptSurroundings, monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    surroundings: AttemptSurroundings,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     path = tmp_path / "factory.db"
     con = database(path)
@@ -67,7 +69,11 @@ def test_production_launch_and_entry_share_the_saved_authorization(
 @pytest.mark.parametrize("already_held", [False, True])
 @pytest.mark.parametrize("bound_claim", [False, True])
 def test_real_composition_retains_custody_through_native_execution(
-    tmp_path: Path, surroundings: AttemptSurroundings, monkeypatch: pytest.MonkeyPatch, already_held: bool, bound_claim: bool,
+    tmp_path: Path,
+    surroundings: AttemptSurroundings,
+    monkeypatch: pytest.MonkeyPatch,
+    already_held: bool,
+    bound_claim: bool,
 ) -> None:
     path = tmp_path / "factory.db"
     con = database(path)
@@ -113,7 +119,11 @@ def test_real_composition_retains_custody_through_native_execution(
 
 @pytest.mark.parametrize("pending", ["answer", "pending", "fault"])
 def test_real_completion_finishes_captured_work_after_reopen(
-    tmp_path: Path, surroundings: AttemptSurroundings, captured_work: Attempts, pending: str, monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    surroundings: AttemptSurroundings,
+    captured_work: Attempts,
+    pending: str,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     con = captured_work.store.connect()
     assert con is not None

@@ -38,19 +38,26 @@ def test_installed_name_and_version_must_match(tmp_path: Path, field: str, value
     assert not any(record.reads for record in distributions.records.values())
 
 
-@pytest.mark.parametrize(("old", "new", "field"), [
-    ('"url": "https://example.invalid/shelf.git"', '"url": "https://other.invalid/repo"', "repository URL"),
-    ('"url": "https://example.invalid/shelf.git"', '"url": "https://example.invalid/shelf.git?tag=main"', "repository URL"),
-    (COMMIT, "e" * 40, "commit"), (COMMIT, "abc", "commit_id"),
-    ('"requested_revision": "any-agent-v1.0"', '"requested_revision": "main"', "requested tag"),
-    ('"subdirectory": "packages/stream-proc"', '"subdirectory": "../outside"', "subdirectory"),
-    ('"vcs": "git"', '"vcs": "hg"', "vcs"),
-    ('"vcs": "git"', '"vcs": "git", "branch": "main"', "branch"),
-    ('"commit_id":', '"missing_commit":', "commit_id"),
-    ('"requested_revision": "any-agent-v1.0"', '"requested_revision": 4', "requested_revision"),
-])
+@pytest.mark.parametrize(
+    ("old", "new", "field"),
+    [
+        ('"url": "https://example.invalid/shelf.git"', '"url": "https://other.invalid/repo"', "repository URL"),
+        ('"url": "https://example.invalid/shelf.git"', '"url": "https://example.invalid/shelf.git?tag=main"', "repository URL"),
+        (COMMIT, "e" * 40, "commit"),
+        (COMMIT, "abc", "commit_id"),
+        ('"requested_revision": "any-agent-v1.0"', '"requested_revision": "main"', "requested tag"),
+        ('"subdirectory": "packages/stream-proc"', '"subdirectory": "../outside"', "subdirectory"),
+        ('"vcs": "git"', '"vcs": "hg"', "vcs"),
+        ('"vcs": "git"', '"vcs": "git", "branch": "main"', "branch"),
+        ('"commit_id":', '"missing_commit":', "commit_id"),
+        ('"requested_revision": "any-agent-v1.0"', '"requested_revision": 4', "requested_revision"),
+    ],
+)
 def test_invalid_or_disagreeing_direct_url_fails_with_context(
-    tmp_path: Path, old: str, new: str, field: str,
+    tmp_path: Path,
+    old: str,
+    new: str,
+    field: str,
 ) -> None:
     identities, distributions = installed_case(complete_case(tmp_path))
     record = distributions.records["stream-proc"]
@@ -125,21 +132,33 @@ def test_shared_commit_conflicting_source_is_rejected(tmp_path: Path) -> None:
     shared = replace(identities.packages[-1], subdirectory=first.subdirectory)
     identities = replace(identities, packages=(first, shared))
     record = distributions.records["stream-proc"]
-    record.record = record.record.model_copy(update={
-        "direct_url": record.record.direct_url.replace("packages/stream-proc", first.subdirectory),
-    })
+    record.record = record.record.model_copy(
+        update={
+            "direct_url": record.record.direct_url.replace("packages/stream-proc", first.subdirectory),
+        }
+    )
     result = capture_installed_sources(identities, distributions)
     assert isinstance(result, ReadFailure) and "conflicting source" in result.explanation
 
 
-@pytest.mark.parametrize(("change", "reason"), [
-    ("directory", ReadFailureReason.NOT_A_FILE), ("symlink", ReadFailureReason.NOT_A_FILE),
-    ("missing", ReadFailureReason.UNREADABLE), ("parent_symlink", ReadFailureReason.NOT_A_FILE),
-    ("missing_inventory", ReadFailureReason.UNREADABLE), ("duplicate_inventory", ReadFailureReason.INVALID_PATH),
-    ("invalid_inventory", ReadFailureReason.UNREADABLE), ("unsafe_inventory", ReadFailureReason.INVALID_PATH),
-])
+@pytest.mark.parametrize(
+    ("change", "reason"),
+    [
+        ("directory", ReadFailureReason.NOT_A_FILE),
+        ("symlink", ReadFailureReason.NOT_A_FILE),
+        ("missing", ReadFailureReason.UNREADABLE),
+        ("parent_symlink", ReadFailureReason.NOT_A_FILE),
+        ("missing_inventory", ReadFailureReason.UNREADABLE),
+        ("duplicate_inventory", ReadFailureReason.INVALID_PATH),
+        ("invalid_inventory", ReadFailureReason.UNREADABLE),
+        ("unsafe_inventory", ReadFailureReason.INVALID_PATH),
+    ],
+)
 def test_stdlib_adapter_captures_files_and_rejects_invalid_source(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, change: str, reason: ReadFailureReason,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    change: str,
+    reason: ReadFailureReason,
 ) -> None:
     identities, distributions = installed_case(complete_case(tmp_path / "case"))
     identity = identities.packages[0]
@@ -179,12 +198,19 @@ def test_stdlib_adapter_captures_files_and_rejects_invalid_source(
     assert "any-agent" in failed.explanation
 
 
-@pytest.mark.parametrize(("metadata_text", "direct_url"), [
-    ("Name: any-agent\n", "{}"), ("Name: any-agent\nVersion: 1.0\nVersion: 2.0\n", "{}"),
-    ("Name: any-agent\nVersion: 1.0\n", None),
-])
+@pytest.mark.parametrize(
+    ("metadata_text", "direct_url"),
+    [
+        ("Name: any-agent\n", "{}"),
+        ("Name: any-agent\nVersion: 1.0\nVersion: 2.0\n", "{}"),
+        ("Name: any-agent\nVersion: 1.0\n", None),
+    ],
+)
 def test_stdlib_adapter_rejects_missing_or_ambiguous_metadata(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, metadata_text: str, direct_url: str | None,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    metadata_text: str,
+    direct_url: str | None,
 ) -> None:
     identities, _ = installed_case(complete_case(tmp_path / "case"))
     info = tmp_path / "any_agent-1.0.dist-info"

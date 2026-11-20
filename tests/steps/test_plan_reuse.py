@@ -36,7 +36,9 @@ def planned(slot: FakeWorktree) -> PlanMetadata:
 
 
 def test_explicit_source_is_validated_while_the_worktree_is_parked(
-    planned: PlanMetadata, slot: FakeWorktree, checkouts: PinnedViews,
+    planned: PlanMetadata,
+    slot: FakeWorktree,
+    checkouts: PinnedViews,
 ) -> None:
     source = next(each.head for each in slot.repo.worktrees() if each.path == slot.path)
     assert source is not None
@@ -49,7 +51,11 @@ def test_explicit_source_is_validated_while_the_worktree_is_parked(
 
 @pytest.mark.parametrize("change", ["none", "unrelated", "uncommitted", "file", "folder", "deleted", "folder_deleted"])
 def test_only_committed_cited_changes_prevent_reuse_with_one_scoped_patch_free_diff(
-    change: str, planned: PlanMetadata, repo: FakeRepo, slot: FakeWorktree, checkouts: PinnedViews,
+    change: str,
+    planned: PlanMetadata,
+    repo: FakeRepo,
+    slot: FakeWorktree,
+    checkouts: PinnedViews,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     if change in ("file", "folder", "unrelated", "uncommitted"):
@@ -66,7 +72,13 @@ def test_only_committed_cited_changes_prevent_reuse_with_one_scoped_patch_free_d
     original = FakeWorktree.diff
 
     def diff(
-        wt: FakeWorktree, a: str, b: str, *, include: Sequence[str] = (), exclude: Sequence[str] = (), cap: int | None = None,
+        wt: FakeWorktree,
+        a: str,
+        b: str,
+        *,
+        include: Sequence[str] = (),
+        exclude: Sequence[str] = (),
+        cap: int | None = None,
     ) -> Diff:
         calls.append((a, b, tuple(include), tuple(exclude), cap))
         result = original(wt, a, b, include=include, exclude=exclude, cap=cap)
@@ -93,16 +105,23 @@ def test_only_committed_cited_changes_prevent_reuse_with_one_scoped_patch_free_d
     assert tree is not None and tree.read(METADATA_PATH) == planned.model_dump_json().encode()
 
 
-@pytest.mark.parametrize(("fault", "reason"), [
-    ("missing_metadata", ReuseReason.MISSING_METADATA),
-    ("malformed_metadata", ReuseReason.INVALID_METADATA),
-    ("missing_commit", ReuseReason.MISSING_COMMIT),
-    ("missing_plan", ReuseReason.INVALID_PLAN),
-    ("invalid_plan", ReuseReason.INVALID_PLAN),
-    ("saved_work", ReuseReason.SAVED_WORK),
-])
+@pytest.mark.parametrize(
+    ("fault", "reason"),
+    [
+        ("missing_metadata", ReuseReason.MISSING_METADATA),
+        ("malformed_metadata", ReuseReason.INVALID_METADATA),
+        ("missing_commit", ReuseReason.MISSING_COMMIT),
+        ("missing_plan", ReuseReason.INVALID_PLAN),
+        ("invalid_plan", ReuseReason.INVALID_PLAN),
+        ("saved_work", ReuseReason.SAVED_WORK),
+    ],
+)
 def test_invalid_evidence_requires_planning_without_a_diff(
-    fault: str, reason: ReuseReason, planned: PlanMetadata, slot: FakeWorktree, checkouts: PinnedViews,
+    fault: str,
+    reason: ReuseReason,
+    planned: PlanMetadata,
+    slot: FakeWorktree,
+    checkouts: PinnedViews,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     if fault == "missing_metadata":
@@ -130,7 +149,9 @@ def test_invalid_evidence_requires_planning_without_a_diff(
 
 
 def test_uncommitted_metadata_cannot_supply_missing_evidence(
-    planned: PlanMetadata, slot: FakeWorktree, checkouts: PinnedViews,
+    planned: PlanMetadata,
+    slot: FakeWorktree,
+    checkouts: PinnedViews,
 ) -> None:
     slot.remove_file(METADATA_PATH)
     record(slot)
@@ -141,7 +162,11 @@ def test_uncommitted_metadata_cannot_supply_missing_evidence(
 
 @pytest.mark.parametrize("operation", ["read", "diff"])
 def test_git_failure_is_explicit_and_does_not_suggest_reuse(
-    operation: str, planned: PlanMetadata, slot: FakeWorktree, checkouts: PinnedViews, monkeypatch: pytest.MonkeyPatch,
+    operation: str,
+    planned: PlanMetadata,
+    slot: FakeWorktree,
+    checkouts: PinnedViews,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     def unavailable(*_args: object, **_kwargs: object) -> Diff:
         raise GitUnavailable("observation failed")
@@ -153,10 +178,26 @@ def test_git_failure_is_explicit_and_does_not_suggest_reuse(
     assert "observation failed" in result.explanation
 
 
-@pytest.mark.parametrize("paths", [
-    [], ["src/a", "src/a"], ["/src/a"], ["../a"], ["src/../a"], ["./src"], ["src//a"], ["src/"],
-    [":(glob)src"], ["src/*.py"], ["src/?.py"], ["src/[ab].py"], ["src\\a"], ["src/\na"], [""],
-])
+@pytest.mark.parametrize(
+    "paths",
+    [
+        [],
+        ["src/a", "src/a"],
+        ["/src/a"],
+        ["../a"],
+        ["src/../a"],
+        ["./src"],
+        ["src//a"],
+        ["src/"],
+        [":(glob)src"],
+        ["src/*.py"],
+        ["src/?.py"],
+        ["src/[ab].py"],
+        ["src\\a"],
+        ["src/\na"],
+        [""],
+    ],
+)
 def test_metadata_rejects_empty_duplicate_and_nonliteral_citations(paths: list[str]) -> None:
     with pytest.raises(ValidationError):
         PlanMetadata.model_validate_json(json.dumps({"prepared_commit": "a" * 40, "cited_paths": paths}))

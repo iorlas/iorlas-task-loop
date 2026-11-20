@@ -35,10 +35,28 @@ def columns(con: sqlite3.Connection, sql: str) -> list[tuple[object, ...]]:
 
 # A valid concluded-and-released checks attempt; each case overrides columns and must fail one CHECK (or the key rules).
 ATTEMPT: dict[str, object] = {
-    "attempt_id": "other", "dispatch_token": "other-token", "generation": 1, "after_attempt_id": "implement", "number": 2,
-    "slot": "s2", "slot_head": D, "target_commit": TARGET, "target_seen": None, "required": "[]", "profile_digest": None,
-    "deadline": 100, "phase": "concluded", "rev": 0, "refusal": None, "refusals": 0, "conclusion": "passed", "reason": None,
-    "concluded_at": 5, "released_at": 6, "parked": D, "abandoned": 0,
+    "attempt_id": "other",
+    "dispatch_token": "other-token",
+    "generation": 1,
+    "after_attempt_id": "implement",
+    "number": 2,
+    "slot": "s2",
+    "slot_head": D,
+    "target_commit": TARGET,
+    "target_seen": None,
+    "required": "[]",
+    "profile_digest": None,
+    "deadline": 100,
+    "phase": "concluded",
+    "rev": 0,
+    "refusal": None,
+    "refusals": 0,
+    "conclusion": "passed",
+    "reason": None,
+    "concluded_at": 5,
+    "released_at": 6,
+    "parked": D,
+    "abandoned": 0,
 }
 
 
@@ -46,37 +64,62 @@ def put(con: sqlite3.Connection, table: str, row: dict[str, object]) -> None:
     con.execute(f"INSERT INTO {table} ({','.join(row)}) VALUES ({','.join('?' * len(row))})", tuple(row.values()))
 
 
-@pytest.mark.parametrize("change", [
-    {}, {"phase": "admitted", "conclusion": None, "concluded_at": None, "released_at": None, "parked": None},
-    {"phase": "admitted", "conclusion": None, "concluded_at": None, "abandoned": 1},
-    {"conclusion": "failed", "reason": "test:failed"}, {"target_seen": TARGET, "profile_digest": DIGEST},
-])
+@pytest.mark.parametrize(
+    "change",
+    [
+        {},
+        {"phase": "admitted", "conclusion": None, "concluded_at": None, "released_at": None, "parked": None},
+        {"phase": "admitted", "conclusion": None, "concluded_at": None, "abandoned": 1},
+        {"conclusion": "failed", "reason": "test:failed"},
+        {"target_seen": TARGET, "profile_digest": DIGEST},
+    ],
+)
 def test_valid_checks_attempts_are_stored(checking: sqlite3.Connection, change: dict[str, object]) -> None:
     put(checking, "checks_attempt", ATTEMPT | change)
 
 
-@pytest.mark.parametrize("change", [
-    {"number": 0}, {"slot_head": "d" * 39}, {"target_commit": "f" * 12}, {"profile_digest": "a" * 63},
-    {"phase": "running"}, {"refusals": -1}, {"conclusion": "ok"}, {"abandoned": 2},
-    {"phase": "admitted"}, {"conclusion": None, "concluded_at": None},  # phase and conclusion
-    {"concluded_at": None}, {"conclusion": None, "phase": "admitted", "released_at": None, "parked": None},  # concluded_at
-    {"conclusion": "failed"}, {"reason": "nothing"},  # a reason exactly when failed
-    {"parked": None}, {"released_at": None},  # released and parked together
-    {"released_at": None, "parked": None, "abandoned": 1},  # abandoned only once released
-    {"phase": "admitted", "conclusion": None, "concluded_at": None},  # released settled only once concluded
-    {"refusal": "slot_busy"}, {"refusals": 1},  # a refusal word exactly when counted
-    {"entry_pid": 7}, {"entry_pid": 7, "entry_start": "s"}, {"entry_start": "s", "entry_boot": "b"},  # an entry all or none
-], ids=lambda change: ",".join(f"{key}={value}" for key, value in change.items()))
+@pytest.mark.parametrize(
+    "change",
+    [
+        {"number": 0},
+        {"slot_head": "d" * 39},
+        {"target_commit": "f" * 12},
+        {"profile_digest": "a" * 63},
+        {"phase": "running"},
+        {"refusals": -1},
+        {"conclusion": "ok"},
+        {"abandoned": 2},
+        {"phase": "admitted"},
+        {"conclusion": None, "concluded_at": None},  # phase and conclusion
+        {"concluded_at": None},
+        {"conclusion": None, "phase": "admitted", "released_at": None, "parked": None},  # concluded_at
+        {"conclusion": "failed"},
+        {"reason": "nothing"},  # a reason exactly when failed
+        {"parked": None},
+        {"released_at": None},  # released and parked together
+        {"released_at": None, "parked": None, "abandoned": 1},  # abandoned only once released
+        {"phase": "admitted", "conclusion": None, "concluded_at": None},  # released settled only once concluded
+        {"refusal": "slot_busy"},
+        {"refusals": 1},  # a refusal word exactly when counted
+        {"entry_pid": 7},
+        {"entry_pid": 7, "entry_start": "s"},
+        {"entry_start": "s", "entry_boot": "b"},  # an entry all or none
+    ],
+    ids=lambda change: ",".join(f"{key}={value}" for key, value in change.items()),
+)
 def test_every_checks_attempt_check_rejects_its_bad_row(checking: sqlite3.Connection, change: dict[str, object]) -> None:
     with pytest.raises(sqlite3.IntegrityError, match="CHECK"):
         put(checking, "checks_attempt", ATTEMPT | change)
 
 
-@pytest.mark.parametrize(("change", "error"), [
-    ({"number": 1}, "UNIQUE constraint failed: checks_attempt.after_attempt_id"),
-    ({"dispatch_token": "checks-token"}, "UNIQUE constraint failed: checks_attempt.dispatch_token"),
-    ({"after_attempt_id": "missing"}, "FOREIGN KEY"),
-])
+@pytest.mark.parametrize(
+    ("change", "error"),
+    [
+        ({"number": 1}, "UNIQUE constraint failed: checks_attempt.after_attempt_id"),
+        ({"dispatch_token": "checks-token"}, "UNIQUE constraint failed: checks_attempt.dispatch_token"),
+        ({"after_attempt_id": "missing"}, "FOREIGN KEY"),
+    ],
+)
 def test_a_checks_attempt_is_unique_per_number_and_names_an_attempt(
     checking: sqlite3.Connection, change: dict[str, object], error: str
 ) -> None:
@@ -85,40 +128,72 @@ def test_a_checks_attempt_is_unique_per_number_and_names_an_attempt(
 
 
 RESULT: dict[str, object] = {
-    "attempt_id": "checks", "block": 1, "position": 0, "name": "check", "dispatch_token": "checks-token", "generation": 1,
-    "argv_digest": DIGEST, "timeout": 60, "started_at": 1, "ended_at": 2, "rc": 0, "conclusion": "passed",
+    "attempt_id": "checks",
+    "block": 1,
+    "position": 0,
+    "name": "check",
+    "dispatch_token": "checks-token",
+    "generation": 1,
+    "argv_digest": DIGEST,
+    "timeout": 60,
+    "started_at": 1,
+    "ended_at": 2,
+    "rc": 0,
+    "conclusion": "passed",
 }
 UNDEFINED: dict[str, object] = {"argv_digest": None, "timeout": None, "rc": None, "conclusion": "undefined"}
 
 
-@pytest.mark.parametrize("change", [{}, {"ended_at": None, "rc": None, "conclusion": None}, UNDEFINED, {"conclusion": "interrupted"},
-                                    {"pid": 5, "pgid": 5, "proc_start": "s", "boot": "b"}])
+@pytest.mark.parametrize(
+    "change",
+    [
+        {},
+        {"ended_at": None, "rc": None, "conclusion": None},
+        UNDEFINED,
+        {"conclusion": "interrupted"},
+        {"pid": 5, "pgid": 5, "proc_start": "s", "boot": "b"},
+    ],
+)
 def test_valid_check_results_are_stored(checking: sqlite3.Connection, change: dict[str, object]) -> None:
     put(checking, "check_result", RESULT | change)
 
 
-@pytest.mark.parametrize("change", [
-    {"block": 0}, {"position": -1}, {"argv_digest": "a" * 63}, {"timeout": 0}, {"conclusion": "ok"},
-    {"ended_at": None}, {"conclusion": None},  # ended exactly when concluded
-    {"argv_digest": None, "timeout": None},  # no argv only when undefined
-    UNDEFINED | {"argv_digest": DIGEST, "timeout": 60},  # undefined has no argv
-    {"timeout": None}, UNDEFINED | {"timeout": 60},  # a timeout exactly with an argv
-    {"pid": 5}, {"pid": 5, "pgid": 5, "proc_start": "s"}, {"pgid": 5, "proc_start": "s", "boot": "b"},  # an identity all or none
-    UNDEFINED | {"pid": 5, "pgid": 5, "proc_start": "s", "boot": "b"}, UNDEFINED | {"rc": 0},  # undefined ran nothing
-    {"ended_at": None, "conclusion": None},  # an exit only with a conclusion
-], ids=lambda change: ",".join(f"{key}={value}" for key, value in change.items()))
+@pytest.mark.parametrize(
+    "change",
+    [
+        {"block": 0},
+        {"position": -1},
+        {"argv_digest": "a" * 63},
+        {"timeout": 0},
+        {"conclusion": "ok"},
+        {"ended_at": None},
+        {"conclusion": None},  # ended exactly when concluded
+        {"argv_digest": None, "timeout": None},  # no argv only when undefined
+        UNDEFINED | {"argv_digest": DIGEST, "timeout": 60},  # undefined has no argv
+        {"timeout": None},
+        UNDEFINED | {"timeout": 60},  # a timeout exactly with an argv
+        {"pid": 5},
+        {"pid": 5, "pgid": 5, "proc_start": "s"},
+        {"pgid": 5, "proc_start": "s", "boot": "b"},  # an identity all or none
+        UNDEFINED | {"pid": 5, "pgid": 5, "proc_start": "s", "boot": "b"},
+        UNDEFINED | {"rc": 0},  # undefined ran nothing
+        {"ended_at": None, "conclusion": None},  # an exit only with a conclusion
+    ],
+    ids=lambda change: ",".join(f"{key}={value}" for key, value in change.items()),
+)
 def test_every_check_result_check_rejects_its_bad_row(checking: sqlite3.Connection, change: dict[str, object]) -> None:
     with pytest.raises(sqlite3.IntegrityError, match="CHECK"):
         put(checking, "check_result", RESULT | change)
 
 
-@pytest.mark.parametrize(("change", "error"), [
-    ({"name": "test"}, "UNIQUE constraint failed: check_result.attempt_id, check_result.block, check_result.position"),
-    ({"position": 1}, "UNIQUE constraint failed: check_result.attempt_id, check_result.block, check_result.name"),
-])
-def test_a_result_is_one_per_position_and_name_in_a_block(
-    checking: sqlite3.Connection, change: dict[str, object], error: str
-) -> None:
+@pytest.mark.parametrize(
+    ("change", "error"),
+    [
+        ({"name": "test"}, "UNIQUE constraint failed: check_result.attempt_id, check_result.block, check_result.position"),
+        ({"position": 1}, "UNIQUE constraint failed: check_result.attempt_id, check_result.block, check_result.name"),
+    ],
+)
+def test_a_result_is_one_per_position_and_name_in_a_block(checking: sqlite3.Connection, change: dict[str, object], error: str) -> None:
     put(checking, "check_result", RESULT)
     with pytest.raises(sqlite3.IntegrityError, match=error):
         put(checking, "check_result", RESULT | change)
@@ -128,10 +203,27 @@ def test_the_admitted_row_reads_back_joined_with_its_implement_attempt(checking:
     found = store(checking).row(CHECKS)
     assert found is not None and found.key == CHECKS
     assert (found.after, found.number, found.slot, found.slot_head, found.target, found.required, found.deadline) == (
-        "implement", 1, "s2", D, TARGET, REQUIRED, 100.0)
+        "implement",
+        1,
+        "s2",
+        D,
+        TARGET,
+        REQUIRED,
+        100.0,
+    )
     assert (found.backlog, found.task_id, found.repo_id, found.tracker_root, found.commit) == ("tasks", "tl-1", "r", "/tracker", X)
-    assert (found.phase, found.entry, found.rev, found.refusal, found.refusals, found.conclusion, found.released_at,
-            found.abandoned, found.profile_digest, found.target_seen) == ("admitted", None, 0, None, 0, None, None, False, None, None)
+    assert (
+        found.phase,
+        found.entry,
+        found.rev,
+        found.refusal,
+        found.refusals,
+        found.conclusion,
+        found.released_at,
+        found.abandoned,
+        found.profile_digest,
+        found.target_seen,
+    ) == ("admitted", None, 0, None, 0, None, None, False, None, None)
     assert store(checking).of_attempt("implement") == (found,) and store(checking).of_attempt("other") == ()
     assert store(checking).row(AttemptKey("checks", "checks-token", 2)) is None
 
@@ -150,8 +242,11 @@ def test_a_second_admission_of_the_same_number_lost_the_race_and_writes_nothing(
     assert [row.number for row in store(checking).of_attempt("implement")] == [1, 2]
 
 
-@pytest.mark.parametrize("required", [(), tuple((f"c{n}", DIGEST) for n in range(33)), (("a", DIGEST), ("a", DIGEST)), (("a", "a" * 40),)],
-                         ids=["none", "33", "repeated", "digest"])
+@pytest.mark.parametrize(
+    "required",
+    [(), tuple((f"c{n}", DIGEST) for n in range(33)), (("a", DIGEST), ("a", DIGEST)), (("a", "a" * 40),)],
+    ids=["none", "33", "repeated", "digest"],
+)
 def test_the_required_list_is_one_to_32_distinct_names_with_digests(
     checking: sqlite3.Connection, required: tuple[tuple[str, str], ...]
 ) -> None:
@@ -169,21 +264,29 @@ def test_a_malformed_stored_required_list_is_unavailable(checking: sqlite3.Conne
 def writes(checks: CheckStore, key: AttemptKey) -> dict[str, Callable[[], object]]:
     """Every fenced write of an admitted checks attempt, under `key`."""
     return {
-        "refused": lambda: checks.refused(key, "slot_busy"), "profiled": lambda: checks.profiled(key, DIGEST),
-        "block": lambda: checks.block(key), "start": lambda: checks.start(key, 1, 1, "test", DIGEST, 60, 3),
-        "undefined": lambda: checks.undefined(key, 1, 2, "smoke", 3), "registered": lambda: checks.registered(key, 1, 0, ME),
+        "refused": lambda: checks.refused(key, "slot_busy"),
+        "profiled": lambda: checks.profiled(key, DIGEST),
+        "block": lambda: checks.block(key),
+        "start": lambda: checks.start(key, 1, 1, "test", DIGEST, 60, 3),
+        "undefined": lambda: checks.undefined(key, 1, 2, "smoke", 3),
+        "registered": lambda: checks.registered(key, 1, 0, ME),
         "finish": lambda: checks.finish(key, 1, 0, CommandConclusion.PASSED, 0, 4),
-            "conclude": lambda: checks.conclude(key, "passed", None, 5),
+        "conclude": lambda: checks.conclude(key, "passed", None, 5),
     }
 
 
 def snapshot(con: sqlite3.Connection) -> tuple[list[tuple[object, ...]], ...]:
-    return (columns(con, "SELECT * FROM checks_attempt ORDER BY attempt_id"),
-            columns(con, "SELECT * FROM check_result ORDER BY attempt_id,block,position"))
+    return (
+        columns(con, "SELECT * FROM checks_attempt ORDER BY attempt_id"),
+        columns(con, "SELECT * FROM check_result ORDER BY attempt_id,block,position"),
+    )
 
 
-@pytest.mark.parametrize("key", [AttemptKey("checks", "other", 1), AttemptKey("checks", "checks-token", 2),
-                                 AttemptKey("implement", "implement-token", 1)], ids=["token", "generation", "agent_attempt"])
+@pytest.mark.parametrize(
+    "key",
+    [AttemptKey("checks", "other", 1), AttemptKey("checks", "checks-token", 2), AttemptKey("implement", "implement-token", 1)],
+    ids=["token", "generation", "agent_attempt"],
+)
 def test_every_write_under_another_key_is_stale_and_writes_nothing(checking: sqlite3.Connection, key: AttemptKey) -> None:
     checks = store(checking)
     checks.start(CHECKS, 1, 0, "check", DIGEST, 60, 2)
@@ -194,9 +297,16 @@ def test_every_write_under_another_key_is_stale_and_writes_nothing(checking: sql
         assert snapshot(checking) == before, name
 
 
-@pytest.mark.parametrize("change", ["DELETE FROM reservation", "UPDATE reservation SET generation=2",
-                                    "UPDATE reservation SET slot='s1'", "UPDATE checks_attempt SET phase='concluded',"
-                                    "conclusion='passed',concluded_at=5"], ids=["released", "generation", "slot", "concluded"])
+@pytest.mark.parametrize(
+    "change",
+    [
+        "DELETE FROM reservation",
+        "UPDATE reservation SET generation=2",
+        "UPDATE reservation SET slot='s1'",
+        "UPDATE checks_attempt SET phase='concluded',conclusion='passed',concluded_at=5",
+    ],
+    ids=["released", "generation", "slot", "concluded"],
+)
 def test_every_write_needs_the_held_reservation_of_an_admitted_attempt(checking: sqlite3.Connection, change: str) -> None:
     checks = store(checking)
     checks.start(CHECKS, 1, 0, "check", DIGEST, 60, 2)
@@ -225,8 +335,11 @@ def test_a_block_runs_its_results_once_and_only_the_latest_block_is_read(checkin
     assert latest_results(checking, "checks") == checks.results(CHECKS)
 
 
-@pytest.mark.parametrize(("block", "position", "name"), [(1, 3, "lint"), (2, 3, "test"), (2, 0, "lint"), (3, 3, "lint")],
-                         ids=["older_block", "name_taken", "position_taken", "skipped_block"])
+@pytest.mark.parametrize(
+    ("block", "position", "name"),
+    [(1, 3, "lint"), (2, 3, "test"), (2, 0, "lint"), (3, 3, "lint")],
+    ids=["older_block", "name_taken", "position_taken", "skipped_block"],
+)
 def test_a_result_start_outside_the_latest_or_next_block_or_taken_is_check_changed(
     checking: sqlite3.Connection, block: int, position: int, name: str
 ) -> None:
@@ -244,8 +357,11 @@ def test_a_result_registers_once_concludes_once_and_never_in_an_older_block(chec
     checks = store(checking)
     checks.start(CHECKS, 1, 0, "check", DIGEST, 60, 2)
     checks.registered(CHECKS, 1, 0, ME)
-    for write in (lambda: checks.registered(CHECKS, 1, 0, ME), lambda: checks.registered(CHECKS, 1, 5, ME),
-                  lambda: checks.finish(CHECKS, 1, 5, CommandConclusion.PASSED, 0, 3)):
+    for write in (
+        lambda: checks.registered(CHECKS, 1, 0, ME),
+        lambda: checks.registered(CHECKS, 1, 5, ME),
+        lambda: checks.finish(CHECKS, 1, 5, CommandConclusion.PASSED, 0, 3),
+    ):
         with pytest.raises(StoreRefused, match="check_changed"):
             write()
     checks.finish(CHECKS, 1, 0, CommandConclusion.TIMED_OUT, None, 3)
@@ -259,7 +375,10 @@ def test_a_result_registers_once_concludes_once_and_never_in_an_older_block(chec
     with pytest.raises(ValueError, match="undefined"):
         checks.finish(CHECKS, 2, 0, CommandConclusion.UNDEFINED, None, 6)
     assert columns(checking, "SELECT block,position,pid,conclusion,rc FROM check_result ORDER BY block,position") == [
-        (1, 0, 501, "timed_out", None), (1, 1, None, None, None), (2, 0, None, None, None)]
+        (1, 0, 501, "timed_out", None),
+        (1, 1, None, None, None),
+        (2, 0, None, None, None),
+    ]
 
 
 def test_only_the_identity_write_uses_the_registration_connection(checking: sqlite3.Connection) -> None:
@@ -275,10 +394,18 @@ def test_only_the_identity_write_uses_the_registration_connection(checking: sqli
     assert opened == ["main", "registration", "main"]
 
 
-@pytest.mark.parametrize(("conclusion", "listed"), [(None, True), (CommandConclusion.LINGERING, True),
-    (CommandConclusion.TIMED_OUT, True), (CommandConclusion.INTERRUPTED, True),
-                                                    (CommandConclusion.PASSED, False),
-                                                        (CommandConclusion.FAILED, False), (CommandConclusion.DIRTY, False)])
+@pytest.mark.parametrize(
+    ("conclusion", "listed"),
+    [
+        (None, True),
+        (CommandConclusion.LINGERING, True),
+        (CommandConclusion.TIMED_OUT, True),
+        (CommandConclusion.INTERRUPTED, True),
+        (CommandConclusion.PASSED, False),
+        (CommandConclusion.FAILED, False),
+        (CommandConclusion.DIRTY, False),
+    ],
+)
 def test_unsettled_is_every_unfinished_or_live_after_result_of_the_latest_block(
     checking: sqlite3.Connection, conclusion: CommandConclusion | None, listed: bool
 ) -> None:
@@ -332,7 +459,14 @@ def test_conclude_is_the_one_phase_change_and_a_concluded_attempt_takes_no_more_
     found = checks.row(CHECKS)
     assert found is not None
     assert (found.phase, found.conclusion, found.reason, found.concluded_at, found.target_seen, found.rev, found.refusals) == (
-        "concluded", "failed", "main_moved", 5.0, "e" * 40, 1, 0)
+        "concluded",
+        "failed",
+        "main_moved",
+        5.0,
+        "e" * 40,
+        1,
+        0,
+    )
     before = snapshot(checking)
     for name, write in writes(checks, CHECKS).items():
         with pytest.raises(StoreRefused, match="stale_reservation"):
@@ -365,10 +499,15 @@ def test_another_boots_replacement_renews_the_deadline_to_the_later_finite_one(
     assert entry(checking) == (9, "s", "boot-2", deadline, 2)
 
 
-@pytest.mark.parametrize(("change", "key", "answer"), [
-    ("SELECT 1", AttemptKey("checks", "other", 1), "refused"), ("DELETE FROM reservation", CHECKS, "refused"),
-    ("UPDATE checks_attempt SET phase='concluded',conclusion='passed',concluded_at=5", CHECKS, "conflict"),
-], ids=["key", "reservation", "concluded"])
+@pytest.mark.parametrize(
+    ("change", "key", "answer"),
+    [
+        ("SELECT 1", AttemptKey("checks", "other", 1), "refused"),
+        ("DELETE FROM reservation", CHECKS, "refused"),
+        ("UPDATE checks_attempt SET phase='concluded',conclusion='passed',concluded_at=5", CHECKS, "conflict"),
+    ],
+    ids=["key", "reservation", "concluded"],
+)
 def test_a_registration_off_the_fence_writes_nothing(checking: sqlite3.Connection, change: str, key: AttemptKey, answer: str) -> None:
     checking.execute(change)
     assert store(checking).register_entry(key, ENTRY, 1) == answer and entry(checking) == (None, None, None, 100.0, 0)
@@ -388,7 +527,9 @@ def test_attempt_of_is_the_latest_checks_attempt_of_the_tasks_current_agent_atte
         'tasks','tl-1','/tracker','r','s1','i','d',1,'m','e','{"harness":"codex","sandbox":"workspace-write"}',100,1,3,?,
         'abababababababababababababababababababababababababababababababab',
         (SELECT digest FROM workflow_file),
-        'eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',1.0)""", (D,))
+        'eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',1.0)""",
+        (D,),
+    )
     assert checks.attempt_of("tasks", "tl-1") is None
 
 
@@ -489,26 +630,39 @@ def test_no_checks_attempt_write_can_match_a_land_candidates_key(landing: sqlite
     """`refused`, `profiled`, `conclude` and the entry registration keep the checks-only fence (`HELD`)."""
     checks = store(landing)
     before = snapshot(landing), columns(landing, "SELECT * FROM land_candidate")
-    for name, write in {"refused": lambda: checks.refused(CANDIDATE, "slot_busy"), "profiled": lambda: checks.profiled(CANDIDATE, DIGEST),
-                        "conclude": lambda: checks.conclude(CANDIDATE, "passed", None, 5)}.items():
+    for name, write in {
+        "refused": lambda: checks.refused(CANDIDATE, "slot_busy"),
+        "profiled": lambda: checks.profiled(CANDIDATE, DIGEST),
+        "conclude": lambda: checks.conclude(CANDIDATE, "passed", None, 5),
+    }.items():
         with pytest.raises(StoreRefused, match="stale_reservation"):
             write()
         assert (snapshot(landing), columns(landing, "SELECT * FROM land_candidate")) == before, name
     assert checks.register_entry(CANDIDATE, ENTRY, 1) == "refused" and checks.row(CANDIDATE) is None
 
 
-@pytest.mark.parametrize("change", [
-    "DELETE FROM reservation", "UPDATE reservation SET generation=2", "UPDATE reservation SET slot='s2'",
-    "UPDATE land_candidate SET validation='failed',reason='test:failed',validated_at=5",
-    "UPDATE land_candidate SET superseded='moved',superseded_at=5",
-], ids=["released", "generation", "slot", "concluded", "superseded"])
+@pytest.mark.parametrize(
+    "change",
+    [
+        "DELETE FROM reservation",
+        "UPDATE reservation SET generation=2",
+        "UPDATE reservation SET slot='s2'",
+        "UPDATE land_candidate SET validation='failed',reason='test:failed',validated_at=5",
+        "UPDATE land_candidate SET superseded='moved',superseded_at=5",
+    ],
+    ids=["released", "generation", "slot", "concluded", "superseded"],
+)
 def test_a_candidates_result_writes_need_it_pending_with_its_held_reservation(landing: sqlite3.Connection, change: str) -> None:
     checks = store(landing)
     checks.start(CANDIDATE, 1, 0, "check", DIGEST, 60, 11)
     landing.execute(change)
-    for write in (lambda: checks.block(CANDIDATE), lambda: checks.start(CANDIDATE, 1, 1, "test", DIGEST, 60, 12),
-                  lambda: checks.undefined(CANDIDATE, 1, 2, "smoke", 12), lambda: checks.registered(CANDIDATE, 1, 0, ME),
-                  lambda: checks.finish(CANDIDATE, 1, 0, CommandConclusion.PASSED, 0, 12)):
+    for write in (
+        lambda: checks.block(CANDIDATE),
+        lambda: checks.start(CANDIDATE, 1, 1, "test", DIGEST, 60, 12),
+        lambda: checks.undefined(CANDIDATE, 1, 2, "smoke", 12),
+        lambda: checks.registered(CANDIDATE, 1, 0, ME),
+        lambda: checks.finish(CANDIDATE, 1, 0, CommandConclusion.PASSED, 0, 12),
+    ):
         with pytest.raises(StoreRefused, match="stale_reservation"):
             write()
     assert candidate_rows(landing) == [(1, 0, "check", None, None)]
@@ -516,10 +670,21 @@ def test_a_candidates_result_writes_need_it_pending_with_its_held_reservation(la
 
 def candidate(con: sqlite3.Connection, number: int, **columns: object) -> None:
     """A candidate of `CHECKS` put directly (no store fence), with its columns."""
-    row: dict[str, object] = {"candidate_id": f"c{number}", "dispatch_token": f"c{number}-token", "generation": 1,
-                              "checks_attempt_id": "checks", "number": number, "origin_commit": ORIGIN, "commit_sha": SQUASH,
-                              "tree_same": 1, "required": "[]", "validation": "same_tree", "validated_at": 1, "admitted_at": 1,
-                              "retry_cause": None if number == 1 else "withdrawn"}
+    row: dict[str, object] = {
+        "candidate_id": f"c{number}",
+        "dispatch_token": f"c{number}-token",
+        "generation": 1,
+        "checks_attempt_id": "checks",
+        "number": number,
+        "origin_commit": ORIGIN,
+        "commit_sha": SQUASH,
+        "tree_same": 1,
+        "required": "[]",
+        "validation": "same_tree",
+        "validated_at": 1,
+        "admitted_at": 1,
+        "retry_cause": None if number == 1 else "withdrawn",
+    }
     put(con, "land_candidate", row | columns)
 
 
@@ -530,7 +695,8 @@ LAND_STATES = [  # (the latest candidate's columns, the abandon's word)
     (SLOTTED, "landing"),  # pending, holding its slot
     (SLOTTED | {"validation": "failed", "validated_at": 2, "reason": "test:failed"}, "landing"),  # failed, still holding it
     (SLOTTED | {"validation": "passed", "validated_at": 2, "released_at": 3, "parked": D}, "landing"),  # pushable: passed
-    (PUSHED, "landed"), (SLOTTED | {"validation": "passed", "validated_at": 2} | PUSHED, "landed"),  # delivered
+    (PUSHED, "landed"),
+    (SLOTTED | {"validation": "passed", "validated_at": 2} | PUSHED, "landed"),  # delivered
     (PUSHED | {"close": "closed", "closed_at": 5}, "closed"),  # delivered and closed
     ({"superseded": "withdrawn", "superseded_at": 3}, "abandoned"),
     (SLOTTED | {"validation": "failed", "validated_at": 2, "reason": "test:failed", "released_at": 3, "parked": D}, "abandoned"),
@@ -538,8 +704,11 @@ LAND_STATES = [  # (the latest candidate's columns, the abandon's word)
 ]
 
 
-@pytest.mark.parametrize(("change", "word"), LAND_STATES, ids=["same_tree", "pending", "failed_held", "passed", "pushed",
-                                                               "pushed_held", "closed", "withdrawn", "failed", "abandoned"])
+@pytest.mark.parametrize(
+    ("change", "word"),
+    LAND_STATES,
+    ids=["same_tree", "pending", "failed_held", "passed", "pushed", "pushed_held", "closed", "withdrawn", "failed", "abandoned"],
+)
 def test_the_abandon_of_a_released_checks_attempt_is_fenced_by_its_land_candidates(
     checking: sqlite3.Connection, change: dict[str, object], word: str
 ) -> None:
@@ -555,8 +724,9 @@ def test_the_abandon_of_a_released_checks_attempt_is_fenced_by_its_land_candidat
     assert found is not None and found.abandoned == (word == "abandoned")
 
 
-@pytest.mark.parametrize(("change", "word"), LAND_STATES[:7],
-                         ids=["same_tree", "pending", "failed_held", "passed", "pushed", "pushed_held", "closed"])
+@pytest.mark.parametrize(
+    ("change", "word"), LAND_STATES[:7], ids=["same_tree", "pending", "failed_held", "passed", "pushed", "pushed_held", "closed"]
+)
 def test_the_abandon_release_of_an_unreleased_checks_attempt_is_fenced_by_its_land_candidates(
     checking: sqlite3.Connection, change: dict[str, object], word: str
 ) -> None:
@@ -608,7 +778,7 @@ def test_command_conclusions_roundtrip_as_enum_members(checking: sqlite3.Connect
     else:
         checks.start(CHECKS, 1, 0, "one", "a" * 64, 60, 2)
         checks.finish(CHECKS, 1, 0, conclusion, None, 3)
-    row, = checks.results(CHECKS)
+    (row,) = checks.results(CHECKS)
     assert row.conclusion is conclusion
     assert checking.execute("SELECT conclusion FROM check_result").fetchone() == (encode(conclusion),)
     assert decode(encode(conclusion)) is conclusion
@@ -635,16 +805,25 @@ def test_malformed_command_conclusions_keep_the_store_explanation(checking: sqli
 def test_command_conclusions_have_one_definition_and_native_ids_one_adapter() -> None:
     root = Path(__file__).resolve().parents[2] / "src" / "taskloop"
     assert [encode(each) for each in CommandConclusion] == [
-        "passed", "failed", "timed_out", "lingering", "dirty", "undefined", "interrupted"]
+        "passed",
+        "failed",
+        "timed_out",
+        "lingering",
+        "dirty",
+        "undefined",
+        "interrupted",
+    ]
     definitions: list[Path] = []
     for path in root.rglob("*.py"):
         tree = ast.parse(path.read_text())
         definitions.extend(path for node in ast.walk(tree) if isinstance(node, ast.ClassDef) and node.name == "CommandConclusion")
         if path.name != "ids.py":
             imports = [node for node in ast.walk(tree) if isinstance(node, (ast.Import, ast.ImportFrom))]
-            assert not any((isinstance(node, ast.ImportFrom) and node.module in {"uuid", "secrets"}) or
-                           (isinstance(node, ast.Import) and any(name.name in {"uuid", "secrets"} for name in node.names))
-                           for node in imports), path
+            assert not any(
+                (isinstance(node, ast.ImportFrom) and node.module in {"uuid", "secrets"})
+                or (isinstance(node, ast.Import) and any(name.name in {"uuid", "secrets"} for name in node.names))
+                for node in imports
+            ), path
         if path.name in {"check_store.py", "setup_store.py"}:
             assert not any(isinstance(node, ast.TypeAlias) and node.name.id == "Conclusion" for node in ast.walk(tree))
             assert not any(isinstance(node, ast.Name) and node.id == "CONCLUSIONS" for node in ast.walk(tree))

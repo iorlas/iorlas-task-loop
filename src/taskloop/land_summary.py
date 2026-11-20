@@ -49,8 +49,11 @@ def message(title: str, checks: ChecksRow, listed: Sequence[tuple[str, str]], pl
     lines = [f"- {one_line(subject, TITLE) or '(no subject)'} ({sha[:12]})" for sha, subject in listed[:SUBJECTS]]
     lines += [f"- ... and {len(listed) - SUBJECTS} more"] if len(listed) > SUBJECTS else []
     squashed = [f"Squashed from task/{task} at {x}:", *lines] if lines else [f"Squashed from task/{task} at {x}."]
-    trailers = [f"Task: {task}", *([f"Plan: {plan_path(task)}"] if plan else []),
-                f"Checked: {checks.key.attempt_id} {checks.conclusion or 'unconcluded'} at {x}"]
+    trailers = [
+        f"Task: {task}",
+        *([f"Plan: {plan_path(task)}"] if plan else []),
+        f"Checked: {checks.key.attempt_id} {checks.conclusion or 'unconcluded'} at {x}",
+    ]
     return "\n".join([head, "", *squashed, "", *trailers]) + "\n"
 
 
@@ -58,7 +61,7 @@ def _plain(title: str) -> str:
     """The title without leading `fixup!`, `squash!`, `amend!` or `reword!`: `git rebase --autosquash` would fold S into
     another commit (only the title is the person's; the task id suffix stays)."""
     while (word := title.split(" ", 1)[0].lower()) in AUTOSQUASH:
-        title = title[len(word):].lstrip()
+        title = title[len(word) :].lstrip()
     return title
 
 
@@ -110,26 +113,48 @@ class Trees:
     s: Files | None
 
 
-def summary(checks: ChecksRow, results: Sequence[ResultRow], profiles: tuple[Profile, Profile], required_o: Required,
-            made: Squashed | Conflicted, trees: Trees, text: tuple[str, Gate | None], o: str) -> LandSummary:
+def summary(
+    checks: ChecksRow,
+    results: Sequence[ResultRow],
+    profiles: tuple[Profile, Profile],
+    required_o: Required,
+    made: Squashed | Conflicted,
+    trees: Trees,
+    text: tuple[str, Gate | None],
+    o: str,
+) -> LandSummary:
     """Section 10's facts from the checks attempt, its latest block's results, the profiles at O and X, the required names
     at O, the squash, the tree listings, and the message with the gate facts."""
     at_o, at_x = profiles
     concluded: dict[str, CommandConclusion | Literal["unfinished", "no result"]] = {
-        row.name: row.conclusion or "unfinished" for row in results}
+        row.name: row.conclusion or "unfinished" for row in results
+    }
 
     names_o, names_c = [name for name, _ in required_o], [name for name, _ in checks.required]
     argv_x = {check.name: check for check in at_x.checks}
     argv_o = {check.name: check for check in at_o.checks}
-    argv = tuple(Changed(name, argv_o.get(name), argv_x.get(name)) for name in names_o
-                 if (argv_o[name].argv if name in argv_o else None) != (argv_x[name].argv if name in argv_x else None))
-    state: State = "conflict" if trees.s is None else "no_change" if trees.s == trees.o else "same_tree" if trees.s == trees.x \
-        else "moved"
+    argv = tuple(
+        Changed(name, argv_o.get(name), argv_x.get(name))
+        for name in names_o
+        if (argv_o[name].argv if name in argv_o else None) != (argv_x[name].argv if name in argv_x else None)
+    )
+    state: State = "conflict" if trees.s is None else "no_change" if trees.s == trees.o else "same_tree" if trees.s == trees.x else "moved"
     return LandSummary(
-        checks.key.attempt_id, checks.conclusion, checks.target, checks.commit,
-        tuple((name, concluded.get(name, "no result")) for name in names_c), o,
-        tuple(name for name in names_o if name not in names_c), tuple(name for name in names_c if name not in names_o), argv,
-        text[1], trees.base, state, made.paths if isinstance(made, Conflicted) else (), text[0])
+        checks.key.attempt_id,
+        checks.conclusion,
+        checks.target,
+        checks.commit,
+        tuple((name, concluded.get(name, "no result")) for name in names_c),
+        o,
+        tuple(name for name in names_o if name not in names_c),
+        tuple(name for name in names_c if name not in names_o),
+        argv,
+        text[1],
+        trees.base,
+        state,
+        made.paths if isinstance(made, Conflicted) else (),
+        text[0],
+    )
 
 
 def _listing(repo: Repo, rev: str) -> Files:
@@ -139,8 +164,15 @@ def _listing(repo: Repo, rev: str) -> Files:
     return dict(tree.files)
 
 
-def summarized(repo: Origin, files: ProfileFiles, checks: ChecksRow, results: Sequence[ResultRow], made: Squashed | Conflicted,
-               title: str, origin: tuple[str, Required]) -> LandSummary | Failed:
+def summarized(
+    repo: Origin,
+    files: ProfileFiles,
+    checks: ChecksRow,
+    results: Sequence[ResultRow],
+    made: Squashed | Conflicted,
+    title: str,
+    origin: tuple[str, Required],
+) -> LandSummary | Failed:
     """The summary read from Git: the profiles at O and X, merge-base(O, X), the tree listings, the message, the gate."""
     o, x = origin[0], checks.commit
     at_o, at_x = read_profile(files, o), read_profile(files, x)
@@ -152,8 +184,9 @@ def summarized(repo: Origin, files: ProfileFiles, checks: ChecksRow, results: Se
         return Failed("unavailable", "git")
     try:
         base = repo.repo.merge_base(o, x) or o
-        trees = Trees(base, _listing(repo.repo, x), _listing(repo.repo, o),
-                      None if isinstance(made, Conflicted) else _listing(repo.repo, made.sha))
+        trees = Trees(
+            base, _listing(repo.repo, x), _listing(repo.repo, o), None if isinstance(made, Conflicted) else _listing(repo.repo, made.sha)
+        )
         text = message_at(repo.repo, title, checks, o)
     except (GitUnavailable, MissingRevision) as error:
         return Failed("unavailable", "git", f"Git could not read the land's commits ({type(error).__name__}): rerun.")
@@ -175,24 +208,41 @@ def _state(found: LandSummary) -> str:
         return f"conflict ({len(found.conflicts)} paths): {shown}"
     if found.state == "no_change":
         return "no change: main already holds X's changes (`--no-change` records it)"
-    return "same tree as X" + (", checks run again: the required names changed" if found.again else ", no checks") \
-        if found.state == "same_tree" else "merged onto a moved main: checks run again"
+    return (
+        "same tree as X" + (", checks run again: the required names changed" if found.again else ", no checks")
+        if found.state == "same_tree"
+        else "merged onto a moved main: checks run again"
+    )
 
 
 def lines(found: LandSummary) -> tuple[str, ...]:
     """The summary as printed: one fact per line, every outside text printable."""
-    names = "same" if not (found.added or found.removed) else "; ".join(
-        part for part in (f"added {', '.join(found.added)}" if found.added else "",
-                          f"removed {', '.join(found.removed)}" if found.removed else "") if part) + " (the checks run again)"
+    names = (
+        "same"
+        if not (found.added or found.removed)
+        else "; ".join(
+            part
+            for part in (
+                f"added {', '.join(found.added)}" if found.added else "",
+                f"removed {', '.join(found.removed)}" if found.removed else "",
+            )
+            if part
+        )
+        + " (the checks run again)"
+    )
     return (
         f"Checks: {found.checks_id} {found.conclusion or 'unconcluded'} at X {found.x} (main at {found.target})",
         *(f"Check: {name} {encode(result) if isinstance(result, CommandConclusion) else result}" for name, result in found.results),
         f"Required at origin main {found.origin}: {names}",
-        *(f"Argv changed: {each.name}: {_argv(None if each.at_o is None else each.at_o.argv)} -> "
-          f"{_argv(None if each.at_x is None else each.at_x.argv)}" for each in found.argv),
+        *(
+            f"Argv changed: {each.name}: {_argv(None if each.at_o is None else each.at_o.argv)} -> "
+            f"{_argv(None if each.at_x is None else each.at_x.argv)}"
+            for each in found.argv
+        ),
         *([] if found.gate is None else gate_lines(found.gate)),
         f"Origin main: {found.origin}; {_state(found)}",
-        "Message:", *(f"  {line}" for line in found.message.splitlines()),
+        "Message:",
+        *(f"  {line}" for line in found.message.splitlines()),
         f"Diff: git diff {found.base}..{found.x}",
     )
 
@@ -208,14 +258,28 @@ def gate_lines(gate: Gate) -> list[str]:
     shown = [f"  {each.kind} {one_line(each.path, 200)} +{each.added} -{each.deleted}" for each in gate.changes[:FILES]]
     more = [f"  ... and {len(gate.changes) - FILES} more"] if len(gate.changes) > FILES else []
     return [
-        f"Files changed: {len(gate.changes)} (+{added} -{deleted})", *shown, *more,
-        *(f"Check {'added' if each.at_o is None else 'removed' if each.at_x is None else 'changed'}: {each.name}: "
-          f"{_check(each.at_o)} -> {_check(each.at_x)}" for each in gate.checks),
+        f"Files changed: {len(gate.changes)} (+{added} -{deleted})",
+        *shown,
+        *more,
+        *(
+            f"Check {'added' if each.at_o is None else 'removed' if each.at_x is None else 'changed'}: {each.name}: "
+            f"{_check(each.at_o)} -> {_check(each.at_x)}"
+            for each in gate.checks
+        ),
         *([] if gate.setup is None else [f"Setup changed: {_joined(gate.setup[0])} -> {_joined(gate.setup[1])}"]),
-        *([] if gate.required is None else [f"Required changed: {', '.join(gate.required[0]) or '(none)'} -> "
-                                              f"{', '.join(gate.required[1]) or '(none)'}"]),
+        *(
+            []
+            if gate.required is None
+            else [f"Required changed: {', '.join(gate.required[0]) or '(none)'} -> {', '.join(gate.required[1]) or '(none)'}"]
+        ),
         *(f"Configuration changed: {one_line(path, 200)}" for path in gate.configs),
         *(f"Test weakened: {one_line(each.path, 200)}: {each.why}" for each in gate.weakened),
-        *(["These change what decides a pass: land the task again, accepting gate changes, to land them (a test module split, or its "
-           "assertions merged, shows as weakened and is accepted the same way)."] if gate.decisive else []),
+        *(
+            [
+                "These change what decides a pass: land the task again, accepting gate changes, to land them (a test module split, or its "
+                "assertions merged, shows as weakened and is accepted the same way)."
+            ]
+            if gate.decisive
+            else []
+        ),
     ]

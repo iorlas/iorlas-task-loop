@@ -1,4 +1,5 @@
 """Public SQLite observations: shared ordinary writers retain integrity and timeout contracts."""
+
 import sqlite3
 import threading
 from pathlib import Path
@@ -19,12 +20,19 @@ from taskloop.operations import Failed
 def observed(monkeypatch: pytest.MonkeyPatch) -> list[str]:
     statements: list[str] = []
     original = sqlite3.connect
-    def connect(database: str, *, uri: bool = False,
-                isolation_level: Literal["DEFERRED", "IMMEDIATE", "EXCLUSIVE"] | None = "DEFERRED", timeout: float = 5.,
-                check_same_thread: bool = True) -> sqlite3.Connection:
+
+    def connect(
+        database: str,
+        *,
+        uri: bool = False,
+        isolation_level: Literal["DEFERRED", "IMMEDIATE", "EXCLUSIVE"] | None = "DEFERRED",
+        timeout: float = 5.0,
+        check_same_thread: bool = True,
+    ) -> sqlite3.Connection:
         con = original(database, uri=uri, isolation_level=isolation_level, timeout=timeout, check_same_thread=check_same_thread)
         con.set_trace_callback(statements.append)
         return con
+
     monkeypatch.setattr(sqlite3, "connect", connect)
     return statements
 
@@ -127,8 +135,10 @@ def test_shared_lifetime_keeps_separate_connections_per_thread(tmp_path: Path) -
     work = open_checking(path, tmp_path / "evidence", GitViews(30), ordinary, registration)
     main = work.store.connect()
     found: list[sqlite3.Connection | None] = []
+
     def read() -> None:
         found.append(work.store.connect())
+
     thread = threading.Thread(target=read)
     try:
         thread.start()

@@ -33,7 +33,9 @@ def test_retries_and_interruption_survive_reopening_without_counting_downtime(tm
     saved = files.operations(KEY)
     assert len({sample.operation for sample in saved}) == 3
     assert {(sample.state, sample.elapsed) for sample in saved} == {
-        (OperationState.FAILED, 4.0), (OperationState.COMPLETED, 3.0), (OperationState.ACTIVE, 0.0),
+        (OperationState.FAILED, 4.0),
+        (OperationState.COMPLETED, 3.0),
+        (OperationState.ACTIVE, 0.0),
     }
     now[0] += 9000
     assert EvidenceFiles(tmp_path).operations(KEY) == saved
@@ -51,14 +53,29 @@ def test_missing_read_creates_nothing(tmp_path: Path) -> None:
     assert not root.exists()
 
 
-@pytest.mark.parametrize("change", [
-    {"elapsed": math.nan}, {"elapsed": math.inf}, {"elapsed": -1.0}, {"started_at": math.nan},
-    {"started_at": math.inf}, {"attempt": ""}, {"operation": "../escape"}, {"elapsed": "1"},
-])
+@pytest.mark.parametrize(
+    "change",
+    [
+        {"elapsed": math.nan},
+        {"elapsed": math.inf},
+        {"elapsed": -1.0},
+        {"started_at": math.nan},
+        {"started_at": math.inf},
+        {"attempt": ""},
+        {"operation": "../escape"},
+        {"elapsed": "1"},
+    ],
+)
 def test_invalid_records_cannot_be_written(tmp_path: Path, change: dict[str, object]) -> None:
     files = EvidenceFiles(tmp_path)
-    sample = OperationSample(operation="a" * 32, attempt=files.directory(KEY), kind=OperationKind.PUBLISH,
-                             started_at=1.0, elapsed=0.0, state=OperationState.ACTIVE)
+    sample = OperationSample(
+        operation="a" * 32,
+        attempt=files.directory(KEY),
+        kind=OperationKind.PUBLISH,
+        started_at=1.0,
+        elapsed=0.0,
+        state=OperationState.ACTIVE,
+    )
     with pytest.raises(ValueError):
         files.write_operation(KEY, sample.model_copy(update=change))
     assert not (tmp_path / "attempts").exists()
@@ -79,7 +96,7 @@ def test_identity_mismatch_is_rejected_by_writer_and_reader(tmp_path: Path) -> N
     files = EvidenceFiles(tmp_path)
     observer = files.observe_operation(KEY, OperationKind.PUBLISH, clock=lambda: 1.0, wall=lambda: 2.0, ids=NativeIds())
     observer.finish(OperationState.COMPLETED)
-    sample, = files.operations(KEY)
+    (sample,) = files.operations(KEY)
     wrong = sample.model_copy(update={"attempt": "other"})
     with pytest.raises(ValueError, match="identity mismatch"):
         files.write_operation(KEY, wrong)
@@ -99,8 +116,12 @@ def test_observation_failure_preserves_one_effect(tmp_path: Path, monkeypatch: p
         monkeypatch.setattr(ids, "hex", broken)
     if failure == "active":
         monkeypatch.setattr(files, "write_operation", broken)
-    timing = partial(files.observe_operation, clock=broken if failure == "origin" else lambda: now[0],
-                     wall=broken if failure == "wall" else lambda: 100.0, ids=ids)
+    timing = partial(
+        files.observe_operation,
+        clock=broken if failure == "origin" else lambda: now[0],
+        wall=broken if failure == "wall" else lambda: 100.0,
+        ids=ids,
+    )
     effects = []
     with measured(timing, KEY, OperationKind.PUBLISH) as observed:
         effects.append("push")
@@ -117,7 +138,7 @@ def test_unknown_exception_is_uncertain_and_preserved(tmp_path: Path) -> None:
     timing = partial(files.observe_operation, clock=lambda: 1.0, wall=lambda: 2.0, ids=NativeIds())
     with pytest.raises(OSError), measured(timing, KEY, OperationKind.PUBLISH):
         raise OSError("Push outcome unavailable")
-    sample, = files.operations(KEY)
+    (sample,) = files.operations(KEY)
     assert sample.state is OperationState.UNCERTAIN
 
 

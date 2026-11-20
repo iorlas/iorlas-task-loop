@@ -34,8 +34,17 @@ def scheduling(bench: Bench, con: sqlite3.Connection, repo: FakeRepo, root: Path
         stopped[0] = True
 
     ports = bench.ports()
-    rounds = RoundsPorts(lambda quiet: run_round(ports, replace(REQUEST, quiet=quiet)), bench.store.slot_use,
-                         lambda: now[0], lambda: now[0], wait, bench.lines.append, lambda: None, lambda: stopped[0], 77)
+    rounds = RoundsPorts(
+        lambda quiet: run_round(ports, replace(REQUEST, quiet=quiet)),
+        bench.store.slot_use,
+        lambda: now[0],
+        lambda: now[0],
+        wait,
+        bench.lines.append,
+        lambda: None,
+        lambda: stopped[0],
+        77,
+    )
     if abrupt:
         with pytest.raises(KeyboardInterrupt):
             run_rounds(rounds, RoundsRequest("tasks", 60))
@@ -47,7 +56,11 @@ def scheduling(bench: Bench, con: sqlite3.Connection, repo: FakeRepo, root: Path
 
 @pytest.mark.parametrize("abrupt", [False, True])
 def test_live_entry_and_agent_survive_rounds_restart_and_adoption(
-    admitted: Path, slot: FakeWorktree, repo: FakeRepo, root: Path, abrupt: bool,
+    admitted: Path,
+    slot: FakeWorktree,
+    repo: FakeRepo,
+    root: Path,
+    abrupt: bool,
 ) -> None:
     con = Store(SCHEMA).open_rw(admitted)
     assert con is not None

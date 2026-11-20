@@ -11,7 +11,7 @@ def project(samples: tuple[OperationSample, ...], step: str, number: int, *, pas
     for sample in sorted(samples, key=lambda each: (each.started_at, each.operation)):
         try:
             started = datetime.fromtimestamp(sample.started_at, UTC).isoformat(timespec="milliseconds")
-        except (OverflowError, OSError, ValueError):
+        except OverflowError, OSError, ValueError:
             continue
         elapsed = None
         if sample.state is not OperationState.ACTIVE:
@@ -19,6 +19,16 @@ def project(samples: tuple[OperationSample, ...], step: str, number: int, *, pas
                 elapsed = int(sample.elapsed * 1000)
             except OverflowError:
                 elapsed = int(sample.elapsed) * 1000
-        found.append(OperationDetail(operation=sample.operation, step=step, n=number, past=past,
-                                     kind=sample.kind, state=sample.state, started_at=started, elapsed_ms=elapsed))
+        found.append(
+            OperationDetail(
+                operation=sample.operation,
+                step=step,
+                n=number,
+                past=past,
+                kind=sample.kind,
+                state=sample.state,
+                started_at=started,
+                elapsed_ms=elapsed,
+            )
+        )
     return tuple(found)

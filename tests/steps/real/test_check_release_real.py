@@ -63,7 +63,9 @@ def test_a_passed_block_s_leftovers_are_reset_away_and_the_slot_parked_at_d(
             'e','{"harness":"codex","sandbox":"workspace-write"}',100,'captured',?,?,1,2,?,?,
         'abababababababababababababababababababababababababababababababab',
         (SELECT digest FROM workflow_file),
-        'eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',1.0)""", (repo_id, d, x, d, d))
+        'eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',1.0)""",
+            (repo_id, d, x, d, d),
+        )
         factory.execute("INSERT INTO slot_release VALUES ('implement','implement-token',1,?,1,'kept')", (d,))
         factory.execute("INSERT INTO reservation VALUES ('s1',?,1,'checks')", (repo_id,))
         insert(factory, ChecksAdmitted(CHECKS, "implement", 1, "s1", d, x, REQUIRED, 100.0))

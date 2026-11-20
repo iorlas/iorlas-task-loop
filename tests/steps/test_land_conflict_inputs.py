@@ -24,8 +24,11 @@ def test_retained_read_survives_release_without_weakening_live_load(on_slot: Pat
     assert b.ports.files.read(inputs.input_ref) == "The exact retained requirements.\n"
     with pytest.raises(StoreRefused):
         b.ports.attempts.load(b.request.source)
-    for key in (replace(b.request.source, dispatch_token="wrong"), replace(b.request.source, reservation_generation=2),
-                AttemptKey("missing", "implement-token", 1)):
+    for key in (
+        replace(b.request.source, dispatch_token="wrong"),
+        replace(b.request.source, reservation_generation=2),
+        AttemptKey("missing", "implement-token", 1),
+    ):
         assert b.ports.attempts.retained(key) is None
     b.con.close()
 
@@ -51,8 +54,9 @@ def test_invalid_original_inputs_never_reserve(on_slot: Path, repo: FakeRepo, tm
     b.con.close()
 
 
-@pytest.mark.parametrize("field,value", [("repo_id", "other"), ("backlog", "elsewhere"), ("task_id", "tl-2"),
-                                       ("tracker_root", "/other"), ("checked", "f" * 40)])
+@pytest.mark.parametrize(
+    "field,value", [("repo_id", "other"), ("backlog", "elsewhere"), ("task_id", "tl-2"), ("tracker_root", "/other"), ("checked", "f" * 40)]
+)
 def test_source_identity_must_match(on_slot: Path, repo: FakeRepo, tmp_path: Path, field: str, value: str) -> None:
     b = bench(on_slot, repo, tmp_path)
     result = admit(b.ports, b.request.model_copy(update={field: value}))
@@ -64,8 +68,10 @@ def test_source_identity_must_match(on_slot: Path, repo: FakeRepo, tmp_path: Pat
 def test_captured_nondefault_harness_and_policy_survive_admission(on_slot: Path, repo: FakeRepo, tmp_path: Path) -> None:
     b = bench(on_slot, repo, tmp_path)
     setting = AgentSetting(harness=HarnessKind.OPENCODE, model="vendor/model", effort="low", access=OpenCodePolicy())
-    b.con.execute("UPDATE attempt SET harness=?,provider=?,model=?,effort=?,access_policy=?", (
-        setting.harness.value, setting.provider.value, setting.model, setting.effort, encode_policy(setting.access)))
+    b.con.execute(
+        "UPDATE attempt SET harness=?,provider=?,model=?,effort=?,access_policy=?",
+        (setting.harness.value, setting.provider.value, setting.model, setting.effort, encode_policy(setting.access)),
+    )
     result = admit(b.ports, b.request)
     assert result.outcome is Outcome.ADMITTED and result.record is not None
     assert result.record.inputs.setting == setting

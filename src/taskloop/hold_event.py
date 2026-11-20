@@ -37,8 +37,9 @@ from taskloop.task_event_cause import (
 )
 
 
-def event(files: EvidenceFiles, reader: AttemptStore, agent: AttemptRow, view: AttemptView,
-          decided: TaskEventCause | None = None) -> TaskEvent:
+def event(
+    files: EvidenceFiles, reader: AttemptStore, agent: AttemptRow, view: AttemptView, decided: TaskEventCause | None = None
+) -> TaskEvent:
     """Only called for a new hold; all mandatory context is validated before insertion."""
     try:
         cause = decided if decided is not None else _cause(files, reader, agent, view)
@@ -46,24 +47,33 @@ def event(files: EvidenceFiles, reader: AttemptStore, agent: AttemptRow, view: A
             cause = land_cause(reader, agent, view.checks.row, cause)
         if isinstance(cause, LandCause):
             cause = _land(files, reader, view, cause)
-        return TaskEvent(attempt_id=agent.key.attempt_id, agent_step=Step(agent.step), cause_id=view.attempt_id,
-                         step=EventStep(view.step), cause=cause)
+        return TaskEvent(
+            attempt_id=agent.key.attempt_id, agent_step=Step(agent.step), cause_id=view.attempt_id, step=EventStep(view.step), cause=cause
+        )
     except ValueError as error:
         raise StoreUnavailable("The deciding hold context is missing or inconsistent") from error
 
 
 def _cause(files: EvidenceFiles, reader: AttemptStore, agent: AttemptRow, view: AttemptView) -> TaskEventCause:
     action = view.hold_action or view.next
-    stuck = {"stuck:expired_admitted": StuckReason.EXPIRED_ADMITTED, "stuck:entry_lost": StuckReason.ENTRY_LOST,
-             "stuck:uncollected": StuckReason.UNCOLLECTED, "stuck:conflict": StuckReason.CONFLICT,
-             "stuck:setup_failed": StuckReason.SETUP_FAILED, "stuck:checks_refused": StuckReason.CHECKS_REFUSED}.get(action)
+    stuck = {
+        "stuck:expired_admitted": StuckReason.EXPIRED_ADMITTED,
+        "stuck:entry_lost": StuckReason.ENTRY_LOST,
+        "stuck:uncollected": StuckReason.UNCOLLECTED,
+        "stuck:conflict": StuckReason.CONFLICT,
+        "stuck:setup_failed": StuckReason.SETUP_FAILED,
+        "stuck:checks_refused": StuckReason.CHECKS_REFUSED,
+    }.get(action)
     execution = view.result.execution or collect(reader, agent.key).execution
     stop = captured_stop(reader, view.attempt_id)
     deadline = agent.deadline if view.checks is None else view.checks.row.deadline
     if stuck is not None:
-        return StuckCause(reason=stuck, deadline=deadline,
-                          rc=execution.facts.rc if execution is not None and stuck is StuckReason.ENTRY_LOST else None,
-                          stop=stop if stuck is StuckReason.ENTRY_LOST else None)
+        return StuckCause(
+            reason=stuck,
+            deadline=deadline,
+            rc=execution.facts.rc if execution is not None and stuck is StuckReason.ENTRY_LOST else None,
+            stop=stop if stuck is StuckReason.ENTRY_LOST else None,
+        )
     if action == "repeats_exhausted":
         left = Leftovers(reason=RepeatReason(view.leftovers[0]), paths=view.leftovers[1:]) if view.leftovers else None
         return RepeatCause(leftovers=left)
@@ -82,9 +92,14 @@ def _agent_cause(files: EvidenceFiles, reader: AttemptStore, agent: AttemptRow, 
     told = explanation(files, execution, agent.step, agent.task_id)
     run, answer = execution.facts, execution.answer
     if run.timed_out or run.rc != 0:
-        return RunCause(reason=RunReason(run.reason or ("timeout" if run.timed_out else "exit")), explanation=told,
-                        deadline=agent.deadline, timed_out=run.timed_out, rc=run.rc,
-                        stop=captured_stop(reader, view.attempt_id))
+        return RunCause(
+            reason=RunReason(run.reason or ("timeout" if run.timed_out else "exit")),
+            explanation=told,
+            deadline=agent.deadline,
+            timed_out=run.timed_out,
+            rc=run.rc,
+            stop=captured_stop(reader, view.attempt_id),
+        )
     if answer.kind != "valid":
         return AnswerCause(reason=AnswerReason(answer.kind), failure=answer.failure, explanation=told)
     if isinstance(execution.verdict, Rejected):
@@ -100,13 +115,20 @@ def _land(files: EvidenceFiles, reader: AttemptStore, view: AttemptView, cause: 
     candidate = LandStore(reader.connect, reader.begin).latest(view.attempt_id)
     if candidate is None:
         return cause
-    checks = tuple(FailedCheck(name=each.name, conclusion=each.conclusion or NotRun.NOT_RUN,
-                              log=None if each.conclusion is CommandConclusion.UNDEFINED else
-                              str(files.check_path(candidate.key, each.block, each.name)))
-                   for each in CheckStore(reader.connect, reader.begin).results(candidate.key)
-                   if each.conclusion is not CommandConclusion.PASSED) if cause.reason is LandReason.CHECKS_FAILED else ()
-    return LandCause(reason=cause.reason, explanation=cause.explanation, source=candidate.commit,
-                     target=candidate.origin, checks=checks)
+    checks = (
+        tuple(
+            FailedCheck(
+                name=each.name,
+                conclusion=each.conclusion or NotRun.NOT_RUN,
+                log=None if each.conclusion is CommandConclusion.UNDEFINED else str(files.check_path(candidate.key, each.block, each.name)),
+            )
+            for each in CheckStore(reader.connect, reader.begin).results(candidate.key)
+            if each.conclusion is not CommandConclusion.PASSED
+        )
+        if cause.reason is LandReason.CHECKS_FAILED
+        else ()
+    )
+    return LandCause(reason=cause.reason, explanation=cause.explanation, source=candidate.commit, target=candidate.origin, checks=checks)
 
 
 def _checks(files: EvidenceFiles, reader: AttemptStore, view: AttemptView) -> ChecksCause:
@@ -115,17 +137,21 @@ def _checks(files: EvidenceFiles, reader: AttemptStore, view: AttemptView) -> Ch
         raise ValueError("A checks cause requires its checks view")
     row = checks.row
     results = CheckStore(reader.connect, reader.begin).results(row.key)
-    failed = tuple(FailedCheck(name=each.name, conclusion=each.conclusion or NotRun.NOT_RUN,
-                              log=None if each.conclusion is CommandConclusion.UNDEFINED else
-                              str(files.check_path(row.key, each.block, each.name)))
-                   for each in results if each.conclusion is not CommandConclusion.PASSED)
+    failed = tuple(
+        FailedCheck(
+            name=each.name,
+            conclusion=each.conclusion or NotRun.NOT_RUN,
+            log=None if each.conclusion is CommandConclusion.UNDEFINED else str(files.check_path(row.key, each.block, each.name)),
+        )
+        for each in results
+        if each.conclusion is not CommandConclusion.PASSED
+    )
     # `row.reason` is the stored validation verdict. Match structured candidates through their existing codec;
     # check names may themselves contain colons, so splitting that verdict would lose information.
     check = next((each for each in failed if row.reason == f"{each.name}:{each.conclusion!s}"), None)
     missing = next((name for name, _digest in row.required if row.reason == f"{name}:not_run"), None)
     if check is not None or missing is not None:
-        return ChecksCause(check=check or FailedCheck(name=missing or "", conclusion=NotRun.NOT_RUN),
-                           checks=failed, deadline=row.deadline)
+        return ChecksCause(check=check or FailedCheck(name=missing or "", conclusion=NotRun.NOT_RUN), checks=failed, deadline=row.deadline)
     setup = next((each for each in CommandConclusion if row.reason == f"setup:{encode(each)}"), None)
     profile = next((each for each in ProfileReason if row.reason == f"profile:{each!s}"), None)
     if setup is not None or profile is not None:

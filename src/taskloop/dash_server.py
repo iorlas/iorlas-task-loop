@@ -25,11 +25,27 @@ from taskloop.operations import Failed
 from taskloop.round_log import IDENT
 from taskloop.round_reader import LogRow
 
-PAGES = {"": "index.html", "index.html": "index.html", "app.js": "app.js", "api.js": "api.js", "drawer.js": "drawer.js",
-         "event-detail.js": "event-detail.js",
-         "logs.js": "logs.js", "ui.js": "ui.js", "lines.js": "lines.js", "rail.js": "rail.js", "duration.js": "duration.js",
-         "taskview.js": "taskview.js", "result.js": "result.js", "words.js": "words.js", "usage.js": "usage.js", "dash.css": "dash.css",
-         "accessibility.js": "accessibility.js", "navigation.js": "navigation.js", "feed.js": "feed.js"}
+PAGES = {
+    "": "index.html",
+    "index.html": "index.html",
+    "app.js": "app.js",
+    "api.js": "api.js",
+    "drawer.js": "drawer.js",
+    "event-detail.js": "event-detail.js",
+    "logs.js": "logs.js",
+    "ui.js": "ui.js",
+    "lines.js": "lines.js",
+    "rail.js": "rail.js",
+    "duration.js": "duration.js",
+    "taskview.js": "taskview.js",
+    "result.js": "result.js",
+    "words.js": "words.js",
+    "usage.js": "usage.js",
+    "dash.css": "dash.css",
+    "accessibility.js": "accessibility.js",
+    "navigation.js": "navigation.js",
+    "feed.js": "feed.js",
+}
 TYPES = {".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8"}
 
 
@@ -212,8 +228,11 @@ def _task_api(ports: DashPorts, path: str, query: str) -> Reply | None:
         return _json(ports.tracker(found["task"]))
     if found := DELIVERY.fullmatch(path):
         delivery = ports.delivery(found["task"])
-        return Reply(503, json.dumps({"error": delivery.detail or delivery.word}).encode(), JSON) \
-            if isinstance(delivery, Failed) else _json(delivery)
+        return (
+            Reply(503, json.dumps({"error": delivery.detail or delivery.word}).encode(), JSON)
+            if isinstance(delivery, Failed)
+            else _json(delivery)
+        )
     if path.startswith("api/tasks/") and IDENT.fullmatch(path[10:]):
         return _json(ports.task(path[10:]))
     return None

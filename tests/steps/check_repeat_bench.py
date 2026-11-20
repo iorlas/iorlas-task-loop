@@ -27,16 +27,45 @@ ASSERTION = "tests/cli/test_check_cli.py: list columns\nE AssertionError: expect
 
 class Repairing(Checking):
     def starting(self) -> StartPorts:
-        repair = CheckRepeat(CheckRepeatStore(lambda: self.con), EvidenceFiles(self.tmp), self.tracker.inspect,
-                             self.checkouts, self.files, lambda _path: True,
-                             lambda path: GitProfileFiles(path, self.checkouts), self, self.observe,
-                                 self.command, lambda: self.now, ids=NativeIds(), engine=ENGINE)
-        factory_commit = FactoryCommit(self.store, self.checkouts, self.files, lambda _worker: True, lambda: self.now, hold,
-                                       ids=NativeIds())
-        repeat = StepRepeat(self.store, factory_commit, EvidenceFiles(self.tmp),
-                            ChainAdmission(lambda: self.con, self.store.begin, EvidenceFiles(self.tmp),
-                                lambda: self.now, self.checkouts, self.files, ids=NativeIds(), engine=ENGINE), self,
-                            lambda _worker: True, self.observe, lambda: self.now, repeating, ids=NativeIds())
+        repair = CheckRepeat(
+            CheckRepeatStore(lambda: self.con),
+            EvidenceFiles(self.tmp),
+            self.tracker.inspect,
+            self.checkouts,
+            self.files,
+            lambda _path: True,
+            lambda path: GitProfileFiles(path, self.checkouts),
+            self,
+            self.observe,
+            self.command,
+            lambda: self.now,
+            ids=NativeIds(),
+            engine=ENGINE,
+        )
+        factory_commit = FactoryCommit(
+            self.store, self.checkouts, self.files, lambda _worker: True, lambda: self.now, hold, ids=NativeIds()
+        )
+        repeat = StepRepeat(
+            self.store,
+            factory_commit,
+            EvidenceFiles(self.tmp),
+            ChainAdmission(
+                lambda: self.con,
+                self.store.begin,
+                EvidenceFiles(self.tmp),
+                lambda: self.now,
+                self.checkouts,
+                self.files,
+                ids=NativeIds(),
+                engine=ENGINE,
+            ),
+            self,
+            lambda _worker: True,
+            self.observe,
+            lambda: self.now,
+            repeating,
+            ids=NativeIds(),
+        )
         return replace(super().starting(), check_repeat=repair, repeat=repeat)
 
     def request(self) -> StartRequest:
@@ -56,8 +85,9 @@ class Repairing(Checking):
         for position, check in enumerate(profile.checks):
             failed = body != "passed" and check.name == "test"
             self.checks.start(key, block, position, check.name, argv_digest(check.argv), check.timeout, self.now)
-            self.checks.finish(key, block, position,
-                CommandConclusion.FAILED if failed else CommandConclusion.PASSED, 1 if failed else 0, self.now)
+            self.checks.finish(
+                key, block, position, CommandConclusion.FAILED if failed else CommandConclusion.PASSED, 1 if failed else 0, self.now
+            )
             EvidenceFiles(self.tmp).check_log(key, block, check.name).write_text(ASSERTION if failed else "ok\n")
         if body == "unreleased_failed":
             self.checks.conclude(key, "failed", "test:failed", self.now)

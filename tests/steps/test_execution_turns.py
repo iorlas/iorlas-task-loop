@@ -16,10 +16,17 @@ surroundings = attempt_surroundings
 
 def outcome(requests: int | str | float | None) -> RunOutcome:
     summary = Summary(
-        text=json.dumps(PLAN), rc=0, work=True, stands=True,
-        res={"ref": "native-session", "answered": True, "turns": 1,
-             "tokens": {"in": 120, "cached": 30, "out": 6},
-             "cumulative": {"in": 240, "cached": 60, "out": 12}},
+        text=json.dumps(PLAN),
+        rc=0,
+        work=True,
+        stands=True,
+        res={
+            "ref": "native-session",
+            "answered": True,
+            "turns": 1,
+            "tokens": {"in": 120, "cached": 30, "out": 6},
+            "cumulative": {"in": 240, "cached": 60, "out": 12},
+        },
     )
     if requests is not None:
         summary.res["requests"] = requests
@@ -74,11 +81,22 @@ def test_repeated_capture_keeps_request_count(surroundings: AttemptSurroundings)
     assert flaky.con.execute("SELECT turns FROM execution").fetchall() == [(3,)]
 
 
-@pytest.mark.parametrize(("requests", "expected"), [
-    (0, 0), (None, None), (True, None), (False, None), (-1, None), ("3", None), (3.0, None),
-])
+@pytest.mark.parametrize(
+    ("requests", "expected"),
+    [
+        (0, 0),
+        (None, None),
+        (True, None),
+        (False, None),
+        (-1, None),
+        ("3", None),
+        (3.0, None),
+    ],
+)
 def test_only_valid_request_counts_are_persisted(
-    surroundings: AttemptSurroundings, requests: int | str | float | None, expected: int | None,
+    surroundings: AttemptSurroundings,
+    requests: int | str | float | None,
+    expected: int | None,
 ) -> None:
     con = database(surroundings)
     result = app(con, surroundings, FakeRun(outcome(requests))).execute(KEY, ENTRY)

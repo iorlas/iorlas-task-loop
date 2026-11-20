@@ -35,20 +35,37 @@ class ResumePlans:
         self.store, self.checkouts = store, checkouts
         self.content = TaskContentStore(store.connect)
 
-    def unchanged(self, selection: Selection, repo_id: str, backlog: str, task_id: str, tracker: str,
-                  digest: TaskContentDigest | None) -> bool:
+    def unchanged(
+        self, selection: Selection, repo_id: str, backlog: str, task_id: str, tracker: str, digest: TaskContentDigest | None
+    ) -> bool:
         plan = self.store.latest_plan(repo_id, backlog, task_id, tracker)
-        return (plan == selection.plan and (selection.declared or selection.decision is not ReuseDecision.REUSE
-                or (plan is not None and self.content.read(plan.key.attempt_id) == digest)))
+        return plan == selection.plan and (
+            selection.declared
+            or selection.decision is not ReuseDecision.REUSE
+            or (plan is not None and self.content.read(plan.key.attempt_id) == digest)
+        )
 
     def required(self, record: AttemptRecord) -> bool:
         admission = record.admission
-        return (admission.step == Step.IMPLEMENT and record.start is None and admission.source_checks_id is None
-                and (admission.declared_start or self.store.previous_abandoned(admission.key)))
+        return (
+            admission.step == Step.IMPLEMENT
+            and record.start is None
+            and admission.source_checks_id is None
+            and (admission.declared_start or self.store.previous_abandoned(admission.key))
+        )
 
     def select(
-        self, repo_id: str, backlog: str, task_id: str, tracker_root: str, root: Path, source: str,
-        digest: TaskContentDigest, *, git_dir: Path | None = None, start: Step | None = None,
+        self,
+        repo_id: str,
+        backlog: str,
+        task_id: str,
+        tracker_root: str,
+        root: Path,
+        source: str,
+        digest: TaskContentDigest,
+        *,
+        git_dir: Path | None = None,
+        start: Step | None = None,
     ) -> Selection:
         """Plan again or implement the committed plan. `start=IMPLEMENT` names the choice: only the plan committed at `source`
         counts (the database's plan evidence is not read for it), so the decision is REUSE or a refusal the caller reports."""
@@ -62,8 +79,7 @@ class ResumePlans:
         try:
             repo = self.checkouts(root, git_dir=git_dir)
             tip = repo.tree(f"{source}^{{commit}}")
-            if (tip is None or tip.files.get(path) != ("100644", plan.blob)
-                    or repo.merge_base(plan.end_commit, source) != plan.end_commit):
+            if tip is None or tip.files.get(path) != ("100644", plan.blob) or repo.merge_base(plan.end_commit, source) != plan.end_commit:
                 return Selection(ReuseDecision.PLAN, "The selected source does not retain the recorded plan.", plan)
         except GitUnavailable as error:
             return Selection(ReuseDecision.UNAVAILABLE, f"Plan evidence could not be read: {error}", plan)
@@ -85,8 +101,16 @@ class ResumePlans:
             if tracker is None:
                 raise StoreUnavailable("The admitted tracker identity is unavailable.")
             snapshot = discussion(admission.task, tracker)
-            selected = self.select(str(admission.repo_id), admission.task.scope.backlog, admission.task.task_id, tracker,
-                                   Path(admission.slot_path), base.head, snapshot.digest, git_dir=base.gitdir)
+            selected = self.select(
+                str(admission.repo_id),
+                admission.task.scope.backlog,
+                admission.task.task_id,
+                tracker,
+                Path(admission.slot_path),
+                base.head,
+                snapshot.digest,
+                git_dir=base.gitdir,
+            )
         except (InputError, OSError) as error:
             return AttemptResult("unavailable", "input", explanation=str(error))
         return self._judged(selected.decision, selected.explanation)

@@ -74,7 +74,7 @@ class _Log:
     def write(self, *words: str) -> None:
         try:
             self.ports.log(stamped(self.ports.clock(), self.backlog, "rounds", *words))
-        except (OSError, EvidenceError):
+        except OSError, EvidenceError:
             self.seen(False)
             return
         self.seen(True)
@@ -180,5 +180,5 @@ def abrupt(log: Callable[[str], None], clock: Callable[[], float], backlog: str)
     """The abrupt stop's one best-effort line: a write error or a further Ctrl-C during it is ignored."""
     try:
         log(stamped(clock(), backlog, "rounds", "stopped", "abrupt"))
-    except (OSError, EvidenceError, KeyboardInterrupt):
+    except OSError, EvidenceError, KeyboardInterrupt:
         return

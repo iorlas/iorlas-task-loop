@@ -91,11 +91,11 @@ CREATE TABLE land_conflict (
 );
 CREATE TABLE drain_state (
  singleton INTEGER PRIMARY KEY CHECK(singleton=1), generation INTEGER NOT NULL CHECK(generation>=1),
- state TEXT NOT NULL CHECK(state IN ({','.join(repr(each.value) for each in State)}))
+ state TEXT NOT NULL CHECK(state IN ({",".join(repr(each.value) for each in State)}))
 );
 CREATE TABLE drain_action (
- action_id TEXT PRIMARY KEY, kind TEXT NOT NULL CHECK(kind IN ({','.join(repr(each.value) for each in ActionKind)})),
- state TEXT NOT NULL CHECK(state IN ({','.join(repr(each.value) for each in ActionState)})),
+ action_id TEXT PRIMARY KEY, kind TEXT NOT NULL CHECK(kind IN ({",".join(repr(each.value) for each in ActionKind)})),
+ state TEXT NOT NULL CHECK(state IN ({",".join(repr(each.value) for each in ActionState)})),
  pid INTEGER NOT NULL, pgid INTEGER NOT NULL, start TEXT NOT NULL, boot TEXT NOT NULL,
  subject TEXT NOT NULL, backlog TEXT NOT NULL, tracker_root TEXT NOT NULL,
  checkout TEXT NOT NULL, rev INTEGER NOT NULL DEFAULT 0 CHECK(rev>=0)
@@ -311,8 +311,7 @@ ATTEMPT_LOADED = (
     "number,previous_attempt_id,step,after_commit,harness,source_checks_id,provider,compaction_token_limit"
 )
 FACTS = (
-    "rc,timed_out,stop,watch,work,stands,answered,reason,http_status,t_in,t_cached,t_out,"
-    "c_in,c_cached,c_out,turns,session,usage_incomplete"
+    "rc,timed_out,stop,watch,work,stands,answered,reason,http_status,t_in,t_cached,t_out,c_in,c_cached,c_out,turns,session,usage_incomplete"
 )
 EVIDENCE = "stdout_path,stdout_digest,stderr_path,stderr_digest,answer_path,answer_digest,diagnostic_path,diagnostic_digest"
 ANSWER = "answer_kind,disposition,effect,commit_paths,commit_message,answer_failure,session_state"
@@ -369,9 +368,13 @@ CLOSED = "EXISTS (SELECT 1 FROM land_candidate l WHERE " + OF_TASK + " AND l.clo
 # The abandon, re-run and insert fence of checks attempt `c`: a candidate of its implement attempt is delivered, holds its
 # slot, or is pushable (validated `same_tree` or `passed`, not superseded: S may already be on origin). Words `landed`,
 # else `landing`.
-LANDING = "EXISTS (SELECT 1 FROM land_candidate l WHERE " + OF_TASK + """ AND (l.delivery IS NOT NULL
+LANDING = (
+    "EXISTS (SELECT 1 FROM land_candidate l WHERE "
+    + OF_TASK
+    + """ AND (l.delivery IS NOT NULL
 OR (l.slot IS NOT NULL AND l.released_at IS NULL)
 OR (l.superseded IS NULL AND l.validation IS NOT NULL AND l.validation IN ('same_tree','passed'))))"""
+)
 
 
 def marks(columns: str) -> str:

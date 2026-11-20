@@ -78,7 +78,9 @@ def test_show_json_has_the_same_facts(monkeypatch: pytest.MonkeyPatch, capsys: p
 
 @pytest.mark.parametrize("structured", [False, True])
 def test_a_missing_or_unusable_file_is_exit_1_and_unavailable_exit_3(
-    structured: bool, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str],
+    structured: bool,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     flags = ["--json"] if structured else []
     wired(monkeypatch, {})
@@ -86,8 +88,13 @@ def test_a_missing_or_unusable_file_is_exit_1_and_unavailable_exit_3(
     output = capsys.readouterr()
     assert output.out == ""
     if structured:
-        assert json.loads(output.err) == {"error": {"kind": "missing", "where": ".task-loop/workflows/default.toml",
-                                                    "message": "missing: .task-loop/workflows/default.toml"}}
+        assert json.loads(output.err) == {
+            "error": {
+                "kind": "missing",
+                "where": ".task-loop/workflows/default.toml",
+                "message": "missing: .task-loop/workflows/default.toml",
+            }
+        }
     else:
         assert output.err.endswith(WORKFLOW["missing"] + "\n") and output.err.startswith("tl workflow show: missing: ")
     wired(monkeypatch, {("HEAD", ".task-loop/workflows/default.toml"): b"[step.plan"})
@@ -96,7 +103,7 @@ def test_a_missing_or_unusable_file_is_exit_1_and_unavailable_exit_3(
     wired(monkeypatch, None)
     assert main(["workflow", "show", *flags]) == 3
     error = capsys.readouterr().err
-    assert (json.loads(error)["error"]["kind"] == "unavailable" if structured else error.endswith(WORKFLOW["unavailable"] + "\n"))
+    assert json.loads(error)["error"]["kind"] == "unavailable" if structured else error.endswith(WORKFLOW["unavailable"] + "\n")
 
 
 def test_every_refusal_reason_has_a_guide() -> None:
@@ -104,7 +111,8 @@ def test_every_refusal_reason_has_a_guide() -> None:
 
 
 def test_init_writes_the_starter_once_and_leaves_it_to_the_person_to_commit(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     path = tmp_path / ".task-loop" / "workflows" / "mine.toml"
     assert main(["workflow", "init", "--checkout", str(tmp_path), "--name", "mine"]) == 0

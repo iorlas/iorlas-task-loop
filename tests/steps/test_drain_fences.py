@@ -147,8 +147,16 @@ def test_repeat_and_failed_check_repair_cannot_create_an_attempt_behind_the_fenc
 ) -> None:
     DrainStore(lambda: factory, ids=NativeIds()).request()
     key = AttemptKey("previous", "token", 1)
-    chain = ChainAdmission(lambda: factory, Store(SCHEMA).begin_immediate, EvidenceFiles(tmp_path), lambda: 10,
-                           checkouts, slot_files, ids=NativeIds(), engine=ENGINE)
+    chain = ChainAdmission(
+        lambda: factory,
+        Store(SCHEMA).begin_immediate,
+        EvidenceFiles(tmp_path),
+        lambda: 10,
+        checkouts,
+        slot_files,
+        ids=NativeIds(),
+        engine=ENGINE,
+    )
     found = chain.admit_repeat(RepeatRequest(key, "repeat", 100, "uncommitted"))
     assert isinstance(found, AdmitRefused) and found.reason is Reason.DRAINING
     source = AttemptKey("checks", "checks-token", 1)

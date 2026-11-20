@@ -12,15 +12,36 @@ from taskloop.shelf_digest.source import ReadFailure, SourceOpener
 def _signature(identity: PackageIdentity, public_name: str, binding: Binding) -> Signature:
     module, name = binding.module, binding.name
     if name is None:
-        return Signature(identity, identity.commit, public_name, module.name, module.path, 1, module.end_line,
-                         SignatureKind.MODULE, f"module {module.name}")
+        return Signature(
+            identity,
+            identity.commit,
+            public_name,
+            module.name,
+            module.path,
+            1,
+            module.end_line,
+            SignatureKind.MODULE,
+            f"module {module.name}",
+        )
     nodes = module.declarations[name]
-    decorators = [decorator.lineno for node in nodes if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
-                  for decorator in node.decorator_list]
+    decorators = [
+        decorator.lineno
+        for node in nodes
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
+        for decorator in node.decorator_list
+    ]
     start = min([*(node.lineno for node in nodes), *decorators])
-    return Signature(identity, identity.commit, public_name, f"{module.name}.{name}", module.path,
-                     start, max(node.end_lineno or node.lineno for node in nodes), declaration_kind(nodes[0]),
-                     canonical_declaration(nodes, name))
+    return Signature(
+        identity,
+        identity.commit,
+        public_name,
+        f"{module.name}.{name}",
+        module.path,
+        start,
+        max(node.end_lineno or node.lineno for node in nodes),
+        declaration_kind(nodes[0]),
+        canonical_declaration(nodes, name),
+    )
 
 
 def _public_module(name: str) -> bool:
@@ -36,8 +57,11 @@ def _collect(identity: PackageIdentity, package: PackageExports) -> tuple[Signat
         for name in sorted(package.names[module]):
             binding = package.resolve(module, name)
             if binding is None:
-                package.fail(SignatureFailureReason.UNRESOLVED_EXPORT, package.modules[module].path,
-                             f"Cannot statically resolve public export {module}.{name} (missing, external, or cyclic binding)")
+                package.fail(
+                    SignatureFailureReason.UNRESOLVED_EXPORT,
+                    package.modules[module].path,
+                    f"Cannot statically resolve public export {module}.{name} (missing, external, or cyclic binding)",
+                )
                 return
             public_name = f"{prefix}.{name}"
             signatures[public_name] = _signature(identity, public_name, binding)

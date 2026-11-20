@@ -97,9 +97,19 @@ class Published:
         adopt(slots, VIEWS.checkouts(self.main), SlotGit(VIEWS.checkouts, RealSlotFiles()), root / "slots", 1)
         self.store, self.files = AttemptStore(lambda: factory), RealSlotFiles()
         admission = AttemptAdmission(
-            lambda: factory, begin_immediate, EvidenceFiles(root / "art"), tasks, VIEWS.checkouts, yes, yes, lambda: 10, probe,
-            RealSlotFiles()
-        , ids=NativeIds(), engine=ENGINE)
+            lambda: factory,
+            begin_immediate,
+            EvidenceFiles(root / "art"),
+            tasks,
+            VIEWS.checkouts,
+            yes,
+            yes,
+            lambda: 10,
+            probe,
+            RealSlotFiles(),
+            ids=NativeIds(),
+            engine=ENGINE,
+        )
         admitted = admission.admit(
             AdmitRequest(
                 "tl-1",
@@ -123,11 +133,23 @@ class Published:
             self.files,
         )
         attempts.execute(self.key, ENTRY)
-        assert isinstance(FactoryCommit(self.store, VIEWS.checkouts, self.files, gone, lambda: 20, hold,
-            ids=NativeIds()).commit(self.key), Committed)
+        assert isinstance(
+            FactoryCommit(self.store, VIEWS.checkouts, self.files, gone, lambda: 20, hold, ids=NativeIds()).commit(self.key), Committed
+        )
         self.x = self.rev(self.main, BRANCH)
-        releaser = SlotRelease(self.store, VIEWS.checkouts, self.files, lambda _entry: "gone", gone, custody, yes, lambda: 30,
-                               lambda _setup: "gone", lambda _scratch: True, ids=NativeIds())
+        releaser = SlotRelease(
+            self.store,
+            VIEWS.checkouts,
+            self.files,
+            lambda _entry: "gone",
+            gone,
+            custody,
+            yes,
+            lambda: 30,
+            lambda _setup: "gone",
+            lambda _scratch: True,
+            ids=NativeIds(),
+        )
         assert isinstance(releaser.release(self.key, False), Released)
         self.opened: list[Path] = []
 

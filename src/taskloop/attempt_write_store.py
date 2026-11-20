@@ -38,7 +38,8 @@ class AttemptWrites(AttemptLoads):
         """Seed the repair's already validated session inside its admission transaction, before entry registration."""
         changed = con.execute(
             "UPDATE attempt SET session_ref=? WHERE attempt_id=? AND dispatch_token=? AND generation=? "
-            "AND phase='admitted' AND session_ref IS NULL AND repair_context IS NOT NULL", (session, *astuple(key)),
+            "AND phase='admitted' AND session_ref IS NULL AND repair_context IS NOT NULL",
+            (session, *astuple(key)),
         ).rowcount
         if changed != 1:
             raise StoreRefused("changed_admission")
@@ -46,12 +47,17 @@ class AttemptWrites(AttemptLoads):
     def replace_worker(self, con: sqlite3.Connection, current: AttemptRecord, intent: Intent, worker: Identity) -> int:
         """Only the recovery transaction calls this; admission and original session remain frozen."""
         previous = current.worker
-        if (previous is None or current.revision != intent.attempt_revision
-                or (previous.pid, previous.pgid, previous.start, previous.boot)
-                != (intent.worker.pid, intent.worker.pgid, intent.worker.start, intent.worker.boot)):
+        if (
+            previous is None
+            or current.revision != intent.attempt_revision
+            or (previous.pid, previous.pgid, previous.start, previous.boot)
+            != (intent.worker.pid, intent.worker.pgid, intent.worker.start, intent.worker.boot)
+        ):
             raise StoreRefused("worker_mismatch")
-        con.execute("UPDATE attempt SET worker_pid=?,worker_pgid=?,worker_start=?,worker_boot=?,rev=rev+1 WHERE attempt_id=? AND rev=?",
-                    (worker.pid, worker.pgid, worker.start, worker.boot, intent.key.attempt_id, current.revision))
+        con.execute(
+            "UPDATE attempt SET worker_pid=?,worker_pgid=?,worker_start=?,worker_boot=?,rev=rev+1 WHERE attempt_id=? AND rev=?",
+            (worker.pid, worker.pgid, worker.start, worker.boot, intent.key.attempt_id, current.revision),
+        )
         return current.revision + 1
 
     def renew(self, con: sqlite3.Connection, current: AttemptRecord, deadline: float) -> AttemptRecord:
@@ -68,13 +74,19 @@ class AttemptWrites(AttemptLoads):
         return replace(current, admission=admission, revision=current.revision + 1)
 
     def recovery(
-        self, con: sqlite3.Connection, key: AttemptKey, now: float, *, allow_expired: bool = False,
+        self,
+        con: sqlite3.Connection,
+        key: AttemptKey,
+        now: float,
+        *,
+        allow_expired: bool = False,
     ) -> AttemptRecord | Result:
         """Read eligibility inside the recovery store's transaction; no attempt facts are changed."""
         row = con.execute(
             f"""SELECT {SUCCESSOR},EXISTS(SELECT 1 FROM slot_release r WHERE r.attempt_id=p.attempt_id),
             EXISTS(SELECT 1 FROM execution e WHERE e.attempt_id=p.attempt_id)
-            FROM attempt p WHERE p.attempt_id=? AND p.dispatch_token=? AND p.generation=?""", astuple(key),
+            FROM attempt p WHERE p.attempt_id=? AND p.dispatch_token=? AND p.generation=?""",
+            astuple(key),
         ).fetchone()
         if row is None or row[0] or row[1]:
             return Result(outcome=Outcome.INELIGIBLE, explanation="The attempt is missing, superseded or released.")
@@ -90,10 +102,18 @@ class AttemptWrites(AttemptLoads):
         return self._recovery_session(con, record, now, allow_expired=allow_expired)
 
     def _recovery_session(
-        self, con: sqlite3.Connection, record: AttemptRecord, now: float, *, allow_expired: bool = False,
+        self,
+        con: sqlite3.Connection,
+        record: AttemptRecord,
+        now: float,
+        *,
+        allow_expired: bool = False,
     ) -> AttemptRecord | Result:
-        if (not math.isfinite(now) or not math.isfinite(record.admission.deadline)
-                or ((not allow_expired or record.admission.repair is not None) and now >= record.admission.deadline)):
+        if (
+            not math.isfinite(now)
+            or not math.isfinite(record.admission.deadline)
+            or ((not allow_expired or record.admission.repair is not None) and now >= record.admission.deadline)
+        ):
             return Result(outcome=Outcome.EXPIRED, explanation="The attempt's existing allowance has expired.")
         if record.phase != "registered" or record.worker is None:
             return Result(outcome=Outcome.UNRESOLVED, explanation="Complete entry and worker registration is required for stop proof.")
@@ -109,7 +129,11 @@ class AttemptWrites(AttemptLoads):
         return record
 
     def register_entry(
-        self, key: AttemptKey, entry: EntryIdentity, now: float, replacing: Replaced | None = None,
+        self,
+        key: AttemptKey,
+        entry: EntryIdentity,
+        now: float,
+        replacing: Replaced | None = None,
         renewed: float | None = None,
     ) -> Literal["accepted", "conflict", "refused"]:
         """The only writer of entry_*: one winner while `admitted`; a replacement names the exact stored identity.
@@ -121,8 +145,7 @@ class AttemptWrites(AttemptLoads):
         is refused and writes nothing. A same-boot replacement or a first registration never renews.
         """
         with self._connection(write=True) as con:
-            if blocked(con) and not any(action.kind is ActionKind.DISPATCH and action.subject == key.attempt_id
-                                        for action in pending(con)):
+            if blocked(con) and not any(action.kind is ActionKind.DISPATCH and action.subject == key.attempt_id for action in pending(con)):
                 return "refused"
             row: tuple[object, ...] | None = con.execute(
                 """SELECT p.phase,p.deadline,p.entry_pid,p.entry_start,p.entry_boot,p.repair_context FROM attempt p
@@ -197,7 +220,8 @@ class AttemptWrites(AttemptLoads):
         evidence: Evidence,
         session_state: Literal["complete", "pending", "conflict", "fault"],
         callback: Callback | None = None,
-        *, now: float,
+        *,
+        now: float,
     ) -> Literal["accepted", "already_same", "conflict"]:
         with self._connection(write=True) as con:
             current = self._owned(con, admission, callback)
@@ -219,18 +243,28 @@ class AttemptWrites(AttemptLoads):
             if current.phase != "registered":
                 return "conflict"
             refs = tuple(value for ref in astuple(evidence) for value in ref)
-            values = (*astuple(admission.key), *attempt_reads._facts_values(facts), *refs, session_state,
-                      None if callback is None else callback.model_dump_json())
+            values = (
+                *astuple(admission.key),
+                *attempt_reads._facts_values(facts),
+                *refs,
+                session_state,
+                None if callback is None else callback.model_dump_json(),
+            )
             marks = ",".join("?" * len(values))
             con.execute(
                 f"INSERT INTO execution (attempt_id,dispatch_token,generation,{FACTS},{EVIDENCE},session_state,recovery_callback) "
-                f"VALUES ({marks})", values
+                f"VALUES ({marks})",
+                values,
             )
             con.execute("UPDATE attempt SET phase='captured',ended_at=?,rev=rev+1 WHERE attempt_id=?", (now, admission.key.attempt_id))
             return "accepted"
 
     def answer(
-        self, admission: Admission, evidence: Evidence, answer: AnswerState, callback: Callback | None = None,
+        self,
+        admission: Admission,
+        evidence: Evidence,
+        answer: AnswerState,
+        callback: Callback | None = None,
     ) -> Literal["accepted", "already_same", "conflict"]:
         with self._connection(write=True) as con:
             self._owned(con, admission, callback)

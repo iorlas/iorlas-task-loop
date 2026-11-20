@@ -23,7 +23,9 @@ class Digest:
 
 
 def generate_digest(
-    taskloop_repo: Repo, revision: str, shelf_repo: Repo,
+    taskloop_repo: Repo,
+    revision: str,
+    shelf_repo: Repo,
 ) -> Digest | ReadFailure | IdentityFailure | SignatureFailure | DocumentationFailure | FactFailure:
     """Return all six packages, or an explained failure without a partial result."""
     source = open_source(taskloop_repo, revision)
@@ -36,7 +38,9 @@ def generate_digest(
 
 
 def generate_installed_digest(
-    taskloop_repo: Repo, revision: str, distributions: Distributions,
+    taskloop_repo: Repo,
+    revision: str,
+    distributions: Distributions,
 ) -> Digest | ReadFailure | IdentityFailure | SignatureFailure | DocumentationFailure | FactFailure:
     """Generate from installed sources only, after reconciling the committed task-loop manifests."""
     source = open_source(taskloop_repo, revision)
@@ -52,7 +56,8 @@ def generate_installed_digest(
 
 
 def _extract(
-    identities: Identities, opener: SourceOpener,
+    identities: Identities,
+    opener: SourceOpener,
 ) -> Digest | ReadFailure | SignatureFailure | DocumentationFailure | FactFailure:
     signatures = extract_signatures(identities, opener)
     if isinstance(signatures, (ReadFailure, SignatureFailure)):

@@ -32,19 +32,29 @@ def no_leftovers(_key: AttemptKey) -> Uncommitted | None:
 def ports(con: sqlite3.Connection, processes: Processes, now: float = 10) -> StatusPorts:
     app = recovery(con, processes)
     app.clock = lambda: now
-    return StatusPorts(AttemptStore(lambda: con), lambda _entry: "gone", lambda: now, no_leftovers,
-                       lambda: "boot", recovery=app.status)
+    return StatusPorts(AttemptStore(lambda: con), lambda _entry: "gone", lambda: now, no_leftovers, lambda: "boot", recovery=app.status)
 
 
-@pytest.mark.parametrize(("states", "word"), [
-    ({7: Seen.ALIVE}, "wait"), ({8: Seen.ALIVE}, "wait"), ({30: Seen.ALIVE}, "wait"),
-    ({7: Seen.UNKNOWN}, "unknown"), ({8: Seen.UNKNOWN}, "unknown"), ({30: Seen.UNKNOWN}, "unknown"),
-    ({7: Seen.ALIVE, 8: Seen.UNKNOWN}, "unknown"), ({8: Seen.ALIVE, 30: Seen.UNKNOWN}, "unknown"),
-    ({}, "start"),
-])
+@pytest.mark.parametrize(
+    ("states", "word"),
+    [
+        ({7: Seen.ALIVE}, "wait"),
+        ({8: Seen.ALIVE}, "wait"),
+        ({30: Seen.ALIVE}, "wait"),
+        ({7: Seen.UNKNOWN}, "unknown"),
+        ({8: Seen.UNKNOWN}, "unknown"),
+        ({30: Seen.UNKNOWN}, "unknown"),
+        ({7: Seen.ALIVE, 8: Seen.UNKNOWN}, "unknown"),
+        ({8: Seen.ALIVE, 30: Seen.UNKNOWN}, "unknown"),
+        ({}, "start"),
+    ],
+)
 @pytest.mark.parametrize("expired", [False, True])
 def test_shared_gate_covers_all_status_consumers_without_writes(
-    tmp_path: Path, states: dict[int, Seen], word: Next, expired: bool,
+    tmp_path: Path,
+    states: dict[int, Seen],
+    word: Next,
+    expired: bool,
 ) -> None:
     con = database(tmp_path / "factory.db")
     intended(recovery(con).store)
@@ -64,10 +74,15 @@ def test_shared_gate_covers_all_status_consumers_without_writes(
     con.close()
 
 
-@pytest.mark.parametrize("change", [
-    "UPDATE attempt SET worker_start=NULL", "UPDATE attempt SET session_ref=NULL",
-    "UPDATE attempt SET session_conflict=1", "UPDATE attempt SET entry_start=NULL",
-])
+@pytest.mark.parametrize(
+    "change",
+    [
+        "UPDATE attempt SET worker_start=NULL",
+        "UPDATE attempt SET session_ref=NULL",
+        "UPDATE attempt SET session_conflict=1",
+        "UPDATE attempt SET entry_start=NULL",
+    ],
+)
 def test_incomplete_registration_and_missing_reader_fail_closed(tmp_path: Path, change: str) -> None:
     con = database(tmp_path / "factory.db")
     reads = ports(con, Processes())
@@ -122,7 +137,11 @@ def test_captured_completion_and_explicit_holds_keep_their_own_paths(tmp_path: P
 
 @pytest.mark.parametrize("seen", [Seen.ALIVE, Seen.UNKNOWN])
 def test_successive_rounds_do_not_execute_while_recovery_processes_are_live_or_unknown(
-    tmp_path: Path, slot: FakeWorktree, checkouts: PinnedViews, slot_files: SlotFiles, seen: Seen,
+    tmp_path: Path,
+    slot: FakeWorktree,
+    checkouts: PinnedViews,
+    slot_files: SlotFiles,
+    seen: Seen,
 ) -> None:
     con = database(tmp_path / "factory.db")
     intended(recovery(con).store)

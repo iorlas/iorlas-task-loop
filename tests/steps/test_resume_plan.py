@@ -33,7 +33,11 @@ def plan_calls() -> list[str]:
 
 @pytest.fixture
 def resumable(
-    tmp_path: Path, slot: FakeWorktree, checkouts: PinnedViews, slot_files: SlotFiles, plan_calls: list[str],
+    tmp_path: Path,
+    slot: FakeWorktree,
+    checkouts: PinnedViews,
+    slot_files: SlotFiles,
+    plan_calls: list[str],
 ) -> Generator[Factory]:
     con = Store(SCHEMA).open_rw(tmp_path / "resume.db")
     assert con is not None
@@ -45,14 +49,17 @@ def resumable(
         assert source is not None
         plan_calls.append(str(source))
         path, metadata = "docs/design/tl-1/plan.md", "docs/design/tl-1/plan-metadata.json"
-        run = scripted(slot.repo, {"disposition": "planned", "plan_path": path, "paths": [path, metadata],
-                                  "message": "Plan", "explanation": "planned"},
-                       {path: PLAN_TEXT, metadata: PlanMetadata(prepared_commit=str(source), cited_paths=("README",)).model_dump_json()})
+        run = scripted(
+            slot.repo,
+            {"disposition": "planned", "plan_path": path, "paths": [path, metadata], "message": "Plan", "explanation": "planned"},
+            {path: PLAN_TEXT, metadata: PlanMetadata(prepared_commit=str(source), cited_paths=("README",)).model_dump_json()},
+        )
         return run(harness, spec, timeout, hooks)
 
     factory.agents["tl-1", "plan"] = plan
     factory.agents["tl-1", "implement"] = scripted(
-        slot.repo, {"disposition": "needs_owner", "message": None, "explanation": "Choose a shape"}, {})
+        slot.repo, {"disposition": "needs_owner", "message": None, "explanation": "Choose a shape"}, {}
+    )
     assert factory.round() == [("tl-1", "plan", "start", "started")]
     assert factory.round() == [("tl-1", "plan", "commit", "committed release=released branch=published")]
     assert factory.round() == [("tl-1", "implement", "advance", "started")]
@@ -61,10 +68,20 @@ def resumable(
     factory.con.close()
 
 
-def request(factory: Factory, settings: StepSettings | None = None, overrides: Overrides | None = None,
-            new: NewTask | None = None) -> AdmitRequest:
-    return AdmitRequest("tl-1", "tasks", "/tracker", factory.slot.repo.path,
-                        settings or StepSettings(), factory.now + 100, "auto", overrides or Overrides(), new or NewTask())
+def request(
+    factory: Factory, settings: StepSettings | None = None, overrides: Overrides | None = None, new: NewTask | None = None
+) -> AdmitRequest:
+    return AdmitRequest(
+        "tl-1",
+        "tasks",
+        "/tracker",
+        factory.slot.repo.path,
+        settings or StepSettings(),
+        factory.now + 100,
+        "auto",
+        overrides or Overrides(),
+        new or NewTask(),
+    )
 
 
 def steps(factory: Factory) -> list[tuple[str, int, int]]:
@@ -72,7 +89,9 @@ def steps(factory: Factory) -> list[tuple[str, int, int]]:
 
 
 def test_two_cleared_holds_reuse_the_plan_then_changed_content_replans(
-    resumable: Factory, plan_calls: list[str], monkeypatch: pytest.MonkeyPatch,
+    resumable: Factory,
+    plan_calls: list[str],
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     factory = resumable
     guard_git(factory.con, monkeypatch)
@@ -97,9 +116,15 @@ def test_two_cleared_holds_reuse_the_plan_then_changed_content_replans(
 
 def test_resume_captures_implementation_prompt_settings_overrides_and_latest_answer(resumable: Factory) -> None:
     factory = resumable
-    settings = StepSettings(plan=AgentSetting(model="plan-model"), implement=AgentSetting(
-        harness=HarnessKind.CLAUDE, model="opus", effort="medium",
-        access=ClaudePolicy(settings_file=Path("/settings.json"), settings="{}")))
+    settings = StepSettings(
+        plan=AgentSetting(model="plan-model"),
+        implement=AgentSetting(
+            harness=HarnessKind.CLAUDE,
+            model="opus",
+            effort="medium",
+            access=ClaudePolicy(settings_file=Path("/settings.json"), settings="{}"),
+        ),
+    )
     admitted = factory.starting().admission.admit(request(factory, settings, Overrides(harness=HarnessKind.CLAUDE, effort="high")))
     assert isinstance(admitted, Admitted)
     factory.con.close()
@@ -156,7 +181,9 @@ def test_changed_plan_evidence_during_claim_cannot_commit_stale_selection(resuma
 
 @pytest.mark.parametrize("change", ["content", "branch", "eligibility", "tracker_down", "git_down", "none"])
 def test_entry_rechecks_after_database_reopen_before_setup_and_dispatch(
-    resumable: Factory, change: str, monkeypatch: pytest.MonkeyPatch,
+    resumable: Factory,
+    change: str,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     factory = resumable
     admitted = factory.starting().admission.admit(request(factory))
@@ -239,5 +266,3 @@ def test_unavailable_git_evidence_prevents_admission_with_explanation(resumable:
     result = resumable.starting().admission.admit(request(resumable))
     assert isinstance(result, AdmitUnavailable) and result.what == "git" and "evidence read failed" in result.detail
     assert len(steps(resumable)) == 2
-
-

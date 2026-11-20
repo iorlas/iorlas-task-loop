@@ -14,7 +14,12 @@ type Saver = Callable[[Repo, Worktree, SlotState], wip.Refused | None]
 
 
 def park_slot(
-    checkouts: Checkouts, slot_files: SlotFiles, path: Path, repo_id: str, slot_head: str, branch: str | None,
+    checkouts: Checkouts,
+    slot_files: SlotFiles,
+    path: Path,
+    repo_id: str,
+    slot_head: str,
+    branch: str | None,
     save: Saver | None = None,
 ) -> tuple[str, str | None] | NotReleased:
     """Park a clean slot at its admitted head; authorized held work is saved before parking."""
@@ -31,8 +36,11 @@ def park_slot(
     if state.branch is None and state.head == slot_head and not merging:
         return state.head, None
     if merging or state.branch not in (None, branch):
-        return (NotReleased("unavailable", "merge_pending", "An active merge needs owning preservation before the slot can be parked.")
-                if merging else NotReleased("refused", "slot_branch", f"The slot is on another branch. {NOTHING}"))
+        return (
+            NotReleased("unavailable", "merge_pending", "An active merge needs owning preservation before the slot can be parked.")
+            if merging
+            else NotReleased("refused", "slot_branch", f"The slot is on another branch. {NOTHING}")
+        )
     return slot_head, str(checkouts(path, git_dir=state.gitdir).worktree(path).park(slot_head))
 
 
@@ -58,13 +66,15 @@ def _saved(checkouts: Checkouts, path: Path, state: SlotState, slot_head: str, s
 
 def saver(log: wip.SavedLog, files: SlotFiles, clock: Callable[[], float], source: wip.Source) -> Saver:
     """Construct the hold's save, retaining merge preservation before any abort."""
+
     def save(view: Repo, slot: Worktree, state: SlotState) -> wip.Refused | None:
         head = state.head or source.base
         if slot.merging() and source.merge is not None:
             target = files.read(state.gitdir / "MERGE_HEAD", 256)
             if target != f"{source.merge[1]}\n".encode("ascii"):
-                return wip.Refused(wip.SaveReason.MERGE_CHANGED,
-                                   "The active merge's target changed or cannot be read; work stays reserved.")
+                return wip.Refused(
+                    wip.SaveReason.MERGE_CHANGED, "The active merge's target changed or cannot be read; work stays reserved."
+                )
         saved_head = any(each.source_head == head for each in log.saved(source.attempt_id))
         if not state.dirty and not slot.merging() and (source.merge is None or saved_head):
             wip.adopt(view, head, source, log)

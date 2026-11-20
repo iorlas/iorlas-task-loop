@@ -27,7 +27,13 @@ text = "FIRST WORDS"
 text = "SECOND WORDS"
 """)
 TASK = TaskInspection(
-    TaskReference(TaskScope("tasks"), "tl-1"), "Add a widget", "It must do X.", "- X works", (), "in_progress", "taskloop",
+    TaskReference(TaskScope("tasks"), "tl-1"),
+    "Add a widget",
+    "It must do X.",
+    "- X works",
+    (),
+    "in_progress",
+    "taskloop",
 )
 CONTEXT = InputContext("a" * 40, ("just check",), "Glossary.\n", ())
 

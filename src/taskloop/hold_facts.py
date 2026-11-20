@@ -62,8 +62,14 @@ def outcome(reader: AttemptStore, agent: AttemptRow, released: ReleasedTask | Fa
         found = None if setup is None else setup.unsettled
         return Kept(word, slot) if found is None else Kept(word, slot, found.pid, found.pgid)
     if word == "check_running" and checks is not None:
-        found = next((row.process for row in CheckStore(reader.connect, reader.begin).results(checks.key)
-                      if row.unsettled and row.process is not None), None)
+        found = next(
+            (
+                row.process
+                for row in CheckStore(reader.connect, reader.begin).results(checks.key)
+                if row.unsettled and row.process is not None
+            ),
+            None,
+        )
         return Kept(word, slot) if found is None else Kept(word, slot, found.pid, found.pgid)
     return Kept(word, slot)
 
@@ -87,15 +93,24 @@ def merge_cause(reader: AttemptStore, attempt_id: str) -> MergeCause | None:
     work = MergeStore(reader.connect, reader.begin).get(attempt_id)
     if work is None or work.reason is None:
         return None
-    return MergeCause(reason=MergeReason(work.reason), explanation=work.explanation,
-                      source=work.source, target=work.target, conflicts=work.conflicts)
+    return MergeCause(
+        reason=MergeReason(work.reason), explanation=work.explanation, source=work.source, target=work.target, conflicts=work.conflicts
+    )
 
 
 def land_cause(reader: AttemptStore, agent: AttemptRow, checks: ChecksRow, cause: LandCause) -> LandCause:
     """Read only the terminal decision belonging to this exact retained admission, even after its release."""
-    request = Request(source=agent.key, checks=checks.key, repo_id=checks.repo_id, backlog=checks.backlog,
-                      task_id=checks.task_id, tracker_root=checks.tracker_root, checked=checks.commit,
-                      target=checks.commit, deadline=0.0)
+    request = Request(
+        source=agent.key,
+        checks=checks.key,
+        repo_id=checks.repo_id,
+        backlog=checks.backlog,
+        task_id=checks.task_id,
+        tracker_root=checks.tracker_root,
+        checked=checks.commit,
+        target=checks.commit,
+        deadline=0.0,
+    )
     try:
         record = ConflictStore(reader.connect, reader.begin).find(request)
     except (AdmissionRefused, ValueError) as error:
@@ -105,13 +120,16 @@ def land_cause(reader: AttemptStore, agent: AttemptRow, checks: ChecksRow, cause
     work = MergeStore(reader.connect, reader.begin).get(record.key.attempt_id)
     if work is None:
         return cause
-    if ((work.attempt_id, work.dispatch_token, work.generation) !=
-            (record.key.attempt_id, record.key.dispatch_token, record.key.reservation_generation)
-            or (work.task_id, work.repo_id, work.source, work.target, work.deadline, work.branch) !=
-            (request.task_id, request.repo_id, request.checked, record.request.target, record.request.deadline, None)
-            or (work.base, work.slot, work.setting, work.input_path, work.input_digest) !=
-            (record.base, Path(record.slot_path), record.inputs.setting, record.inputs.input_ref.path, record.inputs.input_ref.digest)
-            or work.phase is not Phase.TERMINAL or not work.explanation.strip()):
+    if (
+        (work.attempt_id, work.dispatch_token, work.generation)
+        != (record.key.attempt_id, record.key.dispatch_token, record.key.reservation_generation)
+        or (work.task_id, work.repo_id, work.source, work.target, work.deadline, work.branch)
+        != (request.task_id, request.repo_id, request.checked, record.request.target, record.request.deadline, None)
+        or (work.base, work.slot, work.setting, work.input_path, work.input_digest)
+        != (record.base, Path(record.slot_path), record.inputs.setting, record.inputs.input_ref.path, record.inputs.input_ref.digest)
+        or work.phase is not Phase.TERMINAL
+        or not work.explanation.strip()
+    ):
         raise StoreUnavailable("The retained terminal conflict decision cannot be verified")
     return LandCause(reason=cause.reason, explanation=work.explanation, source=work.source, target=work.target)
 
@@ -121,10 +139,16 @@ def facts(files: EvidenceFiles, reader: AttemptStore, row: HoldRow, labels: Labe
     published = None if agent.published is None else agent.published.commit
     head = (agent.task_id, row.label, labels, row.reason)
     cause = row.event.cause
-    failed = tuple(FailedCheck(each.name, str(each.conclusion), each.log or "") for each in cause.checks) if isinstance(
-        cause, (ChecksCause, LandCause)) else ()
-    left = Leftovers(str(cause.leftovers.reason), cause.leftovers.paths) if isinstance(
-        cause, RepeatCause) and cause.leftovers is not None else None
+    failed = (
+        tuple(FailedCheck(each.name, str(each.conclusion), each.log or "") for each in cause.checks)
+        if isinstance(cause, (ChecksCause, LandCause))
+        else ()
+    )
+    left = (
+        Leftovers(str(cause.leftovers.reason), cause.leftovers.paths)
+        if isinstance(cause, RepeatCause) and cause.leftovers is not None
+        else None
+    )
     deadline = cause.deadline if isinstance(cause, (ChecksCause, RunCause, StuckCause)) else None
     stop = cause.stop if isinstance(cause, (RunCause, StuckCause)) else None
     rc = cause.rc if isinstance(cause, (RunCause, StuckCause)) else None
@@ -133,11 +157,39 @@ def facts(files: EvidenceFiles, reader: AttemptStore, row: HoldRow, labels: Labe
         checks = next((each for each in store.of_attempt(row.attempt_id) if each.key.attempt_id == row.cause_id), None)
         if checks is None:
             raise StoreRefused("changed")
-        return HoldFacts(*head, CHECK, checks.number, row.cause_id, row.held_at, published, agent.end_commit,
-                         cause.explanation, failed, left, str(files.root / files.directory(checks.key)),
-                         files.last_entry(checks.key), deadline, stop=stop, rc=rc)
+        return HoldFacts(
+            *head,
+            CHECK,
+            checks.number,
+            row.cause_id,
+            row.held_at,
+            published,
+            agent.end_commit,
+            cause.explanation,
+            failed,
+            left,
+            str(files.root / files.directory(checks.key)),
+            files.last_entry(checks.key),
+            deadline,
+            stop=stop,
+            rc=rc,
+        )
     if agent.key.attempt_id != row.cause_id:
         raise StoreRefused("changed")
-    return HoldFacts(*head, agent.step, agent.number, agent.key.attempt_id, row.held_at, published, agent.end_commit,
-                     cause.explanation, failed, left, str(files.root / files.directory(agent.key)),
-                     files.last_entry(agent.key), deadline, stop=stop, rc=rc)
+    return HoldFacts(
+        *head,
+        agent.step,
+        agent.number,
+        agent.key.attempt_id,
+        row.held_at,
+        published,
+        agent.end_commit,
+        cause.explanation,
+        failed,
+        left,
+        str(files.root / files.directory(agent.key)),
+        files.last_entry(agent.key),
+        deadline,
+        stop=stop,
+        rc=rc,
+    )

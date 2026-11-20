@@ -34,7 +34,7 @@ def read(directory: Path, identity: str) -> DurationSample | None:
             return _load(directory / SEALED, identity)
         except FileNotFoundError:
             return _load(directory / ACTIVE, identity)
-    except (OSError, ValueError, ValidationError):
+    except OSError, ValueError, ValidationError:
         return None
 
 

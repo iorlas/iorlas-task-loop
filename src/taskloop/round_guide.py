@@ -54,8 +54,7 @@ GUIDE = {
     "not_committed": "The result has not been accepted by factory commit. The factory cannot publish it.",
     "remote_ahead": "The remote branch includes later work. Publication waits for the owner to reconcile its history.",
     "no_remote": "The repository has no configured origin. The owner must configure the intended remote before publication.",
-    "not_advanceable": "The current attempt has not met the conditions for advancing. The factory waits for "
-    "settlement and publication.",
+    "not_advanceable": "The current attempt has not met the conditions for advancing. The factory waits for settlement and publication.",
     "claim_lost": "The tracker claim is no longer the factory's. The factory will not retake it automatically.",
     "environment": "Setup or the slot environment could not be established. The owner must resolve its supplied "
     "diagnostic before work proceeds.",
@@ -117,9 +116,23 @@ def automatic_guide(word: str) -> str:
         word = word.split(":", 1)[1]
         if not word.startswith(("rejected:", "run:", "answer:", "environment:", "checks:")):
             return GUIDE.get(word, GUIDE["failed"])
-    reason = word.split(":", 1)[1] if word.split(":", 1)[0] in {
-        "refused", "unavailable", "uncertain", "unsettled", "uncommitted", "waiting", "rejected", "not_applicable", "defect", "held",
-    } else word
+    reason = (
+        word.split(":", 1)[1]
+        if word.split(":", 1)[0]
+        in {
+            "refused",
+            "unavailable",
+            "uncertain",
+            "unsettled",
+            "uncommitted",
+            "waiting",
+            "rejected",
+            "not_applicable",
+            "defect",
+            "held",
+        }
+        else word
+    )
     return _reason_guide(reason)
 
 

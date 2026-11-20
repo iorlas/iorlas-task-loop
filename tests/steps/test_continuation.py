@@ -45,6 +45,7 @@ def captured_work(tmp_path: Path, surroundings: AttemptSurroundings, monkeypatch
     assert record is not None
     recovery_store = RecoveryStore(lambda: con)
     callbacks = Callbacks(app, record.admission, registered(recovery_store, intended(recovery_store), WORKER))
+
     def crashed(*_args: object) -> None:
         raise RuntimeError("entry crashed before decoding")
 
@@ -86,11 +87,14 @@ def test_captured_completion_preserves_live_or_unknown_entry(captured_work: Atte
     assert store.collect(KEY) == before
 
 
-@pytest.mark.parametrize("change", [
-    "UPDATE reservation SET generation=2",
-    STUCK_SQL,
-    "UPDATE attempt SET session_conflict=1",
-])
+@pytest.mark.parametrize(
+    "change",
+    [
+        "UPDATE reservation SET generation=2",
+        STUCK_SQL,
+        "UPDATE attempt SET session_conflict=1",
+    ],
+)
 def test_captured_completion_reloads_ownership_under_custody(captured_work: Attempts, change: str) -> None:
     store = captured_work.store
     con = store.connect()
@@ -128,7 +132,9 @@ def test_captured_completion_retries_custody_and_evidence(captured_work: Attempt
 
 @pytest.mark.parametrize("phase", ["admitted", "registered"])
 def test_captured_completion_refuses_uncaptured_work(
-    tmp_path: Path, surroundings: AttemptSurroundings, phase: str,
+    tmp_path: Path,
+    surroundings: AttemptSurroundings,
+    phase: str,
 ) -> None:
     con = database(tmp_path / "factory.db")
     execution = NativeRun()
@@ -154,7 +160,10 @@ def test_captured_completion_rejects_changed_callback(captured_work: Attempts) -
 @pytest.mark.parametrize("boundary", ["before_intent", "after_authorize", "after_intent", "after_register", "lost_ack"])
 @pytest.mark.parametrize("seen", [Seen.ALIVE, Seen.GONE, Seen.UNKNOWN])
 def test_crash_reopen_observes_before_execution(
-    tmp_path: Path, surroundings: AttemptSurroundings, boundary: str, seen: Seen,
+    tmp_path: Path,
+    surroundings: AttemptSurroundings,
+    boundary: str,
+    seen: Seen,
 ) -> None:
     path = tmp_path / "factory.db"
     con = database(path)
@@ -166,6 +175,7 @@ def test_crash_reopen_observes_before_execution(
     elif boundary in ("after_intent", "after_register", "lost_ack"):
         intent = intended(app.store)
         if boundary in ("after_register", "lost_ack"):
+
             @contextmanager
             def lost_ack(connection: sqlite3.Connection) -> Generator[None]:
                 with begin_immediate(connection):
@@ -203,7 +213,10 @@ def test_crash_reopen_observes_before_execution(
 
 @pytest.mark.parametrize("staged", [False, True])
 def test_preauthorized_renewal_uses_current_admission_without_authorizing_again(
-    tmp_path: Path, surroundings: AttemptSurroundings, monkeypatch: pytest.MonkeyPatch, staged: bool,
+    tmp_path: Path,
+    surroundings: AttemptSurroundings,
+    monkeypatch: pytest.MonkeyPatch,
+    staged: bool,
 ) -> None:
     con = database(tmp_path / "factory.db")
     execution = NativeRun()
@@ -232,7 +245,9 @@ def test_preauthorized_renewal_uses_current_admission_without_authorizing_again(
 
 @pytest.mark.parametrize("field", ["key", "owner", "generation", "token", "session"])
 def test_preauthorization_requires_exact_attempt_owner_and_authority(
-    tmp_path: Path, surroundings: AttemptSurroundings, field: str,
+    tmp_path: Path,
+    surroundings: AttemptSurroundings,
+    field: str,
 ) -> None:
     con = database(tmp_path / "factory.db")
     execution = NativeRun()
@@ -240,10 +255,17 @@ def test_preauthorization_requires_exact_attempt_owner_and_authority(
     recovery_app = recovery(con)
     authorized = recovery_app.authorize(KEY, OWNER)
     assert authorized.intent is not None
-    expected = authorized.intent.model_copy(update={field: {
-        "key": AttemptKey("other", "dispatch", 1), "owner": Identity(pid=40, pgid=40, start="other", boot="boot"),
-        "generation": 2, "token": "other", "session": "other",
-    }[field]})
+    expected = authorized.intent.model_copy(
+        update={
+            field: {
+                "key": AttemptKey("other", "dispatch", 1),
+                "owner": Identity(pid=40, pgid=40, start="other", boot="boot"),
+                "generation": 2,
+                "token": "other",
+                "session": "other",
+            }[field]
+        }
+    )
     before = list(con.iterdump())
     result = Continuation(recovery_app, attempts, NativeContinuation(attempts, recovery_app.store))(KEY, OWNER, intent=expected)
     assert result.refusal is not None and result.refusal.outcome is Outcome.CHANGED
@@ -253,7 +275,9 @@ def test_preauthorization_requires_exact_attempt_owner_and_authority(
 
 @pytest.mark.parametrize("seen", [Seen.ALIVE, Seen.GONE, Seen.UNKNOWN])
 def test_registered_preauthorization_never_launches_another_worker(
-    tmp_path: Path, surroundings: AttemptSurroundings, seen: Seen,
+    tmp_path: Path,
+    surroundings: AttemptSurroundings,
+    seen: Seen,
 ) -> None:
     con = database(tmp_path / "factory.db")
     execution = NativeRun()
@@ -276,7 +300,9 @@ def test_registered_preauthorization_never_launches_another_worker(
 
 @pytest.mark.parametrize("state", [ClaimState.LOST, ClaimState.UNKNOWN])
 def test_preauthorization_rechecks_claim_without_permitting_execution(
-    tmp_path: Path, surroundings: AttemptSurroundings, state: ClaimState,
+    tmp_path: Path,
+    surroundings: AttemptSurroundings,
+    state: ClaimState,
 ) -> None:
     con = database(tmp_path / "factory.db")
     execution = NativeRun()
@@ -287,16 +313,20 @@ def test_preauthorization_rechecks_claim_without_permitting_execution(
     recovery_app.claim = lambda _admission: Claim(state=state, explanation="The claim is no longer confirmed.")
     before = list(con.iterdump())
     result = Continuation(recovery_app, attempts, NativeContinuation(attempts, recovery_app.store))(
-        KEY, OWNER, intent=authorized.intent,
+        KEY,
+        OWNER,
+        intent=authorized.intent,
     )
     assert result.refusal is not None and result.refusal.outcome is (
-        Outcome.CLAIM_LOST if state is ClaimState.LOST else Outcome.CLAIM_UNKNOWN)
+        Outcome.CLAIM_LOST if state is ClaimState.LOST else Outcome.CLAIM_UNKNOWN
+    )
     assert result.explanation and execution.calls == [] and list(con.iterdump()) == before
     con.close()
 
 
 def test_renewed_continuation_fences_old_callbacks_and_pending_capture(
-    tmp_path: Path, surroundings: AttemptSurroundings,
+    tmp_path: Path,
+    surroundings: AttemptSurroundings,
 ) -> None:
     con = database(tmp_path / "factory.db")
     execution = NativeRun()
@@ -328,7 +358,10 @@ def test_renewed_continuation_fences_old_callbacks_and_pending_capture(
 
 @pytest.mark.parametrize(("change", "outcome"), CHANGES)
 def test_local_fences_refuse_before_native_execution(
-    tmp_path: Path, surroundings: AttemptSurroundings, change: str, outcome: Outcome,
+    tmp_path: Path,
+    surroundings: AttemptSurroundings,
+    change: str,
+    outcome: Outcome,
 ) -> None:
     con = database(tmp_path / "factory.db")
     execution = NativeRun()
@@ -387,7 +420,9 @@ def test_old_pending_capture_cannot_overwrite_successor(tmp_path: Path, surround
 
 
 def test_crash_before_decoding_reopens_captured_work_without_execution(
-    tmp_path: Path, surroundings: AttemptSurroundings, monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    surroundings: AttemptSurroundings,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     path = tmp_path / "factory.db"
     con = database(path)

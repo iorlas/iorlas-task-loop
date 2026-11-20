@@ -21,17 +21,24 @@ from taskloop.recovery.store import RecoveryStore
 from taskloop.slot_lock import SlotBusy, SlotLockUnavailable
 
 
-@pytest.mark.parametrize(("entry", "worker", "state"), [
-    (Seen.GONE, Seen.ALIVE, ReconciliationState.LIVE),
-    (Seen.UNKNOWN, Seen.ALIVE, ReconciliationState.LIVE),
-    (Seen.GONE, Seen.GONE, ReconciliationState.GONE),
-    (Seen.ALIVE, Seen.GONE, ReconciliationState.UNKNOWN),
-    (Seen.UNKNOWN, Seen.GONE, ReconciliationState.UNKNOWN),
-    (Seen.GONE, Seen.UNKNOWN, ReconciliationState.UNKNOWN),
-])
+@pytest.mark.parametrize(
+    ("entry", "worker", "state"),
+    [
+        (Seen.GONE, Seen.ALIVE, ReconciliationState.LIVE),
+        (Seen.UNKNOWN, Seen.ALIVE, ReconciliationState.LIVE),
+        (Seen.GONE, Seen.GONE, ReconciliationState.GONE),
+        (Seen.ALIVE, Seen.GONE, ReconciliationState.UNKNOWN),
+        (Seen.UNKNOWN, Seen.GONE, ReconciliationState.UNKNOWN),
+        (Seen.GONE, Seen.UNKNOWN, ReconciliationState.UNKNOWN),
+    ],
+)
 @pytest.mark.parametrize("advanced", [False, True])
 def test_reopen_classifies_exact_registered_worker_and_preserves_owner(
-    tmp_path: Path, entry: Seen, worker: Seen, state: ReconciliationState, advanced: bool,
+    tmp_path: Path,
+    entry: Seen,
+    worker: Seen,
+    state: ReconciliationState,
+    advanced: bool,
 ) -> None:
     path = tmp_path / "factory.db"
     con = database(path)
@@ -59,12 +66,19 @@ def test_reopen_classifies_exact_registered_worker_and_preserves_owner(
 
 
 @pytest.mark.parametrize("execution", [False, True])
-@pytest.mark.parametrize(("worker", "state"), [
-    (Seen.GONE, ReconciliationState.GONE), (Seen.ALIVE, ReconciliationState.UNKNOWN),
-    (Seen.UNKNOWN, ReconciliationState.UNKNOWN),
-])
+@pytest.mark.parametrize(
+    ("worker", "state"),
+    [
+        (Seen.GONE, ReconciliationState.GONE),
+        (Seen.ALIVE, ReconciliationState.UNKNOWN),
+        (Seen.UNKNOWN, ReconciliationState.UNKNOWN),
+    ],
+)
 def test_unregistered_intent_never_adopts_a_worker(
-    tmp_path: Path, execution: bool, worker: Seen, state: ReconciliationState,
+    tmp_path: Path,
+    execution: bool,
+    worker: Seen,
+    state: ReconciliationState,
 ) -> None:
     con = database(tmp_path / "factory.db")
     app = recovery(con)
@@ -159,8 +173,7 @@ def test_claim_refusals_preserve_execution(tmp_path: Path, state: ClaimState) ->
     app.claim = lambda _admission: Claim(state=state, explanation="Claim observation explanation.")
     before = list(con.iterdump())
     result = app.reconcile(expected)
-    assert isinstance(result, Result) and result.outcome is (
-        Outcome.CLAIM_LOST if state is ClaimState.LOST else Outcome.CLAIM_UNKNOWN)
+    assert isinstance(result, Result) and result.outcome is (Outcome.CLAIM_LOST if state is ClaimState.LOST else Outcome.CLAIM_UNKNOWN)
     assert result.explanation == "Claim observation explanation." and list(con.iterdump()) == before
     con.close()
 
@@ -202,12 +215,19 @@ def test_custody_surrounds_observations_and_comparison_and_can_be_supplied(tmp_p
     con.close()
 
 
-@pytest.mark.parametrize(("error", "outcome"), [
-    (SlotBusy, Outcome.CUSTODY_BUSY), (SlotLockUnavailable, Outcome.UNAVAILABLE),
-    (StoreUnavailable, Outcome.UNAVAILABLE), (ValueError, Outcome.UNAVAILABLE),
-])
+@pytest.mark.parametrize(
+    ("error", "outcome"),
+    [
+        (SlotBusy, Outcome.CUSTODY_BUSY),
+        (SlotLockUnavailable, Outcome.UNAVAILABLE),
+        (StoreUnavailable, Outcome.UNAVAILABLE),
+        (ValueError, Outcome.UNAVAILABLE),
+    ],
+)
 def test_unavailable_custody_or_storage_is_explained(
-    tmp_path: Path, error: Callable[[str], Exception], outcome: Outcome,
+    tmp_path: Path,
+    error: Callable[[str], Exception],
+    outcome: Outcome,
 ) -> None:
     con = database(tmp_path / "factory.db")
     app = recovery(con)
@@ -236,10 +256,15 @@ def test_reconciliation_omits_snapshot_only_for_capture(tmp_path: Path) -> None:
     con.close()
 
 
-@pytest.mark.parametrize("change", [
-    "UPDATE attempt SET rev=rev+1", "UPDATE attempt SET worker_start='different'",
-    "UPDATE attempt SET session_ref='different'", "UPDATE attempt SET entry_start='different'",
-])
+@pytest.mark.parametrize(
+    "change",
+    [
+        "UPDATE attempt SET rev=rev+1",
+        "UPDATE attempt SET worker_start='different'",
+        "UPDATE attempt SET session_ref='different'",
+        "UPDATE attempt SET entry_start='different'",
+    ],
+)
 def test_registered_execution_requires_exact_worker_revision_session_and_entry(tmp_path: Path, change: str) -> None:
     con = database(tmp_path / "factory.db")
     processes = Processes()

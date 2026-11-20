@@ -70,8 +70,9 @@ class CheckRepeat:
             key = AttemptKey(self.ids.hex(), self.ids.token(16), self.store.generation(state.checks.repo_id, free))
             opening = feedback_opening(self.store.workflow(previous).workflow.step)
             ref = self.files.put_input(key, failed_check_feedback(evidence, original, self.ids.token(16), opening))
-            admitted = self.store.admit(previous, evidence, key, ref, free, deadline_after(request.minutes, self.clock),
-                                       self.engine, self.clock())
+            admitted = self.store.admit(
+                previous, evidence, key, ref, free, deadline_after(request.minutes, self.clock), self.engine, self.clock()
+            )
             if isinstance(admitted, AdmitRefused):
                 return self._winner(request, previous) if admitted.reason == "task_attempted" else Failed("refused", admitted.reason)
         except (StoreUnavailable, EvidenceError, InputError, ValidationError, GitUnavailable) as error:
@@ -86,9 +87,11 @@ class CheckRepeat:
         checks = CheckStore(self.store.connect, self.store.begin)
         rows = checks.results(source.key)
         setup = SetupStore(self.store.connect, self.store.begin).latest(source.key)
-        stopped = (entry_stopped(self.observe, None, source.entry)
-                   or setup_stopped(self.seen, None if setup is None else setup.unsettled)
-                   or checks_stopped(self.seen, rows))
+        stopped = (
+            entry_stopped(self.observe, None, source.entry)
+            or setup_stopped(self.seen, None if setup is None else setup.unsettled)
+            or checks_stopped(self.seen, rows)
+        )
         if stopped is not None:
             return Failed("unavailable", stopped.reason, stopped.detail)
         repo = self._candidate(request, state)
@@ -133,13 +136,24 @@ class CheckRepeat:
             return Failed("unavailable", FeedbackReason.PROFILE, "The checked commit's profile is unavailable or invalid.")
         rows = CheckStore(self.store.connect, self.store.begin).results(source.key)
         command = next((check for check in profile.checks if check.name == result.name), None)
-        if (source.profile_digest != hashlib.sha256(blob).hexdigest() or command is None
-                or argv_digest(command.argv) != result.argv_digest or not completed(rows, profile.checks, source.required)):
+        if (
+            source.profile_digest != hashlib.sha256(blob).hexdigest()
+            or command is None
+            or argv_digest(command.argv) != result.argv_digest
+            or not completed(rows, profile.checks, source.required)
+        ):
             return Failed("refused", FeedbackReason.PROFILE, "The stored check result and checked profile do not agree.")
         if result.rc is None:
             return Failed("refused", FeedbackReason.EVIDENCE, "The check did not exit with a nonzero status.")
-        return FailedCheck(source=source.key, block=result.block, commit=source.commit, name=result.name,
-                           argv=command.argv, rc=result.rc, output=self.files.check_output(source.key, result.block, result.name))
+        return FailedCheck(
+            source=source.key,
+            block=result.block,
+            commit=source.commit,
+            name=result.name,
+            argv=command.argv,
+            rc=result.rc,
+            output=self.files.check_output(source.key, result.block, result.name),
+        )
 
     def _winner(self, request: StartRequest, previous: AttemptKey) -> Started | Failed:
         rows = AttemptStore(self.store.connect, self.store.begin).attempts(request.backlog, request.task_id)
@@ -148,6 +162,11 @@ class CheckRepeat:
         return Failed("refused", "changed", "The failed checks are no longer eligible for an implement repeat.")
 
     def _launch(self, request: StartRequest, admitted: Admitted, *, existing: bool) -> Started | Failed:
-        result = launched(self.launcher.launch(request.backlog, request.task_id, request.minutes),
-                          request.backlog, request.task_id, admitted.key, existing=existing)
+        result = launched(
+            self.launcher.launch(request.backlog, request.task_id, request.minutes),
+            request.backlog,
+            request.task_id,
+            admitted.key,
+            existing=existing,
+        )
         return replace(result, admitted=True) if isinstance(result, Failed) and not existing else result

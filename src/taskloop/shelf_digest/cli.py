@@ -20,8 +20,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     arguments = parser.parse_args(argv)
     try:
         views = GitViews(30)
-        result = generate_installed_digest(views.checkouts(arguments.checkout.expanduser().resolve()), arguments.at,
-                                           InstalledDistributions())
+        result = generate_installed_digest(
+            views.checkouts(arguments.checkout.expanduser().resolve()), arguments.at, InstalledDistributions()
+        )
         if not isinstance(result, Digest):
             print(result.explanation, file=sys.stderr)
             return 1

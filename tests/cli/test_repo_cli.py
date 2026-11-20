@@ -41,16 +41,23 @@ def test_inspection_output(structured: bool, tmp_path: Path, monkeypatch: pytest
 
 
 @pytest.mark.parametrize("structured", [False, True])
-@pytest.mark.parametrize("error, kind", [
-    (NotARepo("missing"), "not_a_repo"),
-    (GitReadFailure("read failed"), "git_read_failure"),
-    (GitUnavailable("git missing"), "git_unavailable"),
-    (GitTimeout("timed out"), "git_timeout"),
-    (UnsupportedCheckout("select root"), "unsupported_checkout"),
-    (OSError("unavailable"), "path_unavailable"),
-])
+@pytest.mark.parametrize(
+    "error, kind",
+    [
+        (NotARepo("missing"), "not_a_repo"),
+        (GitReadFailure("read failed"), "git_read_failure"),
+        (GitUnavailable("git missing"), "git_unavailable"),
+        (GitTimeout("timed out"), "git_timeout"),
+        (UnsupportedCheckout("select root"), "unsupported_checkout"),
+        (OSError("unavailable"), "path_unavailable"),
+    ],
+)
 def test_inspection_failures_are_nonzero(
-    error: Exception, kind: str, structured: bool, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str],
+    error: Exception,
+    kind: str,
+    structured: bool,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     def fail(path: str) -> RepoInspection:
         raise error

@@ -23,8 +23,9 @@ from taskloop.operations import Failed
 
 
 def request(tmp_path: Path, port: int) -> DashRequest:
-    return DashRequest("tl", str(tmp_path), "auto", ip_address("127.0.0.1"), port,
-                       tmp_path / "factory.db", tmp_path / "artifacts", tmp_path)
+    return DashRequest(
+        "tl", str(tmp_path), "auto", ip_address("127.0.0.1"), port, tmp_path / "factory.db", tmp_path / "artifacts", tmp_path
+    )
 
 
 def board_answer(address: tuple[str, int]) -> tuple[int, dict[str, str]]:
@@ -49,8 +50,9 @@ def test_a_missing_or_incompatible_factory_db_is_a_503_with_its_reason_never_a_s
 @pytest.mark.usefixtures("require_loopback")
 def test_a_taken_port_is_a_failed_the_rounds_go_on_without_and_no_dashboard_is_left_running(tmp_path: Path) -> None:
     nothing = Failed("refused", "x")
-    ports = DashPorts(lambda: nothing, lambda _id: nothing, lambda _id: None, lambda *_: None, tuple,
-                      lambda *_: None, lambda _id: nothing, "tl", tmp_path)
+    ports = DashPorts(
+        lambda: nothing, lambda _id: nothing, lambda _id: None, lambda *_: None, tuple, lambda *_: None, lambda _id: nothing, "tl", tmp_path
+    )
     busy = DashServer(ports, ip_address("127.0.0.1"), 0)
     try:
         with serving(request(tmp_path, busy.address[1]), GitViews(5)) as address:
@@ -90,7 +92,9 @@ def test_without_a_dash_port_nothing_is_served(tmp_path: Path) -> None:
 
 @pytest.mark.parametrize("host", ["192.0.2.4", "::"])
 def test_unavailable_address_reports_the_selected_address_and_port(
-    host: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    host: str,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     selected = replace(request(tmp_path, 8123), host=ip_address(host))
 

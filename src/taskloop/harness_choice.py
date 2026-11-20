@@ -22,12 +22,26 @@ class Provider(StrEnum):
 
 
 HARNESS_WORDS = {HarnessKind.CODEX: "Codex", HarnessKind.CLAUDE: "Claude Code", HarnessKind.OPENCODE: "OpenCode"}
-PROVIDER_WORDS = {Provider.OPENAI: "OpenAI", Provider.ANTHROPIC: "Anthropic", Provider.DEEPSEEK: "DeepSeek", Provider.KIMI: "Kimi",
-                  Provider.XAI: "xAI", Provider.UNKNOWN: "provider unknown"}
+PROVIDER_WORDS = {
+    Provider.OPENAI: "OpenAI",
+    Provider.ANTHROPIC: "Anthropic",
+    Provider.DEEPSEEK: "DeepSeek",
+    Provider.KIMI: "Kimi",
+    Provider.XAI: "xAI",
+    Provider.UNKNOWN: "provider unknown",
+}
 # OpenCode serves many providers: the model id names whose model it is (`opencode/deepseek-v4.1-flash-free`, `moonshotai/kimi-k2`).
-_BY_MODEL = (("deepseek", Provider.DEEPSEEK), ("kimi", Provider.KIMI), ("moonshot", Provider.KIMI), ("grok", Provider.XAI),
-             ("xai", Provider.XAI), ("gpt", Provider.OPENAI), ("openai", Provider.OPENAI), ("claude", Provider.ANTHROPIC),
-             ("anthropic", Provider.ANTHROPIC))
+_BY_MODEL = (
+    ("deepseek", Provider.DEEPSEEK),
+    ("kimi", Provider.KIMI),
+    ("moonshot", Provider.KIMI),
+    ("grok", Provider.XAI),
+    ("xai", Provider.XAI),
+    ("gpt", Provider.OPENAI),
+    ("openai", Provider.OPENAI),
+    ("claude", Provider.ANTHROPIC),
+    ("anthropic", Provider.ANTHROPIC),
+)
 
 
 def provider_of(harness: HarnessKind, model: str) -> Provider:

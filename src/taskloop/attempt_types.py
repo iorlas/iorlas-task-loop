@@ -216,12 +216,30 @@ class PlanContentRule(StrEnum):
     HEADING = "plan_heading"
 
 
-type Rule = PlanContentRule | Literal[
-    "commit_absent", "not_descendant", "chain_length", "paths", "mode", "file_size", "nothing_written", "plan_missing",
-    "plan_encoding", "plan_empty", "plan_size",
-]
+type Rule = (
+    PlanContentRule
+    | Literal[
+        "commit_absent",
+        "not_descendant",
+        "chain_length",
+        "paths",
+        "mode",
+        "file_size",
+        "nothing_written",
+        "plan_missing",
+        "plan_encoding",
+        "plan_empty",
+        "plan_size",
+    ]
+)
 CHAIN_RULES: Final[tuple[Rule, ...]] = (
-    "commit_absent", "not_descendant", "chain_length", "paths", "mode", "file_size", "nothing_written",
+    "commit_absent",
+    "not_descendant",
+    "chain_length",
+    "paths",
+    "mode",
+    "file_size",
+    "nothing_written",
 )
 
 

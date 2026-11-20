@@ -83,6 +83,8 @@ HELD_SLOT = (
 )
 HELD_MAIN = "task/{task} is checked out in your main checkout ({path}): switch it off the branch yourself, then start again."
 HELD_OTHER = "task/{task} is checked out in {path}, which is not a slot: switch it off the branch yourself, then start again."
+
+
 def refusal_detail(found: BranchRefusal, task_id: str) -> str:
     return DETAILS.get(found, "").format(task=task_id)
 
@@ -126,8 +128,9 @@ def branch_refusal(repo: Repo, task_id: str, heads: Sequence[str]) -> BranchRefu
     passing = tuple(head for head in heads if repo.is_ancestor(head, start) or (origin is not None and repo.is_ancestor(head, origin)))
     if (heads and not passing) or not _related(repo, start, origin):
         return "target" if origin is None else "branch_diverged"
-    unpublished = local is not None and _foreign_unpublished(repo, local,
-        [tip for tip in (remote, found.get(MAIN), origin) if tip is not None])
+    unpublished = local is not None and _foreign_unpublished(
+        repo, local, [tip for tip in (remote, found.get(MAIN), origin) if tip is not None]
+    )
     return "branch_unpublished" if unpublished else Branch(passing, local, remote, start)
 
 
@@ -155,7 +158,8 @@ UNPUBLISHED: Final = (
 DETAILS: Final = {
     "branch_diverged": DIVERGED,
     "branch_unpublished": UNPUBLISHED,
-    "target": f"The checkout lacks the required origin remote-tracking ref: `{ORIGIN_MAIN}`."}
+    "target": f"The checkout lacks the required origin remote-tracking ref: `{ORIGIN_MAIN}`.",
+}
 
 
 def refreshed_sources(repo: Repo, task_id: str, paths: Sequence[Path]) -> tuple[dict[Path, str | None], BranchRefusal | Branch, str | None]:
@@ -165,8 +169,11 @@ def refreshed_sources(repo: Repo, task_id: str, paths: Sequence[Path]) -> tuple[
         raise GitUnavailable(f"Origin main could not be refreshed: {fetched.output}")
     park_commit = next((entry.sha for entry in repo.refs([ORIGIN_MAIN]) if entry.name == ORIGIN_MAIN), None)
     heads: dict[Path, str | None] = {info.path: info.head for info in repo.worktrees()}
-    found = ("target" if park_commit is None else
-             branch_refusal(repo, task_id, tuple(head for path in paths if (head := heads.get(path)) is not None)))
+    found = (
+        "target"
+        if park_commit is None
+        else branch_refusal(repo, task_id, tuple(head for path in paths if (head := heads.get(path)) is not None))
+    )
     return heads, found, park_commit
 
 
@@ -208,8 +215,9 @@ def _take(checkouts: Checkouts, files: SlotFiles, record: AttemptRecord, state: 
         return _refused("branch_held")
     changed = taken.head != found.start
     diverged = changed and repo.merge_base(found.start, taken.head) is None
-    moved = (changed and not diverged) or (after is not None and (lacks(repo, after, taken.head)
-                                         or (admission.source_checks_id is not None and taken.head != after)))
+    moved = (changed and not diverged) or (
+        after is not None and (lacks(repo, after, taken.head) or (admission.source_checks_id is not None and taken.head != after))
+    )
     if not diverged and not moved:
         return None
     # A source substituted between the rule and take never dispatches, even when D is safely on main.
