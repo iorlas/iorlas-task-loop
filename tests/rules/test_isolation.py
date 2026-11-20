@@ -42,16 +42,9 @@ def test_noneditable_install_matches_current_source() -> None:
     assert entries[0].load() is cli.main
 
 
-# Every shared dependency and the shelf tag it is pinned at. stream-proc is pinned at any-agent's tag (a later
-# commit than its own stream-proc-v0.9.0 tag): both must resolve to one shelf commit.
-SHARED = {
-    "git-porcelain": "git-porcelain-v0.22.0",
-    "beads-client": "beads-client-v0.4.0",
-    "any-agent": "any-agent-v0.15.0",
-    "sqlite-store": "sqlite-store-v0.1.0",
-    "process-lock": "process-lock-v0.2.1",
-    "stream-proc": "any-agent-v0.15.0",
-}
+# Every shared dependency is pinned at the one shelf snapshot tag, so all of them resolve to one shelf commit.
+SNAPSHOT = "blueprint-v0.5.0"
+SHARED = {"git-porcelain", "beads-client", "any-agent", "sqlite-store", "process-lock", "stream-proc"}
 
 
 # Direct dependencies from PyPI, pinned exactly like the shelf ones, but not shelf packages (no tag, no source entry).
@@ -69,7 +62,7 @@ def test_portable_shared_dependency(name: str) -> None:
     dependency = importlib.metadata.distribution(name)
     pinned = {f"{package}=={importlib.metadata.version(package)}" for package in set(SHARED) | EDGE}
     assert set(project["project"]["dependencies"]) == pinned
-    tag = SHARED[name]
+    tag = SNAPSHOT
     assert "workspace" not in project.get("tool", {}).get("uv", {})
     assert set(project["tool"]["uv"]["sources"]) == set(SHARED)
     assert project["tool"]["uv"]["sources"][name] == {
@@ -90,8 +83,8 @@ def test_portable_shared_dependency(name: str) -> None:
     assert source.rsplit("#", 1)[1] == dependency_origin["vcs_info"]["commit_id"]
 
 
-def test_stream_proc_comes_from_any_agents_commit() -> None:
-    assert locked_source("stream-proc").rsplit("#", 1)[1] == locked_source("any-agent").rsplit("#", 1)[1]
+def test_every_shared_dependency_comes_from_one_commit() -> None:
+    assert len({locked_source(name).rsplit("#", 1)[1] for name in SHARED}) == 1
 
 
 def test_no_baseline_or_editable_dependencies() -> None:

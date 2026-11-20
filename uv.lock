@@ -14,7 +14,7 @@ wheels = [
 [[package]]
 name = "any-agent"
 version = "0.15.0"
-source = { git = "https://github.com/yoselabs/shelf.git?subdirectory=packages%2Fany-agent&tag=any-agent-v0.15.0#7292d63cca18ba875fb78a2f4df406a104d03fc2" }
+source = { git = "https://github.com/yoselabs/shelf.git?subdirectory=packages%2Fany-agent&tag=blueprint-v0.5.0#2dfe82fb74944fab99b7cc3cd482ed98151acb24" }
 dependencies = [
     { name = "stream-proc" },
 ]
@@ -22,7 +22,7 @@ dependencies = [
 [[package]]
 name = "beads-client"
 version = "0.4.0"
-source = { git = "https://github.com/yoselabs/shelf.git?subdirectory=packages%2Fbeads-client&tag=beads-client-v0.4.0#bf477df4c3d777f5f7efff02bbc6496ba518cf3a" }
+source = { git = "https://github.com/yoselabs/shelf.git?subdirectory=packages%2Fbeads-client&tag=blueprint-v0.5.0#2dfe82fb74944fab99b7cc3cd482ed98151acb24" }
 
 [[package]]
 name = "colorama"
@@ -44,8 +44,8 @@ wheels = [
 
 [[package]]
 name = "git-porcelain"
-version = "0.22.0"
-source = { git = "https://github.com/yoselabs/shelf.git?subdirectory=packages%2Fgit-porcelain&tag=git-porcelain-v0.22.0#ed0e41dc9e93025defaed55180e0bf7fd34340c2" }
+version = "0.24.0"
+source = { git = "https://github.com/yoselabs/shelf.git?subdirectory=packages%2Fgit-porcelain&tag=blueprint-v0.5.0#2dfe82fb74944fab99b7cc3cd482ed98151acb24" }
 
 [[package]]
 name = "iniconfig"
@@ -78,13 +78,13 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "any-agent", git = "https://github.com/yoselabs/shelf.git?subdirectory=packages%2Fany-agent&tag=any-agent-v0.15.0" },
-    { name = "beads-client", git = "https://github.com/yoselabs/shelf.git?subdirectory=packages%2Fbeads-client&tag=beads-client-v0.4.0" },
-    { name = "git-porcelain", git = "https://github.com/yoselabs/shelf.git?subdirectory=packages%2Fgit-porcelain&tag=git-porcelain-v0.22.0" },
-    { name = "process-lock", git = "https://github.com/yoselabs/shelf.git?subdirectory=packages%2Fprocess-lock&tag=process-lock-v0.2.1" },
+    { name = "any-agent", git = "https://github.com/yoselabs/shelf.git?subdirectory=packages%2Fany-agent&tag=blueprint-v0.5.0" },
+    { name = "beads-client", git = "https://github.com/yoselabs/shelf.git?subdirectory=packages%2Fbeads-client&tag=blueprint-v0.5.0" },
+    { name = "git-porcelain", git = "https://github.com/yoselabs/shelf.git?subdirectory=packages%2Fgit-porcelain&tag=blueprint-v0.5.0" },
+    { name = "process-lock", git = "https://github.com/yoselabs/shelf.git?subdirectory=packages%2Fprocess-lock&tag=blueprint-v0.5.0" },
     { name = "pydantic", specifier = "==2.14.3" },
-    { name = "sqlite-store", git = "https://github.com/yoselabs/shelf.git?subdirectory=packages%2Fsqlite-store&tag=sqlite-store-v0.1.0" },
-    { name = "stream-proc", git = "https://github.com/yoselabs/shelf.git?subdirectory=packages%2Fstream-proc&tag=any-agent-v0.15.0" },
+    { name = "sqlite-store", git = "https://github.com/yoselabs/shelf.git?subdirectory=packages%2Fsqlite-store&tag=blueprint-v0.5.0" },
+    { name = "stream-proc", git = "https://github.com/yoselabs/shelf.git?subdirectory=packages%2Fstream-proc&tag=blueprint-v0.5.0" },
 ]
 
 [package.metadata.requires-dev]
@@ -114,7 +114,7 @@ wheels = [
 [[package]]
 name = "process-lock"
 version = "0.2.1"
-source = { git = "https://github.com/yoselabs/shelf.git?subdirectory=packages%2Fprocess-lock&tag=process-lock-v0.2.1#d3d611ca15e07bacbf39727d14174f06bdc59e2a" }
+source = { git = "https://github.com/yoselabs/shelf.git?subdirectory=packages%2Fprocess-lock&tag=blueprint-v0.5.0#2dfe82fb74944fab99b7cc3cd482ed98151acb24" }
 
 [[package]]
 name = "pydantic"
@@ -213,12 +213,12 @@ wheels = [
 [[package]]
 name = "sqlite-store"
 version = "0.1.0"
-source = { git = "https://github.com/yoselabs/shelf.git?subdirectory=packages%2Fsqlite-store&tag=sqlite-store-v0.1.0#18d3164893f95dc82e391a7226652d286d9c4663" }
+source = { git = "https://github.com/yoselabs/shelf.git?subdirectory=packages%2Fsqlite-store&tag=blueprint-v0.5.0#2dfe82fb74944fab99b7cc3cd482ed98151acb24" }
 
 [[package]]
 name = "stream-proc"
 version = "0.9.0"
-source = { git = "https://github.com/yoselabs/shelf.git?subdirectory=packages%2Fstream-proc&tag=any-agent-v0.15.0#7292d63cca18ba875fb78a2f4df406a104d03fc2" }
+source = { git = "https://github.com/yoselabs/shelf.git?subdirectory=packages%2Fstream-proc&tag=blueprint-v0.5.0#2dfe82fb74944fab99b7cc3cd482ed98151acb24" }
 
 [[package]]
 name = "typing-extensions"

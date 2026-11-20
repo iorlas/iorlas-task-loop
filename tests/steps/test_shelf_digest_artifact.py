@@ -14,7 +14,7 @@ from taskloop.shelf_digest.render import TOKEN_LIMIT
 from taskloop.shelf_digest.source import SourceSnapshot, relative_path
 
 ROOT = Path(__file__).resolve().parents[2]
-SOURCE_COMMIT = "4b9a05ab1ca3e64ddeabba495c7a1a13b31d85e7"
+SOURCE_COMMIT = "8c06a86e82744c3d72478310fcda7ae0c0032611"
 
 
 def test_artifact_decodes_all_six_manifest_identities() -> None:
@@ -77,9 +77,9 @@ def test_consumer_validates_all_pins_and_keeps_generation_provenance() -> None:
 
 @pytest.mark.parametrize(("old", "new", "reason"), [
     (b'"0.9.0"', b'"0.8.0"', "package identities"),
-    (b'"any-agent-v0.15.0"', b'"any-agent-v0.14.0"', "package identities"),
+    (b'"blueprint-v0.5.0"', b'"blueprint-v0.4.0"', "package identities"),
     (b'"packages/stream-proc"', b'"packages/other"', "package identities"),
-    (b'"7292d63cca18ba875fb78a2f4df406a104d03fc2"', b'"7292d63cca18ba875fb78a2f4df406a104d03fc3"', "commit identities"),
+    (b'"2dfe82fb74944fab99b7cc3cd482ed98151acb24"', b'"2dfe82fb74944fab99b7cc3cd482ed98151acb25"', "commit identities"),
     (b'"0.15.0",0', b'"0.15.0",-1', "identity index"),
     (b'"0.15.0",0', b'"0.15.0",true', "valid integer"),
     (b'"stream-proc","0.9.0"', b'"any-agent","0.9.0"', "package identities"),
