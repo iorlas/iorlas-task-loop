@@ -233,9 +233,9 @@ def test_checks_numbering_spans_implement_attempts(checking: sqlite3.Connection,
     checking.execute(
         """INSERT INTO attempt (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,
         input_path,input_digest,schema_version,model,effort,access_policy,deadline,number,seq,slot_head,previous_attempt_id,repeat_reason,
-        phase,base_commit,end_commit,after_commit)
+        phase,base_commit,end_commit,after_commit,engine_digest,workflow_digest,workflow_sha,admitted_at)
         SELECT 'another','another-token',1,step,adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,input_digest,
-        schema_version,model,effort,access_policy,deadline,2,3,slot_head,'implement','unsafe',phase,base_commit,end_commit,NULL
+        schema_version,model,effort,access_policy,deadline,2,3,slot_head,'implement','unsafe',phase,base_commit,end_commit,NULL,engine_digest,workflow_digest,workflow_sha,admitted_at
         FROM attempt WHERE attempt_id='implement'""")
     checking.execute("INSERT INTO slot_release VALUES ('another','another-token',1,?,7,'kept')", (D,))
     key = AttemptKey("fresh", "fresh-token", 1)

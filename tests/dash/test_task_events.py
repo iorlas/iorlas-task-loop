@@ -81,8 +81,8 @@ def repeat_ports(con: sqlite3.Connection, tmp_path: Path, before: str, now: str)
     con.execute(
         """INSERT INTO attempt (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,
         input_path,input_digest,schema_version,model,effort,access_policy,deadline,number,seq,slot_head,previous_attempt_id,
-        repeat_reason,base_commit) SELECT 'again','again-token',2,step,adapter,backlog,task_id,tracker_root,repo_id,slot,
-        input_path,input_digest,schema_version,model,effort,access_policy,deadline,2,3,slot_head,'implement','unsafe',?
+        repeat_reason,base_commit,engine_digest,workflow_digest,workflow_sha,admitted_at) SELECT 'again','again-token',2,step,adapter,backlog,task_id,tracker_root,repo_id,slot,
+        input_path,input_digest,schema_version,model,effort,access_policy,deadline,2,3,slot_head,'implement','unsafe',?,engine_digest,workflow_digest,workflow_sha,admitted_at
         FROM attempt WHERE attempt_id='implement'""", ("c" * 40,))
     files = EvidenceFiles(tmp_path)
     for key, text in ((AttemptKey("implement", "implement-token", 1), before), (AttemptKey("again", "again-token", 2), now)):
