@@ -1,4 +1,7 @@
 {
+  "env": {
+    "BD_DISABLE_METRICS": "1"
+  },
   "hooks": {
     "SessionStart": [
       {

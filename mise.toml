@@ -1,10 +1,8 @@
-# Dev tools, pinned exactly (88 sec 6). Install: `mise install`. The justfile reads these pins; CI installs the same versions with uv.
+# Dev tools, pinned exactly (88 sec 6). Install: `mise install`. The python tools (ruff, pyrefly, codespell, deptry, import-linter, just) are pinned in the uv dev group, not here.
 # The successor is installed as a wheel and currently declares no runtime dependencies.
 [tools]
 "aqua:gastownhall/beads" = "1.3.1"
 just = "1.58.0"
 prek = "0.3.6"
 uv = "0.13.0"
-ruff = "0.17.2"
-"pipx:pyrefly" = "1.4.0"
-"pipx:import-linter" = "2.15"
+gitleaks = "8.30.1"

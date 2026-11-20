@@ -134,3 +134,28 @@ This protocol applies when ending a Beads implementation workflow. It is subordi
 - Do not commit or push without clear authority from the active profile or the current user request.
 - If a required sync or push is blocked, stop and report the exact command and error.
 <!-- END BEADS INTEGRATION -->
+
+<!-- BEGIN SHELF RESOLVER BLOCK — managed by shelf's onboarding; safe to re-run -->
+### The shelf — shared micro-software you consume
+
+This project consumes **the shelf** (`github.com/yoselabs/shelf`) — shared, ownable,
+contract-guaranteed software pieces, pinned in `pyproject.toml` by git tag. Reach for it before
+hand-rolling substrate; adopt only if **DEEP · STABLE · WINS**; contribute back by *promotion*.
+
+**Three things fire the loop**, not one: substrate glue you are about to write; a bug whose root
+cause was a *dependency's* behaviour; and — the quiet one — a dependency that worked fine and was
+merely **verbose**, where you wrote an expression and thought "why isn't this a method?". "Stop
+caring about X" includes how much you must type to use X. Promote the **thing** a domain has (a type
+the consumer holds), name it `any-<domain>`, never `<lib>-extra`.
+
+**Full behaviour = the shelf loop.** Resolve it **once per session, lazily** — the first time you
+consider adopting or promoting substrate, never at startup:
+
+1. Find the local clone: `$SHELF_HOME` → `../shelf` → `~/Workspaces/shelf`.
+2. If absent (greenfield), clone it once: `git clone https://github.com/yoselabs/shelf ~/Workspaces/shelf`.
+3. Read `<shelf>/docs/agent-loop.md` and follow it. Load once; cache for the session.
+
+Never hit GitHub to start a session or to write code — only to clone (once) or during an actual
+adopt/promote (a lazy `git pull` at that checkpoint). Never commit a local `path=`/editable shelf
+source (the commit guard blocks it).
+<!-- END SHELF RESOLVER BLOCK -->

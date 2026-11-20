@@ -1,10 +1,82 @@
-# Repository lint hook. Delivery checks are introduced with their owning successor task.
+# Git hooks, owned by prek (or pre-commit, which reads the same file). The blueprint recipe
+# (docs/research/blueprint-skill/research/hooks-and-beads.md): bd never installs hooks itself
+# (`bd init --skip-hooks`); its hooks run from here, first, so a failing check below still blocks the
+# commit and bd still runs. Install: `prek install` (installs every type in default_install_hook_types).
+default_install_hook_types: [pre-commit, post-merge, pre-push, post-checkout, prepare-commit-msg]
 repos:
-  - repo: local
-    hooks:
-      - id: just-lint
-        name: just lint
-        entry: just lint
-        language: system
-        pass_filenames: false
-        always_run: true
+- repo: local
+  hooks:
+  - id: bd-pre-commit
+    name: bd pre-commit
+    entry: bd hooks run pre-commit
+    language: system
+    always_run: true
+    pass_filenames: false
+    stages: [pre-commit]
+  - id: bd-post-merge
+    name: bd post-merge
+    entry: bd hooks run post-merge
+    language: system
+    always_run: true
+    pass_filenames: false
+    stages: [post-merge]
+  - id: bd-pre-push
+    name: bd pre-push
+    entry: bd hooks run pre-push
+    language: system
+    always_run: true
+    pass_filenames: false
+    stages: [pre-push]
+  - id: bd-dolt-push
+    name: bd dolt push
+    # `bd hooks run pre-push` does not push the Dolt data ref (refs/dolt/data); git push and bd dolt
+    # push are two remote syncs. Fatal: a hook that cannot fail says nothing (a2kay's push "Passed" while the
+    # Dolt push failed over HTTPS). Offline, BD_DOLT_PUSH_OPTIONAL=1 pushes the code and still prints FAILED.
+    entry: sh -c 'bd dolt push && exit 0; echo "FAILED - bd dolt push did not reach the remote (refs/dolt/data); fix the remote or its credentials and push again, or set BD_DOLT_PUSH_OPTIONAL=1 to push the code without it" >&2; test -n "${BD_DOLT_PUSH_OPTIONAL:-}"'
+    language: system
+    always_run: true
+    pass_filenames: false
+    stages: [pre-push]
+  - id: bd-post-checkout
+    name: bd post-checkout
+    entry: sh -c 'bd hooks run post-checkout "$PRE_COMMIT_FROM_REF" "$PRE_COMMIT_TO_REF" "$PRE_COMMIT_CHECKOUT_TYPE"' --
+    language: system
+    always_run: true
+    pass_filenames: false
+    stages: [post-checkout]
+  - id: bd-prepare-commit-msg
+    name: bd prepare-commit-msg
+    entry: bd hooks run prepare-commit-msg
+    language: system
+    always_run: true
+    stages: [prepare-commit-msg]
+- repo: local
+  hooks:
+  - id: secret-scan
+    name: secrets in the staged changes
+    # gitleaks (pinned in mise.toml) over the index only, so it costs a fraction of a second; the gate scans the changed range.
+    entry: uv run python -m blueprint.secret_scan staged
+    language: system
+    always_run: true
+    pass_filenames: false
+    stages: [pre-commit]
+- repo: local
+  hooks:
+  - id: gate
+    name: just check
+    # just is pinned in mise.toml here (the profile's argv runs a bare `just`).
+    # Skipped only when the working tree is clean and HEAD's tree already passed `just check` (any-gate, a dev dependency
+    # pinned by git tag); any doubt runs it. A repo with no python runs `just check` directly.
+    entry: uv run python -m any_gate pre-push --gate check -- just check
+    language: system
+    always_run: true
+    pass_filenames: false
+    # The whole gate before code leaves the machine; per-commit hooks stay fast (format, lint).
+    stages: [pre-push]
+- repo: local
+  hooks:
+  - id: ruff-check
+    name: ruff check
+    entry: uv run ruff check --force-exclude
+    language: system
+    types: [python]

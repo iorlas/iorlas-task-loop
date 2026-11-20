@@ -40,6 +40,8 @@ def test_noneditable_install_matches_current_source() -> None:
 # Every shared dependency is pinned at the one shelf snapshot tag, so all of them resolve to one shelf commit.
 SNAPSHOT = "blueprint-v0.4.0"
 SHARED = {"git-porcelain", "beads-client", "any-agent", "sqlite-store", "process-lock", "stream-proc"}
+# The gate kit (dev group): the packages the gate runs, and the ones they need that uv does not carry across a git source.
+KIT = {"blueprint", "any-gate", "any-gate-python", "any-lease", "atomic-io", "content-digest"}
 
 
 # Direct dependencies from PyPI, pinned exactly like the shelf ones, but not shelf packages (no tag, no source entry).
@@ -59,7 +61,7 @@ def test_portable_shared_dependency(name: str) -> None:
     assert set(project["project"]["dependencies"]) == pinned
     tag = SNAPSHOT
     assert "workspace" not in project.get("tool", {}).get("uv", {})
-    assert set(project["tool"]["uv"]["sources"]) == set(SHARED)
+    assert set(project["tool"]["uv"]["sources"]) == SHARED | KIT
     assert project["tool"]["uv"]["sources"][name] == {
         "git": "https://github.com/yoselabs/shelf.git",
         "subdirectory": f"packages/{name}",
@@ -105,3 +107,8 @@ def test_no_baseline_or_editable_dependencies() -> None:
     for entry in sys.path:
         path = Path(entry).resolve()
         assert not any(part in {"_vendor", "packages"} for part in path.parts), path
+
+
+def test_every_shelf_source_names_the_snapshot_tag() -> None:
+    sources = tomllib.loads((ROOT / "pyproject.toml").read_text())["tool"]["uv"]["sources"]
+    assert {source["tag"] for source in sources.values()} == {SNAPSHOT}

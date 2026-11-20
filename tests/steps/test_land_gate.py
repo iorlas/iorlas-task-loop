@@ -81,7 +81,7 @@ def test_a_replaced_tool_configuration_is_flagged_with_the_diffstat_of_every_cha
                          "    assert 2 == 2\n    assert 3 == 3\n"}, "skip, xfail or noqa markers 0 -> 1"),
     ({"tests/test_a.py": "# ruff: noqa\n" + TESTS}, "skip, xfail or noqa markers 0 -> 1"),
     ({"tests/test_a.py": "def test_a(:\n"}, "does not parse"),
-], ids=["deleted", "rewritten", "fewer_assertions", "skip_marker", "bare_skip_call", "file_noqa", "unparseable"])
+], ids=["deleted", "rewritten", "fewer_assertions", "skip_marker", "bare_skip_call", "file_noqa", "unparsable"])
 def test_a_deleted_rewritten_skipped_or_unreadable_test_is_flagged(tmp_path: Path, change: dict[str, str | None], why: str) -> None:
     gate = landed(tmp_path, change)
     assert [(each.path, each.why) for each in gate.weakened] == [("tests/test_a.py", why)] and gate.decisive

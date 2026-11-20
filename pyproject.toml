@@ -18,6 +18,12 @@ dependencies = [
 ]
 
 [tool.uv.sources]
+blueprint = { git = "https://github.com/yoselabs/shelf.git", subdirectory = "packages/blueprint", tag = "blueprint-v0.4.0" }
+any-gate-python = { git = "https://github.com/yoselabs/shelf.git", subdirectory = "packages/any-gate-python", tag = "blueprint-v0.4.0" }
+content-digest = { git = "https://github.com/yoselabs/shelf.git", subdirectory = "packages/content-digest", tag = "blueprint-v0.4.0" }
+atomic-io = { git = "https://github.com/yoselabs/shelf.git", subdirectory = "packages/atomic-io", tag = "blueprint-v0.4.0" }
+any-lease = { git = "https://github.com/yoselabs/shelf.git", subdirectory = "packages/any-lease", tag = "blueprint-v0.4.0" }
+any-gate = { git = "https://github.com/yoselabs/shelf.git", subdirectory = "packages/any-gate", tag = "blueprint-v0.4.0" }
 any-agent = { git = "https://github.com/yoselabs/shelf.git", subdirectory = "packages/any-agent", tag = "blueprint-v0.4.0" }
 sqlite-store = { git = "https://github.com/yoselabs/shelf.git", subdirectory = "packages/sqlite-store", tag = "blueprint-v0.4.0" }
 git-porcelain = { git = "https://github.com/yoselabs/shelf.git", subdirectory = "packages/git-porcelain", tag = "blueprint-v0.4.0" }
@@ -36,7 +42,22 @@ packages = ["src/taskloop"]
 include = ["src/taskloop", "pyproject.toml", "README.md", "LICENSE"]
 
 [dependency-groups]
-dev = ["pytest==9.2.0", "pytest-xdist==3.8.0"]
+dev = [
+    "blueprint",
+    "any-gate-python",
+    "any-gate",
+    "pytest==9.2.0",
+    "pytest-xdist==3.8.0",
+    "ruff==0.17.2",
+    "pyrefly==1.4.0",
+    "import-linter==2.15",
+    "codespell>=2.3,<3",
+    "deptry>=0.20,<1",
+    "pytest-cov>=7.1.0",
+]
+
+[tool.uv]
+required-version = ">=0.13.0"
 
 [tool.shelf-size]
 code-file = 400
@@ -48,3 +69,86 @@ testpaths = ["tests/cli", "tests/steps", "tests/rules"]
 addopts = "--import-mode=importlib -p no:cacheprovider"
 # importlib mode puts no test directory on sys.path: tests import the shared doubles module (tests/steps/doubles.py)
 pythonpath = ["tests/steps"]
+
+# The successor's lint policy: narrower than the shelf's, scoped to its own source roots (it replaces ruff.toml).
+[tool.ruff]
+target-version = "py315"
+src = ["src"]
+line-length = 140
+output-format = "concise"
+extend-exclude = [".worktrees", ".slots", ".task", "docs"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "C4", "C90", "SIM", "RUF", "PL", "D100", "TID251"]
+ignore = ["PLR0913", "PLR2004", "PLR0917"]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 12
+
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+"subprocess".msg = "Process mechanisms belong to their owning shared library."
+
+[tool.pyrefly]
+preset = "strict"
+python-version = "3.15"
+project-includes = ["src", "tests"]
+# tests/steps: the shared test doubles module (doubles.py), as pytest's pythonpath
+search-path = ["src", "tests/steps"]
+check-unannotated-defs = true
+use-ignore-files = false
+
+[[tool.pyrefly.sub-config]]
+matches = "src/**"
+
+[tool.pyrefly.sub-config.errors]
+implicit-any-parameter = "error"
+implicit-any-empty-container = "error"
+implicit-any-lambda = "error"
+implicit-any-attribute = "error"
+missing-override-decorator = "error"
+method-assign = "error"
+non-exhaustive-match = "error"
+unnecessary-type-conversion = "error"
+deprecated = "error"
+implicit-any-type-argument = "error"
+
+[tool.codespell]
+skip = "uv.lock,.git,.venv,*.pyc,.worktrees,.slots,.task,docs"
+
+[[tool.pyrefly.sub-config]]
+matches = "tests/**"
+
+[tool.pyrefly.sub-config.errors]
+implicit-any-parameter = false
+implicit-any-type-argument = false
+implicit-any-lambda = false
+implicit-any-attribute = false
+implicit-any-empty-container = false
+unannotated-return = false
+missing-override-decorator = false
+method-assign = false
+
+[tool.shelf-preset]
+# The successor foundation keeps its own narrower lint and type policy (ruff.toml and pyrefly.toml before this table); widening it to the
+# shelf's is its own task. Each list below is a difference the owner has not yet decided to remove.
+ruff-select-omitted = ["A", "ANN", "ARG", "ASYNC", "BLE", "DTZ", "EM", "ERA", "FA", "FBT", "FLY", "FURB", "G", "ICN", "INP", "ISC", "LOG", "N", "PERF", "PIE", "PLC", "PLE", "PLR", "PLW", "PTH", "PYI", "RET", "RSE", "S", "SLF", "T10", "T20", "TC", "TID", "TRY"]
+ruff-select-extra = ["D100", "PL", "TID251"]
+ruff-ignore-omitted = ["ANN401", "ISC001", "S603", "S607", "TRY003"]
+ruff-ignore-extra = ["PLR0917"]
+pyrefly-errors-omitted = ["deprecated", "missing-super-call", "no-any-return-explicit", "no-any-return-implicit", "unannotated-return", "unnecessary-comparison", "unnecessary-type-conversion", "untyped-import", "unused-ignore", "unused-type-ignore"]
+linter-versions-differ = ["ruff", "pyrefly"]  # pinned exactly in the dev group; the shelf runs older ones
+
+[tool.deptry]
+known_first_party = ["taskloop"]
+extend_exclude = ["docs", "\\.worktrees", "\\.slots", "\\.task"]
+# pydantic is pinned for the models at the edges (database rows, agent answers, configuration) the foundation grows with their
+# owning tasks (tests/rules/test_isolation.py pins it); no module imports it yet.
+per_rule_ignores = { DEP002 = ["pydantic"] }
+
+[tool.coverage.run]
+branch = true
+source = ["src"]
+
+[tool.coverage.report]
+show_missing = true
+fail_under = 65
