@@ -42,7 +42,11 @@ from taskloop.slots_store import SlotsStore
 from taskloop.task import TaskBinding, TaskInspection, TaskScope
 from taskloop.tracker import inspect_task
 
-VIEWS = GitViews(DEFAULT_GIT_READ_SECONDS)
+
+def git_views() -> GitViews:
+    """Built per use: the hermetic environment is applied by each test's fixture, after import."""
+    return GitViews(DEFAULT_GIT_READ_SECONDS)
+
 
 ENTRY = (7, "entry-start", "boot")
 WORKER = Worker(pid=42, pgid=42, start="native-start", boot="boot")
@@ -90,18 +94,18 @@ class Published:
         git(self.main, "commit", "-q", "-m", "base")
         git(self.main, "remote", "add", "origin", self.remote.as_uri())
         git(self.main, "push", "-q", "origin", "main")
-        self.slot = root / "slots" / folder_name(VIEWS.checkouts(self.main).identity()) / "s1"
+        self.slot = root / "slots" / folder_name(git_views().checkouts(self.main).identity()) / "s1"
         git(self.main, "worktree", "add", "-q", "--detach", str(self.slot), "HEAD")
         self.d = self.rev(self.slot, "HEAD")
         slots = SlotsStore(lambda: factory, transaction)
-        adopt(slots, VIEWS.checkouts(self.main), SlotGit(VIEWS.checkouts, RealSlotFiles()), root / "slots", 1)
+        adopt(slots, git_views().checkouts(self.main), SlotGit(git_views().checkouts, RealSlotFiles()), root / "slots", 1)
         self.store, self.files = AttemptStore(lambda: factory), RealSlotFiles()
         admission = AttemptAdmission(
             lambda: factory,
             transaction,
             EvidenceFiles(root / "art"),
             tasks,
-            VIEWS.checkouts,
+            git_views().checkouts,
             yes,
             yes,
             lambda: 10,
@@ -129,17 +133,18 @@ class Published:
             AgentLaunch(lambda _harness: ("/bin/codex", {}), ids=NativeIds()),
             write_plan(self.slot),
             lambda: 10,
-            VIEWS.checkouts,
+            git_views().checkouts,
             self.files,
         )
         attempts.execute(self.key, ENTRY)
         assert isinstance(
-            FactoryCommit(self.store, VIEWS.checkouts, self.files, gone, lambda: 20, hold, ids=NativeIds()).commit(self.key), Committed
+            FactoryCommit(self.store, git_views().checkouts, self.files, gone, lambda: 20, hold, ids=NativeIds()).commit(self.key),
+            Committed,
         )
         self.x = self.rev(self.main, BRANCH)
         releaser = SlotRelease(
             self.store,
-            VIEWS.checkouts,
+            git_views().checkouts,
             self.files,
             lambda _entry: "gone",
             gone,
@@ -163,7 +168,7 @@ class Published:
 
     def counted(self, path: Path, /, *, git_dir: Path | None = None) -> Repo:
         self.opened.append(path)
-        return VIEWS.remotes(path, git_dir=git_dir)
+        return git_views().remotes(path, git_dir=git_dir)
 
     def publish(self) -> PublishResult:
         return BranchPublish(self.store, self.counted, self.files, lambda: 40, ids=NativeIds()).publish(self.key)

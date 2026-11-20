@@ -23,7 +23,10 @@ from taskloop.slot_files import RealSlotFiles
 from taskloop.slot_lock import custody
 from taskloop.slot_release import Released
 
-VIEWS = GitViews(DEFAULT_GIT_READ_SECONDS)
+
+def git_views() -> GitViews:
+    """Built per use: the hermetic environment is applied by each test's fixture, after import."""
+    return GitViews(DEFAULT_GIT_READ_SECONDS)
 
 
 def gone(_process: object) -> ProcessSeen:
@@ -46,7 +49,7 @@ def test_a_passed_block_s_leftovers_are_reset_away_and_the_slot_parked_at_d(
     (main / "README").write_text("one\n")
     git(main, "add", ".gitignore", "README")
     git(main, "commit", "-q", "-m", "D")
-    repo_id = VIEWS.checkouts(main).identity().key
+    repo_id = git_views().checkouts(main).identity().key
     slot = root / "slots" / repo_id / "s1"
     git(main, "worktree", "add", "-q", "--detach", str(slot), "HEAD")
     d = git(main, "rev-parse", "HEAD").strip()
@@ -69,7 +72,7 @@ def test_a_passed_block_s_leftovers_are_reset_away_and_the_slot_parked_at_d(
         factory.execute("INSERT INTO slot_release VALUES ('implement','implement-token',1,?,1,'kept')", (d,))
         factory.execute("INSERT INTO reservation VALUES ('s1',?,1,'checks')", (repo_id,))
         insert(factory, ChecksAdmitted(CHECKS, "implement", 1, "s1", d, x, REQUIRED, 100.0))
-    assert isinstance(detach_at(VIEWS.checkouts, RealSlotFiles(), str(slot), repo_id, x), Prepared)
+    assert isinstance(detach_at(git_views().checkouts, RealSlotFiles(), str(slot), repo_id, x), Prepared)
     (slot / "coverage.xml").write_text("a report\n")
     (slot / "build").mkdir()
     (slot / "build" / "out").write_text("ignored\n")
@@ -83,7 +86,7 @@ def test_a_passed_block_s_leftovers_are_reset_away_and_the_slot_parked_at_d(
         emptied.append(path)
         return True
 
-    release = ChecksRelease(store, VIEWS.checkouts, RealSlotFiles(), never, custody, lambda: 30, gone, scratch, ids=NativeIds())
+    release = ChecksRelease(store, git_views().checkouts, RealSlotFiles(), never, custody, lambda: 30, gone, scratch, ids=NativeIds())
     assert release.release(CHECKS, False) == Released("s1", d, True, "kept", False)
     assert git(slot, "rev-parse", "HEAD").strip() == d and git(slot, "status", "--porcelain", "--ignored").strip() == ""
     assert (slot / "README").read_text() == "one\n" and not (slot / "coverage.xml").exists() and not (slot / "build").exists()

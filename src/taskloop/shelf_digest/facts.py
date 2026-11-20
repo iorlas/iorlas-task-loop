@@ -121,7 +121,7 @@ CONTRACTS = (
                 "spawn",
                 (
                     "registered(worker)",
-                    "stream_proc.popen_registered(argv, registered=register, cwd=cwd, env=env, stderr=stderr, start_new_session=session)",
+                    "stream_proc.popen_registered(argv, registered=register, cwd=cwd, env=env, stderr=stderr)",
                 ),
                 True,
             ),
@@ -205,14 +205,14 @@ CONTRACTS = (
     ),
     Contract(
         FactName.PARK,
-        "park detaches/cleans; keep_ignored preserves ignored files; tracked collision refuses before change; exclude is checkout-local.",
+        "park detaches/cleans and always preserves ignored files; tracked collision refuses before change; exclude is checkout-local.",
         (
             Rule(
                 "git-porcelain",
                 "real_write",
                 "park",
                 (
-                    "if keep_ignored:\n _keep_ignored(wt, real_checkout.resolve_commit(wt, base))",
+                    "_keep_ignored(wt, real_checkout.resolve_commit(wt, base))",
                     "wt.run('checkout', '-q', '--detach', base)",
                     "_clean(wt, clean_keep)",
                 ),

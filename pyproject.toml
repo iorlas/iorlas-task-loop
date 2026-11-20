@@ -176,7 +176,7 @@ method-assign = false
 [tool.shelf-preset]
 # The successor foundation keeps its own narrower lint and type policy (ruff.toml and pyrefly.toml before this table); widening it to the
 # shelf's is its own task. Each list below is a difference the owner has not yet decided to remove.
-ruff-select-omitted = ["A", "ANN", "ARG", "ASYNC", "BLE", "DTZ", "EM", "ERA", "FA", "FBT", "FLY", "FURB", "G", "ICN", "INP", "ISC", "LOG", "N", "PERF", "PIE", "PLC", "PLE", "PLR", "PLW", "PTH", "PYI", "RET", "RSE", "S", "SLF", "T10", "T20", "TC", "TID", "TRY"]
+ruff-select-omitted = ["A", "PLW1514", "ANN", "ARG", "ASYNC", "BLE", "DTZ", "EM", "ERA", "FA", "FBT", "FLY", "FURB", "G", "ICN", "INP", "ISC", "LOG", "N", "PERF", "PIE", "PLC", "PLE", "PLR", "PLW", "PTH", "PYI", "RET", "RSE", "S", "SLF", "T10", "T20", "TC", "TID", "TRY"]
 ruff-select-extra = ["D100", "PL", "TID251"]
 ruff-ignore-omitted = ["ANN401", "ISC001", "S603", "S607", "TRY003"]
 ruff-ignore-extra = ["PLR0917"]
