@@ -77,7 +77,7 @@ def test_consumer_validates_all_pins_and_keeps_generation_provenance() -> None:
 
 @pytest.mark.parametrize(("old", "new", "reason"), [
     (b'"0.9.0"', b'"0.8.0"', "package identities"),
-    (b'"blueprint-v0.5.0"', b'"blueprint-v0.4.0"', "package identities"),
+    (b'"blueprint-v0.6.0"', b'"blueprint-v0.5.0"', "package identities"),
     (b'"packages/stream-proc"', b'"packages/other"', "package identities"),
     (b'"2dfe82fb74944fab99b7cc3cd482ed98151acb24"', b'"2dfe82fb74944fab99b7cc3cd482ed98151acb25"', "commit identities"),
     (b'"0.15.0",0', b'"0.15.0",-1', "identity index"),

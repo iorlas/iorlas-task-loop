@@ -1,4 +1,4 @@
-# Rendered by `blueprint render` -- never edit; a recipe of the same name in the repo's justfile replaces it.
+# Rendered by `blueprint gate render` -- never edit; a recipe of the same name in the repo's justfile replaces it.
 # The python+uv stack: its linter, type, spelling, dependency and test steps.
 
 [group('gate')]
@@ -32,11 +32,17 @@ deps:
         uv run deptry .
     fi
 
-# The tests the change reaches, through any-gate (`blueprint test`): suites that already passed on this input are skipped, the rest
+# The tests the change reaches, through any-gate (`blueprint gate test`): suites that already passed on this input are skipped, the rest
 # queue for one test slot. No coverage floor: it is a whole-repo measure.
 [group('gate')]
 test:
-    uv run blueprint test
+    uv run blueprint gate test
+
+# Every test, with the coverage floor (the release gate's test step). Coverage is a whole-repo measure, so a floor cannot ride
+# on `test`, which runs only what the change reaches. The floor is low on purpose, a rot-guard; raise it as coverage climbs.
+[group('gate')]
+test-all:
+    uv run pytest -n auto --cov --cov-report=term-missing --cov-fail-under=65
 
 # Coverage report only (human view).
 cov:
