@@ -1,4 +1,7 @@
 {
+  "env": {
+    "BD_DISABLE_METRICS": "1"
+  },
   "hooks": {
     "SessionStart": [
       {
@@ -9,6 +12,16 @@
           }
         ],
         "matcher": ""
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "command": "(bd list --status in_progress --json 2>/dev/null || echo '[]') | jq -c 'if length > 0 then {systemMessage: (\"⚠️  \" + (length|tostring) + \" bd issue(s) left in_progress — close or update before ending the session:\\n\" + ([.[] | \"  - \" + .id + \": \" + .title] | join(\"\\n\")))} else empty end'",
+            "type": "command"
+          }
+        ]
       }
     ]
   }
