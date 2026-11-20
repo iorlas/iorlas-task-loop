@@ -33,7 +33,6 @@ tool-versions:
     arguments = []
     for tool, command in (
         ("git", ["git", "--version"]),
-        ("codex", ["codex", "--version"]),
         ("python", [sys.executable, "--version"]),
         ("tailwind", ["tailwindcss", "--help"]),
     ):

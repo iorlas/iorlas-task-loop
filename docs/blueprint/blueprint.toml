@@ -29,3 +29,9 @@ id = "knowledge.adr-index"
 reason = "No ADRs yet, so no INDEX.md; follows the same bead as knowledge.adr-format."
 decided_by = "agent"
 expires = 2027-02-18
+
+[[override]]
+id = "agents.culture-files"
+reason = "Whether docs/agents/*.md count as extra instruction files beside AGENTS.md (the only instruction file here) is the owner's open decision; shelf-3jh, ADR 0022."
+decided_by = "owner"
+expires = 2026-12-04
