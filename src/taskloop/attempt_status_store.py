@@ -4,9 +4,10 @@ from dataclasses import astuple
 
 from taskloop import attempt_reads
 from taskloop.attempt_reads import StoreConnection, StoreUnavailable, as_int, as_text
-from taskloop.attempt_types import ATTEMPTS, AttemptKey, ChainLink, EntryIdentity, FileRef
+from taskloop.attempt_types import AttemptKey, ChainLink, EntryIdentity, FileRef
 from taskloop.drain.models import Identity, Owner, Role, owners
 from taskloop.factory_schema import REPEATED
+from taskloop.step import ATTEMPTS
 
 STEP = """SELECT p.number,p.base_commit,p.end_commit,p.input_path,p.input_digest,e.effect,e.commit_paths,
 CASE WHEN p.repair_context IS NULL THEN p.previous_attempt_id ELSE

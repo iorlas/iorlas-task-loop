@@ -14,7 +14,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_valida
 
 from taskloop.frame_markers import RESERVED
 from taskloop.harness_choice import HarnessKind
-from taskloop.step import Step
+from taskloop.step import ATTEMPTS, Step
 
 MAX_BYTES: Final = 64 * 1024
 
@@ -95,11 +95,24 @@ class StepTable(Input):
         return self
 
 
+class ImplementTable(StepTable):
+    """The implement table, the only one with a cap on its check-driven repeats (below the engine's ATTEMPTS ceiling)."""
+
+    max_attempts: int | None = Field(default=None, strict=True, ge=1)
+
+    @field_validator("max_attempts")
+    @classmethod
+    def below_the_ceiling(cls, value: int | None) -> int | None:
+        if value is not None and value > ATTEMPTS:
+            raise ValueError("max_attempts is at most the engine's ceiling")
+        return value
+
+
 class Steps(Input):
     """Keyed by kind, so a duplicate, missing or misordered kind cannot be written; the check step has no table."""
 
     plan: StepTable
-    implement: StepTable
+    implement: ImplementTable
     feedback: tuple[Section, ...] = Field(min_length=1)  # the opening of a failed-check input: verbatim text sections only
 
     @field_validator("feedback")
@@ -112,6 +125,11 @@ class Steps(Input):
 
 class Workflow(Input):
     step: Steps
+
+    @property
+    def implement_cap(self) -> int:
+        """Attempts of the implement step at most when a failed check repeats it; the file's `max_attempts`, else the ceiling."""
+        return self.step.implement.max_attempts or ATTEMPTS
 
     def table(self, step: Step) -> StepTable:
         match step:

@@ -52,7 +52,6 @@ type Observe = Callable[[EntryIdentity], Seen]  # a native process-table read of
 TRAILER: Final = "Task-Loop-Attempt"  # the factory's commit trailer; an agent's message may never carry it
 MiB: Final = 1 << 20
 MODE: Final = "100644"
-ATTEMPTS: Final = 3  # attempts of one step at most (2 repeats); always compared as `number >= ATTEMPTS`
 MIN_GIT_READ_SECONDS: Final = 30
 MAX_GIT_READ_SECONDS: Final = 86400  # a day; a larger value overflows the process timeout
 DEFAULT_GIT_READ_SECONDS: Final = 600  # seconds a Git read may take before it is `unavailable:git` (the machine config's default)

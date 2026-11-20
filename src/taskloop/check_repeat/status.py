@@ -1,13 +1,18 @@
 """The shared, read-only decision for check-driven implement repeats."""
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from enum import StrEnum
 
+from taskloop.admit_store import stored_pin
+from taskloop.attempt_reads import StoreConnection, StoreUnavailable
 from taskloop.attempt_store import AttemptStore
-from taskloop.attempt_types import ATTEMPTS, AttemptKey
+from taskloop.attempt_types import AttemptKey
 from taskloop.check_store import ChecksRow, CheckStore, ResultRow
 from taskloop.command_conclusion import CommandConclusion, encode
 from taskloop.land_store import LandStore
+from taskloop.step import ATTEMPTS
+from taskloop.workflow_read import WorkflowRefusal
 
 
 class CheckRepeatDecision(StrEnum):
@@ -34,10 +39,22 @@ def failed_result(row: ChecksRow, results: tuple[ResultRow, ...]) -> ResultRow |
     return first if row.reason == f"{first.name}:{encode(first.conclusion)}" else None
 
 
-def decision(number: int, row: ChecksRow, results: tuple[ResultRow, ...], *, blocked: bool = False) -> CheckRepeatDecision:
+class CapStore(StoreConnection):
+    def of(self, attempt_id: str) -> int:
+        """How many attempts the implement step may take when checks fail: the pinned workflow's, read when asked."""
+        with self._connection() as con:
+            try:
+                return stored_pin(con, attempt_id).workflow.implement_cap
+            except WorkflowRefusal:
+                raise StoreUnavailable("The stored workflow no longer loads") from None
+
+
+def decision(
+    number: int, cap: Callable[[], int], row: ChecksRow, results: tuple[ResultRow, ...], *, blocked: bool = False
+) -> CheckRepeatDecision:
     if blocked or failed_result(row, results) is None:
         return CheckRepeatDecision.INELIGIBLE
-    if number >= ATTEMPTS:
+    if number >= ATTEMPTS or number >= cap():
         return CheckRepeatDecision.EXHAUSTED
     return CheckRepeatDecision.RELEASE if row.released_at is None else CheckRepeatDecision.REPEAT
 
@@ -56,5 +73,7 @@ def repeat_target(reader: AttemptStore, previous: AttemptKey, row: ChecksRow | N
         return CheckRepeatDecision.INELIGIBLE
     land = LandStore(reader.connect, reader.begin).latest(row.key.attempt_id)
     blocked = land is not None and (land.delivery is not None or land.holds_slot or land.pushable)
-    outcome = decision(rows[0].number, row, CheckStore(reader.connect, reader.begin).results(row.key), blocked=blocked)
+    results = CheckStore(reader.connect, reader.begin).results(row.key)
+    cap = CapStore(reader.connect, reader.begin)
+    outcome = decision(rows[0].number, lambda: cap.of(previous.attempt_id), row, results, blocked=blocked)
     return CheckRepeatTarget(previous, row.key) if outcome is CheckRepeatDecision.REPEAT else outcome

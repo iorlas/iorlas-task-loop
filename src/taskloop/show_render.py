@@ -10,7 +10,6 @@ from pathlib import Path
 
 from taskloop.attempt_result import succeeded, usage_explanation
 from taskloop.attempt_status import AttemptView, SetupShown, Shown
-from taskloop.attempt_types import ATTEMPTS
 from taskloop.check_status import ChecksView
 from taskloop.check_store import Required, ResultRow
 from taskloop.checks import differs
@@ -20,6 +19,7 @@ from taskloop.hold_text import explained
 from taskloop.land_close import NOT_SYNCED
 from taskloop.land_status import LandView
 from taskloop.land_summary import one_line
+from taskloop.step import ATTEMPTS
 
 
 def _when(at: float) -> str:
