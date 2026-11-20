@@ -3,6 +3,7 @@
 import importlib.util
 import shutil
 import sys
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -68,9 +69,7 @@ def test_missing_failed_and_malformed_probes_fail(
 @pytest.mark.parametrize(
     ("name", "old", "new", "tool", "declaration"),
     [
-        (".python-version", "3.15.0", "3.15", "python", ".python-version"),
         ("mise.lock", 'version = "0.162.1"', 'version = "0.162.2"', "codex", "mise.lock"),
-        ("mise.lock", 'version = "3.15.0"', 'version = "3.15.1"', "python", "mise.lock"),
         ("mise.lock", 'version = "4.1.11"', 'version = "4.1.12"', "tailwind", "mise.lock"),
         ("mise.lock", 'backend = "aqua:openai/codex"', 'backend = "npm:@openai/codex"', "codex", "mise.lock"),
         ("mise.lock", '"aqua:openai/codex"', '"aqua:other"', "codex", "mise.lock"),
@@ -90,14 +89,17 @@ def test_committed_declaration_drift_fails(
     assert declaration in error
 
 
-@pytest.mark.parametrize("replacement", ['python = "latest"', 'python = 315'])
-def test_authoritative_pins_must_be_exact_versions(
+@pytest.mark.parametrize("replacement", ["3.15", "latest", ""])
+def test_python_pin_is_one_exact_version_in_python_version_file(
     declarations: Path, capsys: pytest.CaptureFixture[str], replacement: str,
 ) -> None:
-    target = declarations / "mise.toml"
-    target.write_text(target.read_text().replace('python = "3.15.0"', replacement))
+    (declarations / ".python-version").write_text(replacement + "\n")
     assert run(declarations, SUPPORTED) == 1
-    assert "tools.python" in capsys.readouterr().err
+    assert "python" in capsys.readouterr().err
+
+
+def test_mise_does_not_pin_python() -> None:
+    assert "python" not in tomllib.loads((ROOT / "mise.toml").read_text())["tools"]
 
 
 def test_missing_declaration_is_reported(declarations: Path, capsys: pytest.CaptureFixture[str]) -> None:
