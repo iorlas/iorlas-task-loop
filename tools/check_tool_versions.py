@@ -25,7 +25,6 @@ class Prerequisites(BaseModel):
 
 
 class ManagedTools(BaseModel):
-    python: Version
     codex: Version = Field(alias="aqua:openai/codex")
     tailwind: Version = Field(alias="aqua:tailwindlabs/tailwindcss")
 
@@ -40,16 +39,21 @@ class LockedTool(BaseModel):
     backend: str
 
 
+class PythonPin(BaseModel):
+    """`.python-version` is the one owner of the interpreter version (uv installs it); mise does not pin Python."""
+
+    python: Version
+
+
 class Lock(BaseModel):
     tools: dict[str, list[LockedTool]]
 
 
 BACKENDS = {
     Tool.CODEX: "aqua:openai/codex",
-    Tool.PYTHON: "python",
     Tool.TAILWIND: "aqua:tailwindlabs/tailwindcss",
 }
-LOCK_BACKENDS = {**BACKENDS, Tool.PYTHON: "core:python"}
+LOCK_BACKENDS = BACKENDS
 PATTERNS = {
     Tool.GIT: r"git version (\d+\.\d+\.\d+)",
     Tool.CODEX: r"codex-cli (\d+\.\d+\.\d+)",
@@ -61,10 +65,11 @@ PATTERNS = {
 def check(root: Path, probes: dict[Tool, str]) -> tuple[str, ...]:
     config = Configuration.model_validate(tomllib.loads((root / "mise.toml").read_text()))
     lock = Lock.model_validate(tomllib.loads((root / "mise.lock").read_text()))
+    python = PythonPin(python=(root / ".python-version").read_text().strip()).python
     expected = {
         Tool.GIT: config.vars.git_version,
         Tool.CODEX: config.tools.codex,
-        Tool.PYTHON: config.tools.python,
+        Tool.PYTHON: python,
         Tool.TAILWIND: config.tools.tailwind,
     }
     errors: list[str] = []
@@ -80,9 +85,6 @@ def check(root: Path, probes: dict[Tool, str]) -> tuple[str, ...]:
             entries = lock.tools.get(backend, [])
             if len(entries) != 1 or entries[0].version != pin or entries[0].backend != LOCK_BACKENDS[tool]:
                 errors.append(f"{tool}: expected {pin}; mise.lock declares {entries!r}")
-    selector = (root / ".python-version").read_text().strip()
-    if selector != expected[Tool.PYTHON]:
-        errors.append(f"python: expected {expected[Tool.PYTHON]}; .python-version declares {selector!r}")
     css = root / "src/taskloop/dash/static/dash.css"
     with css.open() as stylesheet:
         compiler = stylesheet.readline().strip()
