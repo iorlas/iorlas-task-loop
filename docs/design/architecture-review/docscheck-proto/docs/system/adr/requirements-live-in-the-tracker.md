@@ -1,4 +1,5 @@
 ---
+# Status: evidence; historical format specimen, not current system authority
 lens: requirements
 statement: "The task tracker owns requirements, dependencies, questions, answers and discussion; Git owns code, plans and selected design artifacts."
 read_when: "before writing a requirement, a plan or a design document"

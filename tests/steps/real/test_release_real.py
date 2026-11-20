@@ -1,5 +1,5 @@
 """Real layer, the release's wiring on the real Git adapter under the real slot lock: a person's `--detach` slot is adopted,
-the task admitted, run with a `FakeRun` agent and verified (X on `task/tl-1`); the release parks the slot back at D with
+the task admitted, run with a `FakeRun` agent and committed (X on `task/tl-1`); the release parks the slot back at D with
 real `checkout --detach`, the branch keeps X and the slot is free again. Abandoned instead, the task is admitted afresh and
 its entry resumes `task/tl-1` at X through the real branch rule and `take_branch`. Set-up runs through
 `git_porcelain.testing`'s runner under tmp_path."""
@@ -15,24 +15,30 @@ from any_agent.procs import Worker
 from any_agent.testing import FakeRun
 from beads_client import Bead
 from beads_client.testing import FakeTaskReadClient
+from doubles import ENGINE, WORKFLOW_BYTES, WORKFLOW_PATH
 from git_porcelain.history import Identity
 from git_porcelain.testing import apply_hermetic_env, git
+from plan_fixtures import PLAN_TEXT
 from sqlite_store import begin_immediate
 
 from taskloop.admit import AdmitRequest, Admitted, AttemptAdmission
+from taskloop.agents.launch import AgentLaunch
+from taskloop.agents.settings import AgentSetting, CodexPolicy, StepSettings
 from taskloop.attempt import Attempts
 from taskloop.attempt_store import AttemptStore
-from taskloop.attempt_types import DEFAULT_GIT_READ_SECONDS, AttemptKey, Verified
+from taskloop.attempt_types import DEFAULT_GIT_READ_SECONDS, AttemptKey, Committed
+from taskloop.commit import FactoryCommit
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.git_views import GitViews
+from taskloop.ids import NativeIds
 from taskloop.repo import RepoId
 from taskloop.slot_files import RealSlotFiles
 from taskloop.slot_lock import custody, hold, probe
 from taskloop.slot_release import Released, SlotRelease
 from taskloop.slots import Adopted, NotAdopted, SlotGit, adopt, folder_name, observe
+from taskloop.slots_store import SlotsStore
 from taskloop.task import TaskBinding, TaskInspection, TaskScope
 from taskloop.tracker import inspect_task
-from taskloop.verifier import Verifier
 
 VIEWS = GitViews(DEFAULT_GIT_READ_SECONDS)
 
@@ -73,20 +79,26 @@ class Repository:
         self.main.mkdir()
         git(self.main, "init", "-q", "-b", "main")
         (self.main / "README").write_text("one\n")
-        git(self.main, "add", "README")
+        (self.main / WORKFLOW_PATH).parent.mkdir(parents=True)
+        (self.main / WORKFLOW_PATH).write_bytes(WORKFLOW_BYTES)
+        (self.main / ".task-loop.json").write_text("{}")
+        git(self.main, "add", "README", ".task-loop.json", WORKFLOW_PATH)
         git(self.main, "commit", "-q", "-m", "base")
+        origin = root / "origin"
+        git(root, "clone", "-q", "--bare", str(self.main), str(origin))
+        git(self.main, "remote", "add", "origin", str(origin))
         slots = root / "slots"
         self.repo_id = RepoId(VIEWS.checkouts(self.main).identity().key)
         self.slot = slots / folder_name(VIEWS.checkouts(self.main).identity()) / "s1"
         git(self.main, "worktree", "add", "-q", "--detach", str(self.slot), "HEAD")
         self.d = self.rev("HEAD")
-        adopt(lambda: factory, begin_immediate, VIEWS.checkouts(self.main), SlotGit(VIEWS.checkouts, RealSlotFiles()), slots, 1)
+        adopt(SlotsStore(lambda: factory, begin_immediate), VIEWS.checkouts(self.main), SlotGit(VIEWS.checkouts, RealSlotFiles()), slots, 1)
         self.store, self.files = AttemptStore(lambda: factory), RealSlotFiles()
         self.releaser = SlotRelease(self.store, VIEWS.checkouts, self.files, lambda _entry: "gone", gone, custody, yes, lambda: 30,
-                                    lambda _setup: "gone", lambda _scratch: True)
+                                    lambda _setup: "gone", lambda _scratch: True, ids=NativeIds())
         self.admission = AttemptAdmission(
             lambda: factory, begin_immediate, EvidenceFiles(self.art), tasks, VIEWS.checkouts, yes, yes, lambda: 10, probe, RealSlotFiles()
-        )
+        , ids=NativeIds(), engine=ENGINE)
         self.root = root
 
     def rev(self, name: str) -> str:
@@ -94,20 +106,39 @@ class Repository:
 
     def run(self, agent: Agent) -> AttemptKey:
         """Admit the task, register its entry, run the attempt once."""
-        admitted = self.admission.admit(AdmitRequest("tl-1", "tasks", str(self.root), self.main, "m", "high", "workspace-write", 100, None))
+        admitted = self.admission.admit(
+            AdmitRequest(
+                "tl-1",
+                "tasks",
+                str(self.root),
+                self.main,
+                StepSettings(plan=AgentSetting(model="m", effort="high", access=CodexPolicy(sandbox="workspace-write"))),
+                100,
+                None,
+            )
+        )
         assert isinstance(admitted, Admitted) and admitted.slot == "s1"
         assert self.store.register_entry(admitted.key, ENTRY, 10) == "accepted"
-        attempts = Attempts(self.store, EvidenceFiles(self.art), lambda: ("/bin/codex", {}), agent, lambda: 10, VIEWS.checkouts, self.files)
+        attempts = Attempts(
+            self.store,
+            EvidenceFiles(self.art),
+            AgentLaunch(lambda _harness: ("/bin/codex", {}), ids=NativeIds()),
+            agent,
+            lambda: 10,
+            VIEWS.checkouts,
+            self.files,
+        )
         attempts.execute(admitted.key, ENTRY)
         return admitted.key
 
     def planned(self) -> tuple[AttemptKey, str]:
         def write() -> None:
             (self.slot / P).parent.mkdir(parents=True)
-            (self.slot / P).write_text("# Plan\n")
+            (self.slot / P).write_text(PLAN_TEXT)
 
         key = self.run(answered(PLAN, write))
-        assert isinstance(Verifier(self.store, VIEWS.checkouts, self.files, gone, lambda: 20, hold).verify(key), Verified)
+        assert isinstance(FactoryCommit(self.store, VIEWS.checkouts, self.files, gone, lambda: 20, hold,
+                                        ids=NativeIds()).commit(key), Committed)
         return key, self.rev("HEAD")
 
 
@@ -117,13 +148,14 @@ def real(tmp_path: Path, factory: sqlite3.Connection, monkeypatch: pytest.Monkey
     return Repository(tmp_path.resolve(), factory)
 
 
-def test_a_verified_slot_is_parked_at_d_detached_and_clean_and_is_free_again(real: Repository) -> None:
+def test_a_committed_slot_is_parked_at_d_detached_and_clean_and_is_free_again(real: Repository) -> None:
     key, x = real.planned()
     assert real.releaser.release(key, False) == Released("s1", real.d, True, "kept", False)
     assert git(real.slot, "rev-parse", "--abbrev-ref", "HEAD").strip() == "HEAD"  # detached
     assert (real.rev("HEAD"), real.rev("refs/heads/task/tl-1")) == (real.d, x)
     assert git(real.slot, "status", "--porcelain").strip() == ""
-    views = observe(real.factory, VIEWS.checkouts(real.main), SlotGit(VIEWS.checkouts, RealSlotFiles()), real.repo_id, probe)
+    slots = SlotGit(VIEWS.checkouts, RealSlotFiles())
+    views = observe(SlotsStore(lambda: real.factory), VIEWS.checkouts(real.main), slots, real.repo_id, probe)
     assert [(view.name, view.state) for view in views] == [("s1", "free")]
 
 
@@ -146,10 +178,10 @@ def test_a_slot_whose_pointer_names_another_git_directory_is_never_free_nor_adop
     fake, slots = real.root / "fake", SlotGit(VIEWS.checkouts, RealSlotFiles())
     git(real.root, "init", "-q", "--bare", str(fake))
     (real.slot / ".git").write_text(f"gitdir: {fake}\n")
-    views = observe(real.factory, VIEWS.checkouts(real.main), slots, real.repo_id, probe)
+    views = observe(SlotsStore(lambda: real.factory), VIEWS.checkouts(real.main), slots, real.repo_id, probe)
     assert [(view.name, view.state, view.reason) for view in views] == [("s1", "unknown", "redirected")]
     s2 = real.slot.parent / "s2"
     git(real.main, "worktree", "add", "-q", "--detach", str(s2), "HEAD")
     (s2 / ".git").write_text(f"gitdir: {fake}\n")
-    found = adopt(lambda: real.factory, begin_immediate, VIEWS.checkouts(real.main), slots, real.slot.parent.parent, 2)
+    found = adopt(SlotsStore(lambda: real.factory, begin_immediate), VIEWS.checkouts(real.main), slots, real.slot.parent.parent, 2)
     assert found == (Adopted("s1", real.slot), NotAdopted("s2", "redirected", s2))

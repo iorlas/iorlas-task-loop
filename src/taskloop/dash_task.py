@@ -3,44 +3,61 @@
 was given and the outputs of its failed checks. Display only. The lines of an agent attempt are its `events.jsonl`, read
 behind the evidence files; a checks attempt's are its results."""
 
-from collections.abc import Callable
+import re
 from dataclasses import dataclass, replace
 from difflib import SequenceMatcher
+from pathlib import Path
 
+from any_agent.access import CodexSandbox
 from any_agent.activity import Activity
 
 from taskloop.access import SANDBOX
 from taskloop.activity_file import ActivityPage
+from taskloop.agents.stop_store import StopStore
 from taskloop.attempt_reads import AttemptRow, StoreUnavailable
 from taskloop.attempt_result import collect, succeeded
 from taskloop.attempt_status import StatusPorts, agent_attempt, current_view, with_hold
 from taskloop.attempt_types import AttemptResult
+from taskloop.check_feed import CheckLog, CheckState
 from taskloop.check_store import ChecksRow, CheckStore, ResultRow
-from taskloop.dash_board import admission_of, card_of, tries
+from taskloop.command_conclusion import CommandConclusion
+from taskloop.dash_board import admission_of, card_of, duration_of, queued_card, tries
+from taskloop.dash_commit import STEP as COMMIT
+from taskloop.dash_commit import applies, factory_commit
+from taskloop.dash_duration import Duration
+from taskloop.dash_duration import read as read_duration
+from taskloop.dash_land import build_events
 from taskloop.dash_model import (
     Answer,
     AttemptBody,
+    AttemptChange,
     AttemptDetail,
-    Card,
     CheckLine,
     DashTracker,
+    FactoryCommit,
     FeedEvent,
     FeedPage,
+    OperationDetail,
     Outcome,
     Run,
     State,
     TaskDetail,
+    TaskEventDetail,
     TrackerDetail,
-    Verification,
     iso,
 )
-from taskloop.dash_verify import STEP as VERIFICATION
-from taskloop.dash_verify import applies, verification
-from taskloop.evidence_files import EvidenceFiles
+from taskloop.dash_operation import project as project_operations
+from taskloop.dash_task_event import contexts
+from taskloop.dash_usage import project, totals
+from taskloop.evidence_files import EvidenceError, EvidenceFiles
 from taskloop.harness_choice import HARNESS_WORDS, PROVIDER_WORDS
 from taskloop.hold_store import HoldStore
+from taskloop.land_store import LandStore
+from taskloop.merge.status import result as merge_result
+from taskloop.merge.store import MergeStore
 from taskloop.operations import Failed
-from taskloop.profile import LandMode
+from taskloop.slots_store import SlotsStore, SlotsUnavailable
+from taskloop.step import Step
 
 
 @dataclass(frozen=True)
@@ -48,15 +65,30 @@ class TaskPorts:
     reads: StatusPorts
     files: EvidenceFiles
     tracker: DashTracker
-    mode: Callable[[], LandMode | None] = lambda: None  # the profile's `land` (`dash_board.BoardPorts`)
 
 
 STEP_CHECKS = "checks"
-FEED_LINES = 20  # the agent's latest actions an attempt's detail carries
+FEED_LINES = 20  # the agent's latest actions a running attempt's detail carries
 FOLLOW_LINES = 20  # the tail a replaced follow answers with
 
 
-def feed_event(a: Activity) -> FeedEvent | None:
+def _slot_path(ports: TaskPorts, row: AttemptRow, page: ActivityPage) -> Path | None:
+    if not any(each.kind == "tool" for each in page.events):
+        return None
+    path = SlotsStore(ports.reads.store.connect).adopted(row.repo_id).get(row.slot)
+    if path is None:
+        raise SlotsUnavailable("Attempt's slot path unavailable")
+    return path
+
+
+def _tool_argument(text: str, slot_path: Path) -> str:
+    """Shorten exact path roots at argument boundaries, retaining quotes and unrelated paths."""
+    root = re.escape(str(slot_path))
+    pattern = rf"""(^|[\s"'=:(\[{{,]){root}(/|(?=$|[\s"':),;\]}}]))"""
+    return re.sub(pattern, lambda found: found[1] + ("" if found[2] else "."), text)
+
+
+def feed_event(a: Activity, slot_path: Path | None) -> FeedEvent | None:
     """An agent action as the page's live line: a command, a tool, a message, an error or a wait; None when its time is not one
     (the file is display-only data and may hold anything)."""
     try:
@@ -67,29 +99,56 @@ def feed_event(a: Activity) -> FeedEvent | None:
     if a.kind in ("command", "tool"):
         took = a.duration_ms if finished else None
         code = (a.exit_code or 0) if finished and a.kind == "command" else None
-        return FeedEvent(a.kind, at, id=a.id, state=a.state, cmd=a.text, name=a.name or None, waited_ms=a.waited_ms, duration_ms=took,
+        text = _tool_argument(a.text, slot_path) if a.kind == "tool" and slot_path is not None else a.text
+        return FeedEvent(a.kind, at, id=a.id, state=a.state, cmd=text, name=a.name or None, waited_ms=a.waited_ms, duration_ms=took,
                          exit_code=code)
     return FeedEvent(a.kind, at, text=a.text, waited_ms=a.waited_ms)
 
 
-def _page(page: ActivityPage, ended: bool = False) -> FeedPage:
+def _page(page: ActivityPage, slot_path: Path | None, ended: bool = False, duration: Duration | None = None) -> FeedPage:
     """`ended`: the attempt is over, so a command or tool still running in its file never finished (its worker went away)."""
-    lines = (feed_event(each) for each in page.events)
+    lines = (feed_event(each, slot_path) for each in page.events)
     shown = tuple(replace(line, state="unfinished") if ended and line.state == "running" else line for line in lines if line is not None)
-    return FeedPage(shown, page.cursor, page.replaced, page.available)
+    return FeedPage(shown, page.cursor, page.replaced, page.available, duration)
 
 
 def build_feed(ports: TaskPorts, backlog: str, task_id: str, step: str, number: int, cursor: str | None) -> FeedPage | Failed | None:
-    """The agent's lines of one attempt of the task: its latest, or what came after `cursor`. None: no such agent attempt."""
+    """One numbered attempt: retained lines when ended, latest lines when live, or those after `cursor`. None: no such attempt."""
     try:
         rows = ports.reads.store.attempts(backlog, task_id)
-    except StoreUnavailable as error:
+        if step == STEP_CHECKS:
+            checked = next((link.checks for link in _chain(ports, rows) if link.checks is not None and link.number == number), None)
+            return None if checked is None else _checks_feed(ports, checked, cursor)
+        numbers = tries(rows)
+        row = next((row for row in rows if row.step == step and numbers[row.key.attempt_id] == number), None)
+        if row is None:
+            return None
+        result = collect(ports.reads.store, row.key)
+        duration = read_duration(ports.reads.store, ports.files, row, result)
+        ended = result.status == "collected" or not row.held
+        if cursor is not None:
+            page = ports.files.activity_after(row.key, cursor, FOLLOW_LINES)
+        else:
+            page = ports.files.activity_complete(row.key) if ended else ports.files.activity_tail(row.key, FEED_LINES)
+        return _page(page, _slot_path(ports, row, page), ended=ended, duration=duration)
+    except (StoreUnavailable, SlotsUnavailable) as error:
         return Failed("unavailable", "store", str(error))
-    numbers = tries(rows)
-    key = next((row.key for row in rows if row.step == step and numbers[row.key.attempt_id] == number), None)
-    if key is None:
-        return None
-    return _page(ports.files.activity_tail(key, FEED_LINES) if cursor is None else ports.files.activity_after(key, cursor, FOLLOW_LINES))
+
+
+def _checks_feed(ports: TaskPorts, row: ChecksRow, cursor: str | None) -> FeedPage:
+    results = CheckStore(ports.reads.store.connect, ports.reads.store.begin).results(row.key)
+    logs = tuple(CheckLog(position=each.position, name=each.name, conclusion=each.conclusion,
+                         state=CheckState.FINISHED if each.conclusion is not None else
+                         CheckState.RUNNING if row.phase == "admitted" else CheckState.UNFINISHED) for each in results)
+    block = results[0].block if results else 0
+    page = ports.files.check_feed(row.key, block, logs, cursor)
+    started = {each.position: iso(each.started_at) or "" for each in results}
+    events = tuple(FeedEvent("check", started[each.position], name=each.name, block=each.block,
+                             id=f"{each.block}:{each.position}:{each.offset if each.offset is not None else 'state'}",
+                             state=each.state.value, text=each.text,
+                             passed=None if each.conclusion is None else each.conclusion == CommandConclusion.PASSED)
+                   for each in page.records)
+    return FeedPage(events, page.cursor, page.replaced, page.available)
 
 
 def _agent(
@@ -98,13 +157,18 @@ def _agent(
     state: State = "running" if result.status != "collected" and row.held else "succeeded" if succeeded(result) else "failed"
     started = ports.files.started_at(row.key)
     ended = None if state == "running" or row.release is None else row.release.released_at
-    after = "repeat" if row.previous_attempt_id is not None else "restart_at_plan" if row.step == "plan" and row.seq > 1 else None
+    if state != "running" and ended is None and result.execution is not None:
+        ended = ports.files.captured_at(result.execution.evidence.diagnostics)
+    after = "repeat" if row.previous_attempt_id is not None else "restart_at_plan" if row.step == Step.PLAN and row.seq > 1 else None
     reason = row.repeat_reason if after == "repeat" else "restarted at plan" if after else None
     begun = () if started is None else (FeedEvent("step", iso(started) or "", step=row.step, attempt=number),)
-    page = _page(ports.files.activity_tail(row.key, FEED_LINES), ended=state != "running")
-    return AttemptDetail(row.step, number, state, iso(started), iso(ended), result.reason or result.status, after, reason,
+    activity = ports.files.activity_complete(row.key) if state != "running" else ports.files.activity_tail(row.key, FEED_LINES)
+    page = _page(activity, _slot_path(ports, row, activity), ended=state != "running")
+    summary = result.explanation or result.reason or result.status
+    return AttemptDetail(row.step, number, state, iso(started), iso(ended), summary, after, reason,
                          previous if after == "repeat" else None, begun + page.events, page.cursor, led_by if after == "repeat" else None,
-                         run=_run(row))
+                         run=_run(row), usage=project(None if result.execution is None else result.execution.facts),
+                         duration=read_duration(ports.reads.store, ports.files, row, result))
 
 
 def added_lines(before: str, now: str) -> tuple[tuple[int, int], ...]:
@@ -113,7 +177,8 @@ def added_lines(before: str, now: str) -> tuple[tuple[int, int], ...]:
     return tuple((start, end) for kind, _a, _b, start, end in found if kind in ("insert", "replace"))
 
 
-SANDBOX_WORDS = {SANDBOX: "can write its own workspace only, no network"}
+SANDBOX_WORDS = {SANDBOX: "can write its own workspace only, no network",
+                 CodexSandbox.DANGER_FULL_ACCESS.value: "full access: the container is the boundary"}
 
 
 def _run(row: AttemptRow) -> Run | None:
@@ -121,26 +186,26 @@ def _run(row: AttemptRow) -> Run | None:
     if choices is None:
         return None
     return Run(HARNESS_WORDS[choices.harness], PROVIDER_WORDS[choices.provider], choices.model, choices.effort,
-               SANDBOX_WORDS.get(choices.sandbox, choices.sandbox))
+               SANDBOX_WORDS.get(choices.summary, choices.summary))
 
 
-def _agent_body(ports: TaskPorts, row: AttemptRow, result: AttemptResult, rows: tuple[AttemptRow, ...]) -> AttemptBody:
+def _agent_body(ports: TaskPorts, row: AttemptRow, result: AttemptResult, rows: tuple[AttemptRow, ...]) -> AttemptBody | Failed:
     shown = ports.files.text_bounded(row.key, "answer.txt")
     disposition = None if result.execution is None else result.execution.answer.disposition
     answer = None if shown is None else Answer(disposition or "none", shown[0], shown[1])
-    shown = ports.files.text(row.key, "input.txt")
     earlier = next((each for each in rows if each.key.attempt_id == row.previous_attempt_id), None)
-    before = None if earlier is None else ports.files.text(earlier.key, "input.txt")
-    added = () if shown is None or before is None else added_lines(before, shown)
-    return AttemptBody(shown, Outcome(result.reason or result.status, answer, (), None), added)
-
-
-def _took(result: ResultRow) -> int:
-    return 0 if result.ended_at is None else int((result.ended_at - result.started_at) * 1000)
+    try:
+        shown = ports.files.read(ports.reads.store.input_ref(row.key))
+        before = None if earlier is None else ports.files.read(ports.reads.store.input_ref(earlier.key))
+    except EvidenceError as error:
+        return Failed("unavailable", "input", str(error))
+    added = () if before is None else added_lines(before, shown)
+    change = None if earlier is None else AttemptChange(base_before=earlier.base_commit, base_after=row.base_commit)
+    return AttemptBody(shown, Outcome(result.explanation or result.reason or result.status, answer, (), None), added, change)
 
 
 def _check_line(ports: TaskPorts, row: ChecksRow, result: ResultRow) -> CheckLine:
-    return CheckLine(result.name, result.conclusion == "passed", _took(result),
+    return CheckLine(result.name, result.conclusion == CommandConclusion.PASSED, None,
                      ports.files.check_tail(row.key, result.block, result.name), result.block)
 
 
@@ -149,14 +214,14 @@ def _checks_state(row: ChecksRow) -> tuple[State, str]:
     return state, row.reason or row.conclusion or ("running" if state == "running" else row.phase)
 
 
-def _checks(store: CheckStore, row: ChecksRow, number: int, earlier: str | None) -> AttemptDetail:
+def _checks(store: CheckStore, row: ChecksRow, number: int, earlier: int | None) -> AttemptDetail:
     results = store.results(row.key)
     state, summary = _checks_state(row)
     started = min((each.started_at for each in results), default=None)
-    feed = tuple(FeedEvent("check", iso(each.ended_at or each.started_at) or "", name=each.name, passed=each.conclusion == "passed",
-                           duration_ms=_took(each)) for each in results if each.conclusion is not None)
+    feed = tuple(FeedEvent("check", iso(each.ended_at or each.started_at) or "", name=each.name,
+        passed=each.conclusion == CommandConclusion.PASSED) for each in results if each.conclusion is not None)
     return AttemptDetail("checks", number, state, iso(started), iso(row.concluded_at), summary, "repeat" if earlier is not None else None,
-                         earlier, number - 1 if earlier is not None else None, feed)
+                         "The factory restarted" if earlier is not None else None, earlier, feed)
 
 
 def _checks_body(ports: TaskPorts, store: CheckStore, row: ChecksRow) -> AttemptBody:
@@ -166,73 +231,91 @@ def _checks_body(ports: TaskPorts, store: CheckStore, row: ChecksRow) -> Attempt
 
 @dataclass(frozen=True)
 class Link:
-    """One entry of the task's chain: an agent attempt, the verification of one, or a checks attempt, with its try."""
+    """One entry of the task's chain: an agent attempt, the factory commit of one, or a checks attempt, with its try."""
 
     number: int
     agent: AttemptRow | None = None
     checks: ChecksRow | None = None
-    result: AttemptResult | None = None  # the agent attempt's stored result, for it and for its verification
-    verifies: bool = False
-    of: int = 0  # a verification's: the try of the agent attempt it verifies
-    successor: AttemptRow | None = None  # the repeat of the verified attempt, which records what a failed verification listed
+    result: AttemptResult | None = None  # the agent attempt's stored result, for it and for its factory commit
+    commits: bool = False
+    of: int = 0  # a factory commit's: the try of the agent attempt it commits
+    successor: AttemptRow | None = None  # the repeat of the committed attempt, which records what a failed factory commit listed
 
 
 def _chain(ports: TaskPorts, rows: tuple[AttemptRow, ...]) -> tuple[Link, ...]:
     """The task's attempts oldest first: each agent attempt (numbered within its step across the whole task, `tries`, so a restart at
-    plan never repeats a number), its verification when the factory verified it (numbered across the task, between it and what follows),
+    plan never repeats a number), its factory commit when the factory committed it (numbered across the task, between it and what follows),
     and the checks attempts after an implement attempt (numbered across the task: a checks try is the check step's, not the implement's)."""
     store = CheckStore(ports.reads.store.connect, ports.reads.store.begin)
     found: list[Link] = []
     numbers = tries(rows)
-    verified = checked = 0
+    commits = checked = 0
     for row in reversed(rows):
         result = collect(ports.reads.store, row.key)
+        if row.phase == "admitted" and row.release is None:
+            result = merge_result(MergeStore(ports.reads.store.connect, ports.reads.store.begin), row.key.attempt_id,
+                                  ports.reads.clock()) or result
         found.append(Link(numbers[row.key.attempt_id], agent=row, result=result))
         if applies(result):
-            verified += 1
+            commits += 1
             successor = next((each for each in rows if each.previous_attempt_id == row.key.attempt_id), None)
-            found.append(Link(verified, agent=row, result=result, verifies=True, of=numbers[row.key.attempt_id], successor=successor))
-        for checks in store.of_attempt(row.key.attempt_id) if row.step == "implement" else ():
+            found.append(Link(commits, agent=row, result=result, commits=True, of=numbers[row.key.attempt_id], successor=successor))
+        for checks in store.of_attempt(row.key.attempt_id) if row.step == Step.IMPLEMENT else ():
             checked += 1
             found.append(Link(checked, checks=checks))
     return tuple(found)
 
 
-def _verification(link: Link) -> tuple[AttemptDetail, Verification]:
-    """The verification row: no start or end of its own is stored, so it has none; its result is the typed words."""
+def _factory_commit(link: Link) -> tuple[AttemptDetail, FactoryCommit]:
+    """The factory commit row: no start or end of its own is stored, so it has none; its result is the typed words."""
     row, result = link.agent, link.result
     if row is None or result is None:
-        raise ValueError("A verification belongs to an agent attempt")
-    found, state = verification(row, link.of, result, link.successor)
-    return AttemptDetail(VERIFICATION, link.number, state, None, None, found.result, None, None, None, ()), found
+        raise ValueError("A factory commit belongs to an agent attempt")
+    found, state = factory_commit(row, link.of, result, link.successor)
+    return AttemptDetail(COMMIT, link.number, state, None, None, found.result, None, None, None, ()), found
 
 
 def history(ports: TaskPorts, rows: tuple[AttemptRow, ...]) -> tuple[AttemptDetail, ...]:
-    """Oldest first: each agent attempt, its verification, then the checks attempts after an implement attempt. Every entry up to
+    """Oldest first: each agent attempt, its factory commit, then the checks attempts after an implement attempt. Every entry up to
     the latest abandoned attempt (the chain boundary) is `past`: a person gave that chain up, it is not the task's current steps."""
     cut = max((each.seq for each in rows if each.release is not None and each.release.abandoned), default=0)
     past = {each.key.attempt_id for each in rows if each.seq <= cut}
-    return tuple(replace(each, past=owner in past) for each, owner in _history(ports, rows))
+    holds = HoldStore(ports.reads.store.connect, ports.reads.store.begin).of_attempts(tuple(row.key.attempt_id for row in rows))
+    return tuple(replace(each, past=owner in past) for each, owner in _history(ports, rows, _chain(ports, rows), contexts(holds)))
 
 
-def _history(ports: TaskPorts, rows: tuple[AttemptRow, ...]) -> tuple[tuple[AttemptDetail, str], ...]:
+def _history(ports: TaskPorts, rows: tuple[AttemptRow, ...], chain: tuple[Link, ...],
+             events: dict[str, TaskEventDetail]) -> tuple[tuple[AttemptDetail, str], ...]:
     """Each entry with the agent attempt it belongs to (a checks attempt: the implement attempt it follows)."""
     store = CheckStore(ports.reads.store.connect, ports.reads.store.begin)
     numbers = tries(rows)
     found: list[tuple[AttemptDetail, str]] = []
-    earlier: str | None = None
-    led: dict[str, int] = {}  # agent attempt id -> the try of its verification
-    for link in _chain(ports, rows):
+    earlier: dict[str, int] = {}
+    led: dict[str, int] = {}  # agent attempt id -> the try of its factory commit
+    for link in chain:
         if link.checks is not None:
-            found.append((_checks(store, link.checks, link.number, earlier), link.checks.after))
-            earlier = found[-1][0].summary
-        elif link.verifies and link.agent is not None:
-            found.append((_verification(link)[0], link.agent.key.attempt_id))
+            detail = _checks(store, link.checks, link.number, earlier.get(link.checks.after))
+            found.append((replace(detail, context=events.get(link.checks.key.attempt_id)), link.checks.after))
+            earlier[link.checks.after] = link.number
+        elif link.commits and link.agent is not None:
+            found.append((_factory_commit(link)[0], link.agent.key.attempt_id))
             led[link.agent.key.attempt_id] = link.number
         elif link.agent is not None and link.result is not None:
             previous = link.agent.previous_attempt_id or ""
-            found.append((_agent(ports, link.agent, link.number, link.result, numbers.get(previous), led.get(previous)),
-                          link.agent.key.attempt_id))
+            detail = _agent(ports, link.agent, link.number, link.result, numbers.get(previous), led.get(previous))
+            found.append((replace(detail, context=events.get(link.agent.key.attempt_id)), link.agent.key.attempt_id))
+    return tuple(found)
+
+
+def _operations(files: EvidenceFiles, chain: tuple[Link, ...], past: set[str]) -> tuple[OperationDetail, ...]:
+    found: list[OperationDetail] = []
+    for link in chain:
+        if link.checks is not None:
+            found.extend(project_operations(files.operations(link.checks.key), STEP_CHECKS, link.number,
+                                            past=link.checks.after in past))
+        elif link.agent is not None and not link.commits:
+            found.extend(project_operations(files.operations(link.agent.key), link.agent.step, link.number,
+                                            past=link.agent.key.attempt_id in past))
     return tuple(found)
 
 
@@ -246,10 +329,10 @@ def build_body(ports: TaskPorts, backlog: str, task_id: str, step: str, number: 
                 return _checks_body(ports, store, link.checks)
             if link.agent is None or link.result is None or link.number != number:
                 continue
-            if link.verifies and step == VERIFICATION:
-                found = _verification(link)[1]
+            if link.commits and step == COMMIT:
+                found = _factory_commit(link)[1]
                 return AttemptBody(None, Outcome(found.result, None, (), None, found))
-            if not link.verifies and link.agent.step == step:
+            if not link.commits and link.agent.step == step:
                 return _agent_body(ports, link.agent, link.result, rows)
     except StoreUnavailable as error:
         return Failed("unavailable", "store", str(error))
@@ -260,18 +343,29 @@ def build_task(ports: TaskPorts, backlog: str, task_id: str) -> TaskDetail | Fai
     """A task with no attempt is a waiting card with none. StoreUnavailable becomes a Failed."""
     try:
         rows = ports.reads.store.attempts(backlog, task_id)
+        holds = HoldStore(ports.reads.store.connect, ports.reads.store.begin).of_attempts(tuple(row.key.attempt_id for row in rows))
         view = current_view(ports.reads, backlog, task_id)
         if view is not None:
-            holds = HoldStore(ports.reads.store.connect, ports.reads.store.begin).of_attempts((agent_attempt(view),))
             view = with_hold(view, holds.get(agent_attempt(view)))
-        attempts = history(ports, rows)
-    except StoreUnavailable as error:
+            view = replace(view, stop=StopStore(ports.reads.store.connect).get(
+                view.attempt_id if view.hold is None else view.hold.cause_id))
+        chain = _chain(ports, rows)
+        cut = max((each.seq for each in rows if each.release is not None and each.release.abandoned), default=0)
+        past = {each.key.attempt_id for each in rows if each.seq <= cut}
+        attempts = tuple(replace(each, past=owner in past) for each, owner in _history(ports, rows, chain, contexts(holds)))
+        checks = tuple((link.checks, link.number, link.checks.after in past)
+                       for link in chain if link.checks is not None)
+        operations = _operations(ports.files, chain, past)
+        events = build_events(LandStore(ports.reads.store.connect, ports.reads.store.begin), checks, ports.reads.observe)
+    except (StoreUnavailable, SlotsUnavailable) as error:
         return Failed("unavailable", "store", str(error))
     title = task_id if view is None else ports.tracker.titles((task_id,)).get(task_id, task_id)  # cached by the board's own read
-    card = Card(task_id, title, "waiting", 0, None, None, None, None, None) if view is None else card_of(
+    admission = admission_of(ports.reads, frozenset(each.task_id for each in ports.tracker.ready()))
+    card = queued_card(task_id, title, admission) if view is None else card_of(
         view, rows[0], title, ports.files, ports.reads.clock(), tries(rows).get(view.attempt_id),
-        admission_of(ports.reads, frozenset(each.task_id for each in ports.tracker.ready())), ports.mode)
-    return TaskDetail(card, attempts)
+        admission, duration_of(view, rows[0], ports.reads, ports.files))
+    step_usage, usage = totals(attempts)
+    return TaskDetail(card, attempts, step_usage, usage, events, operations)
 
 
 def build_tracker(tracker: DashTracker, task_id: str) -> TrackerDetail | None:

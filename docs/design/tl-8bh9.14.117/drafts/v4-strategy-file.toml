@@ -1,0 +1,56 @@
+# DRAFT v4 "strategy file": the owner's "profile and workflow together" idea. ONE file holds the repo's whole factory
+# policy: profile keys (setup, checks, required, target, land) and the workflow. Shown to expose the trust-split problem:
+# `required`, `target` and `land` must be read from origin's main, the rest from the task branch, but this is one file.
+# Prose abbreviated. Not loadable; a design sketch.
+
+# ============================================================ part 1: what the repo is (today's .task-loop.json)
+[repo]
+setup = [["just", "bootstrap"]]
+target = "main"                    # TRUST: read from main only
+land = "auto"                      # TRUST: read from main only
+required = ["check", "test"]       # TRUST: read from main only
+
+[[check]]
+name = "check"
+argv = ["just", "check"]
+timeout = 1800
+[[check]]
+name = "test"
+argv = ["just", "test"]
+timeout = 1800
+
+# ============================================================ part 2: how the factory works the task
+[workflow]
+name = "default"
+steps = ["plan", "implement", "check"]
+attempts = 3
+
+[step.plan]
+agent = { harness = "codex", model = "gpt-6.1-sol", effort = "high" }
+root = "docs/design/{task_id}/"
+prompt = [
+  { text = "Your final message must be the JSON answer only; … a message without a tool call ends the step." },
+  { text = "First assess depth from the supplied task text alone … small 6, medium 12, large 20 …" },
+  { use = "task" }, { use = "input_context" },
+  { text = "Use exactly these sections in this order … # Header … ## Read list …" },
+]
+
+[step.implement]
+agent = { harness = "codex", model = "gpt-6.1-sol", effort = "high" }
+root = ""
+excluded = [".beads/", ".task-loop/"]
+prompt = [
+  { use = "task" }, { use = "input_context" },
+  { text = "The plan for this task is `docs/design/{task_id}/plan.md` … Read it first …" },
+  { text = "The factory ran this repository's `setup` before you started … `just check 2>&1 | tail -60` …" },
+]
+
+[step.check]
+runs = "required"                  # names the [repo].required list above: one file, two places
+repeat_to = "implement"
+
+# What this draft makes visible:
+# - Reading it from the task branch lets an agent edit `required`, `land` and `check.argv` in the same file as its prompts.
+#   Reading [repo] from main and [workflow] from the branch means ONE file parsed from TWO commits.
+# - The implement prompt names `just check` while [[check]] defines the same command: a fact with two owners in one file.
+# - `land = "auto"` in a file an A/B branch edits would let the variant land itself as the new default.

@@ -1,4 +1,5 @@
 ---
+# Status: evidence; historical format specimen, not current system authority
 lens: design
 statement: "Every fact has one owning read path and one owning write path; there is no file fallback, dual reader or shadow state."
 read_when: "before adding a second reader, a cache or a fallback for any fact"

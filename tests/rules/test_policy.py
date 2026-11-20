@@ -63,17 +63,41 @@ def test_caps_cannot_be_relaxed() -> None:
 
 # Every SQL write in the source, by (verb, table) -> the one module allowed to issue it. Anything unlisted is refused.
 WRITERS = {
+    ("CREATE TABLE", "task_content"): "factory_schema.py",
+    ("INSERT", "task_content"): "task_content_store.py",
+    ("CREATE TABLE", "recovery_intent"): "factory_schema.py",
+    ("CREATE INDEX", "recovery_intent"): "factory_schema.py",
+    ("INSERT", "recovery_intent"): "recovery/state_store.py",
+    ("UPDATE", "recovery_intent"): "recovery/state_store.py",
+    ("CREATE TABLE", "agent_stop"): "factory_schema.py",
+    ("INSERT", "agent_stop"): "agents/stop_store.py",
+    ("UPDATE", "agent_stop"): "agents/stop_store.py",
+    ("CREATE TABLE", "merge_operation"): "factory_schema.py",
+    ("CREATE TABLE", "land_conflict"): "factory_schema.py",
+    ("INSERT", "land_conflict"): "land_conflict/store.py",
+    ("UPDATE", "land_conflict"): "land_conflict/store.py",
+    ("INSERT", "merge_operation"): "merge/store.py",
+    ("UPDATE", "merge_operation"): "merge/store.py",
+    ("CREATE TABLE", "drain_state"): "factory_schema.py",
+    ("CREATE TABLE", "drain_action"): "factory_schema.py",
+    ("CREATE INDEX", "drain_action"): "factory_schema.py",
+    ("INSERT", "drain_state"): "drain/store.py",
+    ("UPDATE", "drain_state"): "drain/store.py",
+    ("INSERT", "drain_action"): "drain/store.py",
+    ("UPDATE", "drain_action"): "drain/store.py",
     ("CREATE TABLE", "slot"): "factory_schema.py",
     ("CREATE TABLE", "reservation"): "factory_schema.py",
     ("CREATE TABLE", "attempt"): "factory_schema.py",
+    ("CREATE TABLE", "workflow_file"): "factory_schema.py",
     ("CREATE TABLE", "execution"): "factory_schema.py",
-    ("CREATE TABLE", "verification"): "factory_schema.py",
+    ("CREATE TABLE", "factory_commit"): "factory_schema.py",
     ("CREATE TABLE", "slot_release"): "factory_schema.py",
     ("CREATE TABLE", "published_branch"): "factory_schema.py",
     ("CREATE TABLE", "setup_run"): "factory_schema.py",
     ("CREATE TABLE", "checks_attempt"): "factory_schema.py",
     ("CREATE TABLE", "check_result"): "factory_schema.py",
     ("CREATE TABLE", "land_candidate"): "factory_schema.py",
+    ("CREATE INDEX", "attempt"): "factory_schema.py",
     ("CREATE INDEX", "land_candidate"): "factory_schema.py",  # `land_delivered`: at most one delivered candidate per checks attempt
     ("CREATE TABLE", "task_hold"): "factory_schema.py",
     ("INSERT", "task_hold"): "hold_store.py",  # a hold's record, fenced on its attempt and cause being current
@@ -87,19 +111,20 @@ WRITERS = {
     ("UPDATE", "check_result"): "check_store.py",
     ("INSERT", "setup_run"): "setup_store.py",
     ("UPDATE", "setup_run"): "setup_store.py",
-    ("INSERT", "slot"): "slots.py",
-    ("INSERT", "reservation"): "admit_rows.py",
-    ("INSERT", "attempt"): "admit_rows.py",
-    ("UPDATE", "reservation"): "admit_chain.py",  # a repeat's takeover
-    ("UPDATE", "slot"): "admit_rows.py",
-    ("INSERT", "slot_release"): "slot_release.py",
-    ("UPDATE", "slot_release"): "slot_release.py",
-    ("DELETE FROM", "reservation"): "slot_release.py",
-    ("INSERT", "published_branch"): "publish.py",
-    ("INSERT", "execution"): "attempt_store.py",
-    ("INSERT", "verification"): "attempt_store.py",
-    ("UPDATE", "attempt"): "attempt_store.py",  # also the deadline renewal after a reboot, in the entry registration's write
-    ("UPDATE", "execution"): "attempt_store.py",
+    ("INSERT", "slot"): "slots_store.py",
+    ("INSERT", "reservation"): "admit_store.py",
+    ("INSERT", "attempt"): "admit_store.py",
+    ("INSERT", "workflow_file"): "admit_store.py",  # the pinned workflow bytes, stored once per digest
+    ("UPDATE", "reservation"): "admit_store.py",  # a repeat's takeover
+    ("UPDATE", "slot"): "admit_store.py",
+    ("INSERT", "slot_release"): "slot_release_store.py",
+    ("UPDATE", "slot_release"): "slot_release_store.py",
+    ("DELETE FROM", "reservation"): "slot_release_store.py",
+    ("INSERT", "published_branch"): "publish_store.py",
+    ("INSERT", "execution"): "attempt_write_store.py",
+    ("INSERT", "factory_commit"): "attempt_write_store.py",
+    ("UPDATE", "attempt"): "attempt_write_store.py",  # also deadline renewal after a reboot in the entry registration's write
+    ("UPDATE", "execution"): "attempt_write_store.py",
 }
 # A statement verb and its table; an index (`CREATE [UNIQUE] INDEX <name> ON <table>`) is written as `CREATE INDEX` of
 # the table after `ON`.
@@ -118,15 +143,46 @@ def write_of(match: re.Match[str]) -> tuple[str, str]:
     return kind, match.group(2).lower()
 
 
-def sql_writes() -> set[tuple[str, str, str]]:
-    paths = (ROOT / "src" / "taskloop").glob("*.py")
-    return {(*write_of(match), path.name) for path in paths for match in WRITE.finditer(path.read_text())}
+def sql_writes(root: Path = ROOT / "src" / "taskloop") -> set[tuple[str, str, str]]:
+    paths = root.rglob("*.py")
+    return {(*write_of(match), path.relative_to(root).as_posix()) for path in paths
+            for match in WRITE.finditer(path.read_text())}
 
 
 def test_every_sql_write_has_its_one_owner() -> None:
     found = sql_writes()
-    assert {(kind, table): owner for kind, table, owner in found} == WRITERS
-    assert len(found) == len(WRITERS), sorted(found)
+    assert_sql_owners(found, WRITERS)
+
+
+def assert_sql_owners(found: set[tuple[str, str, str]], writers: dict[tuple[str, str], str]) -> None:
+    assert {(kind, table): owner for kind, table, owner in found} == writers, sorted(found)
+    assert len(found) == len(writers), sorted(found)
+
+
+@pytest.mark.parametrize("change", ["none", "misplaced", "competing", "unexpected", "missing"])
+def test_sql_ownership_distinguishes_nested_stores(tmp_path: Path, change: str) -> None:
+    statements = {
+        "one/store.py": 'con.execute("INSERT INTO first VALUES (1)")',
+        "two/store.py": 'con.execute("UPDATE second SET value=1")',
+    }
+    writers = {("INSERT", "first"): "one/store.py", ("UPDATE", "second"): "two/store.py"}
+    if change in {"misplaced", "competing"}:
+        statements["two/store.py"] += '\ncon.execute("INSERT INTO first VALUES (2)")'
+    if change in {"misplaced", "missing"}:
+        statements["one/store.py"] = ""
+    if change == "unexpected":
+        statements["two/store.py"] += '\ncon.execute("DELETE FROM second")'
+    for relative, source in statements.items():
+        path = tmp_path / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(source)
+    found = sql_writes(tmp_path)
+    if change == "none":
+        assert found == {("INSERT", "first", "one/store.py"), ("UPDATE", "second", "two/store.py")}
+        assert_sql_owners(found, writers)
+    else:
+        with pytest.raises(AssertionError):
+            assert_sql_owners(found, writers)
 
 
 @pytest.mark.parametrize(("statement", "write"), [
@@ -144,6 +200,7 @@ def test_write_pattern_catches_spelling_variants(statement: str, write: tuple[st
 GIT_WRITES = frozenset({
     "stage", "stage_tracked", "record", "take_branch", "park", "push", "fetch", "sync", "delete_remote_at", "push_refspecs",
     "push_request", "push_lease", "delete_branch", "clean", "reset", "squash",
+    "start_merge", "finish_merge", "abort_merge", "commit_tree", "update_ref",
 })
 
 
@@ -170,7 +227,8 @@ def git_names(tree: ast.AST) -> set[str]:
 
 def git_writers() -> set[tuple[str, str]]:
     """Every use of a Git write in the factory source, by module (`git_names`)."""
-    return {(name, path.name) for path in (ROOT / "src" / "taskloop").glob("*.py") for name in git_names(ast.parse(path.read_text()))}
+    root = ROOT / "src" / "taskloop"
+    return {(name, str(path.relative_to(root))) for path in root.rglob("*.py") for name in git_names(ast.parse(path.read_text()))}
 
 
 @pytest.mark.parametrize(("source", "names"), [
@@ -185,10 +243,23 @@ def test_the_git_write_matcher_sees_uses_and_not_words(source: str, names: set[s
 def test_only_the_commit_prepare_release_publish_environment_and_land_modules_write_git() -> None:
     """`clean` is the environment reset's (the slot's ignored files and nested repositories, before each setup); `reset`
     too (a checks slot's tracked files back to exactly X, tl-8bh9.14.6 section 8). The checks block writes no Git. The
-    land's squash (objects only) is `land_target`'s, its fetch of origin's `main` and its push of S `land_push`'s."""
+    land's squash (objects only) is `land_target`'s, its fetch of origin's `main` and its push of S `land_push`'s.
+    Admission's bounded fetch of origin main is `prepare`'s."""
     expected = {
         ("stage", "factory_commit.py"), ("record", "factory_commit.py"), ("take_branch", "prepare.py"), ("park", "prepare.py"),
-        ("park", "slot_release.py"), ("push", "publish.py"), ("clean", "environment.py"), ("reset", "environment.py"),
+        ("fetch", "prepare.py"),
+        ("park", "slot_park.py"), ("park", "wip.py"), ("reset", "wip.py"),
+        ("stage", "wip.py"), ("commit_tree", "wip.py"), ("update_ref", "wip.py"), ("abort_merge", "slot_park.py"),
+        ("park", "merge/start.py"), ("start_merge", "merge/start.py"), ("finish_merge", "merge/start.py"),
+        ("fetch", "merge/start.py"),
+        ("stage", "merge/start.py"), ("stage", "merge/git.py"), ("update_ref", "merge/git.py"), ("take_branch", "merge/git.py"),
+        ("stage", "land_conflict/preserve.py"), ("commit_tree", "land_conflict/preserve.py"),
+        ("update_ref", "land_conflict/preserve.py"),
+        ("reset", "land_conflict/cleanup.py"), ("park", "land_conflict/cleanup.py"),
+        ("park", "land_conflict/release.py"),
+            ("abort_merge", "land_conflict/abort.py"),
+            ("push", "publish.py"), ("clean", "environment.py"), ("reset", "environment.py"),
+        ("record", "publish.py"),  # PublishStore.record persists the publication; the matcher sees every receiver.
         ("squash", "land_target.py"), ("fetch", "land_push.py"), ("push", "land_push.py"),
     }
     assert git_writers() == expected
@@ -352,10 +423,9 @@ def _imported(tree: ast.Module) -> list[str]:
     return found
 
 
-def test_only_the_dashboard_server_imports_the_http_server() -> None:
-    """The one allowed importer of the standard library's HTTP code (`.importlinter` ignores exactly `dash_server -> http.server`),
-    and the tests that use a client or a URL parser, are pinned here."""
+def test_http_and_url_parsing_imports_have_explicit_owners() -> None:
+    """Pin the HTTP server, digest URL parser and test consumers; import contracts restrict the precise modules."""
     importers = {str(path.relative_to(ROOT)) for path in FILES
                  if any(name.split(".")[0] in {"http", "urllib", "socketserver"} for name in _imported(ast.parse(path.read_text())))}
     assert importers == {"src/taskloop/dash_server.py", "tests/cli/test_dash_server.py", "tests/cli/test_dash_composition.py",
-                         "tests/rules/test_isolation.py"}
+                         "tests/rules/test_isolation.py", "src/taskloop/shelf_digest/identities.py"}

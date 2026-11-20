@@ -3,11 +3,19 @@ decides anything, and every fact keeps its one owner (factory.db, the tracker, t
 
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from enum import StrEnum
 from typing import Literal, Protocol
+
+from pydantic import BaseModel, ConfigDict
+
+from taskloop.dash_duration import Duration
+from taskloop.land_status import LandState
+from taskloop.land_timing import RetryCause
+from taskloop.operation_evidence import OperationKind, OperationState
+from taskloop.task_event import TaskEvent
 
 type Column = Literal["waiting", "plan", "implement", "checks", "land", "held", "landed"]
 type State = Literal["running", "succeeded", "failed"]
-type LandState = Literal["waiting", "manual", "landing"]
 
 
 def iso(epoch: float | None) -> str | None:
@@ -32,10 +40,15 @@ class Card:
     last_activity_at: str | None
     slot: str | None
     hold_cause: str | None
-    # in `land` only: `waiting` for a round to land it, `manual` for a person (the profile says `land: manual`), `landing`
+    # in `land` only: the shared policy/execution decision (`land_status.LandState`)
     land: LandState | None = None
     status: str | None = None  # `task_status.Status`: the one status of the task, for every reader
     status_note: str | None = None  # the status in plain words (`task_status.words`)
+    ask: bool = False
+    question: str | None = None
+    hold_explanation: str | None = None
+    waiting_since: str | None = None
+    duration: Duration | None = None
 
 
 @dataclass(frozen=True)
@@ -72,7 +85,7 @@ class Comment:
 class CheckLine:
     name: str
     passed: bool
-    duration_ms: int
+    duration_ms: int | None
     output: str | None  # the tail of the check's log, passed or failed; None: the log is gone or unreadable
     block: int = 1
 
@@ -85,23 +98,23 @@ class Answer:
 
 
 @dataclass(frozen=True)
-class VerifyCheck:
-    """One check of a verification: the factory's wording of it, and whether it passed, failed or was not reached."""
+class CommitCheck:
+    """One check of a factory commit: the factory's wording of it, and whether it passed, failed or was not reached."""
 
     name: str
     state: Literal["passed", "failed", "not_run"]
 
 
 @dataclass(frozen=True)
-class Verification:
+class FactoryCommit:
     """What the factory checked after an agent attempt's committing answer: `of_step`/`of` name that attempt, `listed` is what the
-    agent asked to commit, `result` the typed words (`verified`, `reused`, `rejected:<rule>`, `unsettled:<reason>`, `pending`) and
+    agent asked to commit, `result` the typed words (`committed`, `reused`, `rejected:<rule>`, `uncommitted:<reason>`, `pending`) and
     `listing` what the failed check named (the unsafe path and the leftovers beside it, the ignored paths)."""
 
     of_step: str
     of: int
     listed: tuple[str, ...]
-    checks: tuple[VerifyCheck, ...]
+    checks: tuple[CommitCheck, ...]
     result: str
     listing: tuple[str, ...]
 
@@ -112,7 +125,7 @@ class Outcome:
     answer: Answer | None
     checks: tuple[CheckLine, ...]
     output: str | None
-    verification: Verification | None = None
+    factory_commit: FactoryCommit | None = None
 
 
 @dataclass(frozen=True)
@@ -132,16 +145,39 @@ class FeedEvent:
     text: str | None = None  # a message, the agent's reasoning words (only when the harness gave them), an error or a wait
     waited_ms: int | None = None
     exit_code: int | None = None
+    block: int | None = None  # a check's Result block
 
 
 @dataclass(frozen=True)
 class FeedPage:
-    """`GET /api/tasks/<id>/attempts/<step>/<n>/feed`: the agent's lines of one attempt and the cursor to follow them from."""
+    """`GET /api/tasks/<id>/attempts/<step>/<n>/feed`: agent or check lines and the cursor to follow them from."""
 
     events: tuple[FeedEvent, ...]
     cursor: str | None
     replaced: bool
     available: bool
+    duration: Duration | None = None
+
+
+@dataclass(frozen=True)
+class Usage:
+    """Known counts and coverage: totals include reported values only when complete < attempts."""
+
+    fresh: int | None = None
+    cached: int | None = None
+    output: int | None = None
+    turns: int | None = None
+    attempts: int = 0
+    complete: int = 0
+
+
+class TaskEventDetail(BaseModel):
+    """A recorded decision with the time its hold was stored, including cleared holds."""
+
+    model_config = ConfigDict(frozen=True)
+
+    event: TaskEvent
+    held_at: str
 
 
 @dataclass(frozen=True)
@@ -157,21 +193,33 @@ class AttemptDetail:
     repeat_of: int | None  # the try of this step that a `repeat` repeats
     feed: tuple[FeedEvent, ...]
     feed_cursor: str | None = None  # follow the agent's lines from here (`FeedPage`); None for checks and before any line
-    led_by: int | None = None  # a repeat of an agent attempt: the try of the `verification` step whose failure led to it
+    led_by: int | None = None  # a repeat of an agent attempt: the factory commit projection number whose failure led to it
     past: bool = False  # belongs to a chain a person abandoned: history, not the task's current steps
-    run: Run | None = None  # an agent attempt's: what ran it; None for a check or a verification
+    run: Run | None = None  # an agent attempt's: what ran it; None for a check or a factory commit
+    usage: Usage | None = None  # None for checks/factory commit; an agent with no report has empty counts
+    duration: Duration | None = None
+    context: TaskEventDetail | None = None
 
 
 @dataclass(frozen=True)
 class Run:
     """What an agent attempt ran, in plain words: the harness, the provider of its model, the model, the reasoning effort and what
-    its sandbox allows. Its facts are `attempt.harness`, `provider`, `model`, `effort` and `sandbox`, as admitted."""
+    its access policy allows. Its facts are the admitted harness, provider, model, effort and captured access policy."""
 
     harness: str
     provider: str
     model: str
     effort: str
-    sandbox: str
+    access: str
+
+
+class AttemptChange(BaseModel):
+    """The recorded bases of an agent attempt and its linked predecessor."""
+
+    model_config = ConfigDict(frozen=True, strict=True, extra="forbid")
+
+    base_before: str | None
+    base_after: str | None
 
 
 @dataclass(frozen=True)
@@ -182,6 +230,7 @@ class AttemptBody:
     input: str | None
     result: Outcome
     added: tuple[tuple[int, int], ...] = ()  # a repeat's prompt: the line ranges [start, end) the previous attempt's prompt lacks
+    change: AttemptChange | None = None
 
 
 @dataclass(frozen=True)
@@ -190,6 +239,23 @@ class TaskDetail:
 
     task: Card
     attempts: tuple[AttemptDetail, ...]
+    step_usage: dict[str, Usage]
+    usage: Usage
+    land_events: tuple[LandEvent, ...] = ()
+    operations: tuple[OperationDetail, ...] = ()
+
+
+class OperationDetail(BaseModel):
+    model_config = ConfigDict(frozen=True, strict=True, extra="forbid")
+
+    operation: str
+    step: str
+    n: int
+    past: bool
+    kind: OperationKind
+    state: OperationState
+    started_at: str
+    elapsed_ms: int | None
 
 
 @dataclass(frozen=True)
@@ -198,6 +264,65 @@ class TrackerDetail:
 
     fields: Fields
     comments: tuple[Comment, ...]
+
+
+class LandEventKind(StrEnum):
+    READY = "ready"
+    TRIED = "tried"
+    LANDED = "landed"
+
+
+class LandWait(BaseModel):
+    """A wait following an event; a finished wait can have an unknown end time."""
+
+    model_config = ConfigDict(frozen=True)
+
+    after: str
+    started_at: str | None
+    ended_at: str | None
+    open: bool
+    awaited: str
+
+
+class LandEvent(BaseModel):
+    """Recorded land history, separate from the card's current execution and policy."""
+
+    model_config = ConfigDict(frozen=True)
+
+    id: str
+    kind: LandEventKind
+    checks_id: str
+    checks_n: int
+    candidate_id: str | None = None
+    candidate_n: int | None = None
+    at: str | None
+    past: bool
+    explanation: str
+    waits: tuple[LandWait, ...] = ()
+    retry_cause: RetryCause | None = None
+    admitted_at: str | None = None
+    validation_started_at: str | None = None
+    validated_at: str | None = None
+    release_started_at: str | None = None
+    released_at: str | None = None
+    delivery_started_at: str | None = None
+    delivered_at: str | None = None
+    close_started_at: str | None = None
+    closed_at: str | None = None
+    superseded_at: str | None = None
+
+
+class LandDetail(BaseModel):
+    """Pending delivery facts, loaded on selection through the shared land summary operation."""
+
+    model_config = ConfigDict(frozen=True)
+
+    actions: tuple[str, ...]
+    summary: tuple[str, ...]
+    diff_files: int | None
+    added: int | None
+    deleted: int | None
+    pr_url: str | None = None
 
 
 @dataclass(frozen=True)

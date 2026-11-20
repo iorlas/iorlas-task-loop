@@ -1,4 +1,4 @@
-"""The one task status (tl-8bh9.14.143): one status per task computed from its stored facts, the same one in `tl step list`, the
+"""The one task status (tl-8bh9.14.143): one status per task computed from its stored facts, the same one in `tl attempt list`, the
 board and the drawer, the queued reasons, and the restart rule for a task a person abandoned."""
 
 import sqlite3
@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 from doubles import D
+from hold_fixtures import row
 from test_dash_read import KEY, Tracker
 
 from taskloop.attempt_reads import ReleaseRow
@@ -17,13 +18,14 @@ from taskloop.dash_board import BoardPorts, admission_of, build_board, column_of
 from taskloop.dash_model import Board, Ready, TaskDetail
 from taskloop.dash_task import TaskPorts, build_task
 from taskloop.evidence_files import EvidenceFiles
-from taskloop.hold_store import HoldRow
+from taskloop.land_status import LandState
+from taskloop.step import Step
 from taskloop.step_render import human
 from taskloop.task_status import Admission, Status, TaskStatus, Wait, blocker, in_flight, skipped, task_status, words
 
 PASSED = AttemptResult("collected", "passed")
 VIEW = AttemptView("tasks", "tl-1", "plan", "a", "s1", "admitted", "running", AttemptResult("pending", "admitted"), False, "wait")
-HOLD = HoldRow("a", "a", "failed:needs_owner", 10.0, "not_ours", 11.0, 12.0, 13.0, None, 4, "tasks", "tl-1", "/tracker", "auto")
+HOLD = row(labels="not_ours")
 ABANDONED = replace(VIEW, next="start", entry="gone", release=ReleaseRow(D, 5.0, "unclaimed"))
 ASKED = Admission(frozenset({"tl-1"}), "auto")
 
@@ -31,8 +33,8 @@ ASKED = Admission(frozenset({"tl-1"}), "auto")
 @pytest.mark.parametrize(("view", "expected"), [
     (VIEW, TaskStatus(Status.RUNNING)),
     (replace(VIEW, step="check"), TaskStatus(Status.CHECKING)),
-    (replace(VIEW, next="verify"), TaskStatus(Status.SETTLING, "verify")),
-    (replace(VIEW, next="land", step="check"), TaskStatus(Status.WAITING_FOR_LAND)),
+    (replace(VIEW, next="commit"), TaskStatus(Status.SETTLING, "commit")),
+    (replace(VIEW, next="land", step="check"), TaskStatus(Status.WAITING_FOR_LAND, land=LandState.UNKNOWN)),
     (replace(VIEW, next="landed", step="check"), TaskStatus(Status.LANDED)),
     (replace(VIEW, next="hold", hold=HOLD), TaskStatus(Status.HELD, "failed:needs_owner")),
     (replace(VIEW, next="hold", hold_due="stuck:entry_lost"), TaskStatus(Status.HELD, "stuck:entry_lost")),
@@ -47,6 +49,21 @@ def test_each_view_has_one_status_with_its_stored_reason(view: AttemptView, expe
     assert words(expected)  # every status has plain words
 
 
+@pytest.mark.parametrize("step", [*Step, "check"])
+def test_members_and_text_agree_on_status_precedence_and_in_flight_membership(step: str) -> None:
+    view = replace(VIEW, step=step)
+    expected = TaskStatus(Status.CHECKING if step == "check" else Status.RUNNING)
+    assert task_status(view) == task_status(replace(view, step=str(step))) == expected
+    assert words(task_status(view)) == words(expected)
+    assert column_of(view) == ("checks" if step == "check" else str(step))
+    held = replace(view, next="on_hold", hold=HOLD)
+    assert task_status(held) == TaskStatus(Status.HELD, "failed:needs_owner")
+    queued = replace(ABANDONED, step=step)
+    assert task_status(queued, ASKED) == TaskStatus(Status.QUEUED, "start", Wait.READY)
+    assert in_flight((view,)) == {"tl-1"}
+    assert in_flight((held, queued)) == frozenset()
+
+
 def test_a_task_a_person_abandoned_is_queued_to_start_once_the_tracker_lists_it_under_the_label() -> None:
     assert task_status(ABANDONED, Admission(frozenset(), "auto")).status is Status.ABANDONED  # no approval label on it: stays abandoned
     assert task_status(ABANDONED, ASKED) == TaskStatus(Status.QUEUED, "start", Wait.READY)
@@ -55,10 +72,11 @@ def test_a_task_a_person_abandoned_is_queued_to_start_once_the_tracker_lists_it_
 
 
 def test_a_hold_abandon_is_taken_again_only_by_the_answer_to_its_label() -> None:
-    held = replace(ABANDONED, next="on_hold", hold=replace(HOLD, labels="moved", label="auto"), release=ReleaseRow(D, 5.0, "unclaimed"))
+    held = replace(ABANDONED, next="on_hold", hold=HOLD.model_copy(update={"labels": "moved", "label": "auto"}),
+                   release=ReleaseRow(D, 5.0, "unclaimed"))
     assert task_status(held, ASKED).status is Status.QUEUED
     assert task_status(held, replace(ASKED, label="night")).status is Status.HELD  # another round label: not the person's answer
-    assert task_status(replace(held, hold=replace(HOLD, labels="not_ours")), ASKED).status is Status.HELD
+    assert task_status(replace(held, hold=HOLD.model_copy(update={"labels": "not_ours"})), ASKED).status is Status.HELD
 
 
 @pytest.mark.parametrize(("free", "reserve", "running", "bound", "wait"), [
@@ -97,7 +115,7 @@ def test_list_board_and_drawer_agree_on_a_task_a_person_abandoned(registered: sq
     reads = reads_of(registered)
     listed = list_attempts(reads)
     assert isinstance(listed, Listed) and listed.attempts[0].next == "start"
-    row = human("tl step list", listed, None)[1]
+    row = human("tl attempt list", listed, None)[1]
     assert "\tabandoned: " in row  # the list does not read the tracker: it cannot know the label
     unlabelled = build_board(BoardPorts(reads, files, Tracker()))
     assert isinstance(unlabelled, Board) and (unlabelled.tasks[0].column, unlabelled.tasks[0].status) == ("waiting", "abandoned")

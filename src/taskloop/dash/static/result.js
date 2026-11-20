@@ -60,25 +60,39 @@ function check(c, blocks, shown) {
   node.open = shown.opened.get(key) ?? !c.passed; // what the owner opened or closed stays, across the drawer's rebuilds
   node.addEventListener("toggle", () => shown.opened.set(key, node.open));
   const top = el("summary", "flex cursor-pointer items-baseline gap-3 text-xs");
-  top.append(el("span", "font-mono text-[12px]", c.name), el("span", `font-medium ${c.passed ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"}`, c.passed ? "passed" : "failed"));
+  const color = c.passed ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400";
+  top.append(el("span", "font-mono text-[12px]", c.name),
+    el("span", `font-medium ${color}`, c.passed ? STATE.succeeded.label : STATE.failed.label));
   if (blocks > 1) top.append(el("span", "text-slate-500", `block ${c.block}`));
   top.append(el("span", "ml-auto tabular-nums text-slate-500", fmtDur(c.duration_ms)));
   node.append(top, c.output == null ? el("p", "mt-2 text-xs text-slate-500", "Output unavailable: the log file is gone or cannot be read.") : pre(plain(c.output) || "(no output)", `mt-2 ${c.passed ? "" : "border-l-2 border-l-rose-500"}`));
+  const target = shown.target;
+  if (target?.key === shown.key && target.block === c.block && target.name === c.name) {
+    node.open = true;
+    shown.opened.set(key, true);
+    requestAnimationFrame(() => {
+      if (!node.isConnected) return;
+      node.scrollIntoView({ block: "nearest" });
+      top.focus();
+      shown.revealed?.(target);
+    });
+  }
   return node;
 }
 
 const MARK = {
-  passed: ["passed", "text-emerald-600 dark:text-emerald-400"],
-  failed: ["failed", "text-rose-600 dark:text-rose-400"],
+  passed: [STATE.succeeded.label, "text-emerald-600 dark:text-emerald-400"],
+  failed: [STATE.failed.label, "text-rose-600 dark:text-rose-400"],
   not_run: ["not reached", "text-slate-400 dark:text-slate-500"],
 };
 
-// The factory's verification of an agent attempt: what it checked, in its order, which check failed, the typed result and what the
+// The factory commit of an agent attempt: what it checked, in its order, which check failed, the typed result and what the
 // failed check listed (a path it will not commit, the leftovers beside it, ignored paths). Display only, from the stored facts.
-function verification(v) {
+function factoryCommit(v) {
   const box = el("div", "flex flex-col gap-5");
   const what = el("div");
-  what.append(label(`Checked after ${stepInfo(v.of_step).label}, try ${v.of} · the agent listed ${v.listed.length} ${v.listed.length === 1 ? "path" : "paths"}`));
+  what.append(label(`Factory commit of ${stepInfo(v.of_step).label}, attempt ${v.of}`
+    + ` · the agent listed ${v.listed.length} ${v.listed.length === 1 ? "path" : "paths"}`));
   const list = el("ol", "list-decimal pl-5 text-sm");
   for (const c of v.checks) {
     const li = el("li", "py-0.5");
@@ -102,7 +116,7 @@ export function result(a, body, shown) {
   const summary = el("div");
   summary.append(label("Conclusion"), callout(a.state === "failed" ? "border-rose-500" : a.state === "running" ? "border-sky-500" : "border-emerald-500", null, body.result.summary));
   box.append(summary);
-  if (body.result.verification) box.append(verification(body.result.verification));
+  if (body.result.factory_commit) box.append(factoryCommit(body.result.factory_commit));
   if (body.result.answer) box.append(answer(body.result.answer));
   if (body.result.checks.length) {
     const wrap = el("div");
@@ -131,7 +145,9 @@ export function prompt(a, body) {
   if (!added) return box.append(pre(body.input, "max-h-none")), box;
   const marked = new Set(body.added.flatMap(([from, to]) => Array.from({ length: to - from }, (_, k) => from + k)));
   const text = el("div", "whitespace-pre-wrap break-words rounded border border-slate-200 bg-slate-50 py-2 font-mono text-[11.5px] leading-relaxed dark:border-slate-800 dark:bg-slate-950/60");
-  body.input.split("\n").forEach((line, at) => text.append(el("div", marked.has(at) ? "border-l-2 border-l-emerald-500 bg-emerald-50 px-3 dark:bg-emerald-950/40" : "px-3 border-l-2 border-l-transparent", line || " ")));
+  body.input.split(/\r\n|[\n\r\v\f\x1c-\x1e\x85\u2028\u2029]/u).forEach((line, at) => text.append(el("div", marked.has(at)
+    ? "border-l-2 border-l-emerald-500 bg-emerald-50 px-3 dark:bg-emerald-950/40"
+    : "px-3 border-l-2 border-l-transparent", line || " ")));
   box.append(text);
   return box;
 }

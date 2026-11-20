@@ -11,16 +11,21 @@ from pathlib import Path
 
 from git_porcelain import GitReadFailure, GitTimeout, GitUnavailable, NotARepo
 
-from taskloop import cli_step
+from taskloop import cli_composition, cli_drain, cli_step, cli_workflow
 from taskloop.attempt_types import DEFAULT_GIT_READ_SECONDS
+from taskloop.cli_common import ConfigMissing, backlog, backlog_of, tracker_root, tracker_root_of
 from taskloop.exit_codes import ExitCode, profile_exit_code
 from taskloop.git_views import GitProfileFiles, GitViews
+from taskloop.inspection_guide import PROFILE, REPO, TASK
+from taskloop.machine_config import ConfigRefused, Flags
 from taskloop.printable import block, one_line
 from taskloop.profile import Refused, Resolved, Unavailable, resolve
 from taskloop.repo import UnsupportedCheckout
 from taskloop.step_guide import STEP_ONLY
 from taskloop.task import TaskInspectionError
 from taskloop.tracker_client import inspect_tracker_task, tracker_located
+
+SHOW = "show"
 
 
 def inspection_error_kind(error: GitUnavailable | UnsupportedCheckout | OSError) -> str:
@@ -42,8 +47,13 @@ def inspection_error_kind(error: GitUnavailable | UnsupportedCheckout | OSError)
 
 def show_task(arguments: argparse.Namespace) -> int:
     """Render the same scoped task inspection in human or structured form."""
+    loaded = cli_composition.load_config(arguments.config, Flags())
+    if isinstance(loaded, ConfigRefused):
+        return cli_step.refused(arguments, loaded)
     try:
-        result = inspect_tracker_task(arguments.task_id, arguments.backlog, arguments.tracker_root)
+        result = inspect_tracker_task(arguments.task_id, backlog_of(arguments, loaded), tracker_root_of(arguments, loaded))
+    except ConfigMissing as missing:
+        return cli_step.refused(arguments, missing.refused)
     except TaskInspectionError as error:
         if arguments.json_output:
             data: dict[str, object] = {"kind": error.kind, "message": str(error)}
@@ -53,7 +63,7 @@ def show_task(arguments: argparse.Namespace) -> int:
                 data["backend_kind"] = error.backend_kind
             print(json.dumps({"error": data}), file=sys.stderr)
         else:
-            print(f"tl task show: {error}", file=sys.stderr)
+            print(f"tl task show: {block(str(error))}\n{TASK[error.kind]}", file=sys.stderr)
         return ExitCode.REFUSED
     if arguments.json_output:
         shown = {key: value for key, value in asdict(result).items() if key not in {"status", "assignee"}}  # its keys as they were
@@ -100,7 +110,7 @@ def show_profile(arguments: argparse.Namespace) -> int:
             text = f"tl profile show: refused {reason} ({side}{', ' + key if key else ''}): {detail}"
         case Unavailable(detail=detail):
             error, text = {"kind": "unavailable", "message": detail}, f"tl profile show: unavailable: {detail}"
-    print(json.dumps({"error": error}) if arguments.json_output else text, file=sys.stderr)
+    print(json.dumps({"error": error}) if arguments.json_output else f"{block(text)}\n{PROFILE[error['kind']]}", file=sys.stderr)
     return profile_exit_code(found)
 
 
@@ -116,57 +126,74 @@ def main(argv: Sequence[str] | None = None) -> int:
     tracker_located()  # before any bd call: the given tracker root decides the tracker, never an inherited BEADS_DIR
     parser = argparse.ArgumentParser(
         prog="tl",
-        description=f"Task-loop successor foundation. Step commands ({STEP_ONLY}).",
-        epilog="Exit 0: success; 1: refusal or task/repo inspection error; 2: invalid syntax; "
+        description=("Task loop runs agent work on tracker tasks in managed slots and lands the checked results. First run: "
+                     "`tl config show`, `tl slot adopt CHECKOUT`, `tl profile show`, then `tl rounds start`. "
+                     "Command groups: config, slot, repo, profile, workflow, task, step, attempt, land, rounds, drain, version. "
+                     f"{STEP_ONLY}"),
+        epilog="Exit 0: success; 1: refusal or task/repo showion error; 2: invalid syntax; "
                "3: no reliable result (profile unavailable or step unknown), safe to retry; "
-               "130: abrupt rounds stop or interrupted land.",
+               "130: abrupt rounds stop, interrupted land or interrupted drain.",
         allow_abbrev=False,
     )
     parser.add_argument("--config", metavar="FILE", help="Machine config file (default ~/.config/task-loop/config.toml)")
     commands = parser.add_subparsers(dest="command")
-    repo = commands.add_parser("repo", help="Inspect a local repository", allow_abbrev=False)
+    repo = commands.add_parser("repo", help="Inspect a local repository", description="Inspect a local repository (read-only).",
+                               allow_abbrev=False)
     operations = repo.add_subparsers(dest="operation", required=True)
-    inspect = operations.add_parser("inspect", help="Inspect an explicit checkout root (readonly)", allow_abbrev=False)
-    inspect.add_argument("path", metavar="PATH", help="Explicit checkout root; subdirectories, files and bare repositories are unsupported")
-    inspect.add_argument("--json", action="store_true", dest="json_output", help="Print JSON data; refusals are JSON on stderr")
+    repo_show = operations.add_parser(SHOW, help="Show an explicit checkout root (readonly)", allow_abbrev=False,
+                                    description="Print a checkout's repository identity: id, common directory, checkout path, origin. "
+                                    "Reads Git only; writes nothing.")
+    repo_show.add_argument("path", metavar="PATH", help="Explicit checkout root; subdirectories, files, bare repositories unsupported")
+    repo_show.add_argument("--json", action="store_true", dest="json_output", help="Print JSON data; refusals are JSON on stderr")
     task = commands.add_parser("task", help="Read a task in an explicitly configured backlog", allow_abbrev=False)
     task_operations = task.add_subparsers(dest="operation", required=True)
-    show = task_operations.add_parser("show", help="Inspect a task without modifying the tracker", allow_abbrev=False)
+    show = task_operations.add_parser(SHOW, help="Inspect a task as the tracker holds it, without modifying it", allow_abbrev=False,
+                                      description="Print a task as the tracker holds it: title, requirements, acceptance, "
+                                      "dependencies. Reads the tracker only; writes nothing (`tl attempt show` is the factory's read).")
     show.add_argument("task_id", metavar="TASK_ID")
-    show.add_argument("--backlog", required=True, help="Explicit logical backlog key; no identity is inferred")
-    show.add_argument("--tracker-root", required=True, help="Explicit directory for the configured tracker")
+    backlog(show)
+    tracker_root(show)
     show.add_argument("--json", action="store_true", dest="json_output", help="Print JSON data; refusals are JSON on stderr")
     profile = commands.add_parser("profile", help="The repository profile .task-loop.json, read from Git", allow_abbrev=False)
     profile_show = profile.add_subparsers(dest="operation", required=True).add_parser(
-        "show", help="Print the resolved profile: setup and checks at --at, required and target from --target (read-only)",
-        allow_abbrev=False)
+        SHOW, help="Print the resolved profile: setup and checks at --at, required and target from --target (read-only)",
+        allow_abbrev=False,
+        description="Print the repository profile `.task-loop.json` as the factory reads it from Git: setup and checks at --at, "
+        "required, target and land from --target. Reads Git only; writes nothing.")
     profile_show.add_argument("--checkout", default=".", metavar="PATH", help="The repository checkout (default: .)")
     profile_show.add_argument("--at", default="HEAD", metavar="REV", help="The commit under test (default: HEAD)")
     profile_show.add_argument("--target", default="main", metavar="REF", help="The target ref holding required and target "
                               "(default: main)")
     profile_show.add_argument("--json", action="store_true", dest="json_output", help="Print JSON data; refusals are JSON on stderr")
+    cli_workflow.register(commands)
     cli_step.register(commands)
-    commands.add_parser("version", help="Print the running package version", allow_abbrev=False).add_argument(
-        "--json", action="store_true", dest="json_output")
+    cli_drain.register(commands)
+    commands.add_parser("version", help="Print the running package version", allow_abbrev=False,
+                        description="Print the version of the installed package this command runs.").add_argument(
+        "--json", action="store_true", dest="json_output", help="Print JSON data")
     arguments = parser.parse_args(argv)
     if arguments.command is None:
         parser.print_help()
         return ExitCode.SUCCESS
+    if arguments.command == "drain":
+        return cli_drain.run(arguments)
+    if arguments.command == "workflow":
+        return cli_workflow.run(arguments)
     if arguments.command in cli_step.COMMANDS:
         return cli_step.run(arguments)
-    handlers = {"repo": inspect_repo, "task": show_task, "profile": show_profile, "version": show_version}
+    handlers = {"repo": show_repo, "task": show_task, "profile": show_profile, "version": show_version}
     return handlers[arguments.command](arguments)
 
 
-def inspect_repo(arguments: argparse.Namespace) -> int:
-    """`tl repo inspect PATH`: the checkout's repository identity (read-only)."""
+def show_repo(arguments: argparse.Namespace) -> int:
+    """`tl repo show PATH`: the checkout's repository identity (read-only)."""
     try:
         result = GitViews(DEFAULT_GIT_READ_SECONDS).inspect_checkout(arguments.path)
     except (GitUnavailable, UnsupportedCheckout, OSError) as error:
         if arguments.json_output:
             print(json.dumps({"error": {"kind": inspection_error_kind(error), "message": str(error)}}), file=sys.stderr)
         else:
-            print(f"tl repo inspect: {error}", file=sys.stderr)
+            print(f"tl repo show: {block(str(error))}\n{REPO[inspection_error_kind(error)]}", file=sys.stderr)
         return ExitCode.REFUSED
     data = {
         "repo_id": result.repo_id,

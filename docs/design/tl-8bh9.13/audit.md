@@ -1,5 +1,7 @@
 # Untouched files and behaviors without a complete disposition
 
+Status: **evidence**. Dated source review; recommendations remain proposals unless explicitly accepted below.
+
 Task: tl-8bh9.13. Evidence checked 2026-11-09. Recommendations remain proposed unless an existing owner decision
 is explicitly identified. This is a gap analysis, not successor feature completion or a cutover receipt.
 

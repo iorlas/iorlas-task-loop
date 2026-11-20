@@ -1,0 +1,77 @@
+# DRAFT v3 "edges first": the workflow is a small graph. Steps are minimal nodes; every move between steps, including every
+# loop-back, is an explicit [[edge]] with a typed trigger and handover. This is the owner's "declare the loop" idea made
+# literal. Prompt prose is abbreviated (`…`) and referenced by name as in v2. Not loadable; a design sketch.
+
+[workflow]
+name = "default"
+start = "plan"
+max_attempts_per_step = 3          # ONE global cap, so every cycle terminates (parser rejects a cycle without it)
+max_attempts_per_task = 9          # needed once an edge can go back to plan (resets per-step counters)
+
+[step.plan]
+agent = "default"
+root = "docs/design/{task_id}/"
+prompt = ["final_answer_warning", "depth_assessment", "task", "input_context", "plan_reading_order", "plan_template", "size_gate"]
+[step.implement]
+agent = "default"
+root = ""
+excluded = [".beads/", ".task-loop/"]
+prompt = ["task", "input_context", "implement_reassess", "implement_environment", "plan_handoff"]
+[step.check]
+runs = "profile.required"          # reference only: checks are defined in the profile, never here
+
+# ------------------------------------------------------------- forward edges (today's `advance`)
+[[edge]]
+from = "plan"
+on = "verified"                    # typed: verdict verified + published
+to = "implement"
+handover = []                      # the plan travels by Git (docs/design/<id>/plan.md), not by input text
+
+[[edge]]
+from = "implement"
+on = "verified"
+to = "check"
+handover = []
+
+[[edge]]
+from = "check"
+on = "passed"
+to = "done"                        # `land` is outside the step graph (a person, or `land: auto` in a round)
+
+# ------------------------------------------------------------- backward / sideways edges (today's `repeat`)
+[[edge]]
+from = "plan"
+on = "unsettled"                   # uncommitted | unsafe | ignored leftovers
+to = "plan"
+session = "fresh"                  # resume is Codex-only today and deferred
+handover = ["slot_status"]
+
+[[edge]]
+from = "implement"
+on = "unsettled"
+to = "implement"
+session = "fresh"
+handover = ["slot_status"]
+
+[[edge]]
+from = "check"
+on = "required_check_failed"       # nonzero exit only; timed_out/dirty/lingering/interrupted are never routable
+to = "implement"
+session = "fresh"
+handover = ["check_name", "check_argv", "check_result", "check_output_tail"]
+
+[[edge]]
+from = "check"
+on = "main_moved"
+to = "check"                       # infrastructure; engine-fixed today, listed here only to show the whole graph
+cap = 3
+
+# ------------------------------------------------------------- hold edges (explicit, so absence is not silent)
+[[edge]]
+from = "*"
+on = ["needs_owner", "incomplete", "cap_exhausted", "rejected"]
+to = "hold"
+# these cannot be routed elsewhere; the parser refuses `to != hold` for them. Listing them is documentation.
+
+# Open point shown by this draft: `check -> plan` would need `handover = ["check_output_tail"]` plus a rule for the implement
+# commits already on the branch, and a per-task cap. Not written here because the engine has no such shape yet.

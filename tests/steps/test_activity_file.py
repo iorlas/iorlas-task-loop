@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 from any_agent import events
-from any_agent.activity import encode
+from any_agent.activity import Activity, encode
 
 from taskloop import activity_file, evidence_files
 from taskloop.attempt_types import AttemptKey
@@ -66,6 +66,7 @@ def test_a_cursor_of_another_file_or_past_its_end_resets_to_the_tail(tmp_path: P
 def test_an_attempt_without_events_is_unavailable_not_empty_and_nothing_is_created(tmp_path: Path) -> None:
     files = EvidenceFiles(tmp_path)
     assert not files.activity_tail(KEY, 10).available and not files.activity_after(KEY, "1:0", 10).available
+    assert files.activity_complete(KEY) == activity_file.GONE
     assert not (tmp_path / "attempts").exists()
 
 
@@ -79,6 +80,7 @@ def test_a_half_written_line_waits_and_other_lines_are_skipped(tmp_path: Path) -
         stream.write(b"[truncated]\n" + half[:10].encode())
     again = files.activity_tail(KEY, 10)
     assert [a.text for a in again.events] == ["whole"]
+    assert files.activity_complete(KEY) == again
     assert again.cursor is not None and again.cursor.endswith(f":{path.stat().st_size - 10}")  # it stops before the half line
     with path.open("ab") as stream:
         stream.write(half[10:].encode() + b"\n")
@@ -119,6 +121,7 @@ def test_a_line_that_cannot_be_read_is_skipped_not_raised(tmp_path: Path) -> Non
     with files.events_path(KEY).open("ab") as stream:
         stream.write(b'{"k":"message","s":"finished","at":1' + b"0" * 400 + b',"t":"huge"}\n\xff\xfe{\n')
     assert [a.text for a in files.activity_tail(KEY, 10).events] == ["good"]
+    assert [a.text for a in files.activity_complete(KEY).events] == ["good"]
 
 
 def test_one_line_longer_than_a_read_is_skipped_and_following_goes_on(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -145,11 +148,45 @@ def test_the_file_stops_at_its_cap_across_a_resumed_run(tmp_path: Path, monkeypa
     assert first <= 600 + len(evidence_files.TRUNCATED)
     assert files.events_path(KEY).stat().st_size <= first + len(evidence_files.TRUNCATED)
     assert files.activity_tail(KEY, 100).events[0].text == "message 0"
+    assert files.activity_complete(KEY).events == files.activity_tail(KEY, 100).events
 
 
 def test_a_resumed_run_that_reuses_a_command_id_does_not_replace_the_earlier_line(tmp_path: Path) -> None:
     files = EvidenceFiles(tmp_path)
     run(files, events.Cmd(id="item_1", text="ls"), events.CmdEnd(id="item_1", text="ls", exit=0))
     run(files, events.Cmd(id="item_1", text="pwd"), events.CmdEnd(id="item_1", text="pwd", exit=0), start=2000.0)
-    page = files.activity_tail(KEY, 10)
+    page = files.activity_complete(KEY)
     assert [a.text for a in page.events] == ["ls", "pwd"] and len({a.id for a in page.events}) == 2
+
+
+def test_complete_history_keeps_long_messages_and_collapses_distant_updates_in_first_occurrence_order(tmp_path: Path) -> None:
+    files = EvidenceFiles(tmp_path)
+    long = "retained\n" * (activity_file.READ_CAP // 8 + 1)
+    messages = [f"message {n}: " + "x" * 1500 for n in range(200)]
+    sink = run(files, events.Cmd(id="c", text="make"), *(events.Msg(text=text) for text in messages))
+    # The reader preserves long retained records even though the current producer caps its message text.
+    log = files.open_events(KEY)
+    log.write((encode(Activity(kind="message", state="finished", at=1500, text=long)) + "\n").encode())
+    log.close()
+    sink.feed(events.CmdEnd(id="c", text="make", exit=2))
+    sink.end("done")
+    page = files.activity_complete(KEY)
+    assert page.available and not page.replaced
+    assert [(a.text, a.state, a.exit_code) for a in page.events[:1]] == [("make", "finished", 2)]
+    assert [a.text for a in page.events[1:]] == [*messages, long]
+    assert page.events[0].duration_ms is not None
+    assert page.cursor.endswith(f":{files.events_path(KEY).stat().st_size}")
+    assert files.activity_after(KEY, page.cursor, 20).events == ()
+    live = files.activity_tail(KEY, 20)
+    assert len(live.events) < len(page.events) and all(a.text != long for a in live.events)
+
+
+def test_a_complete_snapshot_stops_at_the_supplied_byte_bound(tmp_path: Path) -> None:
+    files = EvidenceFiles(tmp_path)
+    sink = run(files, events.Msg(text="retained"))
+    path = files.events_path(KEY)
+    size = path.stat().st_size
+    sink.feed(events.Msg(text="outside the snapshot"))
+    page = activity_file.complete(path, size + 10)
+    assert [a.text for a in page.events] == ["retained"] and page.cursor.endswith(f":{size}")
+    assert activity_file.complete(tmp_path, 100) == activity_file.GONE

@@ -1,0 +1,9 @@
+{
+  "prepared_commit": "ca861999263bd031d4f59007c60cdcf726a50fea",
+  "cited_paths": [
+    "src/taskloop",
+    "tests/steps",
+    "tests/cli",
+    "tests/rules"
+  ]
+}

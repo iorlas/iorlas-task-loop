@@ -21,6 +21,7 @@ from taskloop.attempt_types import AttemptKey, EntryIdentity, Seen
 from taskloop.check_release import CandidateTarget, ChecksRelease
 from taskloop.check_store import ChecksAdmitted, CheckStore, insert
 from taskloop.factory_schema import SCHEMA
+from taskloop.ids import NativeIds
 from taskloop.land_store import LandStore
 from taskloop.setup_store import ProcessSeen, SetupStore
 from taskloop.slot_lock import custody, lock_path
@@ -76,11 +77,13 @@ class Bench:
         return True
 
     def release(self, abandon: bool = False, me: EntryIdentity | None = None, key: AttemptKey = CHECKS) -> ReleaseResult:
-        released = ChecksRelease(self.store, self.views, self.files, self.observe, self.hold, lambda: 30, self.setup_seen, self.scratch)
+        released = ChecksRelease(self.store, self.views, self.files, self.observe, self.hold, lambda: 30,
+            self.setup_seen, self.scratch, ids=NativeIds())
         return released.release(key, abandon, me)
 
     def candidate(self, abandon: bool = False, me: EntryIdentity | None = None) -> ReleaseResult:
-        released = ChecksRelease(self.store, self.views, self.files, self.observe, self.hold, lambda: 30, self.setup_seen, self.scratch)
+        released = ChecksRelease(self.store, self.views, self.files, self.observe, self.hold, lambda: 30,
+            self.setup_seen, self.scratch, ids=NativeIds())
         return released.release_of(CandidateTarget(LandStore(lambda: self.con)), CANDIDATE, abandon, me)
 
     def implement(self) -> ReleaseResult:
@@ -93,7 +96,7 @@ class Bench:
             raise AssertionError("an implement attempt released before needs no lock")
 
         released = SlotRelease(AttemptStore(lambda: self.con), self.views, self.files, self.observe, lambda _w: True, nowhere, unclaim,
-                               lambda: 40, self.setup_seen, self.scratch)
+                               lambda: 40, self.setup_seen, self.scratch, ids=NativeIds())
         return released.release(IMPLEMENT, True)
 
     def at_x(self) -> None:
@@ -277,11 +280,12 @@ def test_an_abandon_of_released_checks_with_a_pushable_or_delivered_land_candida
     bench.concluded()
     assert release_word(bench.release()) == "released"
     bench.con.execute("""INSERT INTO land_candidate (candidate_id,dispatch_token,generation,checks_attempt_id,number,origin_commit,
-    commit_sha,tree_same,required,validation,validated_at) VALUES ('candidate','candidate-token',1,'checks',1,?,?,1,'[]','same_tree',3)""",
+    commit_sha,tree_same,required,validation,validated_at,admitted_at)
+    VALUES ('candidate','candidate-token',1,'checks',1,?,?,1,'[]','same_tree',3,2)""",
                       (bench.d, bench.x))
     bench.con.execute(f"UPDATE land_candidate SET validated_at=3{delivery}")
     found = bench.release(abandon=True)
-    assert isinstance(found, NotReleased) and found.word == word and "tl step land" in found.detail
+    assert isinstance(found, NotReleased) and found.word == word and "land the task again" in found.detail
     assert bench.stored() == ([], (30.0, bench.d, 0))
 
 
@@ -376,7 +380,7 @@ def test_an_abandon_of_a_pushable_or_delivered_candidate_holding_its_slot_is_ref
     if delivered:
         candidates.record_delivery(CANDIDATE, lands.x, 25)
     found = lands.candidate(abandon=True)
-    assert isinstance(found, NotReleased) and found.word == word and "tl step land" in found.detail
+    assert isinstance(found, NotReleased) and found.word == word and "land the task again" in found.detail
     assert candidate_columns(lands) == CANDIDATE_HELD and lands.holds == 0 and lands.head() == lands.x
     assert lands.candidate() == Released("s1", lands.d, True, "kept", False)
 
@@ -441,6 +445,6 @@ def test_the_abandon_of_a_released_pushable_or_delivered_candidate_is_refused_an
     assert release_word(lands.candidate(abandon=True)) == "refused:landing"
     candidates.record_delivery(CANDIDATE, lands.x, 25)
     found = lands.candidate(abandon=True)
-    assert isinstance(found, NotReleased) and found.word == "refused:landed" and "tl step land" in found.detail
+    assert isinstance(found, NotReleased) and found.word == "refused:landed" and "land the task again" in found.detail
     assert lands.candidate() == AlreadyReleased("s1", "kept", False)
     assert candidate_columns(lands) == ([], (30.0, lands.d, None))

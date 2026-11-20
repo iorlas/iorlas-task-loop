@@ -1,5 +1,6 @@
 """Admission through real SQLite, real files, the owning Git and task-read fakes, and a local claim double."""
 
+import hashlib
 import json
 import sqlite3
 from collections.abc import Callable, Generator
@@ -8,30 +9,41 @@ from dataclasses import replace
 from pathlib import Path
 
 import pytest
+from admission_boundaries import guard_git, outside_transaction
 from any_agent import RunOutcome, Summary
 from any_agent.procs import Worker
 from any_agent.testing import FakeRun
 from beads_client import Bd, BdError, Bead
 from beads_client.testing import FakeTaskReadClient, Script
-from doubles import FakeSlotFiles, PinnedViews
+from doubles import ENGINE, WORKFLOW, WORKFLOW_BYTES, WORKFLOW_FILES, WORKFLOW_PATH, FakeSlotFiles, FixedIds, PinnedViews
 from git_porcelain import GitTimeout, NotARepo, Repo
 from git_porcelain.testing import FakeRemote, FakeRepo
+from plan_fixtures import PLAN_TEXT
 from sqlite_store import Store, begin_immediate
 
 from taskloop.admit import AdmitRefused, AdmitRequest, AdmitResult, Admitted, AdmitUnavailable, AttemptAdmission, checkout_repo, read_task
+from taskloop.agents.launch import AgentLaunch
+from taskloop.agents.settings import AgentSetting, ClaudePolicy, CodexPolicy, OpenCodePolicy, Overrides, StepSettings
 from taskloop.attempt import Attempts
 from taskloop.attempt_reads import StoreRefused
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import DEFAULT_GIT_READ_SECONDS, AttemptKey, Checkouts, FileRef, SlotFiles
-from taskloop.claim_lease import BD_TIMEOUT_S
+from taskloop.claim import ClaimWord
+from taskloop.claim_lease import BD_TIMEOUT_S, Beat
 from taskloop.composition import adopt_slots, open_admission, real_slots
+from taskloop.discussion import empty
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.factory_schema import SCHEMA
 from taskloop.git_views import GitViews
 from taskloop.harness_choice import HarnessKind, Provider
+from taskloop.ids import NativeIds
+from taskloop.new_task import NewTask
+from taskloop.plan_reuse import PlanMetadata
 from taskloop.slot_lock import custody
 from taskloop.slot_release import NotReleased, Released, SlotRelease
 from taskloop.slots import SlotGit, adopt, folder_name
+from taskloop.slots_store import SlotsStore
+from taskloop.step import Step
 from taskloop.task import TaskBinding, TaskInspection, TaskInspectionError, TaskScope
 from taskloop.tracker import inspect_task
 from taskloop.tracker_client import BD_DISCOVERY, tracker_claims, tracker_located
@@ -40,6 +52,10 @@ WORKER = Worker(pid=42, pgid=42, start="native-start", boot="boot")
 ENTRY = (7, "entry-start", "boot")
 P = "docs/design/tl-1/plan.md"
 PLAN = {"disposition": "planned", "plan_path": P, "paths": [P], "message": "Plan tl-1", "explanation": "Plan written"}
+PLAN_WARNING = (
+    "Your final message must be the JSON answer only; write plan.md before you answer `planned`; "
+    "a message without a tool call ends the step."
+)
 TASKS = FakeTaskReadClient(
     [
         Bead("tl-1", title="Plan it", description="Do the thing", acceptance_criteria="It is done"),
@@ -69,12 +85,17 @@ class Tracker:
         self.con, self.files, self.claimed, self.released = con, SpyFiles(artifacts), claim, unclaim
         self.calls: list[str] = []
         self.during: Callable[[], object] = lambda: None
+        self.step = Step.PLAN  # the step whose input the claim finds written
 
     def claim(self, tracker_root: str, task_id: str) -> bool:
         assert not self.con.in_transaction, "the claim must be outside any transaction"
+        assert self.con.execute("SELECT count(*) FROM drain_action WHERE state='pending'").fetchone() == (1,)
         assert len(self.files.inputs) == 1 + self.calls.count("claim:" + task_id), "this admission wrote its input first"
         bead = TASKS.show(task_id)
-        assert bead is not None and self.files.read(self.files.inputs[-1]).startswith(bead.title)
+        assert bead is not None
+        prompt = self.files.read(self.files.inputs[-1])
+        assert prompt.startswith(WORKFLOW.table(self.step).prompt[0].text or "?")
+        assert self.step is not Step.PLAN or prompt.index(bead.title) < prompt.index(PLAN_WARNING)
         self.calls.append("claim:" + task_id)
         self.during()
         if isinstance(self.claimed, BdError):
@@ -82,6 +103,7 @@ class Tracker:
         return self.claimed
 
     def unclaim(self, tracker_root: str, task_id: str) -> bool:
+        assert not self.con.in_transaction, "returning the claim must be outside any transaction"
         self.calls.append("unclaim:" + task_id)
         if isinstance(self.released, BdError):
             raise self.released
@@ -96,12 +118,20 @@ def slots(con: sqlite3.Connection, repo: FakeRepo, root: Path, count: int) -> No
     """A person's `git worktree add --detach` at each derived path, then adoption."""
     for number in range(1, count + 1):
         repo.add_worktree(root.resolve() / folder_name(repo.identity()) / f"s{number}", "HEAD")
-    adopt(lambda: con, begin_immediate, repo, SlotGit(PinnedViews(repo), FakeSlotFiles(repo)), root, count)
+    adopt(SlotsStore(lambda: con, begin_immediate), repo, SlotGit(PinnedViews(repo), FakeSlotFiles(repo)), root, count)
 
 
 def request(tmp_path: Path, repo: FakeRepo, *, deadline: float = 100, model: str = "chosen", task_id: str = "tl-1",
             label: str | None = None) -> AdmitRequest:
-    return AdmitRequest(task_id, "tasks", str(tmp_path), repo.path, model, "high", "workspace-write", deadline, label)
+    return AdmitRequest(
+        task_id,
+        "tasks",
+        str(tmp_path),
+        repo.path,
+        StepSettings(plan=AgentSetting(model=model, effort="high", access=CodexPolicy(sandbox="workspace-write"))),
+        deadline,
+        label,
+    )
 
 
 def time() -> float:
@@ -115,9 +145,29 @@ def unlocked(_slot_path: str) -> bool:
 
 def admission(con: sqlite3.Connection, tmp_path: Path, tracker: Tracker, repo: FakeRepo) -> AttemptAdmission:
     return AttemptAdmission(
-        lambda: con, begin_immediate, tracker.files, tasks, PinnedViews(repo), tracker.claim, tracker.unclaim, time, unlocked,
+        lambda: con, begin_immediate, tracker.files, outside_transaction(con, tasks), PinnedViews(repo),
+        tracker.claim, tracker.unclaim, time, unlocked,
         FakeSlotFiles(repo),
-    )
+        ids=NativeIds(), discussion=outside_transaction(con, empty), engine=ENGINE)
+
+
+@pytest.fixture(autouse=True)
+def external_ports(factory: sqlite3.Connection, monkeypatch: pytest.MonkeyPatch) -> None:
+    guard_git(factory, monkeypatch)
+
+
+@pytest.mark.parametrize("method", ["claim", "unclaim"])
+def test_tracker_guard_rejects_a_write_transaction_before_effects(factory: sqlite3.Connection, tmp_path: Path, method: str) -> None:
+    tracker = Tracker(factory, tmp_path)
+    call = tracker.claim if method == "claim" else tracker.unclaim
+    with begin_immediate(factory), pytest.raises(AssertionError, match="outside any transaction"):
+        call("tasks", "tl-1")
+    assert tracker.calls == []
+
+
+def test_git_read_guard_rejects_a_write_transaction(factory: sqlite3.Connection, repo: FakeRepo) -> None:
+    with begin_immediate(factory), pytest.raises(AssertionError, match="outside the write transaction"):
+        repo.refs(["refs/heads/"])
 
 
 def admit(con: sqlite3.Connection, tmp_path: Path, repo: FakeRepo, tracker: Tracker | None = None) -> AdmitResult:
@@ -138,24 +188,32 @@ def breaking(error: BaseException) -> Callable[[sqlite3.Connection], AbstractCon
 
 def attempts(con: sqlite3.Connection, tmp_path: Path, run: FakeRun, checkouts: Checkouts, files: SlotFiles) -> Attempts:
     artifacts = EvidenceFiles(tmp_path / "artifacts")
-    return Attempts(AttemptStore(lambda: con), artifacts, lambda: ("/bin/codex", {}), run, lambda: 10, checkouts, files)
+    return Attempts(
+        AttemptStore(lambda: con), artifacts, AgentLaunch(lambda _harness: ("/bin/codex", {}),
+            ids=NativeIds()), run, lambda: 10, checkouts, files
+    )
 
 
 def rows(con: sqlite3.Connection) -> tuple[int, int]:
     return con.execute("SELECT (SELECT count(*) FROM reservation),(SELECT count(*) FROM attempt)").fetchone()
 
 
+@pytest.mark.parametrize("limit", [None, 100000])
 def test_admitted_rows_are_what_the_body_loads_and_stay_unregistered(
-    factory: sqlite3.Connection, repo: FakeRepo, root: Path, tmp_path: Path, checkouts: Checkouts, slot_files: SlotFiles
+    factory: sqlite3.Connection, repo: FakeRepo, root: Path, tmp_path: Path, checkouts: Checkouts, slot_files: SlotFiles,
+    limit: int | None,
 ) -> None:
     slots(factory, repo, root, 2)
-    result = admit(factory, tmp_path, repo)
+    tracker = Tracker(factory, tmp_path / "artifacts")
+    chosen = replace(request(tmp_path, repo), settings=StepSettings(plan=AgentSetting(model="chosen", compaction_token_limit=limit)))
+    result = admission(factory, tmp_path, tracker, repo).admit(chosen)
     assert isinstance(result, Admitted) and result.slot == "s1" and result.key.reservation_generation == 1
     key, repo_id = result.key, repo.identity().key
     assert factory.execute("SELECT * FROM reservation").fetchall() == [("s1", repo_id, 1, key.attempt_id)]
     columns = "backlog,task_id,repo_id,slot,model,phase,entry_pid,entry_start,entry_boot"
     stored = factory.execute(f"SELECT {columns} FROM attempt").fetchone()
     assert stored == ("tasks", "tl-1", repo_id, "s1", "chosen", "admitted", None, None, None)
+    assert factory.execute("SELECT compaction_token_limit FROM attempt").fetchone() == (limit,)
     assert AttemptStore(lambda: factory).tracker_root(key) == str(tmp_path.resolve())  # the claimed root, renewed by the entry
     with pytest.raises(StoreRefused, match="unregistered_entry"):
         AttemptStore(lambda: factory).load(key)
@@ -177,6 +235,90 @@ def test_the_admission_stores_the_label_the_task_is_ingested_under(
     assert factory.execute("SELECT attempt_id,label FROM attempt").fetchall() == [(result.key.attempt_id, label)]
 
 
+def test_the_admission_stores_the_workflow_bytes_once_and_names_them_and_their_commit(
+    factory: sqlite3.Connection, repo: FakeRepo, root: Path, tmp_path: Path
+) -> None:
+    slots(factory, repo, root, 1)
+    tracker = Tracker(factory, tmp_path / "artifacts")
+    assert isinstance(admission(factory, tmp_path, tracker, repo).admit(request(tmp_path, repo)), Admitted)
+    digest, sha = factory.execute("SELECT workflow_digest, workflow_sha FROM attempt").fetchone()
+    assert digest == hashlib.sha256(WORKFLOW_BYTES).hexdigest() and len(sha) in (40, 64)
+    assert factory.execute("SELECT digest, content FROM workflow_file").fetchall() == [(digest, WORKFLOW_BYTES)]
+
+
+def test_a_named_workflow_is_the_file_read_at_the_source_commit_and_pinned(
+    factory: sqlite3.Connection, root: Path, tmp_path: Path
+) -> None:
+    variant = WORKFLOW_BYTES.replace(b"AGENTS.md is already in context", b"VARIANT PROMPT")
+    remote = FakeRemote("https://example.invalid/variant.git")
+    remote.advance("main", {"README": "one", ".task-loop.json": "{}", **WORKFLOW_FILES,
+                            ".task-loop/workflows/variant.toml": variant.decode()})
+    repo = FakeRepo.clone(remote, tmp_path / "variant")
+    slots(factory, repo, root, 1)
+    wanted = replace(request(tmp_path, repo), new=NewTask(workflow="variant"))
+    assert isinstance(admission(factory, tmp_path, Tracker(factory, tmp_path / "artifacts"), repo).admit(wanted), Admitted)
+    stored = factory.execute("SELECT workflow_digest FROM attempt").fetchone()[0]
+    assert stored == hashlib.sha256(variant).hexdigest()
+
+
+def test_the_workflow_agent_keys_set_the_stored_choice_and_a_flag_still_wins(
+    factory: sqlite3.Connection, root: Path, tmp_path: Path
+) -> None:
+    agent = '\n[step.plan.agent]\nmodel = "wf-model"\neffort = "low"\ncompaction_token_limit = 5000\n'
+    remote = FakeRemote("https://example.invalid/agent.git")
+    remote.advance("main", {"README": "one", ".task-loop.json": "{}", **WORKFLOW_FILES,
+                            WORKFLOW_PATH: WORKFLOW_BYTES.decode() + agent})
+    repo = FakeRepo.clone(remote, tmp_path / "agent")
+    slots(factory, repo, root, 1)
+    wanted = replace(request(tmp_path, repo), overrides=Overrides(effort="max"))
+    assert isinstance(admission(factory, tmp_path, Tracker(factory, tmp_path / "artifacts"), repo).admit(wanted), Admitted)
+    assert factory.execute("SELECT model,effort,compaction_token_limit FROM attempt").fetchall() == [("wf-model", "max", 5000)]
+
+
+def committed_plan(tmp_path: Path, *, valid: bool = True) -> FakeRepo:
+    """A repository whose origin `main` commits a plan for `tl-1` and its metadata (cited path `README`), none of it in the database."""
+    remote = FakeRemote("https://example.invalid/plan.git")
+    prepared = remote.advance("main", {"README": "one", ".task-loop.json": "{}", **WORKFLOW_FILES})
+    files = {"docs/design/tl-1/plan.md": PLAN_TEXT,
+             "docs/design/tl-1/plan-metadata.json": PlanMetadata(prepared_commit=prepared, cited_paths=("README",)).model_dump_json()}
+    remote.advance("main", files if valid else {"docs/design/tl-1/plan.md": PLAN_TEXT})
+    return FakeRepo.clone(remote, tmp_path / "planned")
+
+
+def test_starting_at_implement_admits_it_from_the_committed_plan_with_no_database_plan(
+    factory: sqlite3.Connection, root: Path, tmp_path: Path
+) -> None:
+    repo = committed_plan(tmp_path)
+    slots(factory, repo, root, 1)
+    wanted = replace(request(tmp_path, repo), new=NewTask(start=Step.IMPLEMENT))
+    tracker = Tracker(factory, tmp_path / "artifacts")
+    tracker.step = Step.IMPLEMENT
+    assert isinstance(admission(factory, tmp_path, tracker, repo).admit(wanted), Admitted)
+    step, number, after = factory.execute("SELECT step,number,after_commit FROM attempt").fetchone()
+    assert (step, number) == ("implement", 1) and after == repo.refs(["refs/remotes/origin/"])[0].sha
+
+
+def test_starting_at_implement_without_a_valid_committed_plan_is_refused_as_plan(
+    factory: sqlite3.Connection, root: Path, tmp_path: Path
+) -> None:
+    repo = committed_plan(tmp_path, valid=False)
+    slots(factory, repo, root, 1)
+    wanted = replace(request(tmp_path, repo), new=NewTask(start=Step.IMPLEMENT))
+    refused = admission(factory, tmp_path, Tracker(factory, tmp_path / "artifacts"), repo).admit(wanted)
+    assert isinstance(refused, AdmitRefused) and refused.reason == "plan"
+    assert factory.execute("SELECT count(*) FROM attempt").fetchone() == (0,)
+
+
+def test_an_unknown_named_workflow_refuses_the_admission_as_workflow(
+    factory: sqlite3.Connection, repo: FakeRepo, root: Path, tmp_path: Path
+) -> None:
+    slots(factory, repo, root, 1)
+    wanted = replace(request(tmp_path, repo), new=NewTask(workflow="absent"))
+    refused = admission(factory, tmp_path, Tracker(factory, tmp_path / "artifacts"), repo).admit(wanted)
+    assert isinstance(refused, AdmitRefused) and refused.reason == "workflow"
+    assert factory.execute("SELECT count(*) FROM attempt").fetchone() == (0,)
+
+
 @pytest.mark.parametrize(("harness", "model", "provider"), [
     (HarnessKind.CODEX, "gpt-5.5", Provider.OPENAI), (HarnessKind.CLAUDE, "opus", Provider.ANTHROPIC),
     (HarnessKind.OPENCODE, "opencode/deepseek-v4.1-flash-free", Provider.DEEPSEEK), (HarnessKind.OPENCODE, "mystery", Provider.UNKNOWN),
@@ -186,7 +328,9 @@ def test_the_admission_stores_the_harness_and_the_provider_derived_from_it_and_t
 ) -> None:
     slots(factory, repo, root, 1)
     tracker = Tracker(factory, tmp_path / "artifacts")
-    wanted = replace(request(tmp_path, repo, model=model), harness=harness)
+    policy = (CodexPolicy() if harness is HarnessKind.CODEX else
+              ClaudePolicy(settings_file=tmp_path / "policy.json", settings="{}") if harness is HarnessKind.CLAUDE else OpenCodePolicy())
+    wanted = replace(request(tmp_path, repo), settings=StepSettings(plan=AgentSetting(harness=harness, model=model, access=policy)))
     assert isinstance(admission(factory, tmp_path, tracker, repo).admit(wanted), Admitted)
     assert factory.execute("SELECT harness,provider,model FROM attempt").fetchall() == [(harness, provider, model)]
 
@@ -203,12 +347,15 @@ def test_admit_then_register_entry_then_execute_by_that_entry_is_collected(
     other = attempts(factory, tmp_path, run, checkouts, slot_files).execute(result.key, (8, "entry-start", "boot"))
     assert (other.status, other.reason) == ("refused", "not_entry") and run.calls == []
     collected = attempts(factory, tmp_path, run, checkouts, slot_files).execute(result.key, ENTRY)
-    assert (collected.status, collected.reason) == ("pending", "verification") and len(run.calls) == 1
+    assert (collected.status, collected.reason) == ("pending", "commit") and len(run.calls) == 1
     _harness, spec, _timeout, _hooks = run.calls[0]
     assert spec.cwd == str(root.resolve() / folder_name(repo.identity()) / "s1")
+    assert PLAN_WARNING in spec.stdin
     prompt = spec.stdin + " ".join(spec.argv)
     assert "Do the thing" in prompt and "It is done" in prompt
-    closing = "First read `docs/design/tl-1/plan.md` if it exists. If it is still valid for the task and the code as they are now"
+    closing = "After the depth assessment permits planning, follow this plan-only reading order."
+    assert "Use exactly these sections in this order" in prompt
+    assert "Before answering `planned` or `unchanged`, require a Size estimate in Header" in prompt
     assert closing in prompt and "answer `unchanged`" in prompt and "do not run `git add`, `git commit`, `git push`" in prompt
     assert "list in `paths` every file you want committed and give a one-line commit `message`" in prompt
     assert prompt.index("It is done") < prompt.index(closing)  # the fixed closing words come last, in the admitted input
@@ -248,6 +395,7 @@ def test_a_slot_taken_between_observe_and_commit_moves_to_the_next_or_refuses(
     tracker.during = lambda: factory.execute(taken, ("s1", repo_id, "other"))
     result = admit(factory, tmp_path, repo, tracker)
     assert isinstance(result, Admitted) and result.slot == "s2" and tracker.calls == ["claim:tl-1"]
+    factory.execute("DELETE FROM task_content")
     factory.execute("DELETE FROM attempt")
     factory.execute("DELETE FROM reservation WHERE slot='s2'")
     tracker = Tracker(factory, tmp_path / "artifacts")
@@ -268,28 +416,18 @@ def test_one_attempt_per_task_even_when_every_slot_is_held(
     assert again == AdmitRefused("task_attempted") and tracker.calls == [] and rows(factory) == (1, 1)
 
 
-@pytest.mark.parametrize(
-    ("failure", "expected"),
-    [
-        (None, AdmitRefused("task_attempted")),
-        (sqlite3.OperationalError("database is locked"), AdmitUnavailable("store", False, "OperationalError: database is locked")),
-        (sqlite3.IntegrityError("mismatch"), AdmitRefused("constraint", detail="IntegrityError: mismatch")),
-        (BdError("other", "down"), AdmitUnavailable("tracker", False, "BdError: other: down")),
-    ],
-)
-def test_a_concurrent_admission_of_the_task_keeps_the_winners_claim_with_one_slot(
-    factory: sqlite3.Connection, repo: FakeRepo, root: Path, tmp_path: Path, failure: Exception | None, expected: AdmitResult
+def test_a_concurrent_admission_cannot_overtake_a_pending_claim(
+    factory: sqlite3.Connection, repo: FakeRepo, root: Path, tmp_path: Path,
 ) -> None:
-    """Both claim (Bd.claim is idempotent for the actor); the winner commits first; the loser must never unclaim."""
+    """The first durable intent wins; a second caller never touches or returns its claim."""
     slots(factory, repo, root, 1)
-    winner = Tracker(factory, tmp_path / "artifacts")
-    loser = Tracker(factory, tmp_path / "artifacts", claim=failure if isinstance(failure, BdError) else True)
-    loser.during = lambda: admission(factory, tmp_path, winner, repo).admit(request(tmp_path, repo))
-    admitter = admission(factory, tmp_path, loser, repo)
-    if isinstance(failure, sqlite3.Error):
-        admitter.begin = breaking(failure)
-    assert admitter.admit(request(tmp_path, repo)) == expected
-    assert winner.calls == ["claim:tl-1"] and loser.calls == ["claim:tl-1"] and rows(factory) == (1, 1)
+    first = Tracker(factory, tmp_path / "artifacts")
+    second = Tracker(factory, tmp_path / "artifacts")
+    contenders: list[AdmitResult] = []
+    first.during = lambda: contenders.append(admission(factory, tmp_path, second, repo).admit(request(tmp_path, repo)))
+    assert isinstance(admission(factory, tmp_path, first, repo).admit(request(tmp_path, repo)), Admitted)
+    assert len(contenders) == 1 and isinstance(contenders[0], AdmitRefused) and contenders[0].reason == "task_attempted"
+    assert first.calls == ["claim:tl-1"] and second.calls == [] and rows(factory) == (1, 1)
 
 
 @pytest.mark.parametrize(
@@ -321,16 +459,18 @@ def test_claim_refusal_and_unknown_claim(
 
 
 @pytest.mark.parametrize("unclaim", [True, False])
+@pytest.mark.parametrize("table", ["attempt", "task_content"])
 def test_constraint_is_caught_after_rollback_and_compensated(
-    factory: sqlite3.Connection, repo: FakeRepo, root: Path, tmp_path: Path, unclaim: bool
+    factory: sqlite3.Connection, repo: FakeRepo, root: Path, tmp_path: Path, unclaim: bool, table: str,
 ) -> None:
     slots(factory, repo, root, 1)
-    factory.execute("CREATE TEMP TRIGGER mismatch BEFORE INSERT ON attempt BEGIN SELECT RAISE(ABORT, 'schema mismatch'); END")
+    factory.execute(f"CREATE TEMP TRIGGER mismatch BEFORE INSERT ON {table} BEGIN SELECT RAISE(ABORT, 'schema mismatch'); END")
     tracker = Tracker(factory, tmp_path / "artifacts", unclaim=unclaim)
     result = admit(factory, tmp_path, repo, tracker)
     assert isinstance(result, AdmitRefused) and result.reason == "constraint" and result.claim_leaked is not unclaim
     assert result.detail == "IntegrityError: schema mismatch"
     assert tracker.calls == ["claim:tl-1", "unclaim:tl-1"] and rows(factory) == (0, 0)
+    assert factory.execute("SELECT count(*) FROM task_content").fetchone() == (0,)
 
 
 @pytest.mark.parametrize("unclaim", [True, False, BdError("timeout")])
@@ -371,7 +511,6 @@ def test_an_unexpected_failure_compensates_then_propagates(factory: sqlite3.Conn
 @pytest.mark.parametrize(
     ("change", "expected"),
     [
-        ("model", "choices"),
         ("nan", "deadline"),
         ("inf", "deadline"),
         ("deadline", "expired"),
@@ -393,7 +532,15 @@ def test_invalid_request_or_store_refuses_before_any_claim(
     if change in ("task", "input"):
         wanted = request(tmp_path, repo, task_id="tl-404" if change == "task" else "tl-3")
     elif change == "checkout":
-        wanted = AdmitRequest("tl-1", "tasks", str(tmp_path), repo.path / "subdir", "chosen", "high", "workspace-write", 100, None)
+        wanted = AdmitRequest(
+            "tl-1",
+            "tasks",
+            str(tmp_path),
+            repo.path / "subdir",
+            StepSettings(plan=AgentSetting(model="chosen", effort="high", access=CodexPolicy(sandbox="workspace-write"))),
+            100,
+            None,
+        )
     elif change == "version":
         factory.execute("PRAGMA user_version=1")
     elif change == "reservations":
@@ -434,7 +581,7 @@ def test_composition_constructs_without_running_git_or_bd(tmp_path: Path) -> Non
 
 def test_two_repos_both_get_s1_and_the_fence_is_per_repo(factory: sqlite3.Connection, repo: FakeRepo, root: Path, tmp_path: Path) -> None:
     remote = FakeRemote("https://example.invalid/other.git")
-    remote.advance("main", {"README": "two"})
+    remote.advance("main", {"README": "two", ".task-loop.json": "{}", **WORKFLOW_FILES})
     other = FakeRepo.clone(remote, tmp_path / "other")
     keys: list[AttemptKey] = []
     for each, task_id in ((repo, "tl-1"), (other, "tl-2")):
@@ -470,21 +617,21 @@ DELETED = '{"error": "resolving tl-1: no issue found matching \\"tl-1\\"", "sche
 @pytest.mark.parametrize(
     ("out", "err", "code", "beat"),
     [
-        ('{"id": "tl-1", "owner": "taskloop", "schema_version": 1, "status": "heartbeat"}', "", 0, "held"),
-        (TAKEN, "", 1, "lost"),
-        (REVERTED, "", 1, "lost"),
-        (CLOSED, "", 1, "lost"),
-        ("", "", 13, "lost"),
-        ("", "bd: no answer in 30.0s", 124, "unrenewed"),
-        ("", "bd: [Errno 2] No such file or directory", 127, "unrenewed"),
-        (DELETED, "", 1, "lost"),
-        ('{"error": "database is down", "schema_version": 1}', "", 1, "unrenewed"),
+        ('{"id": "tl-1", "owner": "taskloop", "schema_version": 1, "status": "heartbeat"}', "", 0, ClaimWord.HELD),
+        (TAKEN, "", 1, ClaimWord.LOST),
+        (REVERTED, "", 1, ClaimWord.LOST),
+        (CLOSED, "", 1, ClaimWord.LOST),
+        ("", "", 13, ClaimWord.LOST),
+        ("", "bd: no answer in 30.0s", 124, ClaimWord.UNRENEWED),
+        ("", "bd: [Errno 2] No such file or directory", 127, ClaimWord.UNRENEWED),
+        (DELETED, "", 1, ClaimWord.LOST),
+        ('{"error": "database is down", "schema_version": 1}', "", 1, ClaimWord.UNRENEWED),
     ],
     ids=["renewed", "taken", "reverted", "closed", "precondition", "timeout", "missing_binary", "deleted", "other"],
 )
-def test_composition_heartbeats_through_bd_and_maps_its_words(tmp_path: Path, out: str, err: str, code: int, beat: str) -> None:
+def test_composition_heartbeats_through_bd_and_maps_its_words(tmp_path: Path, out: str, err: str, code: int, beat: Beat) -> None:
     script = Script().say(out, err, code)
-    assert tracker_claims(script).heartbeat_for(str(tmp_path), "tl-1")() == beat
+    assert tracker_claims(script).heartbeat_for(str(tmp_path), "tl-1")() is beat
     assert [argv[1:] for argv in script.calls] == [["--actor", "taskloop", "heartbeat", "tl-1", "--json"]]
 
 
@@ -527,7 +674,7 @@ def test_after_an_abandon_the_task_is_admitted_afresh_on_its_existing_branch_wit
     d = factory.execute("SELECT slot_head FROM attempt").fetchone()[0]
     repo.worktree(path).take_branch("task/tl-1", "HEAD", mode="resume")  # as its entry prepared it
     release = SlotRelease(AttemptStore(lambda: factory), checkouts, slot_files, lambda _entry: "gone", lambda _w: True, custody,
-                          tracker.unclaim, time, lambda _setup: "gone", lambda _scratch: True)
+                          tracker.unclaim, time, lambda _setup: "gone", lambda _scratch: True, ids=NativeIds())
     assert release.release(first.key, True) == Released("s1", d, True, "unclaimed", True)
     again = admit(factory, tmp_path, repo, tracker)
     assert isinstance(again, Admitted) and again.slot == "s1" and again.key.reservation_generation == 2  # never reused
@@ -584,7 +731,7 @@ def test_an_abandon_still_returning_its_claim_keeps_the_task_attempted(
     release = SlotRelease(
         AttemptStore(lambda: factory), checkouts, slot_files, lambda _entry: "gone", lambda _w: True, custody, unclaim, time,
         lambda _setup: "gone", lambda _scratch: True,
-    )
+    ids=NativeIds())
     failed = release.release(first.key, True)
     assert isinstance(failed, NotReleased) and failed.detail.endswith("The reservation was removed, no Git write.")
     assert admit(factory, tmp_path, repo, contender) == AdmitRefused("task_attempted")
@@ -599,7 +746,7 @@ def test_a_task_deleted_from_the_tracker_is_refused_by_name_with_the_command_tha
 
     found = read_task(deleted, "t-1", "tasks", "/tracker")
     assert isinstance(found, AdmitRefused) and found.reason == "task_missing"
-    assert "t-1 is gone from the tracker" in found.detail and "tl step release --abandon t-1" in found.detail
+    assert "t-1 is gone from the tracker" in found.detail and "abandoning the task clears its attempt" in found.detail
 
 
 def test_a_checkout_that_is_not_a_repository_is_a_refusal_naming_the_path_and_other_git_faults_stay_unavailable(tmp_path: Path) -> None:
@@ -614,3 +761,24 @@ def test_a_checkout_that_is_not_a_repository_is_a_refusal_naming_the_path_and_ot
     assert isinstance(refused, AdmitRefused) and refused.reason == "checkout" and str(tmp_path / "nowhere") in refused.detail
     assert isinstance(checkout_repo(broken, tmp_path), AdmitUnavailable)
 
+
+
+def test_admission_uses_the_id_port_in_storage_and_evidence(
+    factory: sqlite3.Connection, repo: FakeRepo, root: Path, tmp_path: Path,
+) -> None:
+    slots(factory, repo, root, 1)
+    tracker = Tracker(factory, tmp_path / "artifacts")
+    operation = admission(factory, tmp_path, tracker, repo)
+    ids = FixedIds()
+    operation.ids = ids
+    found = operation.admit(request(tmp_path, repo))
+    assert isinstance(found, Admitted)
+    assert found.key == AttemptKey(ids.fresh[0], ids.tokens[0][1], 1)
+    assert ids.tokens == [(16, "0" * 31 + "1")]
+    assert factory.execute("SELECT attempt_id,dispatch_token FROM attempt").fetchone() == (
+        ids.fresh[0], ids.tokens[0][1])
+    assert (tmp_path / "artifacts" / tracker.files.directory(found.key)).is_dir()
+    again = operation.admit(request(tmp_path, repo))
+    assert isinstance(again, AdmitRefused)
+    assert factory.execute("SELECT attempt_id,dispatch_token FROM attempt").fetchall() == [(
+        found.key.attempt_id, found.key.dispatch_token)]

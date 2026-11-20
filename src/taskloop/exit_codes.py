@@ -5,6 +5,7 @@ from enum import IntEnum
 from typing import Final
 
 from taskloop import profile
+from taskloop.drain.models import Reason
 from taskloop.land_guide import INTERRUPTED
 from taskloop.operations import (
     UNKNOWN_KINDS,
@@ -38,7 +39,7 @@ def profile_exit_code(result: profile.Resolved | profile.Refused | profile.Unava
 
 
 def _round_exit(result: Round) -> ExitCode:
-    """3 when admission stopped on an unknown or a move's word is one, a verify's `branch=` word included, as a publish
+    """3 when admission stopped on an unknown or a move's word is one, a factory commit's `branch=` word included, as a publish
     move's (rerunning is safe); 1 when the round's own inputs were refused; else 0 (a per-task refusal, a held release
     and a leaked claim, reported as its own move, do not change the exit)."""
     words = [result.stopped, *(word.removeprefix("branch=") for move in result.moves for word in move.word.split(" "))]
@@ -62,7 +63,7 @@ def exit_code(result: Result) -> ExitCode:
         case Round():
             return _round_exit(result)
         case Ended(reason=reason):
-            return (ExitCode.SUCCESS if reason == "interrupted" else
+            return (ExitCode.SUCCESS if reason in {"interrupted", Reason.DRAINING, Reason.DRAINED} else
                     ExitCode.INTERRUPTED if reason == "abrupt" else ExitCode.REFUSED)
         case _:
             return ExitCode.SUCCESS

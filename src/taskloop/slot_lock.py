@@ -1,7 +1,7 @@
 """Slot custody: one kernel `flock` per managed slot, taken without waiting; the only importer of `process_lock`.
 
 The attempt entry holds its slot's lock around its whole body (preparation, the agent run, the publish retries, the
-factory commit, the clean-tree check and the verdict). `tl step verify` and a repeating `tl step start` take the same
+factory commit, the clean-tree check and the verdict). `tl step commit` and a repeating `tl step start` take the same
 lock around their Git writes (`hold`), a release around its park and its transaction (`custody`), a land around its
 validation and release (`landing`), and admission probes it before it counts a slot free (`probe`). A second taker, in
 this process or another, is refused at once (`SlotBusy`): nonreentrant, `timeout=0`. The lock file sits beside the
@@ -21,7 +21,7 @@ from process_lock import LockHeldError, ProcessLock
 from taskloop.attempt_types import Admission
 
 LABEL: Final = "taskloop-slot"
-type Role = Literal["entry", "verify", "release", "repeat", "probe", "land"]
+type Role = Literal["entry", "commit", "release", "repeat", "probe", "land"]
 
 
 class SlotBusy(Exception):
@@ -33,7 +33,7 @@ class SlotLockUnavailable(Exception):
 
 
 class ReadOnly(Exception):
-    """A read-only verifier was asked to write Git: a wiring defect, never contention."""
+    """A read-only factory commit was asked to write Git: a wiring defect, never contention."""
 
 
 def lock_path(slot_path: str) -> Path:
@@ -64,8 +64,8 @@ def _held(slot_path: str, attempt_id: str, role: Role) -> Generator[None]:
 
 
 def hold(admission: Admission) -> AbstractContextManager[None]:
-    """A verifier's Git writes for `admission`, under its slot's lock; released when the block ends, raised or not."""
-    return _held(admission.slot_path, admission.key.attempt_id, "verify")
+    """A factory commit's Git writes for `admission`, under its slot's lock; released when the block ends, raised or not."""
+    return _held(admission.slot_path, admission.key.attempt_id, "commit")
 
 
 def custody(slot_path: str, attempt_id: str) -> AbstractContextManager[None]:
@@ -86,7 +86,7 @@ def repeating(slot_path: str, attempt_id: str) -> AbstractContextManager[None]:
 
 def probe(slot_path: str) -> bool | None:
     """Admission's free rule: True when the slot's lock is free now (taken and released at once), False when another
-    holder (an entry, a verify, a release still parking) owns it, None when the lock file cannot be opened."""
+    holder (an entry, a factory commit, a release still parking) owns it, None when the lock file cannot be opened."""
     try:
         acquire(slot_path, "", "probe").release()
     except SlotBusy:
@@ -97,5 +97,5 @@ def probe(slot_path: str) -> bool | None:
 
 
 def refused(_admission: Admission) -> AbstractContextManager[None]:
-    """The hold of a read-only verifier, which never writes Git: any write it were asked for fails closed (`ReadOnly`)."""
+    """The hold of a read-only factory commit, which never writes Git: any write it were asked for fails closed (`ReadOnly`)."""
     raise ReadOnly("read_only")

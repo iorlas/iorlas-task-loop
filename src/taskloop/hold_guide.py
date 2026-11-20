@@ -1,40 +1,26 @@
-"""The fixed words a person reads about a hold (tl-8bh9.14.9 sections 7.1, 10 and 12): `tl step show`'s `Hold:` lines,
+"""The fixed words a person reads about a hold (tl-8bh9.14.9 sections 7.1, 10 and 12): `tl attempt show`'s `Hold:` lines,
 the guides of `Next: hold` and `Next: on_hold`, and the action each abandon refusal asks of the person. Text only; the
 status read decides the words (`hold_status`), the hold operation acts (`hold`)."""
 
 from datetime import UTC, datetime
 from typing import Final
 
+from taskloop.agents.stop_text import stop_text
 from taskloop.attempt_status import AttemptView
-from taskloop.hold_cause import cause, next_step
+from taskloop.hold_cause import cause, terminal_cause
 from taskloop.hold_store import HoldRow
 from taskloop.printable import one_line
+from taskloop.round_guide import automatic_guide
 
-# Section 12: what keeps a hold open, by the abandon's refusal word, and what the person does. A transient word needs nothing.
-KEPT_ACTIONS: Final = {
-    "held:slot_dirty": "the slot has files left by the attempt: save what you need, then empty its changes (`git -C <slot> "
-    "status`; restore tracked files, remove untracked ones). The factory never removes work.",
-    "held:slot_branch": "the slot was switched to another branch: `tl step show` names where the factory left it; put it back.",
-    "held:slot_redirected": "the slot's `.git` pointer changed: restore it, or remove the slot and `tl slot adopt` again.",
-    "held:slot_unborn": "the slot's HEAD has no commit: restore it, or remove the slot and `tl slot adopt` again.",
-    "unsettled:worker_alive": "the agent (or its group) outlived its entry: wait, or stop that process by its pid (never by "
-    "name).",
-    "unsettled:setup_running": "a setup command still runs: wait, or stop it by its pid.",
-    "unsettled:check_running": "a check's command still runs: wait, or stop it by its pid.",
-    "refused:landing": "a land of this task holds its slot: finish or withdraw it (`tl step land`).",
-    "refused:landed": "a land of this task is, or may be, on origin's main: finish it (`tl step land`).",
-}
-OPEN: Final = ("The factory holds this task for a person but has not finished the hold: the next round (or `tl step next` "
-               "now) records it, moves the labels, abandons the attempt and writes one comment on the task. The round's "
-               "`hold pending <step> <word>` line (`tl step next`) names what keeps it open and what to do; "
-               "`tl step release --abandon` says it too. Once that is cleared, the next round returns the claim and finishes "
-               "the hold.")
-TRANSIENT: Final = "needs nothing: the next round tries again."
+OPEN: Final = ("The factory holds this task for a person but has not finished the hold. The next round records it, "
+               "moves its labels, abandons the attempt and writes one comment on the task. The round's "
+               "hold pending <step> <word> line names the reason it must wait. Once that cause is resolved, "
+               "the next round returns the claim and finishes the hold.")
 HOLD: Final = OPEN
 LEAD: Final = "Held: the factory abandoned the attempt and waits for a person (the hold's comment on the task says why)."
 ON_HOLD: Final = (LEAD + " To answer, edit the task's description or acceptance criteria (the agent reads those, not comments), then "
-                  "add back the label the task was taken under (`bd label add <task> <label>`): the next round under that "
-                  "label starts it again at plan on task/<task> as it is. To give up, `bd close <task>`.")
+                  "restore the approval label the task was taken under. The next round under that label starts it again at plan "
+                  "on its retained task branch. To give up, close the task.")
 LABELS: Final = {"moved": "`{label}` removed, `held` added", "absent": "`held` added (`{label}` was not on the task)",
                  "not_ours": "no label changed (another actor holds the task)", "closed": "nothing written (the task is closed)",
                  "missing": "nothing written (no such task)", "superseded": "superseded (the task was taken again first)"}
@@ -47,7 +33,8 @@ def _when(at: float) -> str:
 def _tracker(row: HoldRow) -> str:
     if row.labels is None:
         return "Hold tracker: labels not yet, not commented"
-    written = LABELS[row.labels].format(label=one_line(row.label, 200))
+    written = ("`held` added (no approval label was removed)" if row.label is None and row.labels == "absent" else
+               LABELS[row.labels].format(label=one_line(row.label or "", 200)))
     said = "commented" if row.commented_at is not None else "no comment" if row.labels in ("closed", "missing") else "not commented yet"
     return f"Hold tracker: {written}, {said}{'' if row.cleared_at is None else ', `held` cleared'}"
 
@@ -61,17 +48,24 @@ def hold_lines(view: AttemptView) -> list[str]:
     claim = ("returned" if ended is not None and ended.claim == "unclaimed" else
              "not held (it was no longer the factory's)" if ended is not None and ended.claim == "not_held" else
              "kept: the abandon has not finished")
-    return [f"Hold: {one_line(row.reason)} at {_when(row.held_at)} (cause {row.cause_id})", _tracker(row), f"Hold claim: {claim}"]
+    rc = None if view.result.execution is None or row.cause_id != view.attempt_id else view.result.execution.facts.rc
+    attribution = stop_text(view.stop, rc)
+    detail = [] if attribution is None else [f"Hold cause: {attribution}"]
+    return [f"Hold: {one_line(row.reason)} at {_when(row.held_at)} (cause {row.cause_id})", *detail,
+            _tracker(row), f"Hold claim: {claim}"]
 
 
 def pending_guide(word: str) -> str:
     """What keeps a round's pending hold open (`pending <step> <refusal>`) and the action, for that refusal only."""
     refusal = word.rsplit(" ", 1)[-1]
-    return f"`{refusal}`: {KEPT_ACTIONS.get(refusal, TRANSIENT)}"
+    return f"`{refusal}`: {automatic_guide(refusal)}"
 
 
 def hold_guide(view: AttemptView) -> str:
     """The guide of `Next: hold` or `Next: on_hold`, with the stored label and the reason's own line once recorded."""
+    terminal = terminal_cause(view.hold.reason if view.hold is not None else view.hold_due or "")
+    if terminal is not None:
+        return terminal.explanation
     if view.next == "hold":
         return HOLD
     row = view.hold
@@ -79,16 +73,33 @@ def hold_guide(view: AttemptView) -> str:
         return ON_HOLD
     if row.labels in ("closed", "missing"):
         return "Held: the task is closed or gone in the tracker; nothing to answer."
-    task, label = view.task_id, one_line(row.label, 200)
-    found, ours = cause(row.reason), row.labels != "not_ours"
+    task, label = view.task_id, one_line(row.label or "", 200)
+    rc = None if view.result.execution is None or row.cause_id != view.attempt_id else view.result.execution.facts.rc
+    found, ours = cause(row.reason, stop=view.stop, rc=rc), row.labels != "not_ours"
     edit = "edit the task's description or acceptance criteria (the agent reads those, not comments)"
     again = f"the next round under that label starts it again at plan on task/{task} as it is"
-    back = (f"add back the label the task was taken under (`bd label add {task} {label}`): {again}" if ours
-            else f"start it by hand (`tl step start {task}`): rounds do not take it again")
+    back = (f"restore its approval label `{label}`: {again}" if ours and row.label is not None else
+            "arrange manual continuation with the current owner; rounds do not take it again" if not ours else
+            "choose manual continuation; no approval label was recorded for rounds to take it again")
     what = "" if found is None else " " + found.what
-    answer = f"{LEAD}{what} {next_step(found, back, edit)} To give up, `bd close {task}`."
+    reason = row.reason.removeprefix("failed:")
+    if reason in ("run:vendor_blip", "run:bad_request") and stop_text(view.stop, rc) is None:
+        what = (" The agent's vendor could not accept or complete the request. Review its explanation in the retained "
+                "evidence and the account's available model and reasoning effort choices.")
+    recovery = f"To answer, {edit}, then {back}."
+    if found is not None and found.fix is not None:
+        decision = ("allow more time for the next attempt" if reason in ("run:timeout", "stuck:expired_admitted") else
+                    "decide whether to retry the retained work" if found.fix == "" else
+                    "review the retained evidence and resolve the recorded cause")
+        recovery = f"To continue, {decision}, then {back}."
+        if reason == "land:checks_failed":
+            recovery = ("Decide whether to retry a flaky check or preserve the old task branch and restart from plan on "
+                        f"current main. Once that choice is settled, {back}.")
+    answer = f"{LEAD}{what} {recovery} To give up, close the task."
     if row.reason == "branch_moved":
-        answer += f" First restore task/{task} to contain the verified commit, or delete it locally and on origin."
+        answer += (f" First restore task/{task} to contain the commit accepted by factory commit, "
+                   "or rename it aside (`old/<id>-` and the first 12 "
+                   "characters of its tip).")
     if row.reason == "claim_lost":
         answer += " Someone else changed this task's claim while the factory worked on it."
     return answer

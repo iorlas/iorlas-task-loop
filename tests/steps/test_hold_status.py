@@ -1,24 +1,27 @@
 """A hold in the status (tl-8bh9.14.9 sections 3, 7.2 and 10): section 3's cause rule row by row (a hand-started task
 never), the `hold` and `on_hold` words over every other word but `unknown`, the eligibility rule of a re-ingestion, the
-hold looked up by the agent attempt (the swapped checks view's `after`), `tl step list --stuck`, the JSON's additive keys
-and the `Hold` lines and guides of `tl step show` and `tl step list`."""
+hold looked up by the agent attempt (the swapped checks view's `after`), `tl attempt list --stuck`, the JSON's additive keys
+and the `Hold` lines and guides of `tl attempt show` and `tl attempt list`."""
 
 import sqlite3
 from dataclasses import replace
 from pathlib import Path
 
 import pytest
-from doubles import D, X
+from doubles import D, X, pin_workflow
+from hold_fixtures import event_for
+from hold_fixtures import row as hold_row
 from sqlite_store import begin_immediate
 
+from taskloop.answer_failures import AnswerFailureData, AnswerRule, encode
 from taskloop.attempt_reads import ReleaseRow, StoreUnavailable
 from taskloop.attempt_status import AttemptView, Listed, Shown, StatusPorts, agent_attempt, list_attempts, show_attempt, with_hold
 from taskloop.attempt_store import AttemptStore
-from taskloop.attempt_types import AttemptResult, Unsettled
+from taskloop.attempt_types import AttemptResult, CommitRefused, Uncommitted
 from taskloop.check_status import ChecksView
 from taskloop.check_store import CheckStore
 from taskloop.evidence_files import EvidenceFiles
-from taskloop.hold_guide import HOLD, KEPT_ACTIONS
+from taskloop.hold_guide import HOLD, hold_guide
 from taskloop.hold_status import cause, finished, reingests
 from taskloop.hold_store import HoldInsert, HoldRow, HoldStore
 from taskloop.operations import Failed
@@ -28,7 +31,7 @@ from taskloop.step_render import human
 FAILED = AttemptResult("collected", "needs_owner")
 VIEW = AttemptView("tasks", "tl-1", "plan", "a", "s1", "captured", "gone", FAILED, False, "done", label="auto")
 RETURNED = ReleaseRow(D, 5.0, "unclaimed")
-ROW = HoldRow("a", "a", "failed:needs_owner", 10.0, "moved", 11.0, 12.0, 13.0, None, 4, "tasks", "tl-1", "/tracker", "auto")
+ROW = hold_row()
 
 
 @pytest.mark.parametrize(("view", "expected"), [
@@ -36,9 +39,9 @@ ROW = HoldRow("a", "a", "failed:needs_owner", 10.0, "moved", 11.0, 12.0, 13.0, N
     (replace(VIEW, next="release", result=AttemptResult("collected", "run:timeout")), "failed:run:timeout"),
     (replace(VIEW, step="check", result=AttemptResult("collected", "failed:test:failed")), "failed:test:failed"),
     (replace(VIEW, result=AttemptResult("collected", "rejected:paths")), "failed:rejected:paths"),
-    (replace(VIEW, result=AttemptResult("collected", "verified")), None),
+    (replace(VIEW, result=AttemptResult("collected", "committed")), None),
     (replace(VIEW, result=AttemptResult("collected", "passed")), None),
-    (replace(VIEW, result=AttemptResult("pending", "verification")), None),
+    (replace(VIEW, result=AttemptResult("pending", "commit")), None),
     (replace(VIEW, next="repeats_exhausted", leftovers=("uncommitted", "a.py")), "repeats_exhausted:uncommitted"),
     *((replace(VIEW, next=word), word) for word in ("stuck:expired_admitted", "stuck:entry_lost", "stuck:uncollected",
                                                    "stuck:conflict", "stuck:setup_failed", "stuck:checks_refused")),
@@ -55,11 +58,11 @@ def test_the_cause_rule(view: AttemptView, expected: str | None) -> None:
 
 @pytest.mark.parametrize(("row", "release", "done"), [
     (ROW, RETURNED, True), (ROW, ReleaseRow(D, 5.0, "not_held"), True), (ROW, ReleaseRow(D, 5.0, "unclaiming"), False),
-    (ROW, ReleaseRow(D, 5.0, "kept"), False), (ROW, None, False), (replace(ROW, commented_at=None), RETURNED, False),
-    (replace(ROW, labels=None, labelled_at=None), RETURNED, False),
-    (replace(ROW, labels="closed", commenting_at=None, commented_at=None), ReleaseRow(D, 5.0, "not_held"), True),
-    (replace(ROW, labels="missing", commenting_at=None, commented_at=None), ReleaseRow(D, 5.0, "not_held"), True),
-    (replace(ROW, labels="not_ours", commented_at=None), ReleaseRow(D, 5.0, "not_held"), False),
+    (ROW, ReleaseRow(D, 5.0, "kept"), False), (ROW, None, False), (ROW.model_copy(update={"commented_at": None}), RETURNED, False),
+    (ROW.model_copy(update={"labels": None, "labelled_at": None}), RETURNED, False),
+    (ROW.model_copy(update={"labels": "closed", "commenting_at": None, "commented_at": None}), ReleaseRow(D, 5.0, "not_held"), True),
+    (ROW.model_copy(update={"labels": "missing", "commenting_at": None, "commented_at": None}), ReleaseRow(D, 5.0, "not_held"), True),
+    (ROW.model_copy(update={"labels": "not_ours", "commented_at": None}), ReleaseRow(D, 5.0, "not_held"), False),
 ])
 def test_a_hold_is_finished_once_labelled_abandoned_and_commented(row: HoldRow, release: ReleaseRow | None, done: bool) -> None:
     assert finished(row, release) is done
@@ -80,22 +83,47 @@ def test_the_hold_decides_the_word_after_every_rule_but_unknown(view: AttemptVie
 
 
 @pytest.mark.parametrize(("word", "row", "label", "taken"), [
-    ("on_hold", ROW, "auto", True), ("on_hold", replace(ROW, labels="absent"), "auto", True),
+    ("on_hold", ROW, "auto", True), ("on_hold", ROW.model_copy(update={"labels": "absent"}), "auto", True),
     ("on_hold", ROW, "auto2", False),
-    *(("on_hold", replace(ROW, labels=each), "auto", False) for each in ("not_ours", "closed", "missing")),
+    *(("on_hold", ROW.model_copy(update={"labels": each}), "auto", False) for each in ("not_ours", "closed", "missing")),
     ("hold", ROW, "auto", False), ("start", None, "auto", False),
 ])
 def test_only_a_hold_that_removed_the_round_s_own_label_is_taken_again(word: str, row: HoldRow | None, label: str, taken: bool) -> None:
     assert reingests(word, row, label) is taken
 
 
+@pytest.mark.parametrize(("reason", "retry"), [
+    ("land:conflict", False), ("merge:needs_owner", False), ("land:checks_failed", True),
+    ("land:remote_rejected", True), ("land:branch_moved", True), ("land:claim_lost", True),
+])
+def test_terminal_decisions_resist_restored_approval_labels(reason: str, retry: bool) -> None:
+    assert reingests("on_hold", ROW.model_copy(update={"event": event_for(reason)}), "auto") is retry
+
+
+@pytest.mark.parametrize("pending", [True, False])
+def test_terminal_land_guidance_preserves_work_without_restart_advice(pending: bool) -> None:
+    row = ROW.model_copy(update={"event": event_for("land:conflict")})
+    view = replace(VIEW, next="hold" if pending else "on_hold", hold=None if pending else row,
+                   hold_due=row.reason if pending else None)
+    text = hold_guide(view)
+    assert "retained task work" in text and "stays held" in text
+    assert "do not restart" in text and "resolution limit" in text
+    assert "To answer" not in text and "`bd" not in text and "`tl" not in text
+
+
 def plan(con: sqlite3.Connection, *, label: str | None = "auto", released: str | None = None) -> None:
     """tl-1's admitted plan attempt `a` (no entry, deadline 100), maybe released with `released` as its claim."""
     with begin_immediate(con):
+        pin_workflow(con)
         con.execute(
             """INSERT INTO attempt (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,
-            input_path,input_digest,schema_version,model,effort,sandbox,deadline,number,seq,slot_head,label) VALUES
-            ('a','a-token',1,'plan','beads','tasks','tl-1','/tracker','r','s1','i','d',1,'m','e','workspace-write',100,1,1,?,?)""",
+            input_path,input_digest,schema_version,model,effort,access_policy,deadline,number,seq,slot_head,label,engine_digest,workflow_digest,workflow_sha,
+            admitted_at) VALUES
+            ('a','a-token',1,'plan','beads','tasks','tl-1','/tracker','r','s1','i','d',1,'m','e',
+            '{"harness":"codex","sandbox":"workspace-write"}',100,1,1,?,?,
+        'abababababababababababababababababababababababababababababababab',
+        (SELECT digest FROM workflow_file),
+        'eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',1.0)""",
             (D, label))
         if released is not None:
             con.execute("INSERT INTO slot_release VALUES ('a','a-token',1,?,5,?)", (D, released))
@@ -108,7 +136,7 @@ def reads(con: sqlite3.Connection, now: float = 500) -> StatusPorts:
 def recorded(con: sqlite3.Connection, attempt_id: str = "a", cause_id: str = "a", reason: str = "stuck:expired_admitted",
              comment: bool = True) -> HoldRow:
     store = HoldStore(lambda: con)
-    row = store.insert(HoldInsert(attempt_id, cause_id, reason, 10.0))
+    row = store.insert(HoldInsert(event=event_for(reason, attempt_id, cause_id), now=10.0))
     row = store.labelled(attempt_id, row.rev, "moved", 11.0)
     leased = store.commenting(attempt_id, row.rev, 12.0)
     assert leased is not None
@@ -163,8 +191,13 @@ def test_a_task_taken_again_shows_its_new_attempt_without_the_old_hold(factory: 
     recorded(factory)
     with begin_immediate(factory):
         factory.execute("""INSERT INTO attempt (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,
-            repo_id,slot,input_path,input_digest,schema_version,model,effort,sandbox,deadline,number,seq,slot_head,label) VALUES
-            ('b','b-token',1,'plan','beads','tasks','tl-1','/tracker','r','s1','i','d',1,'m','e','workspace-write',900,1,2,?,'auto')""",
+            repo_id,slot,input_path,input_digest,schema_version,model,effort,access_policy,deadline,number,seq,slot_head,label,
+            engine_digest,workflow_digest,workflow_sha,admitted_at) VALUES
+            ('b','b-token',1,'plan','beads','tasks','tl-1','/tracker','r','s1','i','d',1,'m','e',
+            '{"harness":"codex","sandbox":"workspace-write"}',900,1,2,?,'auto',
+        'abababababababababababababababababababababababababababababababab',
+        (SELECT digest FROM workflow_file),
+        'eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',1.0)""",
             (D,))
     (view,) = listed(factory)
     assert (view.attempt_id, view.next, view.hold) == ("b", "start", None)
@@ -191,22 +224,22 @@ def test_show_prints_the_hold_lines_and_the_answer_with_the_stored_label(factory
     text = "\n".join(human("show", shown, tmp_path / "factory.db"))
     assert "Hold: branch_moved at 1970-01-01 00:00:10 UTC (cause a)" in text
     assert "Hold tracker: `auto` removed, `held` added, commented" in text and "Hold claim: returned" in text
-    assert "Next: on_hold\nHeld: the factory abandoned" in text and "`bd label add tl-1 auto`" in text
-    assert "First restore task/tl-1 to contain the verified commit" in text and "--abandon` again" not in text
+    assert "Next: on_hold\nHeld: the factory abandoned" in text and "restore its approval label `auto`" in text
+    assert "First restore task/tl-1 to contain the commit accepted by factory commit" in text and "--abandon` again" not in text
     data = as_data(shown)
     assert data["label"] == "auto" and data["hold_due"] is None
     assert data["hold"] == {"reason": "branch_moved", "cause": "a", "label": "auto", "held_at": 10.0, "labels": "moved",
                             "labelled_at": 11.0, "commented_at": 13.0, "cleared_at": None}
 
 
-def test_the_on_hold_guide_gives_the_one_fix_of_the_cause(factory: sqlite3.Connection, tmp_path: Path) -> None:
+def test_the_on_hold_guide_explains_the_cause_and_recovery_decision(factory: sqlite3.Connection, tmp_path: Path) -> None:
     plan(factory, released="unclaimed")
     recorded(factory, reason="failed:run:timeout")
     shown = show_attempt(reads(factory), tmp_path, "tasks", "tl-1")
     assert isinstance(shown, Shown)
     text = "\n".join(human("show", shown, tmp_path / "factory.db"))
-    assert "did not finish before its deadline" in text and "To fix it, raise `--minutes` for the next run, then add back" in text
-    assert "`bd label add tl-1 auto`" in text
+    assert "did not finish before its deadline" in text and "allow more time for the next attempt" in text
+    assert "restore its approval label `auto`" in text and "--minutes" not in text and "bd label" not in text
     assert "edit the task's description" not in text
 
 
@@ -218,7 +251,7 @@ def test_show_of_a_pending_hold_names_each_action_and_the_claim_kept(factory: sq
     lines = human("show", shown, tmp_path / "factory.db")
     assert "Hold tracker: `auto` removed, `held` added, not commented yet" in lines
     assert "Hold claim: kept: the abandon has not finished" in lines
-    assert lines[-1] == HOLD and "hold pending <step> <word>" in HOLD and not any(word in HOLD for word in KEPT_ACTIONS)
+    assert lines[-1] == HOLD and "hold pending <step> <word>" in HOLD and "`tl " not in HOLD
 
 
 def test_list_prints_the_hold_word_and_its_guide_once_and_json_says_due(factory: sqlite3.Connection) -> None:
@@ -248,25 +281,30 @@ def test_end_commit_and_label_are_read_with_the_attempt(factory: sqlite3.Connect
 def test_list_stuck_reads_the_leftovers_of_a_round_taken_attempt_so_a_due_repeats_exhausted_hold_shows(
     factory: sqlite3.Connection,
 ) -> None:
-    """Attempt 3 of a step awaiting its verify whose slot has leftovers a repeat would hand back: `repeats_exhausted`, so
+    """Attempt 3 of a step awaiting its commit whose slot has leftovers a repeat would hand back: `repeats_exhausted`, so
     a due hold; the leftovers are read for a labelled attempt only (a hand-started one never becomes a hold)."""
     with begin_immediate(factory):
         for number in (1, 2, 3):
             previous, why = (None, None) if number == 1 else (f"a{number - 1}", "uncommitted")
             factory.execute(
                 """INSERT INTO attempt (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,
-                input_path,input_digest,schema_version,model,effort,sandbox,deadline,phase,base_commit,number,seq,slot_head,
-                previous_attempt_id,repeat_reason,label) VALUES (?,?,1,'plan','beads','tasks','tl-1','/tracker','r','s1','i','d',1,
-                'm','e','workspace-write',100,'captured',?,?,?,?,?,?,'auto')""",
+                input_path,input_digest,schema_version,model,effort,access_policy,deadline,phase,base_commit,number,seq,slot_head,
+                previous_attempt_id,repeat_reason,label,engine_digest,workflow_digest,workflow_sha,
+                admitted_at) VALUES (?,?,1,'plan','beads','tasks','tl-1',
+                '/tracker','r','s1','i','d',1,
+                'm','e','{"harness":"codex","sandbox":"workspace-write"}',100,'captured',?,?,?,?,?,?,'auto',
+        'abababababababababababababababababababababababababababababababab',
+        (SELECT digest FROM workflow_file),
+        'eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',1.0)""",
                 (f"a{number}", f"a{number}-token", D, number, number, D, previous, why))
         factory.execute("""INSERT INTO execution (attempt_id,dispatch_token,generation,rc,timed_out,work,stands,stdout_path,
             stdout_digest,stderr_path,stderr_digest,answer_path,answer_digest,diagnostic_path,diagnostic_digest,answer_kind,effect,
             session_state) VALUES ('a3','a3-token',1,0,0,1,1,'o','d','e','d','a','d','g','d','valid','commit','complete')""")
     probed: list[str] = []
 
-    def leftovers(key: object) -> Unsettled:
+    def leftovers(key: object) -> Uncommitted:
         probed.append(str(key))
-        return Unsettled("uncommitted", ("a.py",))
+        return Uncommitted("uncommitted", ("a.py",))
 
     ports = replace(reads(factory), leftovers=leftovers)
     found = list_attempts(ports, stuck=True)
@@ -278,22 +316,22 @@ def test_list_stuck_reads_the_leftovers_of_a_round_taken_attempt_so_a_due_repeat
     assert isinstance(found, Listed) and found.attempts == () and probed == []
 
 
-def test_a_moved_head_shows_the_refs_the_agent_made_but_stays_next_verify_not_a_repeat(factory: sqlite3.Connection) -> None:
-    """`tl step show` prints `Unsettled:` from the attempt's leftovers: `head_moved` carries its listing there too, though
-    it is no repeatable leftover (the next action stays `verify`)."""
+def test_a_moved_head_shows_the_refs_the_agent_made_but_stays_next_commit_not_a_repeat(factory: sqlite3.Connection) -> None:
+    """`tl attempt show` prints `Uncommitted:` from the attempt's leftovers: `head_moved` carries its listing there too, though
+    it is no repeatable leftover (the next action stays `commit`)."""
     plan(factory)
     factory.execute("UPDATE attempt SET phase='captured',base_commit=?", (D,))
     factory.execute("""INSERT INTO execution (attempt_id,dispatch_token,generation,rc,timed_out,work,stands,stdout_path,
         stdout_digest,stderr_path,stderr_digest,answer_path,answer_digest,diagnostic_path,diagnostic_digest,answer_kind,effect,
         session_state) VALUES ('a','a-token',1,0,0,1,1,'o','d','e','d','a','d','g','d','valid','commit','complete')""")
-    ports = replace(reads(factory), leftovers=lambda _key: Unsettled("head_moved", ("refs/tags/task/evil",)))
+    ports = replace(reads(factory), leftovers=lambda _key: CommitRefused("head_moved", ("refs/tags/task/evil",)))
     found = list_attempts(ports)
     assert isinstance(found, Listed) and [(each.next, each.leftovers) for each in found.attempts] == [
-        ("verify", ("head_moved", "refs/tags/task/evil"))]
+        ("commit", ("head_moved", "refs/tags/task/evil"))]
     for reason in ("branch", "unborn"):  # no listing: the reason alone, which the `unsettled` guide's `branch` text answers
-        found = list_attempts(replace(ports, leftovers=lambda _key, why=reason: Unsettled(why)))
-        assert isinstance(found, Listed) and [(each.next, each.leftovers) for each in found.attempts] == [("verify", (reason,))]
-    found = list_attempts(replace(ports, leftovers=lambda _key: Unsettled("dirty", ("a",))))  # not shown: only the three
+        found = list_attempts(replace(ports, leftovers=lambda _key, why=reason: CommitRefused(why)))
+        assert isinstance(found, Listed) and [(each.next, each.leftovers) for each in found.attempts] == [("commit", (reason,))]
+    found = list_attempts(replace(ports, leftovers=lambda _key: Uncommitted("dirty", ("a",))))  # not shown: only the three
     assert isinstance(found, Listed) and [each.leftovers for each in found.attempts] == [()]
 
 
@@ -303,8 +341,10 @@ def test_deadline_passed_of_a_captured_agent_attempt_is_whether_its_run_timed_ou
     plan(factory)
     factory.execute("UPDATE attempt SET phase='captured',base_commit=?", (D,))
     factory.execute("""INSERT INTO execution (attempt_id,dispatch_token,generation,rc,timed_out,work,stands,stdout_path,
-        stdout_digest,stderr_path,stderr_digest,answer_path,answer_digest,diagnostic_path,diagnostic_digest,answer_kind,session_state)
-        VALUES ('a','a-token',1,0,0,1,1,'o','d','e','d','a','d','g','d','json_invalid','complete')""")
+        stdout_digest,stderr_path,stderr_digest,answer_path,answer_digest,diagnostic_path,diagnostic_digest,answer_kind,
+        session_state,answer_failure)
+        VALUES ('a','a-token',1,0,0,1,1,'o','d','e','d','a','d','g','d','json_invalid','complete',?)""",
+        (encode(AnswerFailureData(rule=AnswerRule.JSON, explanation="Answer must be strict JSON")),))
 
     def seen(now: float) -> list[bool]:
         found = list_attempts(reads(factory, now))

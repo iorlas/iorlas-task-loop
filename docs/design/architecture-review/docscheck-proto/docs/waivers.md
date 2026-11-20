@@ -1,4 +1,5 @@
 ---
+# Status: evidence; historical format specimen, not current system authority
 waivers:
   - {finding: "area/storage:outcomes[0].source:symbol-unresolved@c6d6d3", task: task/tl-unfiled-storage-outcomes, why: "StoreBusy is target design; no code names it yet"}
   - {finding: "area/storage:outcomes[2].source:symbol-unresolved@ba8218", task: task/tl-unfiled-storage-outcomes, why: "SchemaMismatch is target design; the code refuses with words only"}

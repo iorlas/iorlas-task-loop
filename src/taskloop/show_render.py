@@ -1,4 +1,4 @@
-"""The `tl step show` lines of one view: an agent attempt's, or (tl-8bh9.14.6 section 9) a checks attempt's with its
+"""The `tl attempt show` lines of one view: an agent attempt's, or (tl-8bh9.14.6 section 9) a checks attempt's with its
 `Check:` lines and (tl-8bh9.14.8 section 14) its latest land candidate's `Land` lines, then a hold's `Hold` lines
 (tl-8bh9.14.9 section 10). Fixed words around the status
 values; nothing here decides, reads or writes (`step_render` places them). Every stored text a `Land` line shows (the
@@ -8,12 +8,13 @@ only: its stored start is a clock-tick token that proves identity (JSON keeps it
 from datetime import UTC, datetime
 from pathlib import Path
 
-from taskloop.attempt_result import succeeded
+from taskloop.attempt_result import succeeded, usage_explanation
 from taskloop.attempt_status import AttemptView, SetupShown, Shown
 from taskloop.attempt_types import ATTEMPTS
 from taskloop.check_status import ChecksView
 from taskloop.check_store import Required, ResultRow
 from taskloop.checks import differs
+from taskloop.command_conclusion import CommandConclusion, encode
 from taskloop.hold_guide import hold_lines
 from taskloop.hold_text import explained
 from taskloop.land_close import NOT_SYNCED
@@ -22,7 +23,16 @@ from taskloop.land_summary import one_line
 
 
 def _when(at: float) -> str:
-    return f"{datetime.fromtimestamp(at, UTC):%Y-%m-%d %H:%M:%S} UTC"
+    try:
+        return f"{datetime.fromtimestamp(at, UTC):%Y-%m-%d %H:%M:%S} UTC"
+    except (ValueError, OverflowError, OSError):
+        return str(at)
+
+
+def setup_times(started_at: float, ended_at: float | None, duration: float | None) -> str:
+    end = "unfinished" if ended_at is None else _when(ended_at)
+    elapsed = "unavailable (no usable recorded duration)" if duration is None else f"{duration:g} s"
+    return f"started {_when(started_at)}; ended {end}; duration {elapsed}"
 
 
 def _common(each: AttemptView) -> tuple[list[str], str, list[str]]:
@@ -53,10 +63,16 @@ def _agent_lines(each: AttemptView) -> list[str]:
     return [
         f"Task: {each.task_id} (backlog {each.backlog})", f"Step: {each.step}",
         f"Attempt: {each.attempt_id} ({each.number} of at most {ATTEMPTS}{repeats})", *earlier,
+        *([] if each.source_checks_id is None else [f"Source checks: {each.source_checks_id}"]),
         f"Slot: {each.slot}", f"Phase: {each.phase}",
         f"Entry: {each.entry}{entry}", f"Worker: {worker}",
         *([] if last_command(each) is None else [f"Last command: {last_command(each)}"]),
         f"Result: {each.result.status} {each.result.reason}".rstrip(),
+        *([] if each.result.execution is None or not (usage := usage_explanation(each.result.execution.facts)) else [usage]),
+        *([f"Preparation: {one_line(each.result.explanation)}"]
+          if each.result.explanation and each.result.reason.startswith("merge:") else []),
+        *([f"Answer: {one_line(each.result.explanation)}"]
+          if each.result.explanation and each.result.reason.startswith("answer:") else []),
         f"Succeeded: {'yes' if succeeded(each.result) else 'no'}", f"Deadline passed: {'yes' if each.deadline_passed else 'no'}",
         *released, *published,
     ]
@@ -67,16 +83,17 @@ def setup_line(found: SetupShown | None) -> str:
     if found is None:
         return "Setup: none"
     row, whose = found.row, "" if found.attempt_id is None else f" (attempt {found.attempt_id}'s, which this repeat keeps)"
-    return f"Setup: run {row.run} {row.conclusion or 'unfinished'} at {row.commit}{whose}; log {found.log}"
+    return (f"Setup: run {row.run} {encode(row.conclusion) or 'unfinished'} at {row.commit}{whose}; log {found.log}; "
+            f"{setup_times(row.started_at, row.ended_at, row.duration_seconds)}")
 
 
 def check_line(row: ResultRow, log: Path | None, required: Required, prefix: str = "Check") -> str:
     """One latest-block result: its conclusion, exit and whole seconds, the process group of a command not proven gone,
     its log, and whether `main` requires it (a required one whose argv at X differs from the one stored from `main` says
     so)."""
-    if row.conclusion == "undefined":
+    if row.conclusion == CommandConclusion.UNDEFINED:
         return f"{prefix}: {row.name} undefined (required by main, not defined at X)"
-    state = "unfinished" if row.conclusion is None else row.conclusion
+    state = "unfinished" if row.conclusion is None else encode(row.conclusion)
     state += "" if row.rc is None else f", exit {row.rc}"
     state += "" if row.ended_at is None else f", {round(row.ended_at - row.started_at)} s"
     state += f", process group {row.process.pgid}" if row.process is not None and row.unsettled else ""  # to verify before a stop

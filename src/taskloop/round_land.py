@@ -1,5 +1,5 @@
-"""The land phase of a round (tl-8bh9.14.136): under the profile's `land: auto` the round lands the oldest passed task it
-took, through `land.land`, the very operation `tl step land` runs (no second path). At most one task is landed or held per
+"""The land phase of a round (tl-8bh9.14.136): under the profile's `land: auto` the round lands the oldest passed task in
+the selected repository and backlog, through the shared `land.land`. At most one task is landed or held per
 round; the land's own lock and the free-slot reserve for it (`round._full`) still apply.
 
 Each outcome is one move of the round log. Landed: the task is closed and its claim returned (the land's close). A refusal
@@ -17,11 +17,12 @@ from pathlib import Path
 from typing import Final
 
 from taskloop.attempt_status import AttemptView
-from taskloop.hold_cause import LAND_CAUSE
 from taskloop.land import How, LandRequest
 from taskloop.operations import Failed, Move
 from taskloop.profile import LandMode
 from taskloop.round_trail import Trail
+from taskloop.task_event_cause import LandCause, LandReason
+from taskloop.task_status import waiting_for_land
 
 # the refusals that are about the task's change: hold it instead of trying again every round
 HOLDING: Final = frozenset({"conflict", "checks_failed", "remote_rejected", "branch_moved", "claim_lost"})
@@ -36,13 +37,13 @@ class Landing:
 
 
 def _waiting(current: Iterable[AttemptView]) -> list[AttemptView]:
-    """The round-taken tasks whose checks passed and wait for a land, the oldest release first."""
-    found = [each for each in current if each.next == "land" and each.label is not None and each.checks is not None]
+    """Released passing tasks, including hand-started tasks, oldest first."""
+    found = [each for each in current if waiting_for_land(each)]
     return sorted(found, key=lambda each: (each.checks.row.released_at or 0.0 if each.checks else 0.0, each.task_id))
 
 
 def land_passed(landing: Landing | None, backlog: str, checkout: Path, minutes: int, current: Iterable[AttemptView], trail: Trail,
-                hold: Callable[[AttemptView, str], Move]) -> frozenset[str]:
+                hold: Callable[[AttemptView, LandCause], Move]) -> frozenset[str]:
     """The tasks this phase finished (landed or held): the free-slot reserve for a waiting land no longer counts them."""
     waiting = _waiting(current)
     if landing is None or not waiting:
@@ -60,7 +61,11 @@ def land_passed(landing: Landing | None, backlog: str, checkout: Path, minutes: 
             trail.add(Move(each.task_id, "land", found, each.attempt_id, step=each.step))
             return frozenset({each.task_id})
         if found.kind == "refused" and found.reason in HOLDING:
-            trail.add(hold(each, f"{LAND_CAUSE}{found.reason}"))
+            decision = LandCause(reason=LandReason(found.reason),
+                                 explanation=found.detail or f"Automatic land was refused: {found.reason}.",
+                                 source=each.checks.row.commit if each.checks is not None else None,
+                                 target=each.checks.row.target if each.checks is not None else None)
+            trail.add(hold(each, decision))
             return frozenset({each.task_id})
         trail.add(Move(each.task_id, "land", found.word, each.attempt_id, found.detail, each.step))
         if found.kind != "refused":

@@ -1,6 +1,6 @@
 """The reader of one attempt's `events.jsonl`: the agent's activity, one `any_agent.activity` record per line, written while the
-attempt runs by `command_sink`. Display only, never control state. Each file read takes at most READ_CAP bytes; timestamp searches
-also obey the owning stream cap. A page carries an
+attempt runs by `command_sink`. Display only, never control state. Live reads take at most READ_CAP bytes; complete snapshots and
+timestamp searches obey the owning stream cap. A page carries an
 opaque cursor (the file's identity and the byte after the last whole line read) to follow with; a cursor that does not belong to
 the file, or is past its end, answers `replaced` with the fresh tail instead of repeating or skipping lines."""
 
@@ -123,6 +123,17 @@ def _tail(stream: BinaryIO, inode: int, size: int, limit: int, replaced: bool) -
 def _parsed(cursor: str) -> tuple[int, int] | None:
     inode, _, offset = cursor.partition(":")
     return (int(inode), int(offset)) if inode.isdigit() and offset.isdigit() else None
+
+
+def complete(path: Path, cap: int) -> ActivityPage:
+    """All logical actions in the retained snapshot, including records larger than a live read; GONE if unreadable."""
+    try:
+        with path.open("rb") as stream:
+            status = os.fstat(stream.fileno())
+            records, end = _lines(_read(stream, 0, min(status.st_size, cap)), 0)
+            return ActivityPage(_collapse(records), _cursor(status.st_ino, end))
+    except OSError:
+        return GONE
 
 
 def tail(path: Path, limit: int) -> ActivityPage:

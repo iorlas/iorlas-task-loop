@@ -2,7 +2,8 @@
 
 import unicodedata
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from enum import StrEnum
 from pathlib import Path
 from typing import Final, Literal, Protocol
 
@@ -10,8 +11,12 @@ from any_agent import RunOutcome, classify
 from any_agent.procs import Worker
 from git_porcelain import Repo
 
-from taskloop.harness_choice import HarnessKind
+from taskloop.agents.settings import AgentSetting
+from taskloop.answer_failures import AnswerFailureData
+from taskloop.answer_repair_models import RepairContext
 from taskloop.repo import RepoId
+from taskloop.shelf_request import ShelfRequest
+from taskloop.step import Step
 from taskloop.task import TaskReference
 
 
@@ -56,7 +61,6 @@ REPEATABLE: Final[tuple[RepeatReason, ...]] = ("uncommitted", "unsafe", "ignored
 # What a valid answer does to the slot: `commit` ends at a new commit X != B, `keep` ends at B itself, `none` ends nothing.
 type Effect = Literal["commit", "keep", "none"]
 EFFECTS: Final[tuple[Effect, ...]] = ("commit", "keep", "none")
-type Step = Literal["plan", "implement"]  # the built steps (`attempt.step`), in order; each has its kind in `steps`
 
 
 @dataclass(frozen=True)
@@ -124,15 +128,15 @@ class Admission:
     slot: str
     slot_path: str
     input_ref: FileRef
-    model: str
-    effort: str
-    sandbox: str
+    setting: AgentSetting
     deadline: float
     entry: EntryIdentity
-    number: int  # the attempt's number in its step (1, 2, 3), admitted with it
-    step: str  # the step the attempt belongs to (`plan`, `implement`), admitted with it
+    number: int  # the step's repeat number after factory commit (1, 2, 3), retained by an answer repair
+    step: Step  # the agent step the attempt belongs to, admitted with it
     after_commit: str | None = None  # attempt 1 of a later step: the previous step's published X, which it starts from
-    harness: HarnessKind = HarnessKind.CODEX  # the agent harness the attempt runs under (`harness_choice`)
+    source_checks_id: str | None = None  # a clean-slot repeat after failed checks; never a dirty-slot takeover
+    repair: RepairContext | None = None
+    declared_start: bool = False  # the run named implement as the start: the plan is the one committed at `after_commit`
 
 
 @dataclass(frozen=True)
@@ -190,8 +194,9 @@ class ExecutionFacts:
     http_status: int | None
     tokens: tuple[int | None, int | None, int | None] | None
     cumulative: tuple[int | None, int | None, int | None] | None
-    turns: int | None
+    turns: int | None  # model requests during this attempt
     session: str | None
+    usage_incomplete: bool | None = None
 
 
 @dataclass(frozen=True)
@@ -201,10 +206,17 @@ class AnswerState:
     effect: Effect | None = None  # stored with the disposition of a valid answer; the store's fences read it
     paths: tuple[str, ...] = ()  # the files the agent asked the factory to commit, as validated
     message: str | None = None
+    failure: AnswerFailureData | None = None
 
 
 # Every verdict rule word: the chain's (CHAIN_RULES, any step) and each step kind's artifact rules (`steps.RULES` has all).
-type Rule = Literal[
+class PlanContentRule(StrEnum):
+    CHANGE_MAP = "plan_change_map"
+    DEPTH = "plan_depth"
+    HEADING = "plan_heading"
+
+
+type Rule = PlanContentRule | Literal[
     "commit_absent", "not_descendant", "chain_length", "paths", "mode", "file_size", "nothing_written", "plan_missing",
     "plan_encoding", "plan_empty", "plan_size",
 ]
@@ -214,7 +226,7 @@ CHAIN_RULES: Final[tuple[Rule, ...]] = (
 
 
 @dataclass(frozen=True)
-class Verified:
+class Committed:
     """Every rule held over the step's chain (B1, each attempt's commit, the step's artifact at Xn); `blob`: that
     artifact's blob (the plan's), None for a step kind without one; `reused`: no attempt of the step committed anything,
     what B1 holds stands."""
@@ -231,36 +243,72 @@ class Rejected:
 
 
 @dataclass(frozen=True)
-class Unsettled:
-    """The slot is not settled (`unborn`, `branch`, `head_moved`, `dirty`, `redirected`, `worker_alive`, `superseded`,
-    `staged`, `uncommitted`, `unsafe`, `ignored`); nothing stored, retryable. `listing` is data for a person and a repeat's
+class PathExplanation:
+    """A rejected path and the owning check's explanation, without file content."""
+
+    path: str
+    explanation: str
+
+    def __post_init__(self) -> None:
+        if not self.explanation.strip():
+            raise ValueError("A refused path needs an explanation")
+
+
+@dataclass(frozen=True)
+class Uncommitted:
+    """Files remain uncommitted (`dirty`, `staged`, `uncommitted`, `unsafe`, `ignored`);
+    nothing stored, retryable. `listing` is data for a person and a repeat's
     feedback (the leftovers, the unsafe path, the ignored paths), never parsed."""
 
     reason: str
     listing: tuple[str, ...] = ()
+    explanations: tuple[PathExplanation, ...] = field(default=(), compare=False)
 
 
 @dataclass(frozen=True)
 class NotApplicable:
-    """No valid `planned` or `unchanged` answer of a clean run to verify; `what` is the stored outcome."""
+    """No valid `planned` or `unchanged` answer of a clean run for factory commit; `what` is the stored outcome."""
 
     what: str
 
 
 @dataclass(frozen=True)
-class VerifyRefused:
+class CommitRefused:
+    """A condition prevents the factory commit; no verdict stored. Listings retain refs for inspection."""
+
     reason: str
+    listing: tuple[str, ...] = ()
+    explanations: tuple[PathExplanation, ...] = field(default=(), compare=False)
+
+
+class CommitWaitingReason(StrEnum):
+    STORE = "store"
+    OBSERVE = "observe"
+    GIT = "git"
+    REPO = "repo"
+    NOT_LISTED = "not_listed"
+    SLOT_BUSY = "slot_busy"
+    LOCK = "lock"
+    VALIDATION_PENDING = "validation_pending"
+    SESSION_PENDING = "session_pending"
+    WORKER_ALIVE = "worker_alive"
 
 
 @dataclass(frozen=True)
-class VerifyUnavailable:
-    """Unknown: nothing stored (`git:<Type>`, `repo`, `not_listed`, `store`, `validation_pending`, `inconsistent`)."""
+class CommitWaiting:
+    """Commit evidence or custody is pending; no verdict stored. Git diagnostics retain their suffix."""
 
-    reason: str
+    reason: CommitWaitingReason
+    diagnostic: str | None = None
 
 
-type Verdict = Verified | Rejected
-type VerifyResult = Verified | Rejected | Unsettled | NotApplicable | VerifyRefused | VerifyUnavailable
+def waiting_reason(result: CommitWaiting) -> str:
+    """Encode a commit wait's reason at the display boundary."""
+    return f"{result.reason}:{result.diagnostic}" if result.diagnostic else str(result.reason)
+
+
+type Verdict = Committed | Rejected
+type CommitResult = Committed | Rejected | Uncommitted | NotApplicable | CommitRefused | CommitWaiting
 
 
 @dataclass(frozen=True)
@@ -270,7 +318,7 @@ class StoredExecution:
     evidence: Evidence
     answer: AnswerState
     session_state: Literal["complete", "pending", "conflict", "fault"]  # the session ref's capture, never a git push
-    verification: Verdict | None = None
+    verdict: Verdict | None = None
 
 
 @dataclass(frozen=True)
@@ -301,19 +349,21 @@ class AttemptResult:
     reason: str = ""
     execution: StoredExecution | None = None
     pending: PendingResult | None = None
+    explanation: str = ""
 
 
 @dataclass(frozen=True)
 class Answer:
     """A step kind decoder's one result: the step's own `disposition` word (for display), its `effect` (what the factory
-    does), and `paths` and `message`: what the agent asks the factory to commit (only with effect `commit`); the agent
-    never commits."""
+    does), and its commit `message`. Planning lists `paths`; implementation leaves them empty because slot settlement
+    selects the changes. The agent never commits."""
 
     disposition: str
     effect: Effect
     paths: tuple[str, ...]
     message: str | None
     explanation: str
+    shelf_request: ShelfRequest | None = None
 
 
 def dot_git(name: str) -> bool:
@@ -333,21 +383,6 @@ def path_allowed(path: str, rules: StepRules) -> bool:
         return False
     parts = path.split("/")
     return len(path) > len(rules.root) and not any(p in ("", ".", "..") or dot_git(p) for p in parts)
-
-
-def commit_message(message: object) -> bool:
-    """An agent's one-line commit message: 1 to 500 characters, no NUL, never the factory's trailer."""
-    return (
-        isinstance(message, str) and 1 <= len(message) <= 500 and "\0" not in message and TRAILER.casefold() + ":" not in message.casefold()
-    )
-
-
-def listed_paths(paths: object, rules: StepRules) -> tuple[str, ...] | None:
-    """The answer's `paths` when it is a list of at most `max_paths` unique allowed paths; else None."""
-    if not isinstance(paths, list) or len(paths) > rules.max_paths:
-        return None
-    found = tuple(path for path in paths if isinstance(path, str) and path_allowed(path, rules))
-    return found if len(found) == len(paths) and len(set(found)) == len(found) else None
 
 
 def optional_int(value: object) -> int | None:
@@ -386,6 +421,7 @@ def execution_facts(raw: RunOutcome) -> ExecutionFacts:
         optional_int(s.facts.get("http_status")),
         _usage(s.res.get("tokens")),
         _usage(s.res.get("cumulative")),
-        optional_int(s.res.get("turns")),
+        optional_int(s.res.get("requests")),
         ref if isinstance(ref := s.res.get("ref"), str) and ref else None,
+        incomplete if isinstance(incomplete := s.res.get("usage_incomplete"), bool) else None,
     )

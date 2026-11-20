@@ -7,17 +7,23 @@ check, then is done. The check step is not a kind (no agent: its attempt is a `c
 
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from typing import Final, Protocol
+from typing import Final, Literal, Protocol
 
 from git_porcelain import Tree
 
 from taskloop import implement_step, plan_step
-from taskloop.attempt_types import CHAIN_RULES, Answer, Rejected, Rule, Step, StepRules, Unsettled
+from taskloop.attempt_types import CHAIN_RULES, Answer, Rejected, Rule, StepRules, Uncommitted
+from taskloop.check_repeat.feedback import FailedCheck
+from taskloop.input_context import InputContext
+from taskloop.step import Step, decode_step
 from taskloop.task import TaskInspection
+from taskloop.workflow import StepTable
+
+type Built = Step | Literal["check"]  # a built step: an agent step or the check
 
 
 class Feedback(Protocol):
-    def __call__(self, found: Unsettled, rules: StepRules, number: int, task: str, nonce: str, *, unrecorded: bool) -> str:
+    def __call__(self, found: Uncommitted, rules: StepRules, number: int, task: str, nonce: str, *, unrecorded: bool) -> str:
         """A repeat's complete input: the leftovers `found` as data, the kind's fixed instructions, then `task` (attempt
         1's input). `unrecorded`: attempt `number` asked for a commit and nothing of it was committed."""
         ...
@@ -33,7 +39,7 @@ class StepKind:
 
     step: Step
     rules: Callable[[str], StepRules]
-    input_text: Callable[[TaskInspection, StepRules], str]
+    input_text: Callable[[StepTable, TaskInspection, StepRules, InputContext], str]
     answer_schema: Mapping[str, object]
     decode: Callable[[object, StepRules], Answer]
     artifact: Callable[[Tree, StepRules], Rejected | str | None]
@@ -42,49 +48,54 @@ class StepKind:
 
 
 PLAN: Final = StepKind(
-    "plan", plan_step.step_rules, plan_step.input_text, plan_step.ANSWER_SCHEMA, plan_step.decode, plan_step.artifact,
+    Step.PLAN, plan_step.step_rules, plan_step.input_text, plan_step.ANSWER_SCHEMA, plan_step.decode, plan_step.artifact,
     plan_step.feedback,
 )
 IMPLEMENT: Final = StepKind(
-    "implement", implement_step.step_rules, implement_step.input_text, implement_step.ANSWER_SCHEMA, implement_step.decode,
+    Step.IMPLEMENT, implement_step.step_rules, implement_step.input_text, implement_step.ANSWER_SCHEMA, implement_step.decode,
     implement_step.artifact, implement_step.feedback, environment=True,
 )
-STEPS: Final[tuple[StepKind, ...]] = (PLAN, IMPLEMENT)  # the agent steps, in order
+KINDS: Final[Mapping[Step, StepKind]] = {each.step: each for each in (PLAN, IMPLEMENT)}  # the registry, one kind per `Step`
 CHECK: Final = "check"  # the checks step: no kind, its own tables (`check_store`)
-ORDER: Final = (PLAN.step, IMPLEMENT.step, CHECK)  # every built step, in the fixed order
+ORDER: Final[tuple[Built, ...]] = (*KINDS, CHECK)  # every built step, in the fixed order: the `Step` enum's, then the check
 # every verdict word a stored verdict may hold
 RULES: Final[tuple[Rule, ...]] = CHAIN_RULES + plan_step.ARTIFACT_RULES + implement_step.ARTIFACT_RULES
+
+
+def failed_check_feedback(found: FailedCheck, task: str, nonce: str, opening: str) -> str:
+    return implement_step.failed_check_feedback(found, task, nonce, opening)
 
 
 def kind(step: str) -> StepKind:
     """The kind of a stored or admitted step; an unknown step is a programming error (the schema's CHECK lists the built
     ones)."""
-    match step:
-        case "plan":
-            return PLAN
-        case "implement":
-            return IMPLEMENT
-        case _:
-            raise ValueError(f"Unknown step: {step}")
+    try:
+        selected = decode_step(step)
+    except ValueError as error:
+        raise ValueError(f"Unknown step: {step}") from error
+    return KINDS[selected]
 
 
 def is_agent(step: str) -> bool:
     """`step` has a kind (an agent attempt, `attempt` row); `check` has none."""
-    return any(each.step == step for each in STEPS)
+    try:
+        decode_step(step)
+    except ValueError:
+        return False
+    return True
 
 
-def following(step: str) -> str | None:
+def following(step: str) -> Built | None:
     """The step after `step` in `ORDER`; None after the last built step. An unknown step is a programming error."""
-    if step not in ORDER:
-        raise ValueError(f"Unknown step: {step}")
-    at = ORDER.index(step)
+    selected = CHECK if step == CHECK else kind(step).step
+    at = ORDER.index(selected)
     return ORDER[at + 1] if at + 1 < len(ORDER) else None
 
 
-def next_step(current: str | None, done: bool) -> str | None:
+def next_step(current: str | None, done: bool) -> Built | None:
     """What a task admits next. `current`: its current attempt's step, None when it has none or its abandon returned the
-    claim (a fresh start: the first step). `done`: that attempt is verified, its release settled (claim kept) and its
+    claim (a fresh start: the first step). `done`: that attempt is accepted by factory commit, its release settled (claim kept) and its
     commit published. None: the current attempt's own `Next` applies, or the last step is done."""
     if current is None:
-        return STEPS[0].step
+        return next(iter(KINDS))
     return following(current) if done else None

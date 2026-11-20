@@ -9,32 +9,46 @@ import json
 import sqlite3
 from collections.abc import Callable, Mapping, Sequence
 from contextlib import AbstractContextManager
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Literal, override
 
+import pytest
 from beads_client import Bead
-from doubles import CHECKS, Environment, FakeProfiles, FakeSlotFiles, PinnedViews
-from git_porcelain import Pushed, Recorded, RemoteRefs, Sha
+from doubles import CHECKS, WORKFLOW_FILES, Environment, FakeProfiles, FakeSlotFiles, PinnedViews, pin_workflow
+from git_porcelain import Pushed, Recorded, RemoteRefs, Repo, Sha
 from git_porcelain.api import PushResult
 from git_porcelain.testing import FakeRemote, FakeRepo, FakeWorktree
+from land_conflict_bench import ExecutionCase
+from merge_bench import MergeRepo
 from sqlite_store import Store, begin_immediate
 
 from taskloop import check_store
-from taskloop.attempt_types import EntryIdentity, Seen
+from taskloop.agents.launch import AgentLaunch
+from taskloop.attempt_store import AttemptLoads
+from taskloop.attempt_types import AttemptKey, EntryIdentity, Seen
 from taskloop.check_store import CheckStore
 from taskloop.checks import Block, BlockPorts, argv_digest
+from taskloop.claim import ClaimWord
 from taskloop.claim_lease import Beat, Heartbeat
 from taskloop.composition import Checking
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.factory_schema import SCHEMA
 from taskloop.git_views import GitProfileFiles
+from taskloop.ids import NativeIds
 from taskloop.land import LandRequest, LandResult, land
 from taskloop.land_check import LandPorts
+from taskloop.land_conflict.admit import Ports as ConflictPorts
+from taskloop.land_conflict.execute import Ports as ExecutionPorts
+from taskloop.land_conflict.handoff import Handoff
+from taskloop.land_conflict.models import Record
+from taskloop.land_conflict.store import ConflictStore
 from taskloop.land_store import LandRow, LandStore
+from taskloop.merge.models import Reason, Result, Terminal
+from taskloop.merge.store import MergeStore
 from taskloop.setup_store import SetupStore
 from taskloop.slot_lock import landing
-from taskloop.slots import folder_name
+from taskloop.slots import SlotGit, folder_name
 from taskloop.task import TaskBinding, TaskInspection, TaskScope
 from taskloop.tracker import inspect_task
 from taskloop.tracker_client import CloseAnswer
@@ -49,12 +63,12 @@ DONE = (
     """INSERT INTO execution (attempt_id,dispatch_token,generation,rc,timed_out,work,stands,stdout_path,stdout_digest,stderr_path,
     stderr_digest,answer_path,answer_digest,diagnostic_path,diagnostic_digest,answer_kind,effect,session_state) VALUES
     ('implement','implement-token',1,0,0,1,1,'o','d','e','d','a','d','g','d','valid','commit','complete')""",
-    """INSERT INTO verification (attempt_id,dispatch_token,generation,verdict,observed_at)
-    VALUES ('implement','implement-token',1,'verified',5)""",
+    """INSERT INTO factory_commit (attempt_id,dispatch_token,generation,verdict,observed_at)
+    VALUES ('implement','implement-token',1,'committed',5)""",
 )
 
 
-class Racing(FakeRepo):
+class Racing(MergeRepo):
     """The person's clone: `after_ls` runs one step after each `ls_remote` in turn (None: nothing), as another actor
     racing on origin; `answer` replaces the next push's result; `pushes` counts the pushes made."""
 
@@ -124,7 +138,7 @@ class LandBench:
     x: str
     status: str = "in_progress"
     assignee: str = "taskloop"
-    beats: list[Beat] = field(default_factory=lambda: ["held"])
+    beats: list[Beat] = field(default_factory=lambda: [ClaimWord.HELD])
     environ: dict[str, str] = field(default_factory=dict)
     seen: dict[EntryIdentity, Seen] = field(default_factory=dict)
     now: float = 10.0
@@ -135,12 +149,17 @@ class LandBench:
     closing: list[CloseAnswer] = field(default_factory=list)
     tracker: list[tuple[str, str]] = field(default_factory=list)
     on_close: Callable[[], object] = lambda: None
+    conflict_runs: list[Record] = field(default_factory=list)
+    conflict_result: Result = field(default_factory=lambda: Terminal(reason=Reason.OWNER,
+                                    explanation="The checked conflict is retained; review is required before delivery."))
 
     def __post_init__(self) -> None:
         self.views, self.files = PinnedViews(self.repo), FakeSlotFiles(self.repo)
         self.environment = Environment(self.con, self.views, self.root / "art", tmp_bytes=4096)
         self.environment.clock = lambda: self.now
         self.environment.profiles = FakeProfiles(blob=json.dumps(PROFILE).encode())
+        ref = EvidenceFiles(self.root / "art").put_input(AttemptKey("implement", "implement-token", 1), "It must do X")
+        self.con.execute("UPDATE attempt SET input_path=?,input_digest=?", (ref.path, ref.digest))
         self.d = self.slot_head()
         self.lands = LandStore(lambda: self.con, self.begin)
 
@@ -183,11 +202,25 @@ class LandBench:
         block = Block(BlockPorts(env.process, env.process.lingering, lambda: self.now))
         return Checking(CheckStore(lambda: self.con), SetupStore(lambda: self.con), EvidenceFiles(env.artifacts), self.views, self.files,
                         env.profiles, env.preparation(), block, env.observe, lambda entry: self.seen.get(entry, "gone"),
-                        lambda _path: True, lambda: self.now, lambda: {"HOME": "/home/p"})
+                        lambda _path: True, lambda: self.now, lambda: {"HOME": "/home/p"}, ids=NativeIds())
 
     def ports(self) -> LandPorts:
         return LandPorts(self.checking(), self.lands, self.views, lambda path: GitProfileFiles(path, self.views), self.inspect,
-                         self.heartbeat_for, NoBeats, lambda: self.me, lambda _path: True, landing, self.environ, self.close)
+                         self.heartbeat_for, NoBeats, lambda: self.me, lambda _path: True, landing,
+                             self.environ, self.close, self.conflicts(), ids=NativeIds())
+
+    def conflicts(self) -> Handoff:
+        store = ConflictStore(lambda: self.con)
+
+        def admission(_repo: Repo) -> ConflictPorts:
+            return ConflictPorts(store, AttemptLoads(lambda: self.con), EvidenceFiles(self.root / "art"), self.repo,
+                                 SlotGit(self.views, self.files), lambda _path: True, lambda: self.now, NativeIds())
+
+        def execution(_repo: Repo, record: Record) -> Result:
+            self.conflict_runs.append(record)
+            return self.conflict_result
+
+        return Handoff(store, admission, execution)
 
     def land(self, mode: str = "land", *, no_change: bool = False, minutes: int | None = 5, checkout: Path | None = None,
              accept: bool = False) -> LandResult:
@@ -217,6 +250,26 @@ class LandBench:
         return {path: (tree.read(path) or b"").decode() for path in tree.files}
 
 
+def executing(b: LandBench, *, interrupt: bool = False,
+              edit: Callable[[FakeWorktree], None] | None = None) -> tuple[LandPorts, list[ExecutionCase]]:
+    """Drive conflict execution and its durable release with the same Git, database and slot as land."""
+    ports, cases = b.ports(), list[ExecutionCase]()
+
+    def execution(repo: Repo, record: Record) -> Result:
+        if not cases:
+            work = b.checking()
+            dependencies = ExecutionPorts(ports.conflicts.store, MergeStore(lambda: b.con), repo,
+                b.views, b.views, b.files, work.files, AgentLaunch(lambda _h: ("/bin/codex", {}), ids=NativeIds()),
+                lambda *_args: pytest.fail("unwired agent"), lambda _worker: True, lambda: b.now,
+                work.preparation, lambda: ClaimWord.HELD, ("/bin/codex", {}), ("probe",))
+            case = ExecutionCase(b.root / "factory.db", b.con, record, dependencies, b.slot, b.environment,
+                                 interrupt=interrupt, edit=edit)
+            case.ports = replace(case.ports, run=case.run, gone=lambda _worker: case.gone)
+            cases.append(case)
+        return cases[0].resume()
+
+    return replace(ports, conflicts=replace(ports.conflicts, execution=execution)), cases
+
 def database(path: Path, repo_id: str, slot: Path, base: str, x: str, d: str) -> sqlite3.Connection:
     """`path`: tl-1's done implement attempt (B its base, X its commit, released `kept` from slot s0, published), its checks
     attempt 1 concluded `passed` and released (parked at D), and the adopted free slot s1 at `slot` (generation 1)."""
@@ -225,11 +278,18 @@ def database(path: Path, repo_id: str, slot: Path, base: str, x: str, d: str) ->
     with begin_immediate(con):
         con.execute("INSERT INTO slot (repo_id,name,path,generation) VALUES (?,'s0','/elsewhere/s0',0),(?,'s1',?,1)",
                     (repo_id, repo_id, str(slot)))
+        pin_workflow(con)
         con.execute(
             """INSERT INTO attempt (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,
-            input_path,input_digest,schema_version,model,effort,sandbox,deadline,phase,base_commit,end_commit,number,seq,slot_head,
-            after_commit) VALUES ('implement','implement-token',1,'implement','beads','tasks','tl-1','/tracker',?,'s0','input.txt',
-            'digest',1,'m','e','workspace-write',100,'captured',?,?,1,2,?,?)""", (repo_id, base, x, d, base))
+            input_path,input_digest,schema_version,model,effort,access_policy,deadline,phase,base_commit,end_commit,number,seq,slot_head,
+            after_commit,engine_digest,workflow_digest,workflow_sha,
+            admitted_at) VALUES ('implement','implement-token',1,'implement','beads','tasks','tl-1',
+            '/tracker',?,'s0','input.txt',
+            'digest',1,'m','e','{"harness":"codex","sandbox":"workspace-write"}',100,'captured',?,?,1,2,?,?,
+        'abababababababababababababababababababababababababababababababab',
+        (SELECT digest FROM workflow_file),
+        'eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',1.0)""", (repo_id,
+            base, x, d, base))
         for statement in DONE:
             con.execute(statement)
         con.execute("INSERT INTO slot_release VALUES ('implement','implement-token',1,?,4,'kept')", (d,))
@@ -244,7 +304,7 @@ def bench(tmp_path: Path, x_files: dict[str, str] | None = None) -> LandBench:
     `x_files`, default one source file)."""
     where = tmp_path.resolve()
     remote = FakeRemote("https://example.invalid/repo.git")
-    base = remote.advance("main", {"README": "one\n", ".task-loop.json": json.dumps(PROFILE)}, "base")
+    base = remote.advance("main", {"README": "one\n", ".task-loop.json": json.dumps(PROFILE), **WORKFLOW_FILES}, "base")
     repo = Racing(FakeRepo.clone(remote, where / "main"))
     slot = repo.add_worktree(where / "slots" / folder_name(repo.identity()) / "s1", "HEAD")
     root = repo.worktree(repo.identity().root)

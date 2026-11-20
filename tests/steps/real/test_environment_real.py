@@ -17,9 +17,12 @@ from git_porcelain.testing import apply_hermetic_env, git
 from stream_proc import group_alive
 
 from taskloop.access import folders
+from taskloop.agents.launch import codex_access
+from taskloop.agents.settings import CodexPolicy
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import DEFAULT_GIT_READ_SECONDS, AttemptKey
-from taskloop.environment import EnvironmentPorts, Preparation, Renewal
+from taskloop.claim import ClaimWord
+from taskloop.environment import EnvironmentPorts, Preparation
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.git_views import GitViews
 from taskloop.owned_processes import setup_seen
@@ -35,8 +38,8 @@ KEY = AttemptKey("attempt", "dispatch", 1)
 SETUP = 'test -z "$(ls -A .venv 2>/dev/null)" && mkdir -p .venv && echo built > .venv/marker && echo "$TMPDIR" && echo "$UV_CACHE_DIR"'
 
 
-def held() -> Renewal:
-    return "held"
+def held() -> ClaimWord:
+    return ClaimWord.HELD
 
 
 def test_setup_resets_the_slot_and_runs_the_committed_setup_in_it(
@@ -63,16 +66,21 @@ def test_setup_resets_the_slot_and_runs_the_committed_setup_in_it(
     factory.execute("INSERT INTO reservation VALUES ('s1',?,1,'attempt')", (slot.parent.name,))
     factory.execute(
         """INSERT INTO attempt (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,
-        input_digest,schema_version,model,effort,sandbox,deadline,entry_pid,entry_start,entry_boot,number,seq,slot_head,after_commit)
+        input_digest,schema_version,model,effort,access_policy,deadline,entry_pid,entry_start,entry_boot,number,seq,slot_head,
+        after_commit,engine_digest,workflow_digest,workflow_sha,admitted_at)
         VALUES ('attempt','dispatch',1,'implement','beads','tasks','tl-1','/tracker',?,'s1','input.txt','x',1,'m','high',
-        'workspace-write',?,7,'s','b',1,2,?,?)""", (slot.parent.name, time.time() + 600, d, d))
+        '{"harness":"codex","sandbox":"workspace-write"}',?,7,'s','b',1,2,?,?,
+        'abababababababababababababababababababababababababababababababab',
+        (SELECT digest FROM workflow_file),
+        'eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',1.0)""", (slot.parent.name, time.time() + 600, d, d))
     record = AttemptStore(lambda: factory).load(KEY)
     assert record is not None
     ports = EnvironmentPorts(SetupStore(lambda: factory), VIEWS.checkouts, VIEWS.slot_profiles, RealEnvFiles(), setup_process, setup_seen,
                              group_alive, EvidenceFiles(root / "art"), time.time, sys.platform, shutil.rmtree.avoids_symlink_attacks,
                              lambda *_probe: True, (root / "art",), 4096)  # tmp_path is longer than the TMPDIR budget
     gitdir = Path(git(slot, "rev-parse", "--absolute-git-dir").strip())
-    result = Preparation(ports).prepare(record, Prepared(d, gitdir, main), held, ("/bin/codex", {"PATH": os.environ["PATH"]}))
+    result = Preparation(ports).prepare(record, Prepared(d, gitdir, main), held, ("/bin/codex", {"PATH": os.environ["PATH"]}),
+                                        codex_access(CodexPolicy(), folders(slot)).sandbox_argv("/bin/codex", ["true"]))
     assert result is None
     found = folders(slot)
     assert factory.execute("SELECT run,commit_sha,conclusion,rc FROM setup_run").fetchall() == [(1, d, "passed", 0)]

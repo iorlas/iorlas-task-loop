@@ -1,5 +1,7 @@
 # Configuration, profiles and source identity
 
+Status: **design**. Accepted decisions and pending proposals are distinguished below; historical source observations are not a delivery receipt. Explicit holds remain in force except where superseded.
+
 > STORE scope update, 2026-11-09: Denis accepted the identity/lifecycle contract and lifted its design hold for
 > [reconciled STORE slices](../tl-sqd3.26/plan.md) only. Earlier blanket-hold statements below describe prior review history.
 > Explicit dependencies still gate affected actions; historical migration/compatibility scope and unrelated holds remain excluded.
@@ -109,6 +111,8 @@ Internal poll intervals and safety constants need not all be public repository k
 reflection feature is carried into the successor solely because a setting exists; assess each through its actual caller.
 
 ## Profile approval is removed, not moved
+
+See [ADR 03](../tl-8bh9.14.119/adr-03-profile-change-approval.md) for current scope and tests. The later land acceptance requirement qualifies the original blanket wording.
 
 PushJudge.owner_approved currently reads ProfileChange JSONL rows, filters by tip/time within 600 seconds and compares
 diff_sha. Stack delivery writes those records. That is live authorization from a log, not merely audit evidence.

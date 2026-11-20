@@ -6,28 +6,76 @@ from typing import Final
 
 from git_porcelain import Tree
 
-from taskloop import step_text
+from taskloop import answer_decode, step_text
+from taskloop.answer_failures import AnswerFailure, AnswerRule
 from taskloop.attempt_types import (
     MODE,
     Answer,
     Effect,
+    PlanContentRule,
     Rejected,
     RepeatReason,
     Rule,
     StepRules,
+    Uncommitted,
     Unreadable,
-    Unsettled,
-    commit_message,
-    listed_paths,
     path_allowed,
 )
+from taskloop.input_context import InputContext
+from taskloop.plan_content import PlanDepth, validate
 from taskloop.task import TaskInspection
+from taskloop.workflow import StepTable
+from taskloop.workflow_render import render
 
 DISPOSITIONS: Final = ("planned", "unchanged", "incomplete", "needs_owner")
 # Each disposition's effect, stored with it: only `planned` commits and only `unchanged` keeps B; the rest end nothing.
 EFFECT_OF: Final[dict[str, Effect]] = {"planned": "commit", "unchanged": "keep", "incomplete": "none", "needs_owner": "none"}
 PLAN_NAME: Final = "plan.md"
-ARTIFACT_RULES: Final[tuple[Rule, ...]] = ("plan_missing", "plan_encoding", "plan_empty", "plan_size")  # the plan.md rule's words
+BLANK: Final = "\n\n"  # between the paragraphs of an input
+FINAL_ANSWER_WARNING: Final = (
+    "Your final message must be the JSON answer only; write plan.md before you answer `planned`; "
+    "a message without a tool call ends the step."
+)
+ARTIFACT_RULES: Final[tuple[Rule, ...]] = ("plan_missing", "plan_encoding", "plan_empty", "plan_size", *PlanContentRule)
+TEMPLATE: Final = (
+    "Use exactly these sections in this order, with UTF-8 byte allowances (text after each colon is guidance, "
+    "not heading text):\n"
+    "# Header: task, base commit, assessment and Size estimate; 300 bytes. The Header must contain one line that is "
+    "only `Depth: small|medium|large` (one value, optionally followed by a semicolon and explanation); a Depth "
+    "written inside a sentence is refused.\n"
+    "## Outcome and non-goals: 800 bytes.\n"
+    "## Settled decisions: one line each; a reason only when not obvious; cite the task's own decision numbers "
+    "instead of restating them; 1,500 bytes.\n"
+    "## Open decisions: list only, never answer them in the plan; any open decision requires `needs_owner`.\n"
+    "## Change map: nonempty Markdown bullet list; the first line under ## Change map must be a bullet; "
+    "put any explanation inside a bullet. Use one line per file, symbol and change; symbol names instead of "
+    "line numbers. Find callers in one targeted search and list every caller found, including producers and callers "
+    "implementation must consult. Mark new files as new and name their existing integration points; 2,000 bytes or "
+    "more as needed within the total cap.\n"
+    "## Read list: nonempty Markdown bullet list of at most 25 entries. Each entry names an existing file as "
+    "`path:first-last`, with a short reason and a narrow, useful line range. Cover every file implementation must "
+    "edit or consult, including producers and callers. "
+    "Exception: a file whose only change is a one-to-one rename listed in a committed naming map is not listed. "
+    "Instead, name the map rows and one rg -nw command that must return no matches after implementation. "
+    "List the files where the rename touches signatures, logic or behaviour. "
+    "Only map rows with one target name qualify; rows whose target depends on a cause stay in normal plan scope. "
+    "The rg search returning nothing must be an acceptance line. "
+    "For new files, mark them as new in the implementation "
+    "narrative and list their existing integration points here; never invent ranges in nonexistent files. "
+    "Targeted searches for omitted callers or source that changed after planning are allowed.\n"
+    "## Contract: new or changed typed names, states, stored fields and effect boundaries as intent, effect, result; "
+    "2,000 bytes or spare space within the total cap.\n"
+    "## Work packages: numbered, with files and the acceptance lines each closes.\n"
+    "## Acceptance behaviours: one line each, no test names or gate boilerplate; 1,500 bytes.\n"
+    "Forbidden in plan.md: restating task text, AGENTS.md or glossary rules; alternatives paragraphs; history or "
+    "provenance; tables repeating decisions or code; Status, As built, Progress or Implementation progress headings "
+    "and content.\n"
+    "Total caps by depth in UTF-8 bytes: "
+    + ", ".join(f"{depth.value} {depth.cap:,}" for depth in PlanDepth) + ". Equality passes. "
+    "Never grow beyond the cap: remove duplication or answer `needs_owner` with a proposed split, each part with "
+    "acceptance and dependencies (explicitly none where appropriate). A plan missing this template needs revision, "
+    "not `unchanged`."
+)
 ANSWER_KEYS: Final = ("disposition", "plan_path", "paths", "message", "explanation")
 # The structural answer contract Codex forwards as an OpenAI strict response format: a plain object at the top level (no
 # allOf/anyOf/oneOf/not/enum/if there), every property required, nullable by type list, no composition keywords at all.
@@ -47,8 +95,7 @@ ANSWER_SCHEMA: Final = {
 }
 OPENING: Final[dict[RepeatReason, str]] = {
     "uncommitted": "Attempt {number} of this step left changes in the slot that it did not list for commit.",
-    "unsafe": "This listed path, or a `.git*` file near it, cannot be committed: a symlink or under one, not a plain file, "
-    "executable, over 1 MiB, or a Git file.",
+    "unsafe": "These paths cannot be committed.",
     "ignored": "These paths are ignored by Git. Any ignored file under the plan folder, and any ignored attributes file, "
     "blocks the commit whether it is listed or not; a listed one can never be committed.",
 }
@@ -61,39 +108,61 @@ def step_rules(task_id: str) -> StepRules:
 
 def decode(value: object, rules: StepRules) -> Answer:
     """Validate the factory's plan answer contract, without verifying Git effects; the single owner of its cross-field
-    rules and every bound (the strict schema carries none). The expected plan is `<rules.root>plan.md`."""
-    if not isinstance(value, dict) or set(value) != set(ANSWER_KEYS):
-        raise ValueError("Invalid plan answer")
-    disposition, path, paths, message, explanation = (value[key] for key in ANSWER_KEYS)
-    expected, listed = rules.root + PLAN_NAME, listed_paths(paths, rules)
+    rules and every bound (the strict schema carries none). Unfinished answers ignore structurally valid paths without
+    requesting a commit. The expected plan is `<rules.root>plan.md`."""
+    disposition, path, paths, message, explanation = answer_decode.fields(value, ANSWER_KEYS)
+    if not isinstance(disposition, str) or disposition not in DISPOSITIONS:
+        raise AnswerFailure(AnswerRule.DISPOSITION, "disposition must be one of: " + ", ".join(DISPOSITIONS))
+    expected = rules.root + PLAN_NAME
+    listed = answer_decode.paths(paths, rules, unfinished=disposition in ("incomplete", "needs_owner"))
+    if path != expected and (path is not None or disposition == "planned"):
+        suffix = "" if disposition == "planned" else " or null"
+        raise AnswerFailure(AnswerRule.PLAN_PATH, f"plan_path must be {expected}{suffix}")
     if disposition == "planned":
-        fits = path == expected and listed is not None and expected in listed and commit_message(message)
-    else:
-        named = path == expected or path is None  # `unchanged` without a plan decodes: verification names `plan_missing`
-        fits = disposition in DISPOSITIONS and named and listed == () and message is None
-    if not fits or listed is None or not isinstance(explanation, str) or len(explanation) > 2000:
-        raise ValueError("Invalid plan answer")
-    text = message if isinstance(message, str) else None
-    return Answer(str(disposition), EFFECT_OF[str(disposition)], listed, text, explanation)
+        if expected not in listed:
+            raise AnswerFailure(AnswerRule.PATHS_REQUIRED, f"planned paths must include {expected}")
+    elif listed:
+        raise AnswerFailure(AnswerRule.PATHS_COUNT, "unchanged paths must be empty")
+    text = answer_decode.message(message, committing=disposition == "planned")
+    return Answer(disposition, EFFECT_OF[disposition], listed, text, answer_decode.explanation(explanation))
 
 
-def input_text(task: TaskInspection, rules: StepRules) -> str:
-    """The plan step's admitted input: the task's own prose, then the fixed closing words (where the plan goes,
-    `unchanged` or `planned`, no Git write: the factory commits the listed paths)."""
-    return f"{task.title}\n\n{task.requirements}\n\n{task.acceptance}\n\n{_closing_words(rules)}\n"
+def input_text(table: StepTable, task: TaskInspection, rules: StepRules, context: InputContext) -> str:
+    """The workflow's sections for the plan step, then the contract; the factory commits listed paths."""
+    return render(table, task, context, contract(rules))
 
 
-def _closing_words(rules: StepRules) -> str:
+def _metadata_words(rules: StepRules) -> str:
+    return (
+        f"With `planned`, write `{rules.root}plan-metadata.json` beside plan.md and include it in `paths`. "
+        "Its JSON object has exactly two fields: `prepared_commit`, the full Source commit supplied in the factory input "
+        "(the commit used to prepare this plan), and `cited_paths`, a nonempty array of unique literal repository-relative "
+        "files or folders consulted when preparing the plan. Include every consulted source and caller; folders mean "
+        "everything below them. Use no absolute paths, traversal, pathspec magic or wildcard patterns. "
+        "An existing plan without valid committed metadata needs revision, not `unchanged`. "
+        "When reusing a valid plan, retain its metadata and original prepared_commit."
+    )
+
+
+def contract(rules: StepRules) -> str:
+    """What code appends after the workflow's sections: the plan file, its template and byte caps, the answer and commit
+    rules, the metadata and the final-answer warning. Strategy prose lives in the workflow file, never here."""
     root = rules.root
     return (
-        f"First read `{root}{PLAN_NAME}` if it exists. If it is still valid for the task and the code as they are now, change "
-        f"nothing and answer `unchanged`. Otherwise write the plan there (rewrite it in place if it exists) and answer "
+        f"The plan file for this task is `{root}{PLAN_NAME}`: read it if it exists, once the depth assessment permits planning.\n\n"
+        f"{TEMPLATE}\n\n"
+        "If the assessed plan is still valid for the task and code as they "
+        "are now, change nothing and answer `unchanged`. Otherwise write the plan there (rewrite it in place if it exists) and answer "
         f"`planned`; other files only under `{root}`. {step_text.GIT_WRITES} With `planned`, list in `paths` every file "
         "you want committed and give a "
-        "one-line commit `message`; the factory commits exactly those paths. Remove any other file you created. Anything "
-        "left uncommitted is reported back to you as a failed step. If the task cannot be planned as written (it contradicts "
+        "one-line commit `message`; the factory commits exactly those paths. With `planned`, remove any other file you "
+        "created; anything left uncommitted is reported back to you as a failed step. If the task cannot be planned as "
+        "written (it contradicts "
         "itself or the code, is empty or too vague to act on), write no plan: answer `needs_owner` and say in `explanation` "
-        "what the owner must decide."
+        "what the owner must decide. If you could not finish planning, answer `incomplete` and explain why in "
+        "`explanation`. Only with `planned` should `paths` list files; otherwise return `paths: []` and "
+        "`message: null`, and the factory saves unfinished slot work as a work-in-progress commit on the task branch "
+        "when holding the task. " + step_text.SAVED_WORK + BLANK + _metadata_words(rules) + BLANK + FINAL_ANSWER_WARNING
     )
 
 
@@ -102,7 +171,7 @@ def repeat_instructions(rules: StepRules, number: int, *, unrecorded: bool) -> s
     it was committed, so its files must be listed again."""
     root, plan = rules.root, rules.root + PLAN_NAME
     last = (
-        f"Nothing of attempt {number} was committed, so none of its files is in Git: answer `planned` and list in `paths` "
+        f"Nothing of attempt {number} was committed: answer `planned` and list in `paths` "
         f"again every file you want committed, `{plan}` included."
         if unrecorded
         else "If you only removed or restored files, answer `unchanged`: a `planned` answer with nothing new to commit is "
@@ -112,17 +181,19 @@ def repeat_instructions(rules: StepRules, number: int, *, unrecorded: bool) -> s
         f"Remove every untracked file listed that does not belong to the plan. A tracked file you changed outside `{root}` "
         "cannot be committed: restore its committed content (`git show HEAD:<path> > <path>`); you cannot run `git checkout` "
         f"or `git restore`. With `planned`, `paths` always lists `{plan}` and every other file under that folder you want "
-        f"kept, and only when you changed or added a file there. {last}"
+        f"kept, and only when you changed or added a file there; leave files you did not change out of paths. {last}\n\n"
+        + _metadata_words(rules)
     )
 
 
-def feedback(found: Unsettled, rules: StepRules, number: int, task: str, nonce: str, *, unrecorded: bool) -> str:
-    """The next attempt's complete input in the shared frame (`step_text.feedback`): the plan's fixed words for the
-    reason, the listing, its fixed instructions, then the task. `unrecorded`: attempt `number` answered `planned` and
+def feedback(found: Uncommitted, rules: StepRules, number: int, task: str, nonce: str, *, unrecorded: bool) -> str:
+    """The next input: the warning before the shared feedback frame, listing, repair instructions and task.
+    `unrecorded`: attempt `number` answered `planned` and
     nothing of it was committed, so its files must be listed again. `found.reason` is one of REPEATABLE."""
     opening = next(text for reason, text in OPENING.items() if reason == found.reason)
     instructions = repeat_instructions(rules, number, unrecorded=unrecorded)
-    return step_text.feedback(opening.format(number=number), found.listing, instructions, task, nonce)
+    opening = step_text.unsafe_details(found) or opening.format(number=number)
+    return FINAL_ANSWER_WARNING + BLANK + step_text.feedback(opening, found.listing, instructions, task, nonce)
 
 
 def artifact(tip: Tree, rules: StepRules) -> Rejected | str:
@@ -151,4 +222,6 @@ def _content(data: bytes, cap: int) -> Rule | None:
         return "plan_encoding"
     if not text.strip():
         return "plan_empty"
-    return "plan_size" if len(data) > cap else None
+    if len(data) > cap:
+        return "plan_size"
+    return validate(text, len(data))

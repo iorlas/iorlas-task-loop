@@ -1,0 +1,18 @@
+{
+  "prepared_commit": "b0d1f292baca305bb8a5e00926a5d24250c58782",
+  "cited_paths": [
+    "src/taskloop/dash/static/lines.js",
+    "src/taskloop/dash/static/drawer.js",
+    "src/taskloop/dash/static/ui.js",
+    "src/taskloop/dash/static/api.js",
+    "src/taskloop/dash_task.py",
+    "tests/dash/rail.test.js",
+    "tests/dash/rail.html",
+    "tests/dash/duration.test.js",
+    "tests/dash/test_accessibility_markup.py",
+    "tests/dash/test_check_feed_endpoint.py",
+    "tests/cli/test_dash_server.py",
+    "tests/cli/test_dash_words.py",
+    "tests/steps/test_dash_read.py"
+  ]
+}

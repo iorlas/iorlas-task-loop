@@ -3,6 +3,8 @@
 Status: **built** for scheduling priority as recorded in [the scheduling slice](../tl-8bh9.4.3.1.13/plan.md).
 The historical plan-admission wording below is retained; current commands are in the [README](../../../README.md).
 
+See [ADR 09](../tl-8bh9.14.119/adr-09-hierarchical-priority.md) for current scope, supersession and enforcement.
+
 Task: tl-8bh9.3.7. Owner accepted Astra's rule on 2026-11-08. Decision settled; implemented for plan admission in
 [.4.3.1.13](../tl-8bh9.4.3.1.13/plan.md) (`selection.py`); approval is the tracker label `auto`.
 A less urgent task never beats an urgent task because of its ancestors. When own priorities tie, compare ancestor

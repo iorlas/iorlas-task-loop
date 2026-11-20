@@ -17,14 +17,14 @@ from taskloop.setup_store import ProcessSeen
 type Route = Literal["advance", "launch", "rerun", "answer", "abandoned"]
 type ChecksNext = Literal["start", "wait", "release", "done", "unknown", "stuck:hung", "stuck:checks_refused"]
 REFUSED_STUCK: Final = 2  # counted relaunches in a row (section 6.1) after which rounds stop relaunching a checks attempt
-HALF_DONE: Final = ("The task's abandon is half done: its checks attempt is abandoned, the claim still kept. Run `tl step "
-                    "release --abandon` again to return it.")
+HALF_DONE: Final = ("The task's abandon is half done: its checks attempt is abandoned but the claim is still kept. "
+                    "The abandon must finish returning the claim before fresh admission.")
 
 
 @dataclass(frozen=True)
 class ChecksView:
     """The latest checks attempt of the view's done implement attempt, whose fields the view then shows (section 9), with
-    the latest block's results and (`tl step show` only) each result's log path, by position."""
+    the latest block's results and (`tl attempt show` only) each result's log path, by position."""
 
     row: ChecksRow
     results: tuple[ResultRow, ...]

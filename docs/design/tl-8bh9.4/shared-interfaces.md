@@ -1,5 +1,7 @@
 # Shared interfaces: available mechanisms and remaining gaps
 
+Status: **evidence**. Dated source review; recommendations remain proposals unless explicitly accepted below.
+
 Task: tl-8bh9.4 with tl-8bh9.6.2 and corrected STORE dependencies. Source review with Astra, 2026-11-09.
 Evidence is the vendored library snapshot and current factory/delegate source, not latest shelf HEAD. No source edits,
 process/Git execution or implementation tests were performed. Inspect owning shelf source before extending a package;

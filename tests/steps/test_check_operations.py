@@ -1,7 +1,7 @@
 """The step operations on a task in its check step (S6d, tl-8bh9.14.6 sections 5, 9, 10) over a factory.db file (the
 `done` implement attempt), the real checks admission (`ChecksBench`) and a checks launcher that reads the store as the
 real one does: `tl step start` advances, relaunches, answers, re-runs and refuses the half-done abandon; the racing
-winner goes to the checks launcher; release and abandon go checks first; verify stays on the agent attempt."""
+winner goes to the checks launcher; release and abandon go checks first; commit stays on the agent attempt."""
 
 import dataclasses
 from collections.abc import Generator
@@ -12,24 +12,25 @@ from doubles import ChecksBench, Done, FakeSlotFiles, NoAdvance, NoChecks, Pinne
 from git_porcelain.testing import FakeRepo
 
 from taskloop.admit import AdmitRequest, AdmitResult
+from taskloop.agents.settings import Overrides, StepSettings
 from taskloop.attempt_reads import PublishedRow
 from taskloop.attempt_store import AttemptStore
-from taskloop.attempt_types import AttemptKey, EntryIdentity, Verified, VerifyResult
+from taskloop.attempt_types import AttemptKey, CommitResult, Committed, EntryIdentity
 from taskloop.check_store import ChecksAdmitted, CheckStore, insert
 from taskloop.launch import Launched, LaunchRefused, LaunchResult, LaunchUnavailable
 from taskloop.operations import (
     LATE,
     ChecksPorts,
+    CommittedTask,
     Failed,
     ReleasedTask,
     Started,
     StartPorts,
     StartRequest,
-    VerifiedTask,
+    commit_task,
     relaunch_checks,
     release_task,
     start,
-    verify_task,
 )
 from taskloop.publish import PublishResult
 from taskloop.slot_release import AlreadyReleased, NotReleased, Released, ReleaseResult
@@ -37,7 +38,7 @@ from taskloop.step_guide import CHECKS_GUIDE, GUIDE
 from taskloop.step_render import human
 
 ENTRY = (7, "entry-start", "boot")
-REQUEST = StartRequest("tl-1", "tasks", "/tracker", Path("/unused"), "m", "high", 30)
+REQUEST = StartRequest("tl-1", "tasks", "/tracker", Path("/unused"), StepSettings(), Overrides(model="m", effort="high"), 30)
 
 
 class Never:
@@ -138,7 +139,7 @@ def test_the_half_done_abandon_refuses_release_and_launches_nothing(rig: Rig) ->
     rig.start()
     rig.bench.concluded("failed", abandoned=True)
     found = rig.start()
-    assert isinstance(found, Failed) and found.word == "refused:release" and "--abandon" in found.detail
+    assert isinstance(found, Failed) and found.word == "refused:release" and "finish returning the claim" in found.detail
     assert rig.numbers() == [(1, "concluded")] and len(rig.launcher.calls) == 1
 
 
@@ -236,25 +237,25 @@ def test_without_a_checks_attempt_the_release_is_the_implement_attempt_s(rig: Ri
 
 @dataclasses.dataclass
 class Recorded:
-    """Verify and publish ports that record the attempt they were asked about: a stored verdict, an earlier publication."""
+    """Commit and publish ports that record the attempt they were asked about: a stored verdict, an earlier publication."""
 
-    commit: str
+    sha: str
     keys: list[str] = dataclasses.field(default_factory=list)
 
-    def verify(self, key: AttemptKey) -> VerifyResult:
+    def commit(self, key: AttemptKey) -> CommitResult:
         self.keys.append(key.attempt_id)
-        return Verified("blob", reused=True)
+        return Committed("blob", reused=True)
 
     def publish(self, key: AttemptKey) -> PublishResult:
         self.keys.append(key.attempt_id)
-        return PublishedRow(self.commit, self.commit, 6)
+        return PublishedRow(self.sha, self.sha, 6)
 
 
-def test_verify_on_a_task_in_check_acts_on_its_implement_attempt_only(rig: Rig) -> None:
+def test_commit_on_a_task_in_check_acts_on_its_implement_attempt_only(rig: Rig) -> None:
     rig.start()
     seen, implement = Recorded(rig.bench.done.x), Releases(results=[AlreadyReleased("s0", "kept", False)])
-    found = verify_task(AttemptStore(lambda: rig.bench.con), seen, implement, seen, "tasks", "tl-1")
-    assert isinstance(found, VerifiedTask) and (found.status, found.attempt_id) == ("reused", "implement")
+    found = commit_task(AttemptStore(lambda: rig.bench.con), seen, implement, seen, "tasks", "tl-1")
+    assert isinstance(found, CommittedTask) and (found.status, found.attempt_id) == ("reused", "implement")
     assert seen.keys == ["implement", "implement"] and implement.calls == [("implement", False)]
 
 

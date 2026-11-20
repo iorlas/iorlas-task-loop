@@ -5,22 +5,28 @@ the agent's explanation from its stored valid answer (decoded by the step kind's
 Agent text goes to the person only, through `hold_text`."""
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import get_args
 
-from any_agent import DecodedAnswer, decode_answer
-
-from taskloop.attempt_reads import AttemptRow, StoreRefused
-from taskloop.attempt_result import collect
+from taskloop.agents.api import AgentStop
+from taskloop.agents.stop_store import StopStore
+from taskloop.answer_read import read as read_answer
+from taskloop.attempt_reads import AttemptRow, StoreRefused, StoreUnavailable
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import StoredExecution
 from taskloop.check_status import latest
-from taskloop.check_store import CheckStore
+from taskloop.check_store import ChecksRow, CheckStore
 from taskloop.evidence_files import EvidenceError, EvidenceFiles
 from taskloop.hold_store import HoldRow
 from taskloop.hold_text import FailedCheck, HoldFacts, Kept, KeptWord, LabelsWord, Leftovers, Returned
+from taskloop.land_conflict.models import AdmissionRefused, Request
+from taskloop.land_conflict.store import ConflictStore
+from taskloop.merge.models import Phase
+from taskloop.merge.store import MergeStore
 from taskloop.operations import Failed, ReleasedTask
 from taskloop.setup_store import SetupStore
-from taskloop.steps import CHECK, is_agent, kind
+from taskloop.steps import CHECK
+from taskloop.task_event_cause import ChecksCause, LandCause, MergeCause, MergeReason, RepeatCause, RunCause, StuckCause
 
 
 @dataclass(frozen=True)
@@ -33,7 +39,7 @@ class Pending:
 
 def refusal(failed: Failed) -> str:
     """The abandon refusal's word as a round's line shows it: `held:<slot word>` for a slot left as it is, else the
-    refusal's own (`unsettled:worker_alive`, `unavailable:tracker`, `refused:landing`)."""
+    refusal's own (`waiting:worker_alive`, `unavailable:tracker`, `refused:landing`)."""
     return f"held:{failed.reason}" if failed.kind == "refused" and failed.reason.startswith("slot_") else failed.word
 
 
@@ -63,40 +69,75 @@ def outcome(reader: AttemptStore, agent: AttemptRow, released: ReleasedTask | Fa
 
 
 def explanation(files: EvidenceFiles, execution: StoredExecution | None, step: str, task_id: str) -> str | None:
-    """The agent's explanation from its stored valid answer, by the step kind's own decoder; None without one (no valid
-    answer, a checks attempt, or an answer file that no longer reads as stored)."""
-    if execution is None or execution.answer.kind != "valid" or not is_agent(step):
-        return None
-    found = kind(step)
-    rules = found.rules(task_id)
+    """The captured broken rule, otherwise the valid answer's explanation through its owning decoder."""
+    if execution is not None and execution.answer.failure is not None:
+        return execution.answer.failure.describe()
     try:
-        answer = decode_answer(files.read(execution.evidence.answer), lambda value: found.decode(value, rules))
+        answer = read_answer(files, execution, step, task_id)
     except EvidenceError:
         return None
-    return answer.value.explanation if isinstance(answer, DecodedAnswer) else None
+    return None if answer is None else answer.explanation
 
 
-def facts(files: EvidenceFiles, reader: AttemptStore, row: HoldRow, labels: LabelsWord, agent: AttemptRow,
-          leftovers: tuple[str, ...]) -> HoldFacts:
-    """The comment's facts, from the stored hold, never from whichever view the caller has now (after the abandon a
-    checks cause's task shows its implement attempt): a checks cause (`cause_id` is not A) is that checks attempt, its
-    latest block's failed checks with their logs and its evidence directory, with no agent explanation; an agent cause
-    is A with its stored answer's explanation and (`repeats_exhausted`) the `leftovers` the caller read. A's X and
-    publication either way. StoreRefused `changed` when the checks cause is no longer stored."""
+def captured_stop(reader: AttemptStore, cause_id: str) -> AgentStop | None:
+    return StopStore(reader.connect, reader.begin).get(cause_id)
+
+
+def merge_cause(reader: AttemptStore, attempt_id: str) -> MergeCause | None:
+    work = MergeStore(reader.connect, reader.begin).get(attempt_id)
+    if work is None or work.reason is None:
+        return None
+    return MergeCause(reason=MergeReason(work.reason), explanation=work.explanation,
+                      source=work.source, target=work.target, conflicts=work.conflicts)
+
+
+def land_cause(reader: AttemptStore, agent: AttemptRow, checks: ChecksRow, cause: LandCause) -> LandCause:
+    """Read only the terminal decision belonging to this exact retained admission, even after its release."""
+    request = Request(source=agent.key, checks=checks.key, repo_id=checks.repo_id, backlog=checks.backlog,
+                      task_id=checks.task_id, tracker_root=checks.tracker_root, checked=checks.commit,
+                      target=checks.commit, deadline=0.0)
+    try:
+        record = ConflictStore(reader.connect, reader.begin).find(request)
+    except (AdmissionRefused, ValueError) as error:
+        raise StoreUnavailable("The retained conflict admission cannot be verified") from error
+    if record is None:
+        return cause
+    work = MergeStore(reader.connect, reader.begin).get(record.key.attempt_id)
+    if work is None:
+        return cause
+    if ((work.attempt_id, work.dispatch_token, work.generation) !=
+            (record.key.attempt_id, record.key.dispatch_token, record.key.reservation_generation)
+            or (work.task_id, work.repo_id, work.source, work.target, work.deadline, work.branch) !=
+            (request.task_id, request.repo_id, request.checked, record.request.target, record.request.deadline, None)
+            or (work.base, work.slot, work.setting, work.input_path, work.input_digest) !=
+            (record.base, Path(record.slot_path), record.inputs.setting, record.inputs.input_ref.path, record.inputs.input_ref.digest)
+            or work.phase is not Phase.TERMINAL or not work.explanation.strip()):
+        raise StoreUnavailable("The retained terminal conflict decision cannot be verified")
+    return LandCause(reason=cause.reason, explanation=work.explanation, source=work.source, target=work.target)
+
+
+def facts(files: EvidenceFiles, reader: AttemptStore, row: HoldRow, labels: LabelsWord, agent: AttemptRow) -> HoldFacts:
+    """Render the recorded cause. Live evidence resolves locations, never replaces the snapshot's context."""
     published = None if agent.published is None else agent.published.commit
     head = (agent.task_id, row.label, labels, row.reason)
+    cause = row.event.cause
+    failed = tuple(FailedCheck(each.name, str(each.conclusion), each.log or "") for each in cause.checks) if isinstance(
+        cause, (ChecksCause, LandCause)) else ()
+    left = Leftovers(str(cause.leftovers.reason), cause.leftovers.paths) if isinstance(
+        cause, RepeatCause) and cause.leftovers is not None else None
+    deadline = cause.deadline if isinstance(cause, (ChecksCause, RunCause, StuckCause)) else None
+    stop = cause.stop if isinstance(cause, (RunCause, StuckCause)) else None
+    rc = cause.rc if isinstance(cause, (RunCause, StuckCause)) else None
     if row.cause_id != row.attempt_id:
         store = CheckStore(reader.connect, reader.begin)
         checks = next((each for each in store.of_attempt(row.attempt_id) if each.key.attempt_id == row.cause_id), None)
         if checks is None:
             raise StoreRefused("changed")
-        failed = tuple(
-            FailedCheck(each.name, each.conclusion or "unfinished",
-                        "" if each.conclusion == "undefined" else str(files.check_path(checks.key, each.block, each.name)))
-            for each in store.results(checks.key) if each.conclusion != "passed")
-        return HoldFacts(*head, CHECK, checks.number, row.cause_id, row.held_at, published, agent.end_commit, None, failed, None,
-                         str(files.root / files.directory(checks.key)), files.last_entry(checks.key), checks.deadline)
-    left = Leftovers(leftovers[0], leftovers[1:]) if leftovers and row.reason.startswith("repeats_exhausted") else None
-    told = explanation(files, collect(reader, agent.key).execution, agent.step, agent.task_id)
-    return HoldFacts(*head, agent.step, agent.number, agent.key.attempt_id, row.held_at, published, agent.end_commit, told, (),
-                     left, str(files.root / files.directory(agent.key)), files.last_entry(agent.key), agent.deadline)
+        return HoldFacts(*head, CHECK, checks.number, row.cause_id, row.held_at, published, agent.end_commit,
+                         cause.explanation, failed, left, str(files.root / files.directory(checks.key)),
+                         files.last_entry(checks.key), deadline, stop=stop, rc=rc)
+    if agent.key.attempt_id != row.cause_id:
+        raise StoreRefused("changed")
+    return HoldFacts(*head, agent.step, agent.number, agent.key.attempt_id, row.held_at, published, agent.end_commit,
+                     cause.explanation, failed, left, str(files.root / files.directory(agent.key)),
+                     files.last_entry(agent.key), deadline, stop=stop, rc=rc)

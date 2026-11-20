@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "iorlas-task-loop"
-version = "0"
+version = "0.1.0"
 description = "Minimal task-loop successor foundation"
 requires-python = ">=3.15"
 dependencies = [

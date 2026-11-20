@@ -1,5 +1,5 @@
 """What a land changes in the gate that decides a pass (tl-8bh9.14.42 and .43), read from Git objects as O (origin's `main`)
-and S (the squash that would land) and shared by `--summary` and the land itself: the land refuses an S whose gate facts
+and S (the squash that would land) and shared by `tl land show` and the land itself: the land refuses an S whose gate facts
 are not empty unless the person passes `--accept-gate-changes`, naming each fact, so a task cannot disarm the checks of
 every later task unseen.
 
@@ -27,7 +27,6 @@ DOCS: Final = frozenset({".md", ".rst", ".txt"})
 TOOL_SUFFIXES: Final = frozenset({".toml", ".ini", ".cfg"})  # a tool's configuration at any depth (`src/ruff.toml`, `tests/pytest.ini`)
 SKIPS: Final = frozenset({"skip", "skipif", "xfail", "importorskip"})  # `pytest.mark.skip`, `skip()` after `from pytest import skip`
 FILES: Final = 50  # changed files listed, then `... and <n> more`
-ACCEPT: Final = "--accept-gate-changes"
 
 
 @dataclass(frozen=True)

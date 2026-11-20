@@ -10,23 +10,26 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 import pytest
-from doubles import CHECKS, D, X
+from doubles import CHECKS, D, X, pin_workflow
+from hold_fixtures import event, event_for
 from sqlite_store import begin_immediate
 from stream_proc import OwnedProcess
 
-from taskloop.attempt_reads import ReleaseRow
+from taskloop.attempt_reads import ReleaseRow, StoreRefused
 from taskloop.attempt_status import AttemptView
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import AttemptKey, AttemptResult
 from taskloop.check_status import ChecksView
 from taskloop.check_store import CheckStore, ResultRow
+from taskloop.command_conclusion import CommandConclusion
 from taskloop.evidence_files import EvidenceFiles
-from taskloop.hold import ROUND_CAUSES, HoldMove, HoldPorts, clear_holds, hold_task
-from taskloop.hold_guide import KEPT_ACTIONS
+from taskloop.hold import HoldMove, HoldPorts, clear_holds, hold_task
+from taskloop.hold_guide import pending_guide
 from taskloop.hold_store import COMMENT_LEASE, HoldInsert, HoldRow, HoldStore, Uncleared
 from taskloop.operations import Failed, Move, Round
 from taskloop.slot_release import AlreadyReleased, NotReleased, Released, ReleaseResult
 from taskloop.step_render import human
+from taskloop.task_event_cause import RoundCause, RoundReason
 from taskloop.tracker_client import HoldAnswer, HoldWrite, LabelStep, TrackerHolds
 
 NEEDS_OWNER = AttemptResult("collected", "needs_owner")
@@ -35,11 +38,17 @@ RETURNED = Released("s1", D, True, "unclaimed", True)
 
 def attempt(con: sqlite3.Connection, attempt_id: str = "a", *, seq: int = 1, label: str | None = "auto") -> None:
     """tl-1's captured plan attempt at `seq` on slot s1 (X stored, agent pid 42 group 41), taken under `label`."""
+    pin_workflow(con)
     con.execute(
         """INSERT INTO attempt (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,
-        input_path,input_digest,schema_version,model,effort,sandbox,deadline,phase,base_commit,end_commit,worker_pid,worker_pgid,
-        worker_start,worker_boot,number,seq,slot_head,label) VALUES (?,?,1,'plan','beads','tasks','tl-1','/tracker','r','s1','i',
-        'd',1,'m','e','workspace-write',100,'captured',?,?,42,41,'st','boot',1,?,?,?)""",
+        input_path,input_digest,schema_version,model,effort,access_policy,deadline,phase,base_commit,end_commit,worker_pid,worker_pgid,
+        worker_start,worker_boot,number,seq,slot_head,label,engine_digest,workflow_digest,workflow_sha,
+        admitted_at) VALUES (?,?,1,'plan','beads','tasks',
+        'tl-1','/tracker','r','s1','i',
+        'd',1,'m','e','{"harness":"codex","sandbox":"workspace-write"}',100,'captured',?,?,42,41,'st','boot',1,?,?,?,
+        'abababababababababababababababababababababababababababababababab',
+        (SELECT digest FROM workflow_file),
+        'eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',1.0)""",
         (attempt_id, attempt_id + "-token", D, X, seq, D, label))
 
 
@@ -53,20 +62,29 @@ class Tracker:
     commented: HoldWrite = "done"
     cleared: HoldWrite = "done"
     texts: list[str] = field(default_factory=list)
+    keys: list[str] = field(default_factory=list)
+    notices: dict[tuple[str, str, str], str] = field(default_factory=dict)
+    lost_response: bool = False
     during_comment: list[object] = field(default_factory=list)
 
-    def labels(self, root: str, task: str, label: str) -> HoldAnswer[LabelStep]:
+    def labels(self, root: str, task: str, label: str | None) -> HoldAnswer[LabelStep]:
         self.calls.append(f"labels {root} {task} {label}")
         detail = "lock" if self.labelled == "unavailable" else self.assignee if self.labelled in ("moved", "absent") else ""
         return HoldAnswer(self.labelled, detail)
 
-    def comment(self, root: str, task: str, text: str) -> HoldAnswer[HoldWrite]:
+    def comment(self, root: str, task: str, key: str, text: str) -> HoldAnswer[HoldWrite]:
         self.calls.append(f"comment {task}")
         self.texts.append(text)
+        self.keys.append(key)
+        identity = (root, task, key)
+        if identity in self.notices:
+            return HoldAnswer("done")
+        if self.commented == "done" or self.lost_response:
+            self.notices[identity] = text
         for each in self.during_comment:
             assert callable(each)
             each()
-        return HoldAnswer(self.commented)
+        return HoldAnswer("unavailable" if self.lost_response else self.commented)
 
     def clear(self, root: str, task: str) -> HoldAnswer[HoldWrite]:
         self.calls.append(f"clear {task}")
@@ -115,12 +133,17 @@ class Bench:
     def ports(self, view: AttemptView, reason: str | None = None) -> HoldPorts:
         """`fresh`, the task's status read now; None: the held view with its cause still standing (a stuck word, or the
         advance word of a round-passed refusal)."""
-        standing = replace(view, next="advance" if reason in ROUND_CAUSES else "stuck:entry_lost")
+        standing = replace(view, next="advance" if reason in {str(each) for each in RoundReason} else "stuck:entry_lost")
         return HoldPorts(HoldStore(lambda: self.con), AttemptStore(lambda: self.con), self.tracker.holds(), self.abandon, self.checks,
                          lambda: self.now, EvidenceFiles(self.root), lambda _backlog, _task: self.fresh or standing)
 
     def hold(self, view: AttemptView | None = None, reason: str | None = None) -> HoldMove:
-        return hold_task(self.ports(view or VIEW, reason), view or VIEW, reason)
+        found = view or VIEW
+        decided = RoundCause(reason=RoundReason(reason)) if reason is not None else None
+        if (decided is None and found.checks is None and found.hold_due is not None
+                and found.result.execution is None and found.result.status == "collected"):
+            decided = event_for(found.hold_due).cause
+        return hold_task(self.ports(found, reason), found, decided)
 
     def row(self, attempt_id: str = "a") -> HoldRow:
         return HoldStore(lambda: self.con).of_attempts((attempt_id,))[attempt_id]
@@ -146,7 +169,7 @@ def test_a_hold_records_moves_the_labels_abandons_then_comments_once(bench: Benc
     text = bench.tracker.texts[0]
     assert text.startswith("taskloop hold: failed:needs_owner\nStep plan, attempt 1 (a)")
     assert "task branch task/tl-1 is not published." in text and "removed `auto` and added `held` and returned its claim." in text
-    assert "`bd label add tl-1 auto`" in text and f"Evidence: {bench.root}/attempts/" in text
+    assert "restore the approval label `auto`" in text and f"Evidence: {bench.root}/attempts/" in text
 
 
 def test_a_finished_hold_called_again_writes_nothing_more(bench: Bench) -> None:
@@ -182,7 +205,7 @@ def test_a_task_taken_again_meanwhile_is_a_lost_race_with_no_tracker_call(bench:
 
 def test_the_label_step_checks_a_is_still_current_right_before_it(bench: Bench) -> None:
     """Recorded, then the task taken again before the label step: no tracker call; the row stays for `clear_holds`."""
-    HoldStore(lambda: bench.con).insert(HoldInsert("a", "a", "failed:needs_owner", 5.0))
+    HoldStore(lambda: bench.con).insert(HoldInsert(event=event(), now=5.0))
     attempt(bench.con, "b", seq=2)
     found = bench.hold()
     assert (found.word, found.missing, found.refusal, bench.calls) == ("refused", "labels", "refused:changed", [])
@@ -201,7 +224,7 @@ def test_each_label_answer_and_whether_it_comments(bench: Bench, answer: LabelSt
     row = bench.row()
     assert row.labels == answer and (row.commented_at is not None) == comments
     if answer == "not_ours":
-        assert "changed no label" in bench.tracker.texts[0] and "`tl step start tl-1`" in bench.tracker.texts[0]
+        assert "changed no label" in bench.tracker.texts[0] and "resolve its ownership with the current actor" in bench.tracker.texts[0]
 
 
 @pytest.mark.parametrize(("answer", "refusal", "detail"), [
@@ -218,7 +241,7 @@ def test_a_label_step_that_wrote_nothing_is_retried_and_nothing_follows_it(bench
 
 
 def test_a_crash_after_the_labels_resumes_at_the_abandon(bench: Bench) -> None:
-    row = HoldStore(lambda: bench.con).insert(HoldInsert("a", "a", "failed:needs_owner", 5.0))
+    row = HoldStore(lambda: bench.con).insert(HoldInsert(event=event(), now=5.0))
     HoldStore(lambda: bench.con).labelled("a", row.rev, "moved", 6.0)
     assert bench.hold().word == "held"
     assert bench.calls == ["release a True", "comment tl-1"]
@@ -227,7 +250,7 @@ def test_a_crash_after_the_labels_resumes_at_the_abandon(bench: Bench) -> None:
 def test_a_stale_snapshot_never_abandons_the_task_s_new_attempt(bench: Bench) -> None:
     """Labelled, then the task taken again (`tl step start` after the hold's abandon) before a round with an older
     snapshot reruns the hold: the abandon would act on the new attempt, so nothing is done."""
-    row = HoldStore(lambda: bench.con).insert(HoldInsert("a", "a", "failed:needs_owner", 5.0))
+    row = HoldStore(lambda: bench.con).insert(HoldInsert(event=event(), now=5.0))
     HoldStore(lambda: bench.con).labelled("a", row.rev, "moved", 6.0)
     attempt(bench.con, "b", seq=2)
     found = bench.hold()
@@ -242,12 +265,13 @@ def test_a_crash_after_the_abandon_resumes_at_the_comment(bench: Bench) -> None:
     assert bench.calls.count("labels /tracker tl-1 auto") == 1 and bench.calls.count("comment tl-1") == 1
 
 
+WORKER_ALIVE = NotReleased("unsettled", "worker_alive")  # Release retains its own process-result vocabulary.
 KEPT = [
     (NotReleased("refused", "slot_dirty"), "held:slot_dirty", "slot /slots/s1 has files left by this attempt"),
     (NotReleased("refused", "slot_branch"), "held:slot_branch", "slot /slots/s1 is not where the factory left it (slot_branch)"),
     (NotReleased("refused", "slot_redirected"), "held:slot_redirected", "(slot_redirected)"),
     (NotReleased("refused", "slot_unborn"), "held:slot_unborn", "(slot_unborn)"),
-    (NotReleased("unsettled", "worker_alive"), "unsettled:worker_alive", "still runs (pid 42, group 41)"),
+    (WORKER_ALIVE, WORKER_ALIVE.word, "still runs (pid 42, group 41)"),
     (NotReleased("unsettled", "setup_running"), "unsettled:setup_running", "still runs (pid 77, group 76)"),
     (NotReleased("refused", "landing"), "refused:landing", "may be on origin (landing)"),
     (NotReleased("refused", "landed"), "refused:landed", "may be on origin (landed)"),
@@ -290,17 +314,56 @@ def test_an_unclaim_still_to_retry_is_no_returned_claim(bench: Bench) -> None:
 
 
 def test_two_callers_comment_once(bench: Bench) -> None:
-    """A second caller (`tl step next` beside `tl step rounds`) arriving while the first posts finds the lease taken."""
+    """A second caller (`tl rounds once` beside `tl rounds start`) arriving while the first posts finds the lease taken."""
     seen: list[HoldMove] = []
-    bench.tracker.during_comment.append(lambda: seen.append(bench.hold()))
-    assert bench.hold().word == "held"
+    timeout = replace(VIEW, result=AttemptResult("collected", "run:timeout"), hold_due="failed:run:timeout")
+    bench.tracker.during_comment.append(lambda: seen.append(bench.hold(timeout)))
+    assert bench.hold(timeout).word == "held"
+    assert bench.hold(timeout).word == "held"
     assert (seen[0].word, seen[0].missing, seen[0].refusal) == ("pending", "comment", "refused:leased")
     assert bench.calls.count("comment tl-1") == 1
+    assert bench.tracker.keys == ["a"]
+    assert len(bench.tracker.notices) == 1
+    assert bench.tracker.texts[0].startswith("taskloop hold: failed:run:timeout\n")
+
+
+def test_a_lost_timeout_notice_response_survives_restart_and_a_later_timeout(bench: Bench) -> None:
+    timeout = replace(VIEW, result=AttemptResult("collected", "run:timeout"), hold_due="failed:run:timeout")
+    bench.tracker.lost_response = True
+    assert bench.hold(timeout).refusal == "unavailable:tracker"
+    assert bench.row().commented_at is None and len(bench.tracker.notices) == 1
+    restarted = Bench(bench.con, bench.root, now=11.0)
+    restarted.tracker.notices = bench.tracker.notices
+    assert restarted.hold(timeout).word == "held"
+    assert restarted.row().commented_at == 11.0
+    assert len(restarted.tracker.notices) == 1 and restarted.tracker.keys == ["a"]
+    with begin_immediate(bench.con):
+        attempt(bench.con, "b", seq=2)
+    assert restarted.hold(replace(timeout, attempt_id="b")).word == "held"
+    assert restarted.tracker.keys == ["a", "b"] and len(restarted.tracker.notices) == 2
+
+
+def test_a_timeout_notice_survives_failed_delivery_recording(bench: Bench, monkeypatch: pytest.MonkeyPatch) -> None:
+    timeout = replace(VIEW, result=AttemptResult("collected", "run:timeout"), hold_due="failed:run:timeout")
+
+    def failed_record(_store: HoldStore, _attempt_id: str, _rev: int, _now: float) -> HoldRow:
+        raise StoreRefused("changed")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(HoldStore, "commented", failed_record)
+        assert bench.hold(timeout).refusal == "refused:changed"
+    assert bench.row().commented_at is None and len(bench.tracker.notices) == 1
+    assert bench.hold(timeout).refusal == "refused:leased"
+    restarted = Bench(bench.con, bench.root, now=bench.now + COMMENT_LEASE + 1)
+    restarted.tracker.notices = bench.tracker.notices
+    assert restarted.hold(timeout).word == "held"
+    assert restarted.row().commented_at == restarted.now
+    assert len(restarted.tracker.notices) == 1 and restarted.tracker.keys == ["a"]
 
 
 def test_a_lease_older_than_the_lease_time_is_taken_again(bench: Bench) -> None:
     """A caller died after taking the lease (maybe after posting): within `COMMENT_LEASE` nobody posts; after it, one does."""
-    row = HoldStore(lambda: bench.con).insert(HoldInsert("a", "a", "failed:needs_owner", 5.0))
+    row = HoldStore(lambda: bench.con).insert(HoldInsert(event=event(), now=5.0))
     row = HoldStore(lambda: bench.con).labelled("a", row.rev, "moved", 6.0)
     assert HoldStore(lambda: bench.con).commenting("a", row.rev, 9.0) is not None
     assert (bench.hold().missing, bench.tracker.texts) == ("comment", [])
@@ -318,6 +381,7 @@ def test_a_failed_comment_gives_its_lease_back_and_a_deleted_task_needs_none(ben
     bench.now = 11.0
     assert (bench.hold().missing, bench.hold().refusal) == ("comment", "unavailable:tracker")
     assert bench.calls.count("comment tl-1") == 3
+    assert bench.tracker.keys == ["a", "a", "a"] and not bench.tracker.notices
     bench.tracker.commented = "missing"
     assert bench.hold().word == "held" and bench.row().commented_at is not None
 
@@ -352,12 +416,12 @@ def test_a_checks_cause_holds_the_implement_attempt_and_names_its_failed_checks(
         (2, "lint", None, None, None, None, None, None, 2, None, "undefined")])
     bench = Bench(checking, tmp_path)
     row = CheckStore(lambda: checking).of_attempt("implement")[0]
-    results = (ResultRow(1, 0, "check", None, None, None, 1.0, 2.0, 0, "passed"),
-               ResultRow(1, 1, "test", "e" * 64, 60, OwnedProcess(5, 5, "st", "boot"), 1.0, 2.0, 1, "lingering"),
-               ResultRow(1, 2, "lint", None, None, None, 1.0, None, None, "undefined"))
+    results = (ResultRow(1, 0, "check", None, None, None, 1.0, 2.0, 0, CommandConclusion.PASSED),
+               ResultRow(1, 1, "test", "e" * 64, 60, OwnedProcess(5, 5, "st", "boot"), 1.0, 2.0, 1, CommandConclusion.LINGERING),
+               ResultRow(1, 2, "lint", None, None, None, 1.0, None, None, CommandConclusion.UNDEFINED))
     failed = AttemptResult("collected", "failed:test:lingering")
     view = AttemptView("tasks", "tl-1", "check", CHECKS.attempt_id, "s2", "concluded", "gone", failed, False, "hold", label="auto",
-                       hold_due="failed:test:lingering", checks=ChecksView(row, results))
+                       hold_due="failed:test:lingering", checks=ChecksView(replace(row, reason="test:lingering"), results))
     bench.checks.checks_result = NotReleased("unsettled", "check_running")
     found = bench.hold(view)
     assert (found.attempt_id, found.missing, found.refusal) == ("implement", "abandon", "unsettled:check_running")
@@ -388,7 +452,7 @@ def test_clear_of_a_task_held_again_leaves_held_to_the_new_hold(bench: Bench) ->
 
 
 def test_clear_of_an_unfinished_label_step_supersedes_it_and_removes_held(bench: Bench) -> None:
-    HoldStore(lambda: bench.con).insert(HoldInsert("a", "a", "failed:needs_owner", 5.0))
+    HoldStore(lambda: bench.con).insert(HoldInsert(event=event(), now=5.0))
     attempt(bench.con, "b", seq=2)
     assert [each.word for each in clear_holds(HoldStore(lambda: bench.con), bench.tracker.holds(), lambda: 20.0, "tasks")] == ["cleared"]
     assert (bench.row().labels, bench.calls) == ("superseded", ["clear tl-1"])
@@ -419,10 +483,10 @@ def test_a_retried_comment_of_a_checks_cause_describes_the_checks_attempt_not_th
     row = CheckStore(lambda: checking).of_attempt("implement")[0]
     failed = AttemptResult("collected", "failed:test:failed")
     view = AttemptView("tasks", "tl-1", "check", CHECKS.attempt_id, "s2", "concluded", "gone", failed, False, "hold", label="auto",
-                       hold_due="failed:test:failed", checks=ChecksView(row, ()))
+                       hold_due="failed:test:failed", checks=ChecksView(replace(row, reason="test:failed"), ()))
     bench.tracker.commented = "unavailable"
     assert bench.hold(view).missing == "comment"
-    after = AttemptView("tasks", "tl-1", "implement", "implement", "s1", "captured", "gone", AttemptResult("collected", "verified"),
+    after = AttemptView("tasks", "tl-1", "implement", "implement", "s1", "captured", "gone", AttemptResult("collected", "committed"),
                         False, "hold", label="auto", release=ReleaseRow(D, 11.0, "unclaimed"))  # the hold's abandon is recorded
     bench.fresh = after
     bench.tracker.commented, bench.now = "done", 10.0 + COMMENT_LEASE + 1
@@ -463,7 +527,7 @@ def test_clear_waits_while_the_new_hold_s_label_step_is_unfinished_and_clears_on
     bench.hold()
     attempt(bench.con, "b", seq=2)
     store = HoldStore(lambda: bench.con)
-    held = store.insert(HoldInsert("b", "b", "failed:needs_owner", 15.0))
+    held = store.insert(HoldInsert(event=event(attempt_id="b"), now=15.0))
     calls = len(bench.calls)
     found = clear_holds(store, bench.tracker.holds(), lambda: 20.0, "tasks")
     assert [(each.word, each.detail) for each in found] == [("pending:held_again", "b")] and len(bench.calls) == calls
@@ -478,7 +542,7 @@ class Racing(HoldStore):
 
     def uncleared(self, backlog: str) -> tuple[Uncleared, ...]:
         found = super().uncleared(backlog)
-        row = self.insert(HoldInsert("b", "b", "failed:needs_owner", 15.0))
+        row = self.insert(HoldInsert(event=event(attempt_id="b"), now=15.0))
         self.labelled("b", row.rev, "moved", 16.0)
         return found
 
@@ -494,7 +558,7 @@ def test_clear_reads_the_new_hold_again_right_before_the_tracker_call(bench: Ben
 def test_a_hold_whose_cause_is_gone_before_its_label_step_is_retired_with_no_tracker_call(bench: Bench) -> None:
     """The work was relaunched after the hold was recorded (the status read now: an entry runs, no hold cause): the hold
     never writes a label or abandons it; its row is deleted, so a later stop of A can be held afresh."""
-    HoldStore(lambda: bench.con).insert(HoldInsert("a", "a", "stuck:expired_admitted", 5.0))
+    HoldStore(lambda: bench.con).insert(HoldInsert(event=event_for("stuck:expired_admitted"), now=5.0))
     bench.fresh = replace(VIEW, next="wait")
     found = bench.hold()
     assert (found.word, found.refusal, bench.calls) == ("refused", "refused:retired", [])
@@ -507,7 +571,7 @@ def test_a_retired_hold_that_moved_the_labels_removes_held_first_and_waits_on_a_
     """The work went on since and passed (the view read now is at `land`, no hold cause): `held` is removed, then the
     row; the approval label is not added back (a claimed task advances without it)."""
     store = HoldStore(lambda: bench.con)
-    row = store.insert(HoldInsert("a", "a", "failed:needs_owner", 5.0))
+    row = store.insert(HoldInsert(event=event(), now=5.0))
     store.labelled("a", row.rev, "moved", 6.0)
     bench.fresh = replace(VIEW, next="land")
     bench.tracker.cleared = "unavailable"
@@ -528,8 +592,8 @@ def test_the_cause_is_fenced_on_the_status_read_now(bench: Bench, fresh: Attempt
 
 
 def test_a_round_passed_cause_stands_while_the_view_still_waits_for_its_advance_or_publication(bench: Bench) -> None:
-    HoldStore(lambda: bench.con).insert(HoldInsert("a", "a", "branch_moved", 5.0))
-    bench.fresh = replace(VIEW, next="verify")
+    HoldStore(lambda: bench.con).insert(HoldInsert(event=event(RoundCause(reason=RoundReason.BRANCH_MOVED)), now=5.0))
+    bench.fresh = replace(VIEW, next="commit")
     assert bench.hold().refusal == "refused:retired"
     bench.fresh = replace(VIEW, next="publish")
     assert bench.hold(reason="branch_moved").word == "held"
@@ -546,9 +610,9 @@ def test_clear_lists_only_the_round_s_own_backlog(bench: Bench) -> None:
 def test_tl_step_next_prints_the_hold_guide_for_a_pending_hold_only() -> None:
     pending = Round("tasks", (Move("tl-1", "hold", "pending abandon held:slot_dirty", "a", step="plan"),))
     shown = human("next", pending, None)
-    assert [line for line in shown if line.startswith("hold: ")] == [f"hold: `held:slot_dirty`: {KEPT_ACTIONS['held:slot_dirty']}"]
+    assert [line for line in shown if line.startswith("hold: ")] == [f"hold: {pending_guide('pending abandon held:slot_dirty')}"]
     transient = Round("tasks", (Move("tl-1", "hold", "pending abandon unavailable:slot_busy", "a", step="plan"),))
-    assert "hold: `unavailable:slot_busy`: needs nothing" in "\n".join(human("next", transient, None))
+    assert "Another operation holds the slot lock" in "\n".join(human("next", transient, None))
     held = Round("tasks", (Move("tl-1", "hold", "held failed:needs_owner", "a", step="plan"),))
     assert not any(line.startswith("hold: ") for line in human("next", held, None))
 
@@ -557,5 +621,5 @@ def test_a_refusal_echoing_an_untrusted_id_prints_one_printable_line_per_detail_
     hostile = "tl\x1b[31m\u202e-1\nForged: yes" + "x" * 3000
     refused = Failed("refused", "absent", f"No attempt for {hostile} in backlog tasks")
     lines = human("show", refused, None)
-    assert lines[0] == "show: refused:absent" and lines[2].startswith("Forged: yes") and len(lines) == 3  # the newline is a line break only
+    assert lines[0] == "show: refused:absent" and lines[2].startswith("Forged: yes") and len(lines) == 4  # the newline is a line break only
     assert all(each.isprintable() and len(each) <= 2000 for each in lines) and "tl [31m -1" in lines[1]

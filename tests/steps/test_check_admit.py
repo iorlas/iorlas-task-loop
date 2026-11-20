@@ -8,22 +8,30 @@ from collections.abc import Callable, Generator
 from pathlib import Path
 
 import pytest
-from doubles import MAIN_PROFILE, ChecksBench, Done, FakeSlotFiles, PinnedViews
+from admission_boundaries import guard_git, outside_transaction
+from doubles import ENGINE, MAIN_PROFILE, ChecksBench, Done, FakeSlotFiles, FixedIds, PinnedViews
 from git_porcelain import Sha
 from git_porcelain.testing import FakeRemote, FakeRepo
 from sqlite_store import begin_immediate
 
 from taskloop.admit import AdmitRefused, Admitted
 from taskloop.admit_chain import NextAdmission, NextStepRequest
+from taskloop.agents.settings import AgentSetting, CodexPolicy
 from taskloop.attempt_types import AttemptKey
+from taskloop.check_admit import ChecksRequest
 from taskloop.check_store import ChecksAdmitted, CheckStore, insert
 from taskloop.checks import argv_digest
 from taskloop.evidence_files import EvidenceFiles
+from taskloop.ids import NativeIds
 
 
 @pytest.fixture
-def bench(done: Done, repo: FakeRepo, checkouts: PinnedViews, slot_files: FakeSlotFiles) -> Generator[ChecksBench]:
+def bench(
+    done: Done, repo: FakeRepo, checkouts: PinnedViews, slot_files: FakeSlotFiles, monkeypatch: pytest.MonkeyPatch,
+) -> Generator[ChecksBench]:
     found = ChecksBench(done, repo, checkouts, slot_files)
+    guard_git(found.con, monkeypatch)
+    monkeypatch.setattr(found, "inspect", outside_transaction(found.con, found.inspect))
     yield found
     found.con.close()
 
@@ -33,7 +41,10 @@ def required() -> str:
 
 
 def test_an_advance_stores_number_1_on_a_free_slot_at_d_with_the_target_and_its_required_digests(bench: ChecksBench) -> None:
-    found = bench.admit()
+    admission = bench.admission()
+    ids = FixedIds()
+    admission.ids = ids
+    found = admission.admit_checks(ChecksRequest(bench.done.implement, bench.repo.path, 100.0, 1))
     assert isinstance(found, Admitted) and found.slot == "s1" and bench.reads == ["tl-1"]
     rows, held = bench.stored()
     assert rows == [(1, "s1", bench.done.d, bench.done.target, required(), 100.0, "admitted", "implement")]
@@ -41,6 +52,8 @@ def test_an_advance_stores_number_1_on_a_free_slot_at_d_with_the_target_and_its_
     assert bench.con.execute("SELECT generation FROM slot WHERE name='s1'").fetchone() == (1,)
     current = CheckStore(lambda: bench.con).attempt_of("tasks", "tl-1")
     assert current is not None and current[0] == found.key and current[1] == "admitted"
+    assert found.key.attempt_id == ids.fresh[0] and found.key.dispatch_token == ids.tokens[0][1]
+    assert [size for size, _ in ids.tokens] == [16]
     assert bench.con.execute("SELECT count(*) FROM attempt").fetchone() == (1,)  # no agent attempt, no input file
     assert not (bench.done.path.parent / "attempts").exists()
 
@@ -64,7 +77,7 @@ def missing_x(bench: ChecksBench) -> None:
 @pytest.mark.parametrize(("arrange", "word"), [
     (lambda b: setattr(b, "now", 100), "expired"),
     (lambda b: b.con.execute("UPDATE slot_release SET claim='unclaiming'"), "not_advanceable"),  # the abandon's flip went first
-    (lambda b: b.con.execute("UPDATE verification SET verdict='rejected',reason='x'"), "not_advanceable"),
+    (lambda b: b.con.execute("UPDATE factory_commit SET verdict='rejected',reason='x'"), "not_advanceable"),
     (lambda b: b.con.execute("DELETE FROM published_branch"), "not_advanceable"),
     (lambda b: b.con.execute("UPDATE attempt SET step='plan',after_commit=NULL"), "not_advanceable"),  # an agent step follows
     (lambda b: b.repo.delete_branch("task/tl-1", expected=Sha(b.done.x)), "branch_moved"),
@@ -156,15 +169,22 @@ def test_a_re_run_is_refused_while_a_land_candidate_of_the_task_is_delivered_or_
     first = bench.admit()
     assert isinstance(first, Admitted)
     bench.concluded("failed")
-    bench.con.execute(f"""INSERT INTO land_candidate ({CANDIDATE_COLUMNS},slot,slot_head,deadline) VALUES
-    ('candidate','candidate-token',1,?,1,?,?,1,'[]','s9',?,300)""", (first.key.attempt_id, bench.done.target, bench.done.x, bench.done.d))
+    bench.con.execute(f"""INSERT INTO land_candidate ({CANDIDATE_COLUMNS},slot,slot_head,deadline,admitted_at) VALUES
+    ('candidate','candidate-token',1,?,1,?,?,1,'[]','s9',?,300,2)""", (first.key.attempt_id, bench.done.target, bench.done.x, bench.done.d))
     bench.con.execute(f"UPDATE land_candidate SET slot=NULL,slot_head=NULL,deadline=NULL,{change}")
     before = bench.stored()
     found = bench.admit(2)
     if word is None:
         assert isinstance(found, Admitted)
         return
-    assert isinstance(found, AdmitRefused) and found.reason == word and "tl step land" in found.detail and bench.stored() == before
+    assert isinstance(found, AdmitRefused) and found.reason == word and bench.stored() == before
+    assert "checks cannot re-run" in found.detail
+    assert all(syntax not in found.detail for syntax in ("tl ", "--", "`"))
+    if word == "landed":
+        assert "delivered its code to origin's main" in found.detail and "Task closure still needs to finish" in found.detail
+    else:
+        assert "holds its slot or may already be on origin's main" in found.detail
+        assert "Delivery must finish or the candidate must be withdrawn" in found.detail
 
 
 def test_a_number_other_than_the_store_s_is_task_attempted(bench: ChecksBench) -> None:
@@ -173,10 +193,27 @@ def test_a_number_other_than_the_store_s_is_task_attempted(bench: ChecksBench) -
     assert isinstance(found, AdmitRefused) and found.reason == "task_attempted" and bench.stored() == ([], []) and bench.reads == []
 
 
+@pytest.mark.parametrize("abandoned", [False, True])
+def test_latest_number_keeps_earlier_land_facts_and_abandon_refusal_precedence(bench: ChecksBench, abandoned: bool) -> None:
+    first = bench.admit()
+    assert isinstance(first, Admitted)
+    bench.concluded("failed")
+    assert isinstance(bench.admit(2), Admitted)
+    bench.concluded("failed", abandoned=abandoned)
+    bench.con.execute(f"""INSERT INTO land_candidate ({CANDIDATE_COLUMNS},validation,validated_at,delivery,delivered_at,admitted_at)
+    VALUES ('candidate','candidate-token',1,?,1,?,?,1,'[]','no_change',3,'no_change',3,2)""",
+                      (first.key.attempt_id, bench.done.target, bench.done.x))
+    before = bench.stored()
+    found = bench.admit(3)
+    assert isinstance(found, AdmitRefused) and found.reason == ("not_advanceable" if abandoned else "landed")
+    assert bench.stored() == before
+
+
 def racer(bench: ChecksBench) -> None:
     """Another start's admission of number 1, committed between this admission's reads and its write."""
+    repo_id = bench.repo.identity().key
     with begin_immediate(bench.con):
-        bench.con.execute("INSERT INTO reservation VALUES ('s0',?,7,'winner')", (bench.repo.identity().key,))
+        bench.con.execute("INSERT INTO reservation VALUES ('s0',?,7,'winner')", (repo_id,))
         insert(bench.con, ChecksAdmitted(AttemptKey("winner", "w", 7), "implement", 1, "s0", bench.done.d, bench.done.target,
                                          (("check", "1" * 64),), 100.0))
 
@@ -206,6 +243,13 @@ def test_a_commit_between_the_reads_and_the_write_is_seen_under_the_lock(
 def test_the_agent_advance_refuses_the_check_step_before_any_tracker_read_or_input(bench: ChecksBench) -> None:
     """`admit_chain` admits only agent steps: after implement it is `not_advanceable` (never `kind("check")`)."""
     advance = NextAdmission(lambda: bench.con, begin_immediate, EvidenceFiles(bench.done.path.parent), bench.inspect, bench.views,
-                            lambda: 10, lambda _p: True, bench.files)
-    found = advance.admit_next(NextStepRequest(bench.done.implement, bench.repo.path, "m", "high", "workspace-write", 100.0))
+                            lambda: 10, lambda _p: True, bench.files, ids=NativeIds(), engine=ENGINE)
+    found = advance.admit_next(
+        NextStepRequest(
+            bench.done.implement,
+            bench.repo.path,
+            AgentSetting(model="m", effort="high", access=CodexPolicy(sandbox="workspace-write")),
+            100.0,
+        )
+    )
     assert isinstance(found, AdmitRefused) and found.reason == "not_advanceable" and bench.reads == []

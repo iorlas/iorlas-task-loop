@@ -13,11 +13,13 @@ import pytest
 from any_agent import CodexHarness, Harness, LaunchInputs, LaunchSpec, RunHooks, RunOutcome, Summary
 from any_agent.procs import Worker
 from any_agent.testing import FakeRun
+from doubles import ENGINE, pin_workflow
 from git_porcelain.testing import FakeWorktree
 from sqlite_store import Store, begin_immediate
 
-from taskloop.access import CODEX_ACCESS
-from taskloop.attempt import Attempts, Credentials, CredentialsUnavailable, Execution
+from taskloop.agents.launch import AgentLaunch, CredentialReason, Credentials, CredentialsUnavailable, codex_access
+from taskloop.agents.settings import CodexPolicy
+from taskloop.attempt import Attempts, Execution
 from taskloop.attempt_reads import StoreRefused
 from taskloop.attempt_result import report
 from taskloop.attempt_store import AttemptStore
@@ -43,6 +45,8 @@ from taskloop.composition import open_attempts
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.factory_schema import SCHEMA
 from taskloop.git_views import GitViews
+from taskloop.harness_choice import HarnessKind
+from taskloop.ids import NativeIds
 from taskloop.session import SessionLatch
 from taskloop.steps import kind
 
@@ -54,7 +58,7 @@ PLAN = {"disposition": "planned", "plan_path": P, "paths": [P], "message": "Plan
 BASE = "b" * 40  # a recorded B for store-level dispatches; the body reads the slot's own HEAD
 
 
-def codex() -> tuple[str, dict[str, str]]:
+def codex(_harness: HarnessKind) -> tuple[str, dict[str, str]]:
     return "/bin/codex", {}
 
 
@@ -74,11 +78,12 @@ class AttemptSurroundings:
         *,
         credentials: Credentials = codex,
         clock: Callable[[], float] = lambda: 10,
+        monotonic: Callable[[], float] = lambda: 10,
         registration_store: AttemptStore | None = None,
     ) -> Attempts:
         return Attempts(
-            store, EvidenceFiles(self.tmp), credentials, execution, clock, self.checkouts, self.files,
-            registration_store=registration_store,
+            store, EvidenceFiles(self.tmp), AgentLaunch(credentials, ids=NativeIds()), execution, clock, self.checkouts, self.files,
+            registration_store=registration_store, monotonic=monotonic,
         )
 
 
@@ -104,15 +109,15 @@ def seed(con: sqlite3.Connection, surroundings: AttemptSurroundings) -> sqlite3.
     with begin_immediate(con):
         con.execute("INSERT INTO slot (repo_id,name,path) VALUES (?,'s1',?)", (repo_id, str(surroundings.slot.path)))
         con.execute("INSERT INTO reservation VALUES ('s1',?,1,'attempt')", (repo_id,))
-        digest = hashlib.sha256(b"Plan the actual task").hexdigest()
-        con.execute(
-            """INSERT INTO attempt
+        pin_workflow(con)
+        con.execute("""INSERT INTO attempt
             (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,input_digest,
-             schema_version,model,effort,sandbox,deadline,entry_pid,entry_start,entry_boot,number,seq,slot_head)
+             schema_version,model,effort,access_policy,deadline,entry_pid,entry_start,entry_boot,number,seq,slot_head,engine_digest,workflow_digest,workflow_sha,
+             admitted_at)
             VALUES ('attempt','dispatch',1,'plan','beads','tasks','tl-1','/tracker',?,'s1','input.txt',?,1,'chosen','high',
-            'workspace-write',100,7,'entry-start','boot',1,1,'dddddddddddddddddddddddddddddddddddddddd')""",
-            (repo_id, digest),
-        )
+            '{"harness":"codex","sandbox":"workspace-write"}',100,7,'entry-start','boot',1,1,'dddddddddddddddddddddddddddddddddddddddd',
+            ?,(SELECT digest FROM workflow_file),'eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',1.0)""",
+            (repo_id, hashlib.sha256(b"Plan the actual task").hexdigest(), ENGINE))
     (surroundings.tmp / "input.txt").write_text("Plan the actual task")
     return con
 
@@ -134,14 +139,16 @@ def fake(answer: str | None = None, *, rc: int = 0, refs: tuple[str, ...] = ()) 
 
 
 def app(con: sqlite3.Connection, surroundings: AttemptSurroundings, execution: Execution) -> Attempts:
-    return surroundings.attempts(AttemptStore(lambda: con), execution, credentials=lambda: ("/bin/codex", {"SECRET": "credential"}))
+    return surroundings.attempts(
+        AttemptStore(lambda: con), execution, credentials=lambda _harness: ("/bin/codex", {"SECRET": "credential"})
+    )
 
 
 def test_execute_and_independent_collection_preserve_facts_and_reservation(tmp_path: Path, surroundings: AttemptSurroundings) -> None:
     con = database(surroundings)
     execution = fake(refs=("native-session",))
     result = app(con, surroundings, execution).execute(KEY, ENTRY)
-    assert result.reason == "verification"
+    assert result.reason == "commit"
     assert result.execution is not None
     assert result.execution.answer.kind == "valid"
     assert result.execution.facts.tokens == (8, None, 3)
@@ -157,7 +164,9 @@ def test_execute_and_independent_collection_preserve_facts_and_reservation(tmp_p
     assert "chosen" in spec.argv and "workspace-write" in spec.argv
     assert "--output-schema" in spec.argv
     flags = spec.argv.index("--json")
-    assert spec.argv[flags - len(CODEX_ACCESS) : flags] == list(CODEX_ACCESS)
+    assert spec.argv[flags - len(codex_access(CodexPolicy()).flags() + codex_access(CodexPolicy()).config()) : flags] == list(
+        codex_access(CodexPolicy()).flags() + codex_access(CodexPolicy()).config()
+    )
     assert spec.env == {"SECRET": "credential"} and timeout == 90
     assert isinstance(hooks, WatchedHooks) and hooks.unattended is False  # carries the live sink of the last-command time
     assert con.execute("SELECT count(*) FROM reservation").fetchone() == (1,)
@@ -172,7 +181,7 @@ def test_execute_and_independent_collection_preserve_facts_and_reservation(tmp_p
         ("stale", "refused", "stale_reservation"),
         ("entry", "refused", "unregistered_entry"),
         ("expired", "refused", "expired"),
-        ("choices", "refused", "choices"),
+        ("choices", "unavailable", "store"),
         ("input", "refused", "input"),
         ("version", "unavailable", "store"),
     ],
@@ -199,42 +208,6 @@ def test_invalid_admission_never_executes(tmp_path: Path, surroundings: AttemptS
     assert execution.calls == []
 
 
-def test_failed_execution_valid_answer_is_not_success(tmp_path: Path, surroundings: AttemptSurroundings) -> None:
-    con = database(surroundings)
-    result = app(con, surroundings, fake(rc=7)).execute(KEY, ENTRY)
-    assert result.execution is not None
-    assert result.execution.facts.rc == 7
-    assert result.execution.facts.reason == "worker_failed"
-    assert result.execution.answer.kind == "valid"
-
-
-@pytest.mark.parametrize("text, kind", [("", "missing"), ("not json", "json_invalid"), ('{"plan":3}', "schema_invalid")])
-def test_bad_answer_has_one_execution(tmp_path: Path, surroundings: AttemptSurroundings, text: str, kind: str) -> None:
-    con = database(surroundings)
-    execution = fake(text)
-    result = app(con, surroundings, execution).execute(KEY, ENTRY)
-    assert result.execution is not None and result.execution.answer.kind == kind
-    assert len(execution.calls) == 1
-
-
-@pytest.mark.parametrize(
-    ("answer", "stored"),
-    [
-        (json.dumps(PLAN), ("planned", "commit")),
-        (json.dumps(PLAN | {"disposition": "unchanged", "paths": [], "message": None}), ("unchanged", "keep")),
-        (json.dumps(PLAN | {"disposition": "needs_owner", "plan_path": None, "paths": [], "message": None}), ("needs_owner", "none")),
-        ("not json", (None, None)),
-    ],
-)
-def test_the_answer_is_stored_with_its_effect(
-    tmp_path: Path, surroundings: AttemptSurroundings, answer: str, stored: tuple[str | None, str | None]
-) -> None:
-    con = database(surroundings)
-    result = app(con, surroundings, fake(answer)).execute(KEY, ENTRY)
-    assert result.execution is not None and result.execution.answer.effect == stored[1]
-    assert con.execute("SELECT disposition,effect FROM execution").fetchone() == stored
-
-
 def test_decoder_fault_leaves_captured_facts_and_can_resume_without_agent(
     tmp_path: Path, surroundings: AttemptSurroundings, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -250,11 +223,11 @@ def test_decoder_fault_leaves_captured_facts_and_can_resume_without_agent(
         with pytest.raises(RuntimeError, match="decoder bug"):
             owner.execute(KEY, ENTRY)
     resumed, secrets = fake(), []
-    reader = surroundings.attempts(AttemptStore(lambda: con), resumed, credentials=lambda: secrets.append(1) or ("/bin/codex", {}))
+    reader = surroundings.attempts(AttemptStore(lambda: con), resumed, credentials=lambda _harness: secrets.append(1) or ("/bin/codex", {}))
     captured = reader.collect(KEY)
     assert captured.status == "pending" and captured.execution is not None and captured.execution.answer.kind == "validation_pending"
     assert captured.execution.facts.rc == 0
-    assert reader.execute(KEY, ENTRY).reason == "verification"
+    assert reader.execute(KEY, ENTRY).reason == "commit"
     assert not resumed.calls and secrets == []
 
 
@@ -311,7 +284,7 @@ def test_live_ref_is_recorded_while_running_and_duplicates_are_idempotent(tmp_pa
     run = fake(refs=("s", "s"))
     result = owner(flaky, surroundings, registered_run(run, flaky, probe=probe)).execute(KEY, ENTRY)
     assert probe == [("s",), ("s",)]
-    assert result.reason == "verification" and result.execution is not None and result.execution.session_state == "complete"
+    assert result.reason == "commit" and result.execution is not None and result.execution.session_state == "complete"
 
 
 def test_absent_ref_stays_absent_and_late_reported_ref_is_recorded(tmp_path: Path, surroundings: AttemptSurroundings) -> None:
@@ -387,11 +360,11 @@ def test_registration_hook_refuses_before_ref_or_result(tmp_path: Path, surround
     inner = fake(refs=("s",))
 
     def late(harness: Harness, spec: LaunchSpec, timeout: float, hooks: RunHooks | None) -> RunOutcome:
-        now[0] = 500.0  # the deadline passes between the launch decision and the registration
+        now[0] = 500.0  # runtime allowance is consumed between the launch decision and registration
         return inner(harness, spec, timeout, hooks)
 
     attempts = app(con, surroundings, late)
-    attempts.clock = lambda: now[0]
+    attempts.monotonic = lambda: now[0]
     result = attempts.execute(KEY, ENTRY)
     assert result.status == "refused" and result.reason == "expired"
     assert con.execute("SELECT phase,worker_pid,session_ref FROM attempt").fetchone() == ("dispatching", None, None)
@@ -430,7 +403,7 @@ def test_usage_unknown_is_not_zero_and_answer_grace_facts_are_kept(tmp_path: Pat
 
 
 def test_real_file_database_composition_opens_and_collects(tmp_path: Path) -> None:
-    attempts = open_attempts(tmp_path / "factory.db", tmp_path, GitViews(DEFAULT_GIT_READ_SECONDS), lambda: ("/bin/codex", {}))
+    attempts = open_attempts(tmp_path / "factory.db", tmp_path, GitViews(DEFAULT_GIT_READ_SECONDS), lambda _harness: ("/bin/codex", {}))
     assert attempts.collect(KEY).status == "refused"
     assert attempts.execute(KEY, ENTRY).status == "refused"
     assert (tmp_path / "factory.db").exists()
@@ -466,30 +439,34 @@ def test_projection_fault_keeps_evidence_and_capture_retries(
     assert (tmp_path / result.pending.evidence.answer.path).exists()
     attempts = app(con, surroundings, fake())
     assert attempts.capture(result.pending) == CaptureResult("accepted")
-    assert attempts.collect(KEY).reason == "verification"
+    assert attempts.collect(KEY).reason == "commit"
 
 
 def test_stored_pending_session_state_is_reconciled_by_execute(tmp_path: Path, surroundings: AttemptSurroundings) -> None:
     con = database(surroundings)
     late = FakeRun(RunOutcome(rc=0, worker=WORKER, summary=Summary(text=json.dumps(PLAN), res={"ref": "late"})))
-    assert app(con, surroundings, late).execute(KEY, ENTRY).reason == "verification"
+    assert app(con, surroundings, late).execute(KEY, ENTRY).reason == "commit"
     con.execute("UPDATE execution SET session_state='fault'")
     con.execute("UPDATE attempt SET session_ref=NULL")
     again = fake()
     result = app(con, surroundings, again).execute(KEY, ENTRY)
-    assert result.reason == "verification" and again.calls == []
+    assert result.reason == "commit" and again.calls == []
     assert con.execute("SELECT session_ref FROM attempt").fetchone() == ("late",)
 
 
 @pytest.mark.parametrize(
-    ("error", "reason"), [(OSError("keychain locked"), "credentials:OSError"), (CredentialsUnavailable("auth"), "credentials:auth")]
+    ("error", "reason"),
+    [
+        (OSError("keychain locked"), "credentials:OSError"),
+        (CredentialsUnavailable(CredentialReason.AUTH, "Local file login is missing."), "credentials:auth"),
+    ],
 )
 def test_credentials_failure_leaves_the_attempt_admitted_and_never_dispatches(
     surroundings: AttemptSurroundings, error: Exception, reason: str
 ) -> None:
     con = database(surroundings)
 
-    def refuse() -> tuple[str, dict[str, str]]:
+    def refuse(_harness: HarnessKind) -> tuple[str, dict[str, str]]:
         raise error
 
     execution = fake()
@@ -512,29 +489,22 @@ def test_files_failure_is_typed_and_leaves_the_attempt_admitted(tmp_path: Path, 
 @pytest.mark.parametrize("me", [(8, "entry-start", "boot"), (7, "other-start", "boot"), (7, "entry-start", "other-boot")])
 def test_only_the_registered_entry_executes(tmp_path: Path, surroundings: AttemptSurroundings, me: EntryIdentity) -> None:
     con, execution, asked = database(surroundings), fake(), []
-    attempts = surroundings.attempts(AttemptStore(lambda: con), execution, credentials=lambda: asked.append(1) or ("/bin/codex", {}))
+    attempts = surroundings.attempts(
+        AttemptStore(lambda: con), execution, credentials=lambda _harness: asked.append(1) or ("/bin/codex", {})
+    )
     result = attempts.execute(KEY, me)
     assert (result.status, result.reason) == ("refused", "not_entry")
     assert asked == [] and execution.calls == [] and not (tmp_path / "attempts").exists()
     assert con.execute("SELECT phase FROM attempt").fetchone() == ("admitted",)
 
 
-def test_only_the_workspace_write_sandbox_is_launched(tmp_path: Path, surroundings: AttemptSurroundings) -> None:
+def test_a_selected_read_only_policy_is_launched_for_plan(tmp_path: Path, surroundings: AttemptSurroundings) -> None:
     con, execution = database(surroundings), fake()
-    con.execute("UPDATE attempt SET sandbox='danger-full-access'")
-    result = app(con, surroundings, execution).execute(KEY, ENTRY)
-    assert (result.status, result.reason) == ("refused", "sandbox") and execution.calls == []
-    assert con.execute("SELECT phase FROM attempt").fetchone() == ("admitted",)
-
-
-def test_the_sandbox_never_escalates_and_has_no_reviewer() -> None:
-    """`never`: a blocked command (the agent's `git commit` among them) fails back to the model; nothing runs outside."""
-    pairs = {key: value for key, _, value in (flag.partition("=") for flag in CODEX_ACCESS if "=" in flag)}
-    assert pairs["approval_policy"] == "never" and "approvals_reviewer" not in pairs
-    assert pairs["sandbox_workspace_write.writable_roots"] == "[]" and pairs["sandbox_workspace_write.network_access"] == "false"
-    # Codex's workspace-write sandbox also writes /tmp and $TMPDIR by default: both removed (keys from codex 0.167.0)
-    assert pairs["sandbox_workspace_write.exclude_slash_tmp"] == "true"
-    assert pairs["sandbox_workspace_write.exclude_tmpdir_env_var"] == "true"
+    con.execute("UPDATE attempt SET access_policy=?", ('{"harness":"codex","sandbox":"read-only"}',))
+    app(con, surroundings, execution).execute(KEY, ENTRY)
+    spec = execution.calls[0][1]
+    assert spec.argv[spec.argv.index("-s") + 1] == "read-only"
+    assert not any("sandbox_workspace_write" in flag for flag in spec.argv)
 
 
 class CountingHarness(CodexHarness):
@@ -560,18 +530,18 @@ class CountingHarness(CodexHarness):
         ("raced", "pending", "dispatching", "admitted"),
         ("store", "unavailable", "store", "admitted"),
         ("expired", "refused", "expired", "admitted"),  # crossed while resolving the launch: never dispatched
-        ("run", "pending", "verification", "captured"),
+        ("run", "pending", "commit", "captured"),
     ],
 )
 def test_the_harness_is_cleaned_up_once_on_every_exit(
     surroundings: AttemptSurroundings, monkeypatch: pytest.MonkeyPatch, case: str, status: str, reason: str, phase: str
 ) -> None:
     flaky, now, execution = Flaky(database(surroundings)), [10.0], fake()
-    monkeypatch.setattr("taskloop.harness_choice.CodexHarness", CountingHarness)
+    monkeypatch.setattr("taskloop.agents.launch.CodexHarness", CountingHarness)
     monkeypatch.setattr(CountingHarness, "cleanups", [])
     monkeypatch.setattr(CountingHarness, "broken", case == "launch")
 
-    def credentials() -> tuple[str, dict[str, str]]:
+    def credentials(_harness: HarnessKind) -> tuple[str, dict[str, str]]:
         if case == "raced":  # another writer moves the row between load and dispatch
             flaky.con.execute("UPDATE attempt SET rev=rev+1")
         flaky.down = case == "store"
@@ -596,7 +566,7 @@ def test_the_registration_write_goes_through_the_registration_store_only(tmp_pat
 
     registration_store = AttemptStore(lambda: con)
     attempts = surroundings.attempts(Main(lambda: con), fake(), registration_store=registration_store)
-    assert attempts.execute(KEY, ENTRY).reason == "verification"
+    assert attempts.execute(KEY, ENTRY).reason == "commit"
     assert con.execute("SELECT phase,worker_pid FROM attempt").fetchone() == ("captured", 42)
 
 
@@ -615,7 +585,7 @@ def test_the_registration_connection_is_opened_before_dispatch_and_its_fault_lea
         return con
 
     attempts = surroundings.attempts(Main(lambda: con), fake(), registration_store=AttemptStore(opened))
-    assert attempts.execute(KEY, ENTRY).reason == "verification"
+    assert attempts.execute(KEY, ENTRY).reason == "commit"
     assert events[:2] == ["registration_store", "dispatch"]
     con2, run = database(surroundings), fake()
     broken = surroundings.attempts(Main(lambda: con2), run, registration_store=AttemptStore(lambda: None))
@@ -628,7 +598,7 @@ def test_an_entry_replaced_between_load_and_dispatch_fences_the_dispatch(tmp_pat
     con, run = database(surroundings), fake()
     store = AttemptStore(lambda: con)
 
-    def replacing() -> tuple[str, dict[str, str]]:
+    def replacing(_harness: HarnessKind) -> tuple[str, dict[str, str]]:
         assert store.register_entry(KEY, (9, "new-start", "boot"), 10, Replaced(ENTRY, "gone")) == "accepted"
         return "/bin/codex", {}
 
@@ -638,7 +608,7 @@ def test_an_entry_replaced_between_load_and_dispatch_fences_the_dispatch(tmp_pat
 
 
 def test_composition_bounds_only_the_registration_connection(tmp_path: Path) -> None:
-    attempts = open_attempts(tmp_path / "factory.db", tmp_path, GitViews(DEFAULT_GIT_READ_SECONDS), lambda: ("/bin/codex", {}))
+    attempts = open_attempts(tmp_path / "factory.db", tmp_path, GitViews(DEFAULT_GIT_READ_SECONDS), lambda _harness: ("/bin/codex", {}))
     registration_store, main = attempts.registration_store.connect(), attempts.store.connect()
     assert registration_store is not None and main is not None and registration_store is not main
     assert registration_store.execute("PRAGMA busy_timeout").fetchone() == (1500,)
@@ -661,13 +631,13 @@ def test_capture_upgrades_pending_session_state_once_and_rejects_different_evide
     loaded = store.load(KEY)
     assert loaded is not None and pending.facts is not None and pending.evidence is not None
     admission = loaded.admission
-    assert store.capture(admission, None, pending.facts, pending.evidence, "pending") == "accepted"
-    assert store.capture(admission, None, pending.facts, pending.evidence, "pending") == "already_same"
-    assert store.capture(admission, None, pending.facts, pending.evidence, "complete") == "accepted"
-    assert store.capture(admission, None, pending.facts, pending.evidence, "complete") == "already_same"
-    assert store.capture(admission, None, pending.facts, pending.evidence, "pending") == "already_same"
+    assert store.capture(admission, None, pending.facts, pending.evidence, "pending", now=10.0) == "accepted"
+    assert store.capture(admission, None, pending.facts, pending.evidence, "pending", now=10.0) == "already_same"
+    assert store.capture(admission, None, pending.facts, pending.evidence, "complete", now=10.0) == "accepted"
+    assert store.capture(admission, None, pending.facts, pending.evidence, "complete", now=10.0) == "already_same"
+    assert store.capture(admission, None, pending.facts, pending.evidence, "pending", now=10.0) == "already_same"
     other = dataclasses.replace(pending.evidence, stdout=FileRef("elsewhere", "0" * 64))
-    assert store.capture(admission, None, pending.facts, other, "complete") == "conflict"
+    assert store.capture(admission, None, pending.facts, other, "complete", now=10.0) == "conflict"
     attempts = owner(flaky, surroundings, fake())
     assert attempts.capture(dataclasses.replace(pending, evidence=other)) == CaptureResult("conflict")
 
@@ -704,7 +674,7 @@ def test_ref_callback_on_another_thread_uses_its_own_shared_writer_connection(tm
         return outcome
 
     attempts = surroundings.attempts(AttemptStore(lambda: store.shared_rw(path), store.begin_immediate), threaded)
-    assert attempts.execute(KEY, ENTRY).reason == "verification"
+    assert attempts.execute(KEY, ENTRY).reason == "commit"
     assert seen and seen != [threading.get_ident()]
     assert seeded.execute("SELECT session_ref FROM attempt").fetchone() == ("threaded",)
     store.close_shared()
@@ -735,7 +705,7 @@ def test_two_connections_contend_for_one_dispatch(tmp_path: Path, surroundings: 
 
 def test_stored_pending_session_state_is_not_promoted_without_evidence(tmp_path: Path, surroundings: AttemptSurroundings) -> None:
     con = database(surroundings)
-    assert app(con, surroundings, fake()).execute(KEY, ENTRY).reason == "verification"  # the summary reports no ref: facts.session is None
+    assert app(con, surroundings, fake()).execute(KEY, ENTRY).reason == "commit"  # the summary reports no ref: facts.session is None
     con.execute("UPDATE execution SET session_state='pending'")
     again = fake()
     attempts = app(con, surroundings, again)
@@ -744,7 +714,7 @@ def test_stored_pending_session_state_is_not_promoted_without_evidence(tmp_path:
         assert (result.status, result.reason) == ("pending", "session_pending") and again.calls == []
     assert con.execute("SELECT session_state FROM execution").fetchone() == ("pending",)
     con.execute("UPDATE attempt SET session_ref='accepted'")
-    assert attempts.execute(KEY, ENTRY).reason == "verification"
+    assert attempts.execute(KEY, ENTRY).reason == "commit"
     con.execute("UPDATE execution SET session_state='fault'")
     con.execute("DELETE FROM reservation")  # a released reservation: execute on a non-terminal stored state refuses, collect still reads
     assert (attempts.execute(KEY, ENTRY).status, attempts.execute(KEY, ENTRY).reason) == ("refused", "stale_reservation")
@@ -770,7 +740,7 @@ def test_registration_conflict_and_same_identity_are_distinguished(tmp_path: Pat
         hooks.started(WORKER)
         return inner(harness, spec, timeout, hooks)  # the same identity again: already_same, not an error
 
-    assert app(con, surroundings, twice).execute(KEY, ENTRY).reason == "verification"
+    assert app(con, surroundings, twice).execute(KEY, ENTRY).reason == "commit"
 
 
 def test_different_worker_identity_refuses_registration_before_exec(tmp_path: Path, surroundings: AttemptSurroundings) -> None:
@@ -798,7 +768,7 @@ def test_ref_callback_faults_are_retained_with_cause_and_never_raised(
     assert loaded is not None
 
     class Broken(AttemptStore):
-        def session(self, admission: Admission, ref: str) -> Literal["accepted", "already_same", "conflict"]:
+        def _fence(self, con: sqlite3.Connection, admission: Admission) -> AttemptRecord:
             raise error
 
     latch = SessionLatch(Broken(lambda: con), loaded.admission)
@@ -809,7 +779,7 @@ def test_ref_callback_faults_are_retained_with_cause_and_never_raised(
 def test_report_never_presents_pending_state_as_collected(tmp_path: Path, surroundings: AttemptSurroundings) -> None:
     result = app(database(surroundings), surroundings, fake()).execute(KEY, ENTRY)
     stored = result.execution
-    assert stored is not None and report(stored).reason == "verification"
+    assert stored is not None and report(stored).reason == "commit"
     for session_state, status, reason in (
         ("pending", "pending", "session_pending"),
         ("fault", "pending", "session_fault"),

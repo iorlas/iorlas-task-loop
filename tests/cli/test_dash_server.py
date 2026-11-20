@@ -2,15 +2,38 @@
 when a read fails, a page goes away or too many connect."""
 
 import json
+import socket
 import time
 from collections.abc import Iterator
+from dataclasses import replace
 from http.client import HTTPConnection, HTTPResponse
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from ipaddress import ip_address
 from pathlib import Path
 
 import pytest
 
-from taskloop.dash_model import AttemptBody, Board, Card, FeedEvent, FeedPage, Fields, Outcome, TaskDetail, TrackerDetail
+from taskloop import dash_server
+from taskloop.dash_duration import Duration
+from taskloop.dash_model import (
+    AttemptBody,
+    Board,
+    Card,
+    FeedEvent,
+    FeedPage,
+    Fields,
+    LandDetail,
+    LandEvent,
+    LandEventKind,
+    LandWait,
+    OperationDetail,
+    Outcome,
+    TaskDetail,
+    TrackerDetail,
+    Usage,
+)
 from taskloop.dash_server import PAGES, DashPorts, DashServer, Hub
+from taskloop.operation_evidence import OperationKind, OperationState
 from taskloop.operations import Failed
 from taskloop.round_reader import LogRow
 
@@ -33,8 +56,17 @@ class Ports:
     def __init__(self, static: Path, max_streams: int = 16, queue_depth: int = 256) -> None:
         self.cards, self.mode = [card()], "ok"
         self.rows: tuple[LogRow, ...] = (row(),)
-        self.ports = DashPorts(self.board, self.task, self.tracker, self.body, lambda: self.rows, self.feed, "tl", static, 0.03, 0.05,
+        self.ports = DashPorts(self.board, self.task, self.tracker, self.body, lambda: self.rows, self.feed, self.delivery,
+                               "tl", static, 0.03, 0.05,
                                max_streams, queue_depth)
+
+    def delivery(self, task_id: str) -> LandDetail | Failed | None:
+        if task_id == "broken":
+            return Failed("unavailable", "git", "Delivery facts are temporarily unavailable.")
+        if task_id != "tl-1":
+            return None
+        return LandDetail(actions=("Integrate changes.",), summary=("One changed file.",), diff_files=1, added=2, deleted=1,
+                          pr_url="https://example.invalid/pull/1")
 
     def board(self) -> Board | Failed:
         if self.mode == "raise":
@@ -48,13 +80,16 @@ class Ports:
         if (task_id, step, number) != ("tl-1", "implement", 2):
             return None
         line = FeedEvent("command", "2026-11-12T10:00:00Z", id="c1", state="running", cmd="ls")
-        return FeedPage((line,), "7:42", replaced=False, available=True) if cursor is None else FeedPage((), cursor, False, True)
+        return (FeedPage((line,), "7:42", replaced=False, available=True, duration=self.cards[0].duration) if cursor is None
+                else FeedPage((), cursor, False, True, self.cards[0].duration))
 
     def task(self, task_id: str) -> TaskDetail | Failed:
-        return Failed("unavailable", "store") if task_id == "broken" else TaskDetail(card(task_id), ())
+        usage = Usage(16, 13, 7, 1, 1, 1)
+        return (Failed("unavailable", "store") if task_id == "broken"
+                else TaskDetail(replace(card(task_id), duration=self.cards[0].duration), (), {"plan": usage}, usage))
 
     def body(self, task_id: str, step: str, number: int) -> AttemptBody | Failed | None:
-        return AttemptBody("prompt", Outcome("verified", None, (), None)) if (task_id, step, number) == ("tl-1", "plan", 1) else None
+        return AttemptBody("prompt", Outcome("committed", None, (), None)) if (task_id, step, number) == ("tl-1", "plan", 1) else None
 
     def tracker(self, task_id: str) -> TrackerDetail | Failed | None:
         """The tracker's side: tl-1 is known, `broken` is unavailable, `slow` raises, anything else is not in the tracker."""
@@ -73,9 +108,9 @@ def part(value: object) -> dict[str, object]:
 class Stream:
     """One page on `/api/events`: its messages as they come."""
 
-    def __init__(self, server: DashServer) -> None:
+    def __init__(self, server: DashServer, host: str | None = None) -> None:
         self.connection = HTTPConnection(*server.address, timeout=5)
-        self.connection.request("GET", "/api/events")
+        self.connection.request("GET", "/api/events", headers={} if host is None else {"Host": host})
         self.response: HTTPResponse = self.connection.getresponse()
 
     def close(self) -> None:
@@ -93,11 +128,11 @@ class Stream:
 
 
 @pytest.fixture
-def served(tmp_path: Path) -> Iterator[tuple[Ports, DashServer]]:
+def served(tmp_path: Path, require_loopback: None) -> Iterator[tuple[Ports, DashServer]]:
     (tmp_path / "index.html").write_text("<html>page</html>")
     (tmp_path / "secret.txt").write_text("not served")
     fake = Ports(tmp_path)
-    server = DashServer(fake.ports, 0)
+    server = DashServer(fake.ports, ip_address("127.0.0.1"), 0)
     server.start()
     yield fake, server
     server.stop()
@@ -113,6 +148,63 @@ def get(server: DashServer, path: str, host: str | None = None) -> tuple[int, by
     return response.status, response.read()
 
 
+@pytest.mark.parametrize(("host", "family", "authority"), [
+    ("127.0.0.2", socket.AF_INET, "127.0.0.2:8123"), ("::1", socket.AF_INET6, "[::1]:8123"),
+    ("192.0.2.4", socket.AF_INET, None), ("0.0.0.0", socket.AF_INET, None), ("::", socket.AF_INET6, None),
+])
+def test_listener_uses_the_selected_literal_family_and_allocated_port(
+    host: str, family: int, authority: str | None, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    bound: list[tuple[str, int]] = []
+
+    def listener(server: ThreadingHTTPServer, address: tuple[str, int], _handler: type[BaseHTTPRequestHandler]) -> None:
+        bound.append(address)
+        assert server.address_family == family
+        server.server_address = (address[0], 8123, 0, 0) if family == socket.AF_INET6 else (address[0], 8123)
+
+    monkeypatch.setattr(ThreadingHTTPServer, "__init__", listener)
+    server = DashServer(Ports(tmp_path).ports, ip_address(host), 0)
+    assert bound == [(host, 0)] and server.address == (host, 8123)
+    assert (server.hosts is None) == (authority is None)
+    if authority is not None:
+        assert server.hosts is not None and authority in server.hosts
+
+
+def test_explicit_non_loopback_allows_proxy_hosts_for_page_api_and_events(
+    tmp_path: Path, require_loopback: None, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def local_listener(address: tuple[str, int], handler: type[BaseHTTPRequestHandler]) -> ThreadingHTTPServer:
+        assert address == ("192.0.2.4", 0)
+        return ThreadingHTTPServer(("127.0.0.1", 0), handler)
+
+    monkeypatch.setattr(dash_server, "_HTTPServer", local_listener)
+    (tmp_path / "index.html").write_text("<html>page</html>")
+    server = DashServer(Ports(tmp_path).ports, ip_address("192.0.2.4"), 0)
+    server.start()
+    try:
+        assert get(server, "/", "dashboard.example") == (200, b"<html>page</html>")
+        assert get(server, "/api/board", "dashboard.example")[0] == 200
+        stream = Stream(server, "dashboard.example")
+        try:
+            assert stream.response.status == 200 and stream.response.readline() == b": open\n"
+        finally:
+            stream.close()
+    finally:
+        server.stop()
+
+
+def test_binding_a_literal_performs_no_dns_lookup(tmp_path: Path, require_loopback: None, monkeypatch: pytest.MonkeyPatch) -> None:
+    def unexpected_lookup(_host: str) -> str:
+        pytest.fail("a literal bind address must not trigger DNS lookup")
+
+    monkeypatch.setattr(socket, "getfqdn", unexpected_lookup)
+    server = DashServer(Ports(tmp_path).ports, ip_address("127.0.0.1"), 0)
+    try:
+        assert server.address[0] == "127.0.0.1" and server.address[1] > 0
+    finally:
+        server.http.server_close()
+
+
 def test_the_endpoints_answer_json_the_page_is_served_and_nothing_else_is(served: tuple[Ports, DashServer]) -> None:
     _fake, server = served
     status, body = get(server, "/api/board")
@@ -120,6 +212,9 @@ def test_the_endpoints_answer_json_the_page_is_served_and_nothing_else_is(served
     assert json.loads(get(server, "/api/log")[1])["rows"][0]["move"] == "admit"
     assert get(server, "/") == (200, b"<html>page</html>")
     assert get(server, "/api/tasks/unknown")[0] == 200 and get(server, "/api/tasks/broken")[0] == 503
+    detail = json.loads(get(server, "/api/tasks/tl-1")[1])
+    assert detail["step_usage"]["plan"] == detail["usage"] == {
+        "fresh": 16, "cached": 13, "output": 7, "turns": 1, "attempts": 1, "complete": 1}
     assert get(server, "/secret.txt")[0] == 404 and get(server, "/../secret.txt")[0] == 404 and get(server, "/api/tasks/a%2F..")[0] == 404
 
 
@@ -150,6 +245,31 @@ def test_a_title_with_markup_is_data_and_the_page_never_builds_html_from_data() 
         assert not any(word in script.read_text() for word in unsafe), script
 
 
+def test_delivery_details_are_selected_by_task_and_preserve_failure_explanations(served: tuple[Ports, DashServer]) -> None:
+    _fake, server = served
+    status, body = get(server, "/api/tasks/tl-1/delivery")
+    found = json.loads(body)
+    assert status == 200 and found["actions"] == ["Integrate changes."]
+    assert (found["diff_files"], found["added"], found["deleted"]) == (1, 2, 1)
+    assert not {"command", "diff_command"} & found.keys()
+    assert found["pr_url"] == "https://example.invalid/pull/1"
+    assert get(server, "/api/tasks/missing/delivery")[0] == 404
+    status, body = get(server, "/api/tasks/broken/delivery")
+    assert status == 503 and json.loads(body) == {"error": "Delivery facts are temporarily unavailable."}
+
+
+def test_task_detail_encodes_nested_land_events_waits_and_operations() -> None:
+    wait = LandWait(after="checks/ready", started_at=AT, ended_at=None, open=True, awaited="Waiting for delivery.")
+    event = LandEvent(id=wait.after, kind=LandEventKind.READY, checks_id="checks", checks_n=1, at=AT,
+                      past=False, explanation="Ready for delivery.", waits=(wait,))
+    operation = OperationDetail(operation="a" * 32, step="checks", n=1, past=False, kind=OperationKind.CHECKS_START,
+                                state=OperationState.ACTIVE, started_at=AT, elapsed_ms=None)
+    reply = dash_server._json(TaskDetail(card(), (), {}, Usage(), (event,), (operation,)))
+    assert reply.status == 200
+    assert json.loads(reply.body)["land_events"] == [event.model_dump(mode="json")]
+    assert json.loads(reply.body)["operations"] == [operation.model_dump(mode="json")]
+
+
 def test_a_connected_page_is_told_of_a_moved_card_a_vanished_one_and_every_new_log_line(served: tuple[Ports, DashServer]) -> None:
     fake, server = served
     stream = Stream(server)
@@ -171,6 +291,53 @@ def test_the_first_moves_after_connecting_are_not_lost(served: tuple[Ports, Dash
     stream = Stream(server)  # the baseline was taken before the first byte came back
     fake.cards = [card(column="implement")]
     assert part(stream.kinds({"task"})[-1]["task"])["column"] == "implement"
+    stream.close()
+
+
+def test_agent_question_fields_reach_snapshots_and_question_only_stream_updates(served: tuple[Ports, DashServer]) -> None:
+    fake, server = served
+    fake.cards = [replace(card(), column="held", ask=True, question="Which database?\nUse <primary>?")]
+    status, body = get(server, "/api/board")
+    found = json.loads(body)["tasks"][0]
+    assert status == 200 and found["ask"] is True and found["question"] == "Which database?\nUse <primary>?"
+    stream = Stream(server)
+    fake.cards = [replace(fake.cards[0], question="Which region?")]
+    changed = part(stream.kinds({"task"})[-1]["task"])
+    assert changed["ask"] is True and changed["question"] == "Which region?" and changed["column"] == "held"
+    stream.close()
+
+
+def test_duration_values_reach_http_and_duration_only_stream_updates(served: tuple[Ports, DashServer]) -> None:
+    fake, server = served
+    assert json.loads(get(server, "/api/board")[1])["tasks"][0]["duration"] is None
+    assert json.loads(get(server, "/api/tasks/tl-1")[1])["task"]["duration"] is None
+    measured = Duration(execution="initial", number=3, elapsed_ms=12500, quiet_ms=2000, frozen=False)
+    fake.cards = [replace(card(), duration=measured)]
+    assert json.loads(get(server, "/api/board")[1])["tasks"][0]["duration"] == measured.model_dump()
+    assert json.loads(get(server, "/api/tasks/tl-1")[1])["task"]["duration"] == measured.model_dump()
+    for query in ("", "?after=7:42"):
+        page = json.loads(get(server, "/api/tasks/tl-1/attempts/implement/2/feed" + query)[1])
+        assert page["duration"] == measured.model_dump()
+    stream = Stream(server)
+    frozen = measured.model_copy(update={"number": 4, "quiet_ms": None, "frozen": True})
+    fake.cards = [replace(fake.cards[0], duration=frozen)]
+    changed = part(stream.kinds({"task"})[-1]["task"])
+    assert changed["duration"] == frozen.model_dump()
+    stream.close()
+
+
+def test_factory_explanations_reach_snapshots_and_explanation_only_stream_updates(served: tuple[Ports, DashServer]) -> None:
+    fake, server = served
+    fake.cards = [replace(card(), column="held", hold_cause="branch_moved", hold_explanation="The checked branch moved.")]
+    status, body = get(server, "/api/board")
+    found = json.loads(body)["tasks"][0]
+    assert status == 200 and found["hold_explanation"] == "The checked branch moved."
+    assert found["ask"] is False and found["question"] is None
+    stream = Stream(server)
+    fake.cards = [replace(fake.cards[0], hold_explanation="The checked branch moved.\nAnother <commit> is there.")]
+    changed = part(stream.kinds({"task"})[-1]["task"])
+    assert changed["hold_explanation"] == fake.cards[0].hold_explanation
+    assert changed["hold_cause"] == "branch_moved" and changed["ask"] is False and changed["question"] is None
     stream.close()
 
 
@@ -223,7 +390,7 @@ def test_the_feed_endpoint_answers_the_tail_then_a_follow_and_refuses_a_bad_curs
     status, body = get(server, "/api/tasks/tl-1/attempts/implement/2/feed")
     assert status == 200 and json.loads(body)["cursor"] == "7:42" and json.loads(body)["events"][0]["cmd"] == "ls"
     assert json.loads(get(server, "/api/tasks/tl-1/attempts/implement/2/feed?after=7:42")[1]) == {
-        "events": [], "cursor": "7:42", "replaced": False, "available": True}
+        "events": [], "cursor": "7:42", "replaced": False, "available": True, "duration": None}
     assert get(server, "/api/tasks/tl-1/attempts/implement/2/feed?after=junk")[0] == 400
     assert get(server, "/api/tasks/tl-1/attempts/implement/9/feed")[0] == 404
 

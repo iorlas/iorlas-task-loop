@@ -1,7 +1,7 @@
 // The Lines tab of one attempt: the agent's latest actions as a grid, kept where the person scrolled it.
 // Shapes: docs/design/dashboard-ui.md (*Live event*).
 
-import { $, FEED_LIMIT, clock, el, fmtDur, tick } from "./ui.js";
+import { $, FEED_LIMIT, STATE, clock, el, fmtDur, quietSpan, stepInfo, tick } from "./ui.js";
 
 const offset = (e, a) => (a.started_at ? clock(Date.parse(e.at) - Date.parse(a.started_at)) : "");
 
@@ -20,62 +20,77 @@ export function pause(e, prev) {
 
 export const atBottom = (box) => box.scrollHeight - box.scrollTop - box.clientHeight < BOTTOM_PX;
 
-export function lines(a) {
-  const box = el("div", "min-h-0 flex-1 overflow-y-auto px-6 py-4");
+export function lines(a, activate) {
+  const view = el("div", "flex min-h-0 min-w-0 flex-1 flex-col");
+  const box = el("div", "min-h-0 min-w-0 flex-1 overflow-y-auto px-6 py-4");
   box.id = "tail";
   box.dataset.key = `${a.step}/${a.n}`;
   const list = el("div", "divide-y divide-slate-100 dark:divide-slate-800/70");
   list.id = "lines";
   if (!a.feed.length) list.append(el("p", "py-3 text-sm text-slate-500", "No lines recorded for this attempt."));
-  a.feed.forEach((e, i) => list.append(line(e, a, a.feed[i - 1])));
+  const start = a.state === "running" ? Math.max(0, a.feed.length - FEED_LIMIT) : 0;
+  a.feed.slice(start).forEach((e, i) => list.append(line(e, a, a.feed[start + i - 1], false, activate)));
   const note = el("p", "mb-1 text-[11px]");
   note.id = "feednote";
   box.append(note, list);
-  setNote(a);
-  return box;
+  setNote(a, note);
+  const controls = el("div", "px-6 py-2");
+  const jump = el("button", "text-xs text-sky-600 dark:text-sky-400", "Jump to latest");
+  jump.type = "button";
+  jump.addEventListener("click", () => { box.scrollTop = box.scrollHeight; });
+  controls.append(jump);
+  view.append(controls, box);
+  return view;
 }
 
 // The quiet line above the list: how much is kept and whether it is live, or why it stopped following.
-export function setNote(a) {
-  const note = $("feednote");
+export function setNote(a, note = $("feednote")) {
   if (!note) return;
   note.className = `mb-1 text-[11px] ${a.feedError ? "text-rose-600 dark:text-rose-400" : "text-slate-400 dark:text-slate-500"}`;
-  note.textContent = a.feedError ? `Feed stopped: ${a.feedError}. Trying again.` : `Latest ${FEED_LIMIT} lines${a.state === "running" ? ", live" : ""}`;
+  note.textContent = a.feedError ? `Feed stopped: ${a.feedError}.${a.state === "running" ? " Reconnecting." : ""}`
+    : a.feedAvailable === false ? "Check output unavailable: the log file is missing or cannot be read."
+    : a.state === "running" ? `Latest ${FEED_LIMIT} lines, live` : "Retained lines";
+  if (a.feedError && a.state !== "running" && a.feedRetry) {
+    const retry = el("button", "ml-2 text-sky-600 dark:text-sky-400", "Retry feed");
+    retry.type = "button";
+    retry.addEventListener("click", a.feedRetry);
+    note.append(retry);
+  }
 }
 
-// The attempt's quiet time counts from its latest line.
+// Feed display timestamps never establish the attempt's quiet age.
 export function touchQuiet(a) {
   const node = $("quiet");
-  const latest = a.feed.at(-1)?.at;
-  if (!node || !latest) return;
-  node.dataset.quiet = latest;
-  tick(node);
+  if (!node) return;
+  const quiet = quietSpan(a.duration);
+  quiet.id = node.id;
+  node.replaceWith(quiet);
 }
 
-// One row: offset, kind emoji, content, duration. A faint "paused 33s" row sits above a line that came after a pause.
-function line(e, a, prev, fresh = false) {
+// One row: offset, kind emoji and words, content, duration. A faint "paused 33s" row sits above a line that came after a pause.
+function line(e, a, prev, fresh = false, activate) {
   const idle = pause(e, prev);
-  const row = el("div", `${fresh ? "animate-line-in" : ""} grid grid-cols-[3.25rem_3.25rem_minmax(0,1fr)_auto] items-baseline gap-x-3 py-1.5 text-xs`);
+  const row = el("div", `${fresh ? "animate-line-in" : ""} event-row grid grid-cols-[3.25rem_3.25rem_minmax(0,1fr)_auto] items-baseline gap-x-3 py-1.5 text-xs`);
   row.dataset.eid = e.id || "";
   const hint = idle >= PAUSE_MS;
   const r = hint ? "row-start-2" : "row-start-1"; // literal class names: the Tailwind scanner reads strings, not parts
-  if (hint) row.append(el("span", "col-start-3 row-start-1 mb-0.5 text-[11px] text-slate-400 dark:text-slate-500", `⏸ paused ${fmtDur(idle)}`));
-  const at = el("span", `col-start-1 ${r} font-mono tabular-nums text-slate-400 dark:text-slate-500`, offset(e, a));
-  const kind = el("span", `col-start-2 ${r} text-[13px]`, KIND[e.type]);
+  if (hint) row.append(el("span", "event-pause col-start-3 row-start-1 mb-0.5 text-[11px] text-slate-400 dark:text-slate-500", `⏸ paused ${fmtDur(idle)}`));
+  const at = el("span", `event-offset col-start-1 ${r} font-mono tabular-nums text-slate-400 dark:text-slate-500`, offset(e, a));
+  const kind = el("span", `event-kind col-start-2 ${r} break-words text-[11px] leading-snug`, `${KIND[e.type]} ${WORD[e.type]}`);
   kind.title = WORD[e.type];
   const content = el("span", `col-start-3 ${r} min-w-0`);
   const right = el("span", `col-start-4 ${r} text-right tabular-nums text-slate-500 dark:text-slate-400`);
-  fill(e, content, right);
+  fill(e, content, right, activate);
   row.append(at, kind, content, right);
   return row;
 }
 
-function fill(e, content, right) {
+function fill(e, content, right, activate) {
   if (e.type === "command" || e.type === "tool") {
     const running = e.state === "running";
     const failed = !running && e.exit_code != null && e.exit_code !== 0;
     if (e.type === "tool") content.append(el("span", "font-semibold text-slate-600 dark:text-slate-300", e.name), " ");
-    content.append(el("code", `${e.type === "tool" ? "" : "block "}truncate font-mono text-[12px]`, e.cmd));
+    content.append(e.type === "command" ? command(e.cmd) : el("code", "truncate font-mono text-[12px]", e.cmd));
     if (running) {
       right.dataset.since = e.at;
       right.dataset.prefix = "running ";
@@ -86,8 +101,8 @@ function fill(e, content, right) {
       if (failed) right.className += " font-medium text-rose-600 dark:text-rose-400";
     }
   } else if (e.type === "message") {
-    content.className += " whitespace-pre-wrap break-words text-slate-700 dark:text-slate-200"; // what the agent said, in full
-    content.textContent = e.text;
+    content.className += " text-slate-700 dark:text-slate-200";
+    content.append(message(e.text));
   } else if (e.type === "think") {
     // collapsed; only the words the harness gave (the server sends no think line without text)
     const more = el("details", "text-slate-600 dark:text-slate-300");
@@ -97,37 +112,90 @@ function fill(e, content, right) {
     content.className += e.type === "error" ? " font-medium text-rose-600 dark:text-rose-400" : " text-amber-600 dark:text-amber-400";
     content.textContent = e.text;
   } else if (e.type === "check") {
-    content.append(el("span", "font-mono text-[12px]", e.name), "  ", el("span", `font-medium ${e.passed ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"}`, e.passed ? "passed" : "failed"));
-    right.textContent = fmtDur(e.duration_ms);
+    content.append(checkLine(e, activate));
+    if (e.duration_ms != null) right.textContent = fmtDur(e.duration_ms);
   } else {
-    content.append(el("span", "text-slate-500 dark:text-slate-400", `try ${e.attempt} of ${e.step} started`));
+    content.append(el("span", "text-slate-500 dark:text-slate-400", `${stepInfo(e.step)?.label ?? e.step} attempt ${e.attempt} started`));
   }
 }
 
-// One new line of an attempt: a command's finished line replaces its running one (same id); the feed keeps its last FEED_LIMIT.
+function checkLine(e, activate) {
+  const node = el(activate ? "button" : "span", "block w-full min-w-0 text-left");
+  if (activate) {
+    node.type = "button";
+    node.setAttribute("aria-label", `Open Result for ${e.name}${e.block == null ? "" : `, block ${e.block}`}`);
+    node.addEventListener("click", () => activate({ block: e.block, name: e.name }));
+  }
+  node.append(el("span", "font-mono text-[12px]", e.name), "  ");
+  if (e.text != null) node.append(el("span", "block whitespace-pre-wrap break-words font-mono text-[12px]", e.text));
+  else {
+    const known = e.passed === true || e.passed === false;
+    const color = !known ? "text-slate-500 dark:text-slate-400"
+      : e.passed ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400";
+    const label = known ? (e.passed ? STATE.succeeded.label : STATE.failed.label)
+      : e.state === "running" ? "Running" : e.state === "unfinished" ? "Unfinished" : "Outcome unavailable";
+    node.append(el("span", `font-medium ${color}`, label));
+  }
+  return node;
+}
+
+function command(text) {
+  const wrap = el("span", "block min-w-0");
+  const words = el("code", "block truncate font-mono text-[12px]", text);
+  const button = el("button", "mt-1 block text-xs text-sky-600 dark:text-sky-400", "Expand command");
+  button.type = "button";
+  button.setAttribute("aria-expanded", "false");
+  button.addEventListener("click", () => {
+    const expanded = button.getAttribute("aria-expanded") !== "true";
+    words.className = `${expanded ? "block whitespace-pre-wrap break-words" : "block truncate"} font-mono text-[12px]`;
+    button.setAttribute("aria-expanded", String(expanded));
+    button.textContent = expanded ? "Collapse command" : "Expand command";
+  });
+  wrap.append(words, button);
+  return wrap;
+}
+
+function message(text) {
+  const wrap = el("span", "block");
+  const words = el("span", "message-text", text);
+  words.dataset.folded = "true";
+  const button = el("button", "mt-1 block text-xs text-sky-600 dark:text-sky-400", "Expand message");
+  button.type = "button";
+  button.setAttribute("aria-expanded", "false");
+  button.addEventListener("click", () => {
+    const expanded = button.getAttribute("aria-expanded") !== "true";
+    words.dataset.folded = String(!expanded);
+    button.setAttribute("aria-expanded", String(expanded));
+    button.textContent = expanded ? "Collapse message" : "Expand message";
+  });
+  wrap.append(words, button);
+  return wrap;
+}
+
+// One new line: a command's finished line replaces its running one (same id); only a live feed keeps its last FEED_LIMIT.
 export function apply(attempt, e) {
   const at = e.id ? attempt.feed.findIndex((x) => x.id === e.id) : -1;
   if (at >= 0) attempt.feed[at] = e;
   else attempt.feed.push(e);
-  attempt.feed = attempt.feed.slice(-FEED_LIMIT);
+  if (attempt.state === "running") attempt.feed = attempt.feed.slice(-FEED_LIMIT);
 }
 
 // The new line in the open Lines tab: in place of its running line, else at the end. The view follows the end only when it was
 // already there; a person who scrolled up keeps the place, even while the oldest rows drop off the top.
-export function show(attempt, e) {
+export function show(attempt, e, activate) {
   const list = $("lines");
   const box = $("tail");
   if (!list || !box || box.dataset.key !== `${attempt.step}/${attempt.n}`) return;
   const follow = atBottom(box);
   if (list.firstChild?.tagName === "P") list.replaceChildren();
   const index = attempt.feed.indexOf(e);
-  const row = line(e, attempt, attempt.feed[index - 1], true);
+  const row = line(e, attempt, attempt.feed[index - 1], true, activate);
   const old = e.id && [...list.children].find((c) => c.dataset.eid === e.id);
   if (old) old.replaceWith(row);
   else list.append(row);
   const height = box.scrollHeight;
   let dropped = false;
-  while (list.children.length > FEED_LIMIT) {
+  while (attempt.state === "running" && list.children.length > FEED_LIMIT) {
     list.firstChild.remove();
     dropped = true;
   }

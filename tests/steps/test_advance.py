@@ -1,4 +1,4 @@
-"""The round advances a claimed task from plan to implement (S5c), end to end over real SQLite, real admission, verify,
+"""The round advances a claimed task from plan to implement (S5c), end to end over real SQLite, real admission, commit,
 release and publish, the semantic Git fake with its fake remote, a scripted agent run at once by the launch port (as the
 registered entry would run it), the fake slot setup and a tracker double (`round_bench`): plan, advance, implement,
 `Next: advance` (to the check step, whose admission is a double here)."""
@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 from doubles import Command, PinnedViews
-from git_porcelain.testing import FakeWorktree
+from git_porcelain.testing import FakeRemote, FakeWorktree
 from round_bench import Factory, Tracker, scripts, task
 
 from taskloop.attempt_status import Listed, StatusPorts, list_attempts
@@ -27,13 +27,13 @@ def factory(factory: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, che
 def test_rounds_plan_advance_and_implement_a_task_to_its_check_step_without_a_second_claim_or_the_label(factory: Factory) -> None:
     factory.tracker.beads.pop("tl-2")
     assert factory.round() == [("tl-1", "plan", "start", "started")]
-    assert factory.round() == [("tl-1", "plan", "verify", "verified release=released branch=published")]
+    assert factory.round() == [("tl-1", "plan", "commit", "committed release=released branch=published")]
     planned = factory.tip("tl-1")
     assert factory.next_words() == {"tl-1": ("plan", "advance")}
     factory.tracker.beads["tl-1"] = replace(factory.tracker.beads["tl-1"], labels=())  # removed after the claim: no effect
     advanced = factory.round()
     assert advanced == [("tl-1", "implement", "advance", "started")] and factory.last.stopped == "no_free_slot"
-    assert factory.round() == [("tl-1", "implement", "verify", "verified release=released branch=published")]
+    assert factory.round() == [("tl-1", "implement", "commit", "committed release=released branch=published")]
     # the check step is next: this `main` requires no check, so the done implement attempt is skipped (S6d)
     assert factory.round() == [("tl-1", "implement", "skip", "no_required")]
     assert factory.next_words() == {"tl-1": ("implement", "advance")}
@@ -58,17 +58,34 @@ def test_two_done_tasks_and_one_slot_advance_oldest_release_first_and_new_work_w
     assert factory.round() == [("tl-2", "implement", "advance", "started")] and factory.last.stopped == "no_free_slot"
     assert factory.tracker.ready_reads == reads and factory.tracker.claims == ["tl-2", "tl-1"]  # no ready read, no claim
     assert factory.tracker.shows[shows:] == ["tl-2"]  # tl-1 found no free slot before any tracker read
-    assert factory.round() == [("tl-2", "implement", "verify", "verified release=released branch=published"),
+    assert factory.round() == [("tl-2", "implement", "commit", "committed release=released branch=published"),
                                ("tl-1", "implement", "advance", "started")]
-    assert factory.round() == [("tl-1", "implement", "verify", "verified release=released branch=published"),
+    assert factory.round() == [("tl-1", "implement", "commit", "committed release=released branch=published"),
                                ("tl-2", "implement", "skip", "no_required"), ("tl-3", "plan", "start", "started")]
-    assert factory.next_words() == {"tl-1": ("implement", "advance"), "tl-2": ("implement", "advance"), "tl-3": ("plan", "verify")}
+    assert factory.next_words() == {"tl-1": ("implement", "advance"), "tl-2": ("implement", "advance"), "tl-3": ("plan", "commit")}
+
+
+def test_advance_refreshes_origin_and_records_its_tip_for_parking(factory: Factory) -> None:
+    factory.tracker.beads.pop("tl-2")
+    factory.by_hand("tl-1")
+    repo = factory.slot.repo
+    original = dict(repo.branches())["main"]
+    retained = factory.tip("tl-1")
+    origin = FakeRemote("https://example.invalid/current.git")
+    repo.add_remote("origin", origin)
+    repo.worktree(repo.path).push("main")
+    target = origin.advance("main", {"other": "New landing\n"})
+    assert factory.round() == [("tl-1", "implement", "advance", "started")]
+    key = factory.store.attempt_of("tasks", "tl-1")
+    assert key is not None and factory.store.slot_base(key[0]) == target
+    assert repo.is_ancestor(retained, factory.tip("tl-1"))
+    assert dict(repo.branches())["main"] == original
 
 
 def test_a_task_a_person_abandoned_is_restarted_by_a_round_while_it_carries_the_label(factory: Factory) -> None:
     factory.by_hand("tl-1")
     found = factory.store.attempt_of("tasks", "tl-1")
-    assert found is not None and factory.releaser().release(found[0], True)  # the person's `tl step release --abandon`
+    assert found is not None and factory.releaser().release(found[0], True)  # the person's `tl step abandon`
     assert factory.round() == [("tl-1", "plan", "start", "started")]  # the restart takes the one free slot first
     assert factory.current("tl-1") != found[0].attempt_id  # a fresh attempt: the one restart route, no `tl step start`
 
@@ -105,7 +122,7 @@ def test_a_restart_after_the_advance_was_admitted_but_never_launched_continues_i
     assert factory.round() == [("tl-1", "plan", "advance", "unavailable:start")] and factory.last.stopped == "unavailable:start"
     assert factory.next_words() == {"tl-1": ("implement", "start")}
     assert factory.round() == [("tl-1", "implement", "relaunch", "relaunched")]
-    assert factory.round() == [("tl-1", "implement", "verify", "verified release=released branch=published")]
+    assert factory.round() == [("tl-1", "implement", "commit", "committed release=released branch=published")]
     assert factory.next_words() == {"tl-1": ("implement", "advance")}
     assert factory.con.execute("SELECT count(*) FROM attempt WHERE step='implement'").fetchone() == (1,)
 

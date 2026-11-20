@@ -1,9 +1,9 @@
 """The one task status (tl-8bh9.14.143): what a task is doing, computed once from the stored facts of its current view (the attempt,
 its release, hold and land) and, when the reader knows it, the admission facts (which tasks the tracker lists ready under the round's
-label, and what keeps a round from starting one). `tl step list`, the dashboard's board and drawer and the round's admission all call
+label, and what keeps a round from starting one). `tl attempt list`, the dashboard's board and drawer and the round's admission all call
 `task_status`, so they cannot disagree. Pure: values in, values out.
 
-A task whose attempt a person abandoned (`tl step release --abandon`, the claim returned, no hold) is `abandoned` until the tracker
+A task whose attempt a person abandoned (`tl step abandon`, the claim returned, no hold) is `abandoned` until the tracker
 lists it ready under the round's approval label; then the round restarts it fresh (`QUEUED`, one restart route, no `tl step start`
 by hand). A task a hold abandoned is `held` and is taken again only by the person's answer (`hold_status.reingests`)."""
 
@@ -15,14 +15,14 @@ from typing import Final
 from taskloop.attempt_result import succeeded
 from taskloop.attempt_status import AttemptView
 from taskloop.hold_status import RETURNED, reingests
-from taskloop.land_status import LandView
+from taskloop.land_status import LandState, land_state
 
 
 class Status(StrEnum):
     RUNNING = "running"  # an agent step runs (plan, implement)
     CHECKING = "checking"  # the check step runs
-    SETTLING = "settling"  # the factory moves it: starting, verifying, repeating, releasing, publishing, advancing
-    WAITING_FOR_LAND = "waiting_for_land"  # checked and passed: the person's `tl step land`
+    SETTLING = "settling"  # the factory moves it: starting, completing factory commit, repeating, releasing, publishing, advancing
+    WAITING_FOR_LAND = "waiting_for_land"  # checked and passed: the person's `tl land run`
     LANDING = "landing"  # a land is observed running
     LANDED = "landed"
     HELD = "held"  # a hold, due or recorded: waits for a person (its reason is the hold's)
@@ -41,7 +41,7 @@ class Wait(StrEnum):
 
 
 IN_FLIGHT: Final = frozenset({Status.RUNNING, Status.CHECKING, Status.SETTLING, Status.WAITING_FOR_LAND, Status.LANDING})
-SETTLING: Final = frozenset({"start", "verify", "repeat", "release", "publish", "advance"})
+SETTLING: Final = frozenset({"start", "commit", "repeat", "release", "publish", "advance"})
 FRESH: Final = frozenset({Status.ABANDONED, Status.QUEUED})  # no current work: a new attempt is what comes next
 
 
@@ -61,6 +61,7 @@ class TaskStatus:
     reason: str | None = None  # the stored typed reason: a hold's, a failed result's, a `stuck:*` word, a setting's `Next` word
     wait: Wait | None = None  # QUEUED only
     skip: str | None = None  # QUEUED with `Wait.SKIPPED`: the selection rule's word
+    land: LandState | None = None
 
 
 def blocker(free: int, reserve: int, running: int, bound: int) -> Wait:
@@ -76,9 +77,14 @@ def skipped(rule: str) -> TaskStatus:
     return TaskStatus(Status.QUEUED, rule, Wait.SKIPPED, rule)
 
 
-def landing(land: LandView | None) -> bool:
-    """A land is observed running (every other task at its land waits for the person)."""
-    return land is not None and land.row.pending and land.process == "running"
+def waiting_for_land(view: AttemptView) -> bool:
+    """Released passing checks, with no hold or abandon, may continue through the shared land operation."""
+    checks = view.checks
+    return (view.next == "land" and checks is not None and checks.row.released_at is not None
+            and checks.row.conclusion == "passed" and not checks.row.abandoned
+            and view.hold is None and view.hold_due is None
+            and view.entry not in ("running", "unknown") and land_state(view.land) is not LandState.LANDING
+            and view.release is not None and not view.release.abandoned)
 
 
 def restartable(view: AttemptView, admission: Admission | None) -> bool:
@@ -102,7 +108,8 @@ def _stopped(view: AttemptView) -> TaskStatus | None:
 
 def _moving(view: AttemptView) -> TaskStatus | None:
     if view.next == "land":
-        return TaskStatus(Status.LANDING if landing(view.land) else Status.WAITING_FOR_LAND)
+        state = land_state(view.land, view.land_mode)
+        return TaskStatus(Status.LANDING if state is LandState.LANDING else Status.WAITING_FOR_LAND, land=state)
     if view.next == "wait":
         return TaskStatus(Status.CHECKING if view.step == "check" else Status.RUNNING)
     return TaskStatus(Status.SETTLING, view.next) if view.next in SETTLING else None
@@ -140,7 +147,12 @@ def words(found: TaskStatus) -> str:
         return waits[found.wait]
     fixed = {
         Status.RUNNING: "running", Status.CHECKING: "checking", Status.SETTLING: "settling", Status.LANDED: "landed",
-        Status.WAITING_FOR_LAND: "waiting for land", Status.LANDING: "landing", Status.FINISHED: "finished",
+        Status.WAITING_FOR_LAND: {
+            LandState.WAITING: "waiting for land: waits for the factory",
+            LandState.MANUAL: "waiting for land: waits for a person; the profile says land: manual",
+            LandState.UNKNOWN: "waiting for land: landing policy is unavailable",
+            LandState.LANDING: "landing",
+        }[found.land or LandState.UNKNOWN], Status.LANDING: "landing", Status.FINISHED: "finished",
         Status.ABANDONED: "abandoned: a person gave the attempt up; a round restarts it once the task carries the approval label",
         Status.HELD: f"held{reason}: waits for a person", Status.STUCK: f"needs a person{reason}",
     }

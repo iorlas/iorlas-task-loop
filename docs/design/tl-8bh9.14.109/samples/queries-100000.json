@@ -1,0 +1,1337 @@
+{
+  "base": {
+    "queries": {
+      "later": {
+        "seconds": [
+          0.035917317029088736,
+          0.035008192993700504,
+          0.03549680789001286,
+          0.03576907701790333,
+          0.03576167207211256
+        ],
+        "median": 0.03576167207211256,
+        "p95": 0.035917317029088736,
+        "rows": 100,
+        "plan": [
+          [
+            3,
+            0,
+            61,
+            "SEARCH p USING INDEX sqlite_autoindex_attempt_5 (adapter=?)"
+          ],
+          [
+            9,
+            0,
+            0,
+            "CORRELATED SCALAR SUBQUERY 1"
+          ],
+          [
+            13,
+            9,
+            46,
+            "SEARCH q USING COVERING INDEX sqlite_autoindex_attempt_5 (adapter=? AND backlog=? AND task_id=? AND seq>?)"
+          ]
+        ]
+      },
+      "grouped": {
+        "seconds": [
+          0.007908927975222468,
+          0.007170367985963821,
+          0.007677758112549782,
+          0.007453653961420059,
+          0.007685013115406036
+        ],
+        "median": 0.007677758112549782,
+        "p95": 0.007908927975222468,
+        "rows": 100,
+        "plan": [
+          [
+            2,
+            0,
+            0,
+            "CO-ROUTINE q"
+          ],
+          [
+            8,
+            2,
+            53,
+            "SEARCH attempt USING COVERING INDEX sqlite_autoindex_attempt_5 (adapter=?)"
+          ],
+          [
+            47,
+            0,
+            82,
+            "SCAN q"
+          ],
+          [
+            50,
+            0,
+            46,
+            "SEARCH p USING INDEX sqlite_autoindex_attempt_5 (adapter=? AND backlog=? AND task_id=? AND seq=?)"
+          ]
+        ]
+      },
+      "count": {
+        "seconds": [
+          0.0010860119946300983,
+          0.0010942269582301378,
+          0.0010558529756963253,
+          0.0008022421970963478,
+          0.0006826650351285934
+        ],
+        "median": 0.0010558529756963253,
+        "p95": 0.0010942269582301378,
+        "rows": 1,
+        "plan": [
+          [
+            4,
+            0,
+            59,
+            "SEARCH attempt USING INDEX sqlite_autoindex_attempt_5 (adapter=? AND backlog=? AND task_id=?)"
+          ]
+        ]
+      },
+      "old_agent": {
+        "seconds": [
+          0.02940406813286245,
+          0.03075799811631441,
+          0.02991057885810733,
+          0.028878170996904373,
+          0.031429871916770935
+        ],
+        "median": 0.02991057885810733,
+        "p95": 0.031429871916770935,
+        "rows": 1,
+        "plan": [
+          [
+            5,
+            0,
+            216,
+            "SCAN p"
+          ],
+          [
+            7,
+            0,
+            62,
+            "SEARCH s USING INDEX sqlite_autoindex_slot_1 (repo_id=?)"
+          ],
+          [
+            18,
+            0,
+            0,
+            "CORRELATED SCALAR SUBQUERY 1"
+          ],
+          [
+            23,
+            18,
+            39,
+            "SEARCH c USING INDEX sqlite_autoindex_checks_attempt_1 (attempt_id=?)"
+          ]
+        ]
+      },
+      "old_check": {
+        "seconds": [
+          0.040334238903597,
+          0.04141562106087804,
+          0.04069191706366837,
+          0.040482169948518276,
+          0.04454702395014465
+        ],
+        "median": 0.04069191706366837,
+        "p95": 0.04454702395014465,
+        "rows": 1,
+        "plan": [
+          [
+            5,
+            0,
+            216,
+            "SCAN p"
+          ],
+          [
+            7,
+            0,
+            62,
+            "SEARCH s USING INDEX sqlite_autoindex_slot_1 (repo_id=?)"
+          ],
+          [
+            18,
+            0,
+            0,
+            "CORRELATED SCALAR SUBQUERY 1"
+          ],
+          [
+            23,
+            18,
+            39,
+            "SEARCH c USING INDEX sqlite_autoindex_checks_attempt_1 (attempt_id=?)"
+          ]
+        ]
+      },
+      "old_missing": {
+        "seconds": [
+          0.027693100040778518,
+          0.027762924088165164,
+          0.030338772106915712,
+          0.027556732995435596,
+          0.028474763967096806
+        ],
+        "median": 0.027762924088165164,
+        "p95": 0.030338772106915712,
+        "rows": 0,
+        "plan": [
+          [
+            5,
+            0,
+            216,
+            "SCAN p"
+          ],
+          [
+            7,
+            0,
+            62,
+            "SEARCH s USING INDEX sqlite_autoindex_slot_1 (repo_id=?)"
+          ],
+          [
+            18,
+            0,
+            0,
+            "CORRELATED SCALAR SUBQUERY 1"
+          ],
+          [
+            23,
+            18,
+            39,
+            "SEARCH c USING INDEX sqlite_autoindex_checks_attempt_1 (attempt_id=?)"
+          ]
+        ]
+      },
+      "agent": {
+        "seconds": [
+          8.356990292668343e-06,
+          3.847060725092888e-06,
+          3.5259872674942017e-06,
+          3.205845132470131e-06,
+          2.3141037672758102e-06
+        ],
+        "median": 3.5259872674942017e-06,
+        "p95": 8.356990292668343e-06,
+        "rows": 1,
+        "plan": [
+          [
+            1,
+            0,
+            0,
+            "COMPOUND QUERY"
+          ],
+          [
+            2,
+            1,
+            0,
+            "LEFT-MOST SUBQUERY"
+          ],
+          [
+            8,
+            2,
+            46,
+            "SEARCH p USING INDEX sqlite_autoindex_attempt_1 (attempt_id=?)"
+          ],
+          [
+            15,
+            2,
+            47,
+            "SEARCH s USING INDEX sqlite_autoindex_slot_1 (repo_id=? AND name=?)"
+          ],
+          [
+            25,
+            1,
+            0,
+            "UNION ALL"
+          ],
+          [
+            33,
+            25,
+            46,
+            "SEARCH c USING INDEX sqlite_autoindex_checks_attempt_1 (attempt_id=?)"
+          ],
+          [
+            40,
+            25,
+            46,
+            "SEARCH p USING INDEX sqlite_autoindex_attempt_1 (attempt_id=?)"
+          ],
+          [
+            45,
+            25,
+            47,
+            "SEARCH s USING INDEX sqlite_autoindex_slot_1 (repo_id=? AND name=?)"
+          ]
+        ]
+      },
+      "check": {
+        "seconds": [
+          3.6761630326509476e-06,
+          3.0959490686655045e-06,
+          2.844957634806633e-06,
+          2.8060749173164368e-06,
+          2.794899046421051e-06
+        ],
+        "median": 2.844957634806633e-06,
+        "p95": 3.6761630326509476e-06,
+        "rows": 1,
+        "plan": [
+          [
+            1,
+            0,
+            0,
+            "COMPOUND QUERY"
+          ],
+          [
+            2,
+            1,
+            0,
+            "LEFT-MOST SUBQUERY"
+          ],
+          [
+            8,
+            2,
+            46,
+            "SEARCH p USING INDEX sqlite_autoindex_attempt_1 (attempt_id=?)"
+          ],
+          [
+            15,
+            2,
+            47,
+            "SEARCH s USING INDEX sqlite_autoindex_slot_1 (repo_id=? AND name=?)"
+          ],
+          [
+            25,
+            1,
+            0,
+            "UNION ALL"
+          ],
+          [
+            33,
+            25,
+            46,
+            "SEARCH c USING INDEX sqlite_autoindex_checks_attempt_1 (attempt_id=?)"
+          ],
+          [
+            40,
+            25,
+            46,
+            "SEARCH p USING INDEX sqlite_autoindex_attempt_1 (attempt_id=?)"
+          ],
+          [
+            45,
+            25,
+            47,
+            "SEARCH s USING INDEX sqlite_autoindex_slot_1 (repo_id=? AND name=?)"
+          ]
+        ]
+      },
+      "missing": {
+        "seconds": [
+          2.304092049598694e-06,
+          2.2740568965673447e-06,
+          2.1329615265130997e-06,
+          3.4959521144628525e-06,
+          2.084067091345787e-06
+        ],
+        "median": 2.2740568965673447e-06,
+        "p95": 3.4959521144628525e-06,
+        "rows": 0,
+        "plan": [
+          [
+            1,
+            0,
+            0,
+            "COMPOUND QUERY"
+          ],
+          [
+            2,
+            1,
+            0,
+            "LEFT-MOST SUBQUERY"
+          ],
+          [
+            8,
+            2,
+            46,
+            "SEARCH p USING INDEX sqlite_autoindex_attempt_1 (attempt_id=?)"
+          ],
+          [
+            15,
+            2,
+            47,
+            "SEARCH s USING INDEX sqlite_autoindex_slot_1 (repo_id=? AND name=?)"
+          ],
+          [
+            25,
+            1,
+            0,
+            "UNION ALL"
+          ],
+          [
+            33,
+            25,
+            46,
+            "SEARCH c USING INDEX sqlite_autoindex_checks_attempt_1 (attempt_id=?)"
+          ],
+          [
+            40,
+            25,
+            46,
+            "SEARCH p USING INDEX sqlite_autoindex_attempt_1 (attempt_id=?)"
+          ],
+          [
+            45,
+            25,
+            47,
+            "SEARCH s USING INDEX sqlite_autoindex_slot_1 (repo_id=? AND name=?)"
+          ]
+        ]
+      }
+    },
+    "facts": {
+      "rows": {
+        "drain_state": 0,
+        "drain_action": 0,
+        "slot": 3,
+        "reservation": 0,
+        "attempt": 100000,
+        "execution": 100000,
+        "verification": 100000,
+        "slot_release": 100000,
+        "published_branch": 100000,
+        "setup_run": 25000,
+        "checks_attempt": 25000,
+        "check_result": 25000,
+        "land_candidate": 25000,
+        "task_hold": 20000
+      },
+      "sizes": {
+        "synthetic.db-shm": 294912,
+        "evidence-2.txt": 256,
+        "synthetic.db-wal": 151051592,
+        "synthetic.db": 150036480,
+        "evidence-1.txt": 256,
+        "evidence-0.txt": 256,
+        "evidence-3.txt": 256
+      },
+      "index_bytes": 21700608,
+      "schema_version": 20,
+      "sqlite": "3.53.1",
+      "foreign_keys": []
+    },
+    "quick_check": {
+      "seconds": [
+        0.4983477578498423,
+        0.609449006151408,
+        0.6364162000827491,
+        0.5876601790077984,
+        0.6768472930416465
+      ],
+      "median": 0.609449006151408,
+      "p95": 0.6768472930416465,
+      "rows": 1,
+      "plan": []
+    },
+    "insertion100_seconds": [
+      0.009506830014288425,
+      0.0020800370257347822,
+      0.002814101055264473,
+      0.0027307909913361073,
+      0.002406626008450985
+    ]
+  },
+  "repo_index": {
+    "queries": {
+      "later": {
+        "seconds": [
+          0.037173021119087934,
+          0.0359889839310199,
+          0.03690476110205054,
+          0.0358256830368191,
+          0.0361355310305953
+        ],
+        "median": 0.0361355310305953,
+        "p95": 0.037173021119087934,
+        "rows": 100,
+        "plan": [
+          [
+            3,
+            0,
+            61,
+            "SEARCH p USING INDEX sqlite_autoindex_attempt_5 (adapter=?)"
+          ],
+          [
+            9,
+            0,
+            0,
+            "CORRELATED SCALAR SUBQUERY 1"
+          ],
+          [
+            13,
+            9,
+            46,
+            "SEARCH q USING COVERING INDEX sqlite_autoindex_attempt_5 (adapter=? AND backlog=? AND task_id=? AND seq>?)"
+          ]
+        ]
+      },
+      "grouped": {
+        "seconds": [
+          0.0078065539710223675,
+          0.008037793915718794,
+          0.007826591143384576,
+          0.00751213519833982,
+          0.008728232933208346
+        ],
+        "median": 0.007826591143384576,
+        "p95": 0.008728232933208346,
+        "rows": 100,
+        "plan": [
+          [
+            2,
+            0,
+            0,
+            "CO-ROUTINE q"
+          ],
+          [
+            8,
+            2,
+            53,
+            "SEARCH attempt USING COVERING INDEX sqlite_autoindex_attempt_5 (adapter=?)"
+          ],
+          [
+            47,
+            0,
+            82,
+            "SCAN q"
+          ],
+          [
+            50,
+            0,
+            46,
+            "SEARCH p USING INDEX sqlite_autoindex_attempt_5 (adapter=? AND backlog=? AND task_id=? AND seq=?)"
+          ]
+        ]
+      },
+      "count": {
+        "seconds": [
+          0.0009710330050438643,
+          0.0007403858471661806,
+          0.0006106989458203316,
+          0.000513352919369936,
+          0.000539163826033473
+        ],
+        "median": 0.0006106989458203316,
+        "p95": 0.0009710330050438643,
+        "rows": 1,
+        "plan": [
+          [
+            4,
+            0,
+            59,
+            "SEARCH attempt USING INDEX sqlite_autoindex_attempt_5 (adapter=? AND backlog=? AND task_id=?)"
+          ]
+        ]
+      },
+      "old_agent": {
+        "seconds": [
+          0.01603139191865921,
+          0.016260084928944707,
+          0.016086857998743653,
+          0.015693390043452382,
+          0.015168193029239774
+        ],
+        "median": 0.01603139191865921,
+        "p95": 0.016260084928944707,
+        "rows": 1,
+        "plan": [
+          [
+            5,
+            0,
+            216,
+            "SCAN s"
+          ],
+          [
+            7,
+            0,
+            61,
+            "SEARCH p USING INDEX synthetic_repo (repo_id=?)"
+          ],
+          [
+            18,
+            0,
+            0,
+            "CORRELATED SCALAR SUBQUERY 1"
+          ],
+          [
+            23,
+            18,
+            39,
+            "SEARCH c USING INDEX sqlite_autoindex_checks_attempt_1 (attempt_id=?)"
+          ]
+        ]
+      },
+      "old_check": {
+        "seconds": [
+          0.02453607111237943,
+          0.02330398210324347,
+          0.02204689709469676,
+          0.02216073195450008,
+          0.021181033924221992
+        ],
+        "median": 0.02216073195450008,
+        "p95": 0.02453607111237943,
+        "rows": 1,
+        "plan": [
+          [
+            5,
+            0,
+            216,
+            "SCAN s"
+          ],
+          [
+            7,
+            0,
+            61,
+            "SEARCH p USING INDEX synthetic_repo (repo_id=?)"
+          ],
+          [
+            18,
+            0,
+            0,
+            "CORRELATED SCALAR SUBQUERY 1"
+          ],
+          [
+            23,
+            18,
+            39,
+            "SEARCH c USING INDEX sqlite_autoindex_checks_attempt_1 (attempt_id=?)"
+          ]
+        ]
+      },
+      "old_missing": {
+        "seconds": [
+          0.050774259958416224,
+          0.04886975698173046,
+          0.05315767298452556,
+          0.056733077857643366,
+          0.05586823797784746
+        ],
+        "median": 0.05315767298452556,
+        "p95": 0.056733077857643366,
+        "rows": 0,
+        "plan": [
+          [
+            5,
+            0,
+            216,
+            "SCAN s"
+          ],
+          [
+            7,
+            0,
+            61,
+            "SEARCH p USING INDEX synthetic_repo (repo_id=?)"
+          ],
+          [
+            18,
+            0,
+            0,
+            "CORRELATED SCALAR SUBQUERY 1"
+          ],
+          [
+            23,
+            18,
+            39,
+            "SEARCH c USING INDEX sqlite_autoindex_checks_attempt_1 (attempt_id=?)"
+          ]
+        ]
+      },
+      "agent": {
+        "seconds": [
+          1.247413456439972e-05,
+          6.572110578417778e-06,
+          4.850095137953758e-06,
+          2.473825588822365e-06,
+          2.8051435947418213e-06
+        ],
+        "median": 4.850095137953758e-06,
+        "p95": 1.247413456439972e-05,
+        "rows": 1,
+        "plan": [
+          [
+            1,
+            0,
+            0,
+            "COMPOUND QUERY"
+          ],
+          [
+            2,
+            1,
+            0,
+            "LEFT-MOST SUBQUERY"
+          ],
+          [
+            8,
+            2,
+            46,
+            "SEARCH p USING INDEX sqlite_autoindex_attempt_1 (attempt_id=?)"
+          ],
+          [
+            15,
+            2,
+            47,
+            "SEARCH s USING INDEX sqlite_autoindex_slot_1 (repo_id=? AND name=?)"
+          ],
+          [
+            25,
+            1,
+            0,
+            "UNION ALL"
+          ],
+          [
+            33,
+            25,
+            46,
+            "SEARCH c USING INDEX sqlite_autoindex_checks_attempt_1 (attempt_id=?)"
+          ],
+          [
+            40,
+            25,
+            46,
+            "SEARCH p USING INDEX sqlite_autoindex_attempt_1 (attempt_id=?)"
+          ],
+          [
+            45,
+            25,
+            47,
+            "SEARCH s USING INDEX sqlite_autoindex_slot_1 (repo_id=? AND name=?)"
+          ]
+        ]
+      },
+      "check": {
+        "seconds": [
+          5.228910595178604e-06,
+          4.5781489461660385e-06,
+          3.6670826375484467e-06,
+          3.1350646167993546e-06,
+          3.1471718102693558e-06
+        ],
+        "median": 3.6670826375484467e-06,
+        "p95": 5.228910595178604e-06,
+        "rows": 1,
+        "plan": [
+          [
+            1,
+            0,
+            0,
+            "COMPOUND QUERY"
+          ],
+          [
+            2,
+            1,
+            0,
+            "LEFT-MOST SUBQUERY"
+          ],
+          [
+            8,
+            2,
+            46,
+            "SEARCH p USING INDEX sqlite_autoindex_attempt_1 (attempt_id=?)"
+          ],
+          [
+            15,
+            2,
+            47,
+            "SEARCH s USING INDEX sqlite_autoindex_slot_1 (repo_id=? AND name=?)"
+          ],
+          [
+            25,
+            1,
+            0,
+            "UNION ALL"
+          ],
+          [
+            33,
+            25,
+            46,
+            "SEARCH c USING INDEX sqlite_autoindex_checks_attempt_1 (attempt_id=?)"
+          ],
+          [
+            40,
+            25,
+            46,
+            "SEARCH p USING INDEX sqlite_autoindex_attempt_1 (attempt_id=?)"
+          ],
+          [
+            45,
+            25,
+            47,
+            "SEARCH s USING INDEX sqlite_autoindex_slot_1 (repo_id=? AND name=?)"
+          ]
+        ]
+      },
+      "missing": {
+        "seconds": [
+          3.066146746277809e-06,
+          2.72504985332489e-06,
+          4.337867721915245e-06,
+          2.3350585252046585e-06,
+          2.3650936782360077e-06
+        ],
+        "median": 2.72504985332489e-06,
+        "p95": 4.337867721915245e-06,
+        "rows": 0,
+        "plan": [
+          [
+            1,
+            0,
+            0,
+            "COMPOUND QUERY"
+          ],
+          [
+            2,
+            1,
+            0,
+            "LEFT-MOST SUBQUERY"
+          ],
+          [
+            8,
+            2,
+            46,
+            "SEARCH p USING INDEX sqlite_autoindex_attempt_1 (attempt_id=?)"
+          ],
+          [
+            15,
+            2,
+            47,
+            "SEARCH s USING INDEX sqlite_autoindex_slot_1 (repo_id=? AND name=?)"
+          ],
+          [
+            25,
+            1,
+            0,
+            "UNION ALL"
+          ],
+          [
+            33,
+            25,
+            46,
+            "SEARCH c USING INDEX sqlite_autoindex_checks_attempt_1 (attempt_id=?)"
+          ],
+          [
+            40,
+            25,
+            46,
+            "SEARCH p USING INDEX sqlite_autoindex_attempt_1 (attempt_id=?)"
+          ],
+          [
+            45,
+            25,
+            47,
+            "SEARCH s USING INDEX sqlite_autoindex_slot_1 (repo_id=? AND name=?)"
+          ]
+        ]
+      }
+    },
+    "facts": {
+      "rows": {
+        "drain_state": 0,
+        "drain_action": 0,
+        "slot": 3,
+        "reservation": 0,
+        "attempt": 100000,
+        "execution": 100000,
+        "verification": 100000,
+        "slot_release": 100000,
+        "published_branch": 100000,
+        "setup_run": 25000,
+        "checks_attempt": 25000,
+        "check_result": 25000,
+        "land_candidate": 25000,
+        "task_hold": 20000
+      },
+      "sizes": {
+        "synthetic.db-shm": 294912,
+        "evidence-2.txt": 256,
+        "synthetic.db-wal": 151051592,
+        "synthetic.db": 150036480,
+        "evidence-1.txt": 256,
+        "evidence-0.txt": 256,
+        "evidence-3.txt": 256
+      },
+      "index_bytes": 22773760,
+      "schema_version": 20,
+      "sqlite": "3.53.1",
+      "foreign_keys": []
+    },
+    "quick_check": {
+      "seconds": [
+        0.5124420530628413,
+        0.5097878261003643,
+        0.5504696250427514,
+        0.5317364470101893,
+        0.5315222798381001
+      ],
+      "median": 0.5315222798381001,
+      "p95": 0.5504696250427514,
+      "rows": 1,
+      "plan": []
+    },
+    "insertion100_seconds": [
+      0.002439548959955573,
+      0.0025062360800802708,
+      0.001696571009233594,
+      0.00258789979852736,
+      0.0018920411821454763
+    ]
+  },
+  "count_index": {
+    "queries": {
+      "later": {
+        "seconds": [
+          0.035874687135219574,
+          0.05906575499102473,
+          0.048000718001276255,
+          0.03649763995781541,
+          0.03599494486115873
+        ],
+        "median": 0.03649763995781541,
+        "p95": 0.05906575499102473,
+        "rows": 100,
+        "plan": [
+          [
+            3,
+            0,
+            61,
+            "SEARCH p USING INDEX sqlite_autoindex_attempt_5 (adapter=?)"
+          ],
+          [
+            9,
+            0,
+            0,
+            "CORRELATED SCALAR SUBQUERY 1"
+          ],
+          [
+            13,
+            9,
+            46,
+            "SEARCH q USING COVERING INDEX sqlite_autoindex_attempt_5 (adapter=? AND backlog=? AND task_id=? AND seq>?)"
+          ]
+        ]
+      },
+      "grouped": {
+        "seconds": [
+          0.008177006850019097,
+          0.008839595131576061,
+          0.008030398050323129,
+          0.008330448064953089,
+          0.007649615872651339
+        ],
+        "median": 0.008177006850019097,
+        "p95": 0.008839595131576061,
+        "rows": 100,
+        "plan": [
+          [
+            2,
+            0,
+            0,
+            "CO-ROUTINE q"
+          ],
+          [
+            8,
+            2,
+            53,
+            "SEARCH attempt USING COVERING INDEX sqlite_autoindex_attempt_5 (adapter=?)"
+          ],
+          [
+            47,
+            0,
+            82,
+            "SCAN q"
+          ],
+          [
+            50,
+            0,
+            46,
+            "SEARCH p USING INDEX sqlite_autoindex_attempt_5 (adapter=? AND backlog=? AND task_id=? AND seq=?)"
+          ]
+        ]
+      },
+      "count": {
+        "seconds": [
+          2.0348932594060898e-05,
+          1.9426923245191574e-05,
+          1.9456027075648308e-05,
+          1.919618807733059e-05,
+          1.9217142835259438e-05
+        ],
+        "median": 1.9426923245191574e-05,
+        "p95": 2.0348932594060898e-05,
+        "rows": 1,
+        "plan": [
+          [
+            3,
+            0,
+            51,
+            "SEARCH attempt USING COVERING INDEX synthetic_count (adapter=? AND backlog=? AND task_id=? AND step=?)"
+          ]
+        ]
+      },
+      "old_agent": {
+        "seconds": [
+          0.03160899202339351,
+          0.02786346385255456,
+          0.02998728398233652,
+          0.031221716897562146,
+          0.030949912033975124
+        ],
+        "median": 0.030949912033975124,
+        "p95": 0.03160899202339351,
+        "rows": 1,
+        "plan": [
+          [
+            5,
+            0,
+            216,
+            "SCAN p"
+          ],
+          [
+            7,
+            0,
+            62,
+            "SEARCH s USING INDEX sqlite_autoindex_slot_1 (repo_id=?)"
+          ],
+          [
+            18,
+            0,
+            0,
+            "CORRELATED SCALAR SUBQUERY 1"
+          ],
+          [
+            23,
+            18,
+            39,
+            "SEARCH c USING INDEX sqlite_autoindex_checks_attempt_1 (attempt_id=?)"
+          ]
+        ]
+      },
+      "old_check": {
+        "seconds": [
+          0.04296336811967194,
+          0.04255019500851631,
+          0.04872440011240542,
+          0.04286072379909456,
+          0.044140290934592485
+        ],
+        "median": 0.04296336811967194,
+        "p95": 0.04872440011240542,
+        "rows": 1,
+        "plan": [
+          [
+            5,
+            0,
+            216,
+            "SCAN p"
+          ],
+          [
+            7,
+            0,
+            62,
+            "SEARCH s USING INDEX sqlite_autoindex_slot_1 (repo_id=?)"
+          ],
+          [
+            18,
+            0,
+            0,
+            "CORRELATED SCALAR SUBQUERY 1"
+          ],
+          [
+            23,
+            18,
+            39,
+            "SEARCH c USING INDEX sqlite_autoindex_checks_attempt_1 (attempt_id=?)"
+          ]
+        ]
+      },
+      "old_missing": {
+        "seconds": [
+          0.03279119590297341,
+          0.028594120172783732,
+          0.03158371499739587,
+          0.030159841990098357,
+          0.029177556978538632
+        ],
+        "median": 0.030159841990098357,
+        "p95": 0.03279119590297341,
+        "rows": 0,
+        "plan": [
+          [
+            5,
+            0,
+            216,
+            "SCAN p"
+          ],
+          [
+            7,
+            0,
+            62,
+            "SEARCH s USING INDEX sqlite_autoindex_slot_1 (repo_id=?)"
+          ],
+          [
+            18,
+            0,
+            0,
+            "CORRELATED SCALAR SUBQUERY 1"
+          ],
+          [
+            23,
+            18,
+            39,
+            "SEARCH c USING INDEX sqlite_autoindex_checks_attempt_1 (attempt_id=?)"
+          ]
+        ]
+      },
+      "agent": {
+        "seconds": [
+          4.468020051717758e-06,
+          3.966968506574631e-06,
+          3.3660326153039932e-06,
+          1.894705928862095e-05,
+          1.123105175793171e-05
+        ],
+        "median": 4.468020051717758e-06,
+        "p95": 1.894705928862095e-05,
+        "rows": 1,
+        "plan": [
+          [
+            1,
+            0,
+            0,
+            "COMPOUND QUERY"
+          ],
+          [
+            2,
+            1,
+            0,
+            "LEFT-MOST SUBQUERY"
+          ],
+          [
+            8,
+            2,
+            46,
+            "SEARCH p USING INDEX sqlite_autoindex_attempt_1 (attempt_id=?)"
+          ],
+          [
+            15,
+            2,
+            47,
+            "SEARCH s USING INDEX sqlite_autoindex_slot_1 (repo_id=? AND name=?)"
+          ],
+          [
+            25,
+            1,
+            0,
+            "UNION ALL"
+          ],
+          [
+            33,
+            25,
+            46,
+            "SEARCH c USING INDEX sqlite_autoindex_checks_attempt_1 (attempt_id=?)"
+          ],
+          [
+            40,
+            25,
+            46,
+            "SEARCH p USING INDEX sqlite_autoindex_attempt_1 (attempt_id=?)"
+          ],
+          [
+            45,
+            25,
+            47,
+            "SEARCH s USING INDEX sqlite_autoindex_slot_1 (repo_id=? AND name=?)"
+          ]
+        ]
+      },
+      "check": {
+        "seconds": [
+          6.042188033461571e-06,
+          5.109002813696861e-06,
+          4.850095137953758e-06,
+          4.06801700592041e-06,
+          3.2261013984680176e-06
+        ],
+        "median": 4.850095137953758e-06,
+        "p95": 6.042188033461571e-06,
+        "rows": 1,
+        "plan": [
+          [
+            1,
+            0,
+            0,
+            "COMPOUND QUERY"
+          ],
+          [
+            2,
+            1,
+            0,
+            "LEFT-MOST SUBQUERY"
+          ],
+          [
+            8,
+            2,
+            46,
+            "SEARCH p USING INDEX sqlite_autoindex_attempt_1 (attempt_id=?)"
+          ],
+          [
+            15,
+            2,
+            47,
+            "SEARCH s USING INDEX sqlite_autoindex_slot_1 (repo_id=? AND name=?)"
+          ],
+          [
+            25,
+            1,
+            0,
+            "UNION ALL"
+          ],
+          [
+            33,
+            25,
+            46,
+            "SEARCH c USING INDEX sqlite_autoindex_checks_attempt_1 (attempt_id=?)"
+          ],
+          [
+            40,
+            25,
+            46,
+            "SEARCH p USING INDEX sqlite_autoindex_attempt_1 (attempt_id=?)"
+          ],
+          [
+            45,
+            25,
+            47,
+            "SEARCH s USING INDEX sqlite_autoindex_slot_1 (repo_id=? AND name=?)"
+          ]
+        ]
+      },
+      "missing": {
+        "seconds": [
+          2.854038029909134e-06,
+          3.0458904802799225e-06,
+          3.7159770727157593e-06,
+          2.7748756110668182e-06,
+          2.4051405489444733e-06
+        ],
+        "median": 2.854038029909134e-06,
+        "p95": 3.7159770727157593e-06,
+        "rows": 0,
+        "plan": [
+          [
+            1,
+            0,
+            0,
+            "COMPOUND QUERY"
+          ],
+          [
+            2,
+            1,
+            0,
+            "LEFT-MOST SUBQUERY"
+          ],
+          [
+            8,
+            2,
+            46,
+            "SEARCH p USING INDEX sqlite_autoindex_attempt_1 (attempt_id=?)"
+          ],
+          [
+            15,
+            2,
+            47,
+            "SEARCH s USING INDEX sqlite_autoindex_slot_1 (repo_id=? AND name=?)"
+          ],
+          [
+            25,
+            1,
+            0,
+            "UNION ALL"
+          ],
+          [
+            33,
+            25,
+            46,
+            "SEARCH c USING INDEX sqlite_autoindex_checks_attempt_1 (attempt_id=?)"
+          ],
+          [
+            40,
+            25,
+            46,
+            "SEARCH p USING INDEX sqlite_autoindex_attempt_1 (attempt_id=?)"
+          ],
+          [
+            45,
+            25,
+            47,
+            "SEARCH s USING INDEX sqlite_autoindex_slot_1 (repo_id=? AND name=?)"
+          ]
+        ]
+      }
+    },
+    "facts": {
+      "rows": {
+        "drain_state": 0,
+        "drain_action": 0,
+        "slot": 3,
+        "reservation": 0,
+        "attempt": 100000,
+        "execution": 100000,
+        "verification": 100000,
+        "slot_release": 100000,
+        "published_branch": 100000,
+        "setup_run": 25000,
+        "checks_attempt": 25000,
+        "check_result": 25000,
+        "land_candidate": 25000,
+        "task_hold": 20000
+      },
+      "sizes": {
+        "synthetic.db-shm": 294912,
+        "evidence-2.txt": 256,
+        "synthetic.db-wal": 151051592,
+        "synthetic.db": 150036480,
+        "evidence-1.txt": 256,
+        "evidence-0.txt": 256,
+        "evidence-3.txt": 256
+      },
+      "index_bytes": 24678400,
+      "schema_version": 20,
+      "sqlite": "3.53.1",
+      "foreign_keys": []
+    },
+    "quick_check": {
+      "seconds": [
+        0.4882054808549583,
+        0.5123756059911102,
+        0.526845274027437,
+        0.499861118150875,
+        0.5155468739103526
+      ],
+      "median": 0.5123756059911102,
+      "p95": 0.526845274027437,
+      "rows": 1,
+      "plan": []
+    },
+    "insertion100_seconds": [
+      0.0019043120555579662,
+      0.002559807850047946,
+      0.001860991818830371,
+      0.0025081189814954996,
+      0.0020166970789432526
+    ]
+  }
+}

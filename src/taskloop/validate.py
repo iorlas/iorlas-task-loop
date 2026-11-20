@@ -25,6 +25,7 @@ from taskloop.attempt_reads import StoreRefused, StoreUnavailable
 from taskloop.attempt_types import AttemptKey, AttemptResult
 from taskloop.check_store import Outcome, Required
 from taskloop.checks import BlockTarget, CheckSink, check_env, completed, conclusion, main_seen
+from taskloop.command_conclusion import CommandConclusion, encode
 from taskloop.composition import Checking
 from taskloop.environment import Renew, SetupFor
 from taskloop.prepare import Prepared, detach_at, slot_listed
@@ -97,7 +98,7 @@ def reconcile(work: Checking, target: Target) -> AttemptResult | None:
         return AttemptResult("unavailable", "checks:running" if "alive" in seen else "checks:unknown")
     for row in rows:
         if row.conclusion is None:
-            work.store.finish(key, row.block, row.position, "interrupted", None, work.clock())
+            work.store.finish(key, row.block, row.position, CommandConclusion.INTERRUPTED, None, work.clock())
     return None
 
 
@@ -153,7 +154,7 @@ def _environment(work: Checking, target: Target, prepared: Prepared, renew: Rene
     if stopped is None or stopped != AttemptResult("refused", "environment:failed"):
         return stopped
     latest = work.setups.latest(target.key)
-    return Verdict("failed", f"setup:{'failed' if latest is None or latest.conclusion is None else latest.conclusion}")
+    return Verdict("failed", f"setup:{'failed' if latest is None or latest.conclusion is None else encode(latest.conclusion)}")
 
 
 def _block(work: Checking, target: Target, profile: Profile, prepared: Prepared, digest: str) -> Ended:

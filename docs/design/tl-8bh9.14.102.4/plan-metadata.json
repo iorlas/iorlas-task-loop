@@ -1,0 +1,21 @@
+{
+  "prepared_commit": "ca861999263bd031d4f59007c60cdcf726a50fea",
+  "cited_paths": [
+    "tests/steps/public_surfaces.py",
+    "tests/steps/public_surface_cases.py",
+    "tests/steps/public_surface_fixtures.py",
+    "tests/rules",
+    "src/taskloop/cli.py",
+    "src/taskloop/cli_step.py",
+    "src/taskloop/cli_drain.py",
+    "src/taskloop/result_data.py",
+    "src/taskloop/factory_schema.py",
+    "src/taskloop/agents/api.py",
+    "src/taskloop/hold_store.py",
+    "src/taskloop/attempt_status.py",
+    "src/taskloop/task_event.py",
+    "tools/generate_import_contracts.py",
+    ".importlinter",
+    "pyproject.toml"
+  ]
+}

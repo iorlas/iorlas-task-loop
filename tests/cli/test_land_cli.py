@@ -1,4 +1,4 @@
-"""`tl step land` (tl-8bh9.14.8 slice L5) through `main`: the flags become one `LandRequest` for the one operation
+"""`tl land` (tl-8bh9.14.8 slice L5) through `main`: the flags become one `LandRequest` for the one operation
 (`land.land` over `cli_composition.open_land`, both replaced here), every answer's text, exit code and JSON keys (results
 made by `land_bench`'s real operation), the land's own guide before the step commands', printable details, and a guide
 for every refusal word the land's modules write."""
@@ -31,7 +31,8 @@ from taskloop.result_data import Result
 from taskloop.step_guide import GUIDE
 from taskloop.validate import RELAUNCHED
 
-LAND = ["step", "land", "tl-1", "--backlog", "tasks", "--checkout", "/checkout", "--minutes", "20"]
+LAND = ["land", "run", "tl-1", "--backlog", "tasks", "--checkout", "/checkout", "--minutes", "20"]
+BASE = ["tl-1", "--backlog", "tasks", "--checkout", "/checkout"]
 SOURCES = Path(__file__).resolve().parents[2] / "src" / "taskloop"
 type How = Literal["pushed", "already_pushed", "no_change", "delivered", "already_landed"]
 HOWS: tuple[How, ...] = ("pushed", "already_pushed", "no_change", "delivered", "already_landed")
@@ -54,19 +55,20 @@ def b(tmp_path: Path) -> LandBench:
 
 
 def run(argv: list[str], result: Result, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch) -> tuple[int, str, str]:
-    monkeypatch.setitem(cli_step.OPERATIONS, ("step", "land"), lambda _arguments, _loaded: result)
+    for operation in ("run", "show", "withdraw"):
+        monkeypatch.setitem(cli_step.OPERATIONS, ("land", operation), lambda _arguments, _loaded: result)
     code = main(argv)
     output = capsys.readouterr()
     return code, output.out, output.err
 
 
-@pytest.mark.parametrize(("flags", "mode", "no_change", "accept"), [
-    ([], "land", False, False), (["--summary"], "summary", False, False), (["--withdraw"], "withdraw", False, False),
-    (["--no-change"], "land", True, False), (["--summary", "--no-change"], "summary", True, False),
-    (["--accept-gate-changes"], "land", False, True),
-], ids=["land", "summary", "withdraw", "no_change", "summary_no_change", "accept_gate_changes"])
-def test_the_flags_become_one_land_request_for_the_one_operation(
-    flags: list[str], mode: Literal["land", "summary", "withdraw"], no_change: bool, accept: bool, tmp_path: Path,
+@pytest.mark.parametrize(("argv", "mode", "minutes", "no_change", "accept"), [
+    (["run", *BASE, "--minutes", "20"], "land", 20, False, False), (["show", *BASE], "summary", None, False, False),
+    (["withdraw", *BASE], "withdraw", None, False, False), (["run", *BASE, "--no-change"], "land", None, True, False),
+    (["run", *BASE, "--accept-gate-changes"], "land", None, False, True),
+], ids=["run", "show", "withdraw", "no_change", "accept_gate_changes"])
+def test_the_subcommand_and_flags_become_one_land_request_for_the_one_operation(
+    argv: list[str], mode: Literal["land", "summary", "withdraw"], minutes: int | None, no_change: bool, accept: bool, tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str],
 ) -> None:
     opened: list[tuple[Path, Path]] = []
@@ -85,28 +87,17 @@ def test_the_flags_become_one_land_request_for_the_one_operation(
 
     monkeypatch.setattr(cli_composition, "open_land", open_land)
     monkeypatch.setattr(land_module, "land", operation)
-    assert main([*LAND, *flags, "--db", str(tmp_path / "f.db"), "--artifacts", str(tmp_path / "art")]) == 1
+    assert main(["land", *argv, "--db", str(tmp_path / "f.db"), "--artifacts", str(tmp_path / "art")]) == 1
     assert opened == [(tmp_path / "f.db", tmp_path / "art")]
-    assert requests == [LandRequest("tasks", "tl-1", Path("/checkout"), 20, mode, no_change, accept)]
-    assert capsys.readouterr().err.startswith("tl step land: refused:choices\nstubbed\n")
-
-
-def test_minutes_is_optional_and_reaches_the_request_as_none(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    requests: list[LandRequest] = []
-
-    @contextmanager
-    def open_land(*_: object) -> Generator[object]:
-        yield object()
-
-    monkeypatch.setattr(cli_composition, "open_land", open_land)
-    monkeypatch.setattr(land_module, "land", lambda _ports, request: requests.append(request) or Failed("refused", "choices", "x"))
-    main([*LAND[:-2], "--summary", "--db", str(tmp_path / "f.db"), "--artifacts", str(tmp_path / "art")])
-    assert [each.minutes for each in requests] == [None]
+    assert requests == [LandRequest("tasks", "tl-1", Path("/checkout"), minutes, mode, no_change, accept)]
+    assert capsys.readouterr().err.startswith(f"tl land {argv[0]}: refused:choices\nstubbed\n")
 
 
 @pytest.mark.parametrize("argv", [
-    [*LAND, "--summary", "--withdraw"], [part for part in LAND if part not in ("--checkout", "/checkout")],
-], ids=["summary_and_withdraw", "no_checkout"])
+    [*LAND, "--summary"], [*LAND, "--withdraw"], ["land", "show", *BASE, "--minutes", "20"], ["land", "withdraw", *BASE, "--no-change"],
+    ["land"], ["step", "land", *BASE], ["step", "release", *BASE[:3], "--abandon"],
+], ids=["summary_flag", "withdraw_flag", "show_minutes", "withdraw_no_change", "no_subcommand",
+    "step_land", "release_abandon"])
 def test_usage_errors_exit_2_before_any_operation(argv: list[str], monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(cli_composition, "open_land", lambda *_: pytest.fail("opened"))
     with pytest.raises(SystemExit) as ended:
@@ -116,14 +107,14 @@ def test_usage_errors_exit_2_before_any_operation(argv: list[str], monkeypatch: 
 
 def test_an_absent_factory_db_is_refused_and_none_is_created(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     assert main([*LAND, "--db", str(tmp_path / "none.db"), "--artifacts", str(tmp_path / "art")]) == 1
-    assert capsys.readouterr().err.startswith("tl step land: refused:database") and not (tmp_path / "none.db").exists()
+    assert capsys.readouterr().err.startswith("tl land run: refused:database") and not (tmp_path / "none.db").exists()
 
 
 def test_the_help_names_the_flags_and_exit_codes(capsys: pytest.CaptureFixture[str]) -> None:
     with pytest.raises(SystemExit):
-        main(["step", "land", "-h"])
+        main(["land", "run", "-h"])
     text = " ".join(capsys.readouterr().out.split())
-    assert all(flag in text for flag in ("--summary", "--withdraw", "--no-change", "--minutes", "--checkout", "--backlog"))
+    assert all(flag in text for flag in ("--no-change", "--accept-gate-changes", "--minutes", "--checkout", "--backlog"))
     assert "never forced" in text and "a round runs this same land by itself" in text
     assert "Exit 0 landed (or already), 1 refused, 3 unknown" in text
 
@@ -139,7 +130,7 @@ def test_a_land_prints_what_it_did_the_close_and_the_tracker_line(
     assert out.splitlines() == [
         f"pushed: tl-1 (backlog tasks) on origin main; {HOW['pushed']}",
         f"Candidate 1 ({row.key.attempt_id}): S {row.commit} onto origin main at {b.base}; same tree as X, no checks",
-        f"Pushed: origin main at {row.commit}", "Closed: closed", NOT_SYNCED, "Next: `git pull --ff-only` in your checkout.",
+        f"Pushed: origin main at {row.commit}", "Closed: closed", NOT_SYNCED, "Next: bring your checkout up to date with origin's main.",
     ]
     code, out, _ = run([*LAND, "--json"], found, capsys, monkeypatch)
     data = json.loads(out)
@@ -164,7 +155,7 @@ def test_a_land_whose_close_is_still_to_come_says_so_and_no_tracker_line(
     found = b.land()
     assert isinstance(found, Landed)
     code, out, _ = run(LAND, replace(found, row=replace(found.row, close=None, closed_at=None), how="delivered"), capsys, monkeypatch)
-    assert code == 0 and "Closed: not yet: rerun `tl step land` to close the task (the code is on main)." in out and NOT_SYNCED not in out
+    assert code == 0 and "Closed: not yet: land the task again to close it (the code is on main)." in out and NOT_SYNCED not in out
 
 
 def test_a_withdrawal_and_a_summary_exit_0_with_their_lines_and_keys(
@@ -172,18 +163,18 @@ def test_a_withdrawal_and_a_summary_exit_0_with_their_lines_and_keys(
 ) -> None:
     summary = b.land("summary")
     assert isinstance(summary, LandSummary)
-    code, out, _ = run([*LAND, "--summary"], summary, capsys, monkeypatch)
+    code, out, _ = run(["land", "show", *BASE], summary, capsys, monkeypatch)
     assert code == 0 and out.startswith("Checks: checks passed at X") and "same tree as X, no checks" in out
-    assert out.rstrip().endswith("Nothing was recorded, reserved, pushed or closed: `tl step land TASK` lands it.")
-    data = json.loads(run([*LAND, "--summary", "--json"], summary, capsys, monkeypatch)[1])
+    assert out.rstrip().endswith("Nothing was recorded, reserved, pushed or closed: landing the task lands it.")
+    data = json.loads(run(["land", "show", *BASE, "--json"], summary, capsys, monkeypatch)[1])
     assert (data["status"], data["state"], data["again"], data["added"]) == ("summary", "same_tree", False, [])
     b.repo.answer = Transient("connection reset")
     assert isinstance(b.land(), Failed)
     withdrawn = b.land("withdraw")
     assert isinstance(withdrawn, Withdrawn)
-    code, out, _ = run([*LAND, "--withdraw"], withdrawn, capsys, monkeypatch)
+    code, out, _ = run(["land", "withdraw", *BASE], withdrawn, capsys, monkeypatch)
     assert code == 0 and out.startswith(f"withdrawn: tl-1 (backlog tasks); candidate 1 ({withdrawn.row.key.attempt_id}) superseded")
-    data = json.loads(run([*LAND, "--withdraw", "--json"], withdrawn, capsys, monkeypatch)[1])
+    data = json.loads(run(["land", "withdraw", *BASE, "--json"], withdrawn, capsys, monkeypatch)[1])
     assert set(data) == {"status", "backlog", "task", "candidate"} and data["candidate"]["superseded"] == "withdrawn"
 
 
@@ -197,7 +188,7 @@ def test_a_refusal_exits_1_an_unknown_3_on_stderr_with_the_land_s_guide_first(
 ) -> None:
     found, out, err = run(LAND, failed, capsys, monkeypatch)
     lines = err.splitlines()
-    assert (found, out) == (code, "") and lines[:2] == [f"tl step land: {failed.word}", failed.detail]
+    assert (found, out) == (code, "") and lines[:2] == [f"tl land run: {failed.word}", failed.detail]
     key = next(each for each in (failed.reason, failed.reason.split(":")[0], failed.kind) if each in LAND_GUIDE)
     assert LAND_GUIDE[key] in lines and (key not in GUIDE or GUIDE[key] not in lines)  # never the step commands' meaning
     assert (LAND_GUIDE["unavailable"] in lines) is (failed.kind == "unavailable")
@@ -221,7 +212,7 @@ def test_a_ctrl_c_during_a_land_is_one_interrupted_answer_exit_130_not_a_traceba
     assert main(argv) == 130
     output = capsys.readouterr()
     assert output.out == "" and output.err.splitlines() == [
-        f"tl step land: unavailable:{INTERRUPTED}", LAND_GUIDE[INTERRUPTED], LAND_GUIDE["unavailable"]]
+        f"tl land run: unavailable:{INTERRUPTED}", LAND_GUIDE[INTERRUPTED], LAND_GUIDE["unavailable"]]
     assert main([*argv, "--json"]) == 130
     assert json.loads(capsys.readouterr().err) == {"error": {"kind": "unavailable", "reason": INTERRUPTED, "message": None}}
 
@@ -240,7 +231,7 @@ def test_a_moved_main_or_a_remote_refusal_says_the_fact_then_a_guide_that_adds_t
     detail, guide = err.splitlines()[1:3]
     row = b.rows()[0]
     assert row.commit in detail and detail.endswith("nothing was pushed." if reason == "target_moved" else "stays validated.")
-    assert guide == LAND_GUIDE[reason] and guide.startswith(("Rerun `tl step land`", "Origin refused the push"))
+    assert guide == LAND_GUIDE[reason] and guide.startswith(("Main changed during delivery", "Origin refused the push"))
     assert not {each.strip(" .").lower() for each in detail.split(";")} & {each.strip(" .").lower() for each in guide.split(";")}
     assert "protected branch" not in err  # origin's own text is never printed (`land_push`)
 
@@ -278,7 +269,7 @@ AGENT_ONLY = {"worker_alive", "worker_unknown", "task_attempted"}
 def _words() -> set[str]:
     """Every refusal or unknown word a land answers, written by its modules or passed through from its collaborators."""
     written = _literals(LANDS, "Failed", 1)
-    released = _literals(("slot_release", "check_release"), "NotReleased", 1)
+    released = _literals(("slot_release", "slot_park", "check_release"), "NotReleased", 1)
     fenced = _literals(("land_store", "check_store", "setup_store"), "StoreRefused", 0)
     return (written | released | fenced | PASSED | set(RELAUNCHED)) - AGENT_ONLY
 

@@ -3,7 +3,7 @@ or again on the same X after its latest checks attempt concluded `failed` and wa
 claims nothing, writes no input file and runs nothing; the checks entry (`check_entry`) does the rest.
 
 Every read before any effect, in order: the deadline; the implement attempt still the task's current one and done
-(verified, released with its claim kept, published at X; else `not_advanceable`, also while the task's abandon is half
+(accepted by factory commit, released with its claim kept, published at X; else `not_advanceable`, also while the task's abandon is half
 done) and the number its checks attempts give; the checkout's repository is the attempt's; X readable (`commit_missing`)
 and still on the task's branch, the local `task/<id>` else the remote-tracking one (`branch_moved`); the required names
 from the profile at the person's local `refs/heads/main` (O1: `target`, `target_profile`, `no_required`), each with the
@@ -13,13 +13,11 @@ the lowest observed-free slot still unheld (`admit.reserve`) and inserts the row
 HEAD). A lost race on the number is `task_attempted`: the caller launches the winner with the checks launcher.
 """
 
-import secrets
 import sqlite3
 from collections.abc import Callable
 from contextlib import AbstractContextManager
-from dataclasses import astuple, dataclass
+from dataclasses import dataclass
 from pathlib import Path
-from uuid import uuid4
 
 from git_porcelain import GitUnavailable, Repo
 
@@ -33,20 +31,21 @@ from taskloop.admit import (
     checkout_repo,
     deadline_refusal,
     free_slots,
-    issued,
     open_store,
     read_task,
-    unheld,
     why,
 )
-from taskloop.admit_chain import CURRENT, Task, task_of
-from taskloop.admit_rows import reserve
+from taskloop.admit_rows import Task
+from taskloop.admit_store import current, issued, reserve, task_of, unheld
 from taskloop.attempt_reads import StoreRefused
 from taskloop.attempt_types import AttemptKey, Checkouts, SlotFiles
+from taskloop.check_admit_store import latest
 from taskloop.check_status import HALF_DONE
 from taskloop.check_store import ChecksAdmitted, Required, insert
 from taskloop.checks import argv_digest, main_seen
-from taskloop.factory_schema import LANDED, LANDING
+from taskloop.drain.models import BLOCKED, Reason
+from taskloop.drain.store import blocked
+from taskloop.ids import Ids
 from taskloop.prepare import HEADS, REMOTES, lacks
 from taskloop.profile import Profile, ProfileFiles, Refused, Unavailable, read_profile
 from taskloop.repo import RepoId
@@ -57,13 +56,10 @@ from taskloop.tracker import ACTOR
 
 type Profiles = Callable[[Path], ProfileFiles]  # the person's checkout: a file at a commit (`git_views.GitProfileFiles`)
 TARGET = "main"  # the only land target M2 checks against (another one is B6's)
-# The latest checks attempt of one implement attempt: what decides the number the next one takes.
-LATEST = f"""SELECT number,phase,conclusion,released_at IS NOT NULL,abandoned,{LANDED},{LANDING} FROM checks_attempt c
-WHERE after_attempt_id=? ORDER BY number DESC LIMIT 1"""
 LAND_GUIDE = {
-    "landed": "A land of the task delivered its code to origin's main: rerun `tl step land` to finish the close; checks do not re-run.",
-    "landing": "A land candidate of the task holds its slot or may already be on origin's main: run `tl step land` to land it, "
-    "or `tl step land --withdraw`; checks do not re-run meanwhile.",
+    "landed": "A land of the task delivered its code to origin's main. Task closure still needs to finish; checks cannot re-run.",
+    "landing": "A land candidate of the task holds its slot or may already be on origin's main. "
+    "Delivery must finish or the candidate must be withdrawn; checks cannot re-run meanwhile.",
 }
 
 
@@ -95,20 +91,20 @@ def next_number(con: sqlite3.Connection, previous: AttemptKey) -> int | AdmitRef
     delivered (`landed`), holding its slot or pushable (`landing`) refuses the re-run (`factory_schema.LANDING`, as the
     abandon); any other is `task_attempted`."""
     found = task_of(con, previous)
-    row = None if found is None else con.execute(CURRENT, (found.backlog, found.task_id)).fetchone()
-    if row is None or row[0:3] != astuple(previous) or not row[3] or following(str(row[4])) != CHECK:
-        return AdmitRefused("not_advanceable", detail="The implement attempt is not the task's current, done (verified, released "
-                            "with its claim kept, published) attempt")
-    latest: tuple[object, ...] | None = con.execute(LATEST, (previous.attempt_id,)).fetchone()
-    if latest is None:
+    row = None if found is None else current(con, found.backlog, found.task_id)
+    if row is None or row.key != previous or not row.done or following(row.step) != CHECK:
+        return AdmitRefused("not_advanceable", detail="The implement attempt is not the task's current, done "
+                            "(accepted by factory commit, released with its claim kept, published) attempt")
+    checks = latest(con, previous)
+    if checks is None:
         return 1
-    number, phase, conclusion, released, abandoned, landed, landing = latest
-    if abandoned:
+    if checks.abandoned:
         return AdmitRefused("not_advanceable", detail=HALF_DONE)
-    if landed or landing:
-        return AdmitRefused("landed", detail=LAND_GUIDE["landed"]) if landed else AdmitRefused("landing", detail=LAND_GUIDE["landing"])
-    if phase == "concluded" and conclusion == "failed" and released and isinstance(number, int):
-        return number + 1
+    if checks.landed or checks.landing:
+        return (AdmitRefused("landed", detail=LAND_GUIDE["landed"]) if checks.landed
+                else AdmitRefused("landing", detail=LAND_GUIDE["landing"]))
+    if checks.failed_released:
+        return checks.number + 1
     return AdmitRefused("task_attempted", detail="The task's latest checks attempt is current")
 
 
@@ -123,9 +119,11 @@ class ChecksAdmission:
         probe: Probe,
         slot_files: SlotFiles,
         profiles: Profiles,
+        *, ids: Ids,
     ) -> None:
         """The ports of an advance (`admit_chain.NextAdmission`) without the input files, plus the profile port on the
         person's checkout."""
+        self.ids = ids
         self.connect, self.begin, self.tasks, self.checkouts, self.clock = connect, begin, tasks, checkouts, clock
         self.probe, self.slot_files, self.profiles = probe, slot_files, profiles
 
@@ -135,7 +133,7 @@ class ChecksAdmission:
             return ready
         repo_id = RepoId(ready.found.repo_id)
         try:
-            key = AttemptKey(uuid4().hex, secrets.token_hex(16), issued(ready.con, repo_id, tuple(each.name for each in ready.free)) + 1)
+            key = AttemptKey(self.ids.hex(), self.ids.token(16), issued(ready.con, repo_id, tuple(each.name for each in ready.free)) + 1)
             return self._commit(ready, request, key)
         except StoreRefused as error:  # raised under the write lock, after the rollback: the number was taken meanwhile
             return AdmitRefused("task_attempted", detail=str(error))
@@ -217,6 +215,8 @@ class ChecksAdmission:
         then the reservation, the slot's counter and the row."""
         con, repo_id = ready.con, RepoId(ready.found.repo_id)
         with self.begin(con):
+            if blocked(con):
+                return AdmitRefused(Reason.DRAINING, detail=BLOCKED)
             number = next_number(con, request.previous)
             if isinstance(number, AdmitRefused):
                 return number
@@ -270,5 +270,5 @@ def heads(repo: Repo, views: tuple[SlotView, ...]) -> tuple[Free, ...] | AdmitRe
         heads = {info.path: info.head for info in repo.worktrees()}
     except GitUnavailable as error:
         return AdmitUnavailable("git", detail=why(error))
-    found = tuple(Free(view.name, head) for view in views if (head := heads.get(view.path)) is not None)
+    found = tuple(Free(view.name, head, head, head) for view in views if (head := heads.get(view.path)) is not None)
     return found or AdmitRefused("no_free_slot")

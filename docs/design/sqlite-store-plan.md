@@ -12,6 +12,10 @@ are superseded by [reconciled STORE scope](tl-sqd3.26/plan.md). Current commands
 > [consolidated identity/store contract](tl-8bh9.1/identity-store-contract.md) for the proposed retained scope and
 > outstanding owner decision. Preserve this note as source evidence, not authorization to execute old slices.
 
+<a id="execution-store-decision"></a>
+
+See [ADR 07](tl-8bh9.14.119/adr-07-execution-store.md) for current scope, supersession and enforcement.
+
 Owner decision (Denis, 2026-11-06): SQLite for all, as soon as possible. This note is the plan; each slice below is its own PR. The
 design lives in `docs/architecture/zoom-out-review.md` (R1) and `docs/design/durable-factory*.md`; this note adds the inventory the
 migration needs, the order, the kill test and the rollback.

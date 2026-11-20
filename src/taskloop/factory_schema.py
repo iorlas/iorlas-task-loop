@@ -1,5 +1,9 @@
 """The one owner of factory.db DDL, its version and every column list of its tables.
 
+v18: durable factory drain and external-action ownership.
+v17: check-driven repeats retain their source checks link and start at the checked commit.
+Drain old attempts before upgrading; refuse the old database, then discard only through its owning operation.
+
 v11: `attempt.step` admits `implement`; `attempt.after_commit` names, for attempt 1 of every later step, the previous
 step's published X it starts from. `setup_run` is the slot setup's record: "latest" is always the highest `run` of one
 attempt, never a wall-clock order. v12 (tl-8bh9.14.6): the checks step's own tables, `checks_attempt` (one per run of the
@@ -9,26 +13,95 @@ in one block); `setup_run.attempt_id` names an `attempt` or a `checks_attempt`, 
 close; `check_result.attempt_id` names a checks attempt or a land candidate, so it loses its foreign key. v14
 (tl-8bh9.14.9): `attempt.label`, the approval label a round ingested the task under (NULL: started by hand), and
 `task_hold`, a hold of a round-taken task's agent attempt with its tracker writes' phases (written only by `hold_store`).
-v15 (tl-8bh9.14.134): `attempt.repeat_listing`, the JSON array of paths the failed verification listed (the unsafe path,
+v15 (tl-8bh9.14.134): `attempt.repeat_listing`, the JSON array of paths the failed factory commit listed (the unsafe path,
 the leftovers, the ignored paths) that a repeat attempt answers; NULL for attempt 1. The dashboard shows it as the
-verification's result. v16 (tl-8bh9.14.149): `attempt.harness` and `attempt.provider`, the agent harness the step ran under and the
-provider of its model (`harness_choice`), shown on the dashboard. No migration: an older factory.db is refused (`schema`)."""
+factory commit's result. v16 (tl-8bh9.14.149): `attempt.harness` and `attempt.provider`, the agent harness the step ran
+under and the provider of its model (`harness_choice`), shown on the dashboard. v19 (tl-8bh9.14.148): `task_hold.saved`, the JSON
+array of the commits a hold saved on the task branch (`wip.SavedCommit`), written only by `hold_store`.
+No migration: an older factory.db is refused (`schema`).
+v21 (tl-8bh9.14.109): covering whole-task step counts for current-card reads.
+v20 (tl-8bh9.14.160): typed captured access policy replaces the universal sandbox column.
+v21: durable preparation merges. Drain old entries before discarding an older database.
+v22: durable agent stop intents and signal-call reports. Drain old entries before discarding an older database.
+v27: captured per-attempt compaction threshold. Drain old entries before discarding an older database.
+v31: durable answer repairs retain their predecessor's repeat number, settings, session and deadline.
+"""
 
-import sqlite3
-from pathlib import Path
+from enum import StrEnum
 
-from sqlite_store import Schema, SchemaError
+from sqlite_store import Schema
 
+from taskloop.check_repeat.feedback import CheckRepeatReason
+from taskloop.command_conclusion import SETUP_CONCLUSIONS, CommandConclusion, encode
+from taskloop.drain.models import ActionKind, ActionState, State
 from taskloop.harness_choice import HarnessKind, Provider
+from taskloop.step import Step
 
-_HARNESSES = ",".join(f"'{each}'" for each in HarnessKind)
-_PROVIDERS = ",".join(f"'{each}'" for each in Provider)
 
+def _quoted(vocabulary: type[StrEnum]) -> str:
+    """A closed vocabulary as the quoted list of a SQL `IN (...)`."""
+    return ",".join(f"'{each}'" for each in vocabulary)
+
+
+_HARNESSES, _STEPS, _PROVIDERS = _quoted(HarnessKind), _quoted(Step), _quoted(Provider)
+
+_COMMAND_CONCLUSIONS = ",".join(repr(encode(each)) for each in CommandConclusion)
+_SETUP_CONCLUSIONS = ",".join(repr(encode(each)) for each in SETUP_CONCLUSIONS)
+_UNDEFINED = encode(CommandConclusion.UNDEFINED)
+
+# Schema 32 is the drain/discard bundle, including land retry causes and phase times; its reviewed pin changes in place.
+# Subsequent DDL changes require a version bump, pinned by tests/steps/test_factory_schema.py.
+# This is also the runtime's persisted-state compatibility version: increment it for incompatible changes to the
+# interpretation of execution state, even without a DDL change. Compatible code changes keep it and resume normally.
 SCHEMA = Schema(
-    version=16,
+    version=35,
     name="factory",
     steps={},
     ddl=f"""
+CREATE TABLE agent_stop (
+ attempt_id TEXT PRIMARY KEY REFERENCES attempt(attempt_id), data TEXT NOT NULL CHECK(json_valid(data))
+);
+CREATE TABLE task_content (
+ attempt_id TEXT PRIMARY KEY NOT NULL REFERENCES attempt(attempt_id),
+ digest TEXT NOT NULL CHECK(length(digest)=64 AND digest NOT GLOB '*[^0-9a-f]*')
+);
+CREATE TABLE recovery_intent (
+ attempt_id TEXT PRIMARY KEY REFERENCES attempt(attempt_id), data TEXT NOT NULL CHECK(json_valid(data))
+);
+CREATE UNIQUE INDEX recovery_owner ON recovery_intent(json_extract(data,'$.token'));
+CREATE TABLE merge_operation (
+ attempt_id TEXT PRIMARY KEY, data TEXT NOT NULL CHECK(json_valid(data))
+);
+CREATE TABLE land_conflict (
+ operation_id TEXT PRIMARY KEY, dispatch_token TEXT NOT NULL UNIQUE,
+ implement_id TEXT NOT NULL UNIQUE REFERENCES attempt(attempt_id),
+ checks_id TEXT NOT NULL REFERENCES checks_attempt(attempt_id),
+ repo_id TEXT NOT NULL, slot TEXT NOT NULL, generation INTEGER NOT NULL CHECK(generation>=1),
+ data TEXT NOT NULL CHECK(json_valid(data)), save_data TEXT CHECK(save_data IS NULL OR json_valid(save_data)),
+ FOREIGN KEY(repo_id,slot) REFERENCES slot(repo_id,name),
+ UNIQUE(repo_id,slot,generation),
+ CHECK(json_extract(data,'$.key.attempt_id') IS operation_id),
+ CHECK(json_extract(data,'$.key.dispatch_token') IS dispatch_token),
+ CHECK(json_extract(data,'$.key.reservation_generation') IS generation),
+ CHECK(json_extract(data,'$.inputs.key.attempt_id') IS implement_id),
+ CHECK(json_extract(data,'$.request.source.attempt_id') IS implement_id),
+ CHECK(json_extract(data,'$.request.checks.attempt_id') IS checks_id),
+ CHECK(json_extract(data,'$.request.repo_id') IS repo_id),
+ CHECK(json_extract(data,'$.slot') IS slot)
+);
+CREATE TABLE drain_state (
+ singleton INTEGER PRIMARY KEY CHECK(singleton=1), generation INTEGER NOT NULL CHECK(generation>=1),
+ state TEXT NOT NULL CHECK(state IN ({','.join(repr(each.value) for each in State)}))
+);
+CREATE TABLE drain_action (
+ action_id TEXT PRIMARY KEY, kind TEXT NOT NULL CHECK(kind IN ({','.join(repr(each.value) for each in ActionKind)})),
+ state TEXT NOT NULL CHECK(state IN ({','.join(repr(each.value) for each in ActionState)})),
+ pid INTEGER NOT NULL, pgid INTEGER NOT NULL, start TEXT NOT NULL, boot TEXT NOT NULL,
+ subject TEXT NOT NULL, backlog TEXT NOT NULL, tracker_root TEXT NOT NULL,
+ checkout TEXT NOT NULL, rev INTEGER NOT NULL DEFAULT 0 CHECK(rev>=0)
+);
+CREATE UNIQUE INDEX drain_claim ON drain_action(tracker_root,backlog,subject)
+ WHERE kind='{ActionKind.CLAIM.value}' AND state<>'{ActionState.DONE.value}';
 CREATE TABLE slot (
  repo_id TEXT NOT NULL, name TEXT NOT NULL, path TEXT NOT NULL,
  generation INTEGER NOT NULL DEFAULT 0 CHECK(generation >= 0),
@@ -38,14 +111,20 @@ CREATE TABLE reservation (
  slot TEXT NOT NULL, repo_id TEXT NOT NULL, generation INTEGER NOT NULL, attempt_id TEXT NOT NULL UNIQUE,
  PRIMARY KEY (repo_id, slot)
 );
+CREATE TABLE workflow_file (
+ digest TEXT PRIMARY KEY CHECK(length(digest)=64 AND digest NOT GLOB '*[^0-9a-f]*'),
+ content BLOB NOT NULL CHECK(typeof(content)='blob' AND length(content) BETWEEN 1 AND 65536)
+);
 CREATE TABLE attempt (
  attempt_id TEXT PRIMARY KEY, dispatch_token TEXT NOT NULL UNIQUE, generation INTEGER NOT NULL,
- step TEXT NOT NULL CHECK(step IN ('plan','implement')),
+ step TEXT NOT NULL CHECK(step IN ({_STEPS})),
  adapter TEXT NOT NULL CHECK(adapter='beads'), backlog TEXT NOT NULL, task_id TEXT NOT NULL,
  tracker_root TEXT NOT NULL CHECK(substr(tracker_root,1,1)='/'),
  repo_id TEXT NOT NULL, slot TEXT NOT NULL, input_path TEXT NOT NULL, input_digest TEXT NOT NULL,
  schema_version INTEGER NOT NULL CHECK(schema_version=1), model TEXT NOT NULL, effort TEXT NOT NULL,
- sandbox TEXT NOT NULL, deadline REAL NOT NULL, entry_pid INTEGER, entry_start TEXT, entry_boot TEXT,
+ compaction_token_limit INTEGER CHECK(compaction_token_limit IS NULL OR
+  (typeof(compaction_token_limit)='integer' AND compaction_token_limit>0)),
+ access_policy TEXT NOT NULL CHECK(json_valid(access_policy)), deadline REAL NOT NULL, entry_pid INTEGER, entry_start TEXT, entry_boot TEXT,
  phase TEXT NOT NULL DEFAULT 'admitted' CHECK(phase IN ('admitted','dispatching','registered','captured')),
  rev INTEGER NOT NULL DEFAULT 0, worker_pid INTEGER, worker_pgid INTEGER, worker_start TEXT, worker_boot TEXT,
  session_ref TEXT, session_conflict INTEGER NOT NULL DEFAULT 0 CHECK(session_conflict IN (0,1)),
@@ -54,34 +133,52 @@ CREATE TABLE attempt (
  number INTEGER NOT NULL CHECK(number >= 1), seq INTEGER NOT NULL CHECK(seq >= 1),
  slot_head TEXT NOT NULL CHECK(length(slot_head) IN (40,64)),
  previous_attempt_id TEXT UNIQUE REFERENCES attempt(attempt_id),
- repeat_reason TEXT CHECK(repeat_reason IN ('uncommitted','unsafe','ignored')),
+ repair_context TEXT CHECK(repair_context IS NULL OR json_valid(repair_context)),
+ repeat_reason TEXT CHECK(repeat_reason IN ('uncommitted','unsafe','ignored','{CheckRepeatReason.FAILED_CHECK.value}')),
+ source_checks_id TEXT REFERENCES checks_attempt(attempt_id),
  repeat_listing TEXT CHECK(repeat_listing IS NULL OR json_valid(repeat_listing)),
  after_commit TEXT CHECK(after_commit IS NULL OR length(after_commit) IN (40,64)),
  label TEXT CHECK(label IS NULL OR length(label) BETWEEN 1 AND 200),
  harness TEXT NOT NULL DEFAULT '{HarnessKind.CODEX}' CHECK(harness IN ({_HARNESSES})),
  provider TEXT NOT NULL DEFAULT '{Provider.OPENAI}' CHECK(provider IN ({_PROVIDERS})),
- CHECK((number = 1) = (previous_attempt_id IS NULL)), CHECK((number = 1) = (repeat_reason IS NULL)),
- CHECK((number = 1 AND step <> 'plan') = (after_commit IS NOT NULL)),
+ engine_digest TEXT NOT NULL CHECK(length(engine_digest)=64 AND engine_digest NOT GLOB '*[^0-9a-f]*'),
+ declared_start INTEGER NOT NULL DEFAULT 0 CHECK(declared_start IN (0,1)),
+ workflow_digest TEXT NOT NULL REFERENCES workflow_file(digest),
+ workflow_sha TEXT NOT NULL CHECK(length(workflow_sha) IN (40,64) AND workflow_sha NOT GLOB '*[^0-9a-f]*'),
+ admitted_at REAL NOT NULL, ended_at REAL CHECK(ended_at IS NULL OR phase='captured'),
+ CHECK((number = 1 AND repair_context IS NULL) = (previous_attempt_id IS NULL)),
+ CHECK((number = 1) = (repeat_reason IS NULL)),
+ CHECK(((number = 1 AND step <> '{Step.PLAN}') OR source_checks_id IS NOT NULL) = (after_commit IS NOT NULL)),
+ CHECK((repeat_reason IS '{CheckRepeatReason.FAILED_CHECK.value}') = (source_checks_id IS NOT NULL)),
+ CHECK(source_checks_id IS NULL OR step='{Step.IMPLEMENT}'),
+ CHECK(declared_start=0 OR (step='{Step.IMPLEMENT}' AND number=1 AND source_checks_id IS NULL)),
  CHECK(phase='admitted' OR base_commit IS NOT NULL), CHECK(end_commit IS NULL OR phase='captured'),
  UNIQUE(adapter, backlog, task_id, seq)
 );
+CREATE INDEX attempt_step_count ON attempt(adapter,backlog,task_id,step,seq);
+CREATE UNIQUE INDEX attempt_checks_source ON attempt(source_checks_id) WHERE repair_context IS NULL;
 CREATE TABLE execution (
  attempt_id TEXT PRIMARY KEY REFERENCES attempt(attempt_id), dispatch_token TEXT NOT NULL, generation INTEGER NOT NULL,
  rc INTEGER, timed_out INTEGER NOT NULL, stop TEXT, watch TEXT, work INTEGER NOT NULL, stands INTEGER NOT NULL,
  answered INTEGER, reason TEXT, http_status INTEGER, t_in INTEGER, t_cached INTEGER, t_out INTEGER,
  c_in INTEGER, c_cached INTEGER, c_out INTEGER, turns INTEGER, session TEXT,
+ usage_incomplete INTEGER CHECK(usage_incomplete IS NULL OR usage_incomplete IN (0,1)),
  stdout_path TEXT NOT NULL, stdout_digest TEXT NOT NULL, stderr_path TEXT NOT NULL, stderr_digest TEXT NOT NULL,
  answer_path TEXT NOT NULL, answer_digest TEXT NOT NULL, diagnostic_path TEXT NOT NULL, diagnostic_digest TEXT NOT NULL,
  answer_kind TEXT NOT NULL DEFAULT 'validation_pending'
   CHECK(answer_kind IN ('validation_pending','valid','missing','json_invalid','schema_invalid')),
  disposition TEXT, effect TEXT CHECK(effect IN ('commit','keep','none')), commit_paths TEXT, commit_message TEXT,
- session_state TEXT NOT NULL CHECK(session_state IN ('complete','pending','conflict','fault'))
+ session_state TEXT NOT NULL CHECK(session_state IN ('complete','pending','conflict','fault')),
+ recovery_callback TEXT CHECK(recovery_callback IS NULL OR json_valid(recovery_callback)),
+ answer_failure TEXT CHECK(answer_failure IS NULL OR json_valid(answer_failure)),
+ CHECK ((answer_kind IN ('missing','json_invalid','schema_invalid') AND answer_failure IS NOT NULL)
+     OR (answer_kind IN ('valid','validation_pending') AND answer_failure IS NULL))
 );
-CREATE TABLE verification (
+CREATE TABLE factory_commit (
  attempt_id TEXT PRIMARY KEY REFERENCES execution(attempt_id), dispatch_token TEXT NOT NULL, generation INTEGER NOT NULL,
- verdict TEXT NOT NULL CHECK(verdict IN ('verified','rejected')), reason TEXT, blob TEXT, observed_at REAL NOT NULL,
- reused INTEGER NOT NULL DEFAULT 0 CHECK(reused IN (0,1)), CHECK(reused=0 OR verdict='verified'),
- CHECK((verdict='verified') = (reason IS NULL))
+ verdict TEXT NOT NULL CHECK(verdict IN ('committed','rejected')), reason TEXT, blob TEXT, observed_at REAL NOT NULL,
+ reused INTEGER NOT NULL DEFAULT 0 CHECK(reused IN (0,1)), CHECK(reused=0 OR verdict='committed'),
+ CHECK((verdict='committed') = (reason IS NULL))
 );
 CREATE TABLE slot_release (
  attempt_id TEXT PRIMARY KEY REFERENCES attempt(attempt_id), dispatch_token TEXT NOT NULL, generation INTEGER NOT NULL,
@@ -89,7 +186,7 @@ CREATE TABLE slot_release (
  claim TEXT NOT NULL CHECK(claim IN ('kept','unclaiming','unclaimed','not_held'))
 );
 CREATE TABLE published_branch (
- attempt_id TEXT PRIMARY KEY REFERENCES verification(attempt_id), dispatch_token TEXT NOT NULL, generation INTEGER NOT NULL,
+ attempt_id TEXT PRIMARY KEY REFERENCES factory_commit(attempt_id), dispatch_token TEXT NOT NULL, generation INTEGER NOT NULL,
  commit_sha TEXT NOT NULL CHECK(length(commit_sha) IN (40,64)),
  remote_head TEXT NOT NULL CHECK(length(remote_head) IN (40,64)),
  published_at REAL NOT NULL
@@ -102,7 +199,7 @@ CREATE TABLE setup_run (
  command INTEGER NOT NULL DEFAULT 0 CHECK(command >= 0),
  pid INTEGER, pgid INTEGER, proc_start TEXT, boot TEXT,
  started_at REAL NOT NULL, ended_at REAL, rc INTEGER,
- conclusion TEXT CHECK(conclusion IN ('passed','failed','timed_out','lingering','dirty','interrupted')),
+ conclusion TEXT CHECK(conclusion IN ({_SETUP_CONCLUSIONS})),
  CHECK((ended_at IS NULL) = (conclusion IS NULL)), PRIMARY KEY (attempt_id, run)
 );
 CREATE TABLE checks_attempt (
@@ -136,11 +233,11 @@ CREATE TABLE check_result (
  argv_digest TEXT CHECK(argv_digest IS NULL OR length(argv_digest)=64), timeout INTEGER CHECK(timeout IS NULL OR timeout >= 1),
  pid INTEGER, pgid INTEGER, proc_start TEXT, boot TEXT,
  started_at REAL NOT NULL, ended_at REAL, rc INTEGER,
- conclusion TEXT CHECK(conclusion IN ('passed','failed','timed_out','lingering','dirty','undefined','interrupted')),
- CHECK((ended_at IS NULL) = (conclusion IS NULL)), CHECK((argv_digest IS NULL) = (conclusion IS 'undefined')),
+ conclusion TEXT CHECK(conclusion IN ({_COMMAND_CONCLUSIONS})),
+ CHECK((ended_at IS NULL) = (conclusion IS NULL)), CHECK((argv_digest IS NULL) = (conclusion IS '{_UNDEFINED}')),
  CHECK((timeout IS NULL) = (argv_digest IS NULL)),
  CHECK((pid IS NULL) = (pgid IS NULL) AND (pid IS NULL) = (proc_start IS NULL) AND (pid IS NULL) = (boot IS NULL)),
- CHECK(conclusion IS NOT 'undefined' OR (pid IS NULL AND rc IS NULL)), CHECK(rc IS NULL OR conclusion IS NOT NULL),
+ CHECK(conclusion IS NOT '{_UNDEFINED}' OR (pid IS NULL AND rc IS NULL)), CHECK(rc IS NULL OR conclusion IS NOT NULL),
  PRIMARY KEY (attempt_id, block, position), UNIQUE (attempt_id, block, name)
 );
 CREATE TABLE land_candidate (
@@ -161,7 +258,14 @@ CREATE TABLE land_candidate (
  delivery TEXT CHECK(delivery IS NULL OR delivery IN ('pushed','no_change')), delivered_at REAL,
  remote_head TEXT CHECK(remote_head IS NULL OR length(remote_head) IN (40,64)),
  close TEXT CHECK(close IS NULL OR close IN ('closed','already_closed')), closed_at REAL,
+ admitted_at REAL NOT NULL,
+ retry_cause TEXT CHECK(retry_cause IS NULL OR retry_cause IN ('failed','moved','gone','withdrawn','abandoned')),
+ validation_started_at REAL, release_started_at REAL, delivery_started_at REAL, close_started_at REAL,
  rev INTEGER NOT NULL DEFAULT 0,
+ CHECK((number = 1) = (retry_cause IS NULL)),
+ CHECK(release_started_at IS NULL OR slot IS NOT NULL),
+ CHECK(delivery_started_at IS NULL OR validation IN ('same_tree','no_change','passed') AND validation IS NOT NULL),
+ CHECK(close_started_at IS NULL OR delivery IS NOT NULL),
  CHECK((slot IS NULL) = (slot_head IS NULL) AND (slot IS NULL) = (deadline IS NULL)),
  CHECK((slot IS NULL) = (validation IS NOT NULL AND validation IN ('same_tree','no_change'))),
  CHECK((validation IS 'no_change') = (delivery IS 'no_change')),
@@ -178,14 +282,14 @@ CREATE TABLE land_candidate (
 CREATE UNIQUE INDEX land_delivered ON land_candidate(checks_attempt_id) WHERE delivery IS NOT NULL;
 CREATE TABLE task_hold (
  attempt_id TEXT PRIMARY KEY REFERENCES attempt(attempt_id),
- cause_id TEXT NOT NULL,
- reason TEXT NOT NULL CHECK(length(reason) BETWEEN 1 AND 200),
+ event TEXT NOT NULL CHECK(json_valid(event)),
  held_at REAL NOT NULL,
  labels TEXT CHECK(labels IS NULL OR labels IN ('moved','absent','not_ours','closed','missing','superseded')),
  labelled_at REAL,
  commenting_at REAL, commented_at REAL,
  cleared_at REAL,
  rev INTEGER NOT NULL DEFAULT 0,
+ saved TEXT NOT NULL DEFAULT '[]',
  CHECK((labels IS NULL) = (labelled_at IS NULL)),
  CHECK(commented_at IS NULL OR commenting_at IS NOT NULL),
  CHECK(commented_at IS NULL OR (labels IS NOT NULL AND labels IN ('moved','absent','not_ours'))),
@@ -198,19 +302,20 @@ SLOT = "repo_id,name,path"
 RESERVATION = "slot,repo_id,generation,attempt_id"
 ATTEMPT_ADMITTED = (
     "attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,input_digest,"
-    "schema_version,model,effort,sandbox,deadline,number,previous_attempt_id,repeat_reason,repeat_listing,seq,slot_head,after_commit,label,harness,provider"
+    "schema_version,model,effort,access_policy,deadline,number,previous_attempt_id,repeat_reason,repeat_listing,seq,slot_head,"
+    "after_commit,label,harness,provider,source_checks_id,compaction_token_limit,repair_context,engine_digest,workflow_digest,workflow_sha,declared_start,admitted_at"
 )
 ATTEMPT_LOADED = (
-    "backlog,task_id,repo_id,slot,input_path,input_digest,model,effort,sandbox,deadline,entry_pid,entry_start,entry_boot,"
+    "backlog,task_id,repo_id,slot,input_path,input_digest,model,effort,access_policy,deadline,entry_pid,entry_start,entry_boot,"
     "phase,rev,worker_pid,worker_pgid,worker_start,worker_boot,session_ref,session_conflict,base_commit,end_commit,"
-    "number,previous_attempt_id,step,after_commit,harness"
+    "number,previous_attempt_id,step,after_commit,harness,source_checks_id,provider,compaction_token_limit"
 )
 FACTS = (
     "rc,timed_out,stop,watch,work,stands,answered,reason,http_status,t_in,t_cached,t_out,"
-    "c_in,c_cached,c_out,turns,session"
+    "c_in,c_cached,c_out,turns,session,usage_incomplete"
 )
 EVIDENCE = "stdout_path,stdout_digest,stderr_path,stderr_digest,answer_path,answer_digest,diagnostic_path,diagnostic_digest"
-ANSWER = "answer_kind,disposition,effect,commit_paths,commit_message,session_state"
+ANSWER = "answer_kind,disposition,effect,commit_paths,commit_message,answer_failure,session_state"
 VERDICT = "verdict,reason,blob,reused"
 RELEASE = "attempt_id,dispatch_token,generation,head,released_at,claim"
 PUBLISHED = "attempt_id,dispatch_token,generation,commit_sha,remote_head,published_at"  # X pushed; the remote tip confirmed
@@ -222,21 +327,22 @@ CHECKS_LOADED = (
 )
 LAND_ADMITTED = (
     "candidate_id,dispatch_token,generation,checks_attempt_id,number,origin_commit,commit_sha,tree_same,required,slot,slot_head,"
-    "deadline,validation,validated_at,delivery,delivered_at"
+    "deadline,validation,validated_at,delivery,delivered_at,admitted_at,retry_cause,validation_started_at,delivery_started_at"
 )
 LAND_LOADED = (
     "candidate_id,dispatch_token,generation,checks_attempt_id,number,origin_commit,commit_sha,tree_same,required,slot,slot_head,"
     "deadline,profile_digest,entry_pid,entry_start,entry_boot,validation,reason,validated_at,released_at,parked,superseded,"
-    "superseded_at,delivery,delivered_at,remote_head,close,closed_at,rev"
+    "superseded_at,delivery,delivered_at,remote_head,close,closed_at,rev,admitted_at,retry_cause,validation_started_at,"
+    "release_started_at,delivery_started_at,close_started_at"
 )
-HOLD = "attempt_id,cause_id,reason,held_at,labels,labelled_at,commenting_at,commented_at,cleared_at,rev"
+HOLD = "attempt_id,event,held_at,labels,labelled_at,commenting_at,commented_at,cleared_at,rev"
 CHECK_RESULT = "block,position,name,argv_digest,timeout,pid,pgid,proc_start,boot,started_at,ended_at,rc,conclusion"
 
 
-# A repeat of attempt `p` exists (`previous_attempt_id` links only a step's repeats): its chain is frozen.
+# A repeat or answer repair of attempt `p` exists: its chain is frozen.
 REPEATED = "EXISTS (SELECT 1 FROM attempt s WHERE s.previous_attempt_id=p.attempt_id)"
 # A later attempt of the same task exists (a repeat, the next step or a fresh start): attempt `p` is no longer the current
-# one. The one "not current" rule of every read and fence; `previous_attempt_id` links only a step's repeats.
+# one. The one "not current" rule of every read and fence; `previous_attempt_id` links a step's repeats and answer repairs.
 LATER = """EXISTS (SELECT 1 FROM attempt later WHERE later.adapter=p.adapter AND later.backlog=p.backlog
 AND later.task_id=p.task_id AND later.seq>p.seq)"""
 # The release's "not current" rule (`slot_release` ROW, FENCE, FLIP): `LATER`, or the attempt's latest checks attempt (its
@@ -275,35 +381,3 @@ def marks(columns: str) -> str:
 
 def prefixed(alias: str, columns: str) -> str:
     return ",".join(f"{alias}.{column}" for column in columns.split(","))
-
-
-def current(con: sqlite3.Connection) -> bool:
-    """The connection's database is exactly this code's schema version."""
-    return con.execute("PRAGMA user_version").fetchone() == (SCHEMA.version,)
-
-
-def refusal(error: SchemaError, path: Path) -> str:
-    """The words of `refused schema`: the store's for a newer file (this code must be updated); for an older one, which
-    nothing upgrades (`SCHEMA.steps` is empty), the truth that an older version wrote it and that the owner discards it."""
-    found = _recorded(path)
-    if found is None or found >= SCHEMA.version:
-        return str(error)
-    if found == 0:
-        return (f"factory.db records no schema version, this code knows v{SCHEMA.version}: it is not a factory.db; the "
-                "owner moves it aside, then tl slot adopt")
-    return (f"factory is schema v{found}, this code knows v{SCHEMA.version}: an older version wrote it and nothing upgrades "
-            "it; the owner discards factory.db (moves it aside), then tl slot adopt")
-
-
-def _recorded(path: Path) -> int | None:
-    """The schema version the file records, read-only (only to word a refusal); None when it cannot be read."""
-    try:
-        con = sqlite3.connect(f"{path.resolve().as_uri()}?mode=ro", uri=True)
-    except (sqlite3.Error, OSError, ValueError):
-        return None
-    try:
-        return int(con.execute("PRAGMA user_version").fetchone()[0])
-    except sqlite3.Error:
-        return None
-    finally:
-        con.close()

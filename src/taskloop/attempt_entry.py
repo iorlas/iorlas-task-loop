@@ -3,16 +3,16 @@
 It runs only as the identity the launcher registered: its own boot-aware identity is read and compared with the stored
 entry before the attempt key is used or any credential is read. It then holds its slot's custody lock (`slot_lock`)
 until it exits; a held lock refuses (`refused slot_busy`) with nothing read or written. It never creates factory.db,
-runs the agent at most once (through `Attempts.execute`), retries only an unavailable capture, then verifies
-once (`Verifier.verify`: commit the listed paths, check the tree is clean, judge; never retried), and writes one log
+runs the agent at most once (through `Attempts.execute`), retries only an unavailable capture, then completes factory commit
+once (`FactoryCommit.commit`: commit the listed paths, check the tree is clean, judge; never retried), and writes one log
 line of fixed words: status and reason, read back after a stored verdict (an accepted capture retry instead keeps the run's
-own words and adds `publish=` and the collected `then=`), always `verify=`, then `claim=` (the tracker claim's lease,
+own words and adds `publish=` and the collected `then=`), always `commit=`, then `claim=` (the tracker claim's lease,
 renewed by `claim_lease` while the step runs), then, once the result read back is collected, `release=` (the settled
-release of its own slot, still under its lock: `released`, `already_released` or why the slot stays held), then, for a verified plan only,
+release of its own slot, still under its lock: `released`, `already_released` or why the slot stays held), then, for an accepted plan only,
 `branch=` (the publication of `task/<id>` to origin, once, after the lock is released: `published` or `already_published`, or the refusal or
 unknown word; never retried here), never facts, environment, argv or exception text. A claim found lost before the agent
 starts refuses (`refused claim_lost`), and so does one lost by the renewal after an implement step's setup (which
-runs first, `environment.Preparation`); one lost later is only recorded. It exits 0 only for a verified plan, new or
+runs first, `environment.Preparation`); one lost later is only recorded. It exits 0 only for a plan accepted by factory commit, new or
 reused (`plan.succeeded`), whatever its publication says. Its stdout and stderr are the attempt's `entry.log`.
 """
 
@@ -46,29 +46,35 @@ from taskloop.attempt_types import (
     AttemptResult,
     CaptureResult,
     Checkouts,
+    CommitRefused,
+    CommitResult,
+    Committed,
+    CommitWaiting,
     EntryIdentity,
     NotApplicable,
     Rejected,
-    Unsettled,
-    Verified,
-    VerifyRefused,
-    VerifyResult,
-    VerifyUnavailable,
+    Uncommitted,
     WorkerGone,
     entry_identity,
+    waiting_reason,
 )
+from taskloop.claim import ClaimWord, encode_claim
 from taskloop.claim_lease import HeartbeatFor, KeepAlive, Stop, keeping, renewal
-from taskloop.composition import open_attempts
+from taskloop.commit import FactoryCommit
+from taskloop.composition import open_attempts, open_continuation
+from taskloop.drain.models import Identity
 from taskloop.environment import Renew
 from taskloop.evidence_files import TERMINATED
 from taskloop.factory_schema import SCHEMA
 from taskloop.git_views import GitViews
 from taskloop.owned_processes import entry_seen, setup_seen, worker_gone
 from taskloop.publish import BranchPublish, publish_word
+from taskloop.recovery.continue_attempt import Continuation
+from taskloop.recovery.entry import RecoveryEntry
+from taskloop.recovery.models import Intent, Outcome, Result
 from taskloop.slot_env import RealEnvFiles
 from taskloop.slot_release import SlotRelease, release_word
 from taskloop.tracker_client import tracker_claims, tracker_located
-from taskloop.verifier import Verifier
 
 RETRY_WAIT = 2.0
 UNFINISHED: Final = frozenset({"validation_pending", "session_pending", "session_fault"})  # a captured result still to finish
@@ -83,6 +89,8 @@ class _Registered:
     tracker_root: str
     slot_path: str  # the slot, from its stored `slot` row: its custody lock is beside it
     deadline: float
+    recovery: RecoveryEntry | None = None
+    intent: Intent | None = None
 
 
 @dataclass(frozen=True)
@@ -135,23 +143,24 @@ def _capture(
             return captured
 
 
-def shown(result: VerifyResult) -> str:
-    """The `verify=` word of the log line."""
+def shown(result: CommitResult) -> str:
+    """The `commit=` word of the log line."""
     match result:
-        case Verified() | Rejected():
+        case Committed() | Rejected():
             return judged(result)
-        case Unsettled(reason=reason):
-            return "unsettled:" + reason
-        case VerifyUnavailable(reason=reason):
-            return "unavailable:" + reason
-        case VerifyRefused(reason=reason):
+        case Uncommitted(reason=reason):
+            return "uncommitted:" + reason
+        case CommitWaiting():
+            return "waiting:" + waiting_reason(result)
+        case CommitRefused(reason=reason):
             return "refused:" + reason
         case NotApplicable():
             return "not_applicable"
 
 
 def _registered(
-    args: EntryArgs, attempts: Callable[[Path, Path], Attempts], inspect: Callable[[int], ProcessObservation]
+    args: EntryArgs, attempts: Callable[[Path, Path], Attempts], inspect: Callable[[int], ProcessObservation],
+    continuation: Callable[[], Continuation] | None,
 ) -> _Registered | str:
     """The attempt this process is the registered entry of, with its tracker root; otherwise the refusal's log words."""
     try:
@@ -167,10 +176,19 @@ def _registered(
         return "refused absent"
     key, _phase, entry = found
     me = None if seen.kind != "matching" or seen.identity is None else entry_identity(seen.identity)
-    if me is None or me != entry:
+    if me is None:
         return "refused identity"
+    recovery, intent = None, None
+    if me != entry:
+        recovery = None if continuation is None else RecoveryEntry(continuation())
+        registered = (Result(outcome=Outcome.CHANGED, explanation="This process is not the registered entry.")
+                      if recovery is None else recovery.registered(key, me))
+        if isinstance(registered, Result):
+            return "refused identity" if recovery is None else f"refused {registered.outcome}: {registered.explanation}"
+        intent = registered
     record = _record(app, key)
-    return record if isinstance(record, str) else _Registered(app, key, me, tracker, record.admission.slot_path, record.admission.deadline)
+    return record if isinstance(record, str) else _Registered(app, key, me, tracker, record.admission.slot_path,
+                                                            record.admission.deadline, recovery, intent)
 
 
 def _record(app: Attempts, key: AttemptKey) -> AttemptRecord | str:
@@ -185,7 +203,7 @@ def _record(app: Attempts, key: AttemptKey) -> AttemptRecord | str:
 
 
 def _held(_admission: Admission) -> AbstractContextManager[None]:
-    """The entry's verify runs inside the slot lock the entry already holds: the library's nonreentrant lock would refuse
+    """The entry's factory commit runs inside its existing slot lock: the library's nonreentrant lock would refuse
     a second acquire in this process."""
     return nullcontext()
 
@@ -198,29 +216,44 @@ def _unheld(_slot_path: str, _attempt_id: str) -> AbstractContextManager[None]:
 def _step(
     found: _Registered, clock: Callable[[], float], wait: Callable[[float], None], gone: WorkerGone, renew: Renew
 ) -> tuple[str, bool, bool]:
-    """Execute once, retry an unavailable capture, verify once: the log words, whether the plan succeeded and whether
+    """Execute once, retry an unavailable capture, complete factory commit once: the log words, whether the plan succeeded and whether
     the result read back is collected (terminal)."""
     app, key = found.app, found.key
-    result = app.execute(key, found.me, renew)
+    if found.recovery is not None and found.intent is not None:
+        continued = found.recovery.run(found.intent, Identity(pid=found.me[0], pgid=found.me[0], start=found.me[1], boot=found.me[2]),
+                                       clock, wait, RETRY_WAIT)
+        if continued.completion is None:
+            return f"{continued.state}: {continued.explanation}", False, False
+        completion = continued.completion
+        result = resumed(lambda: completion, lambda: app.execute(key, found.me), clock, wait, found.deadline)
+        execution = result.execution
+        if execution is None or execution.answer.kind == "validation_pending" or execution.session_state != "complete":
+            return f"{result.status} {result.reason}", False, False
+    else:
+        result = app.execute(key, found.me, renew)
     captured = _capture(app, result, clock, wait)
     accepted = captured is not None and captured.status in ACCEPTED
-    if accepted:  # captured but maybe not finished (the store was busy again): finish it before verify commits anything
+    if accepted:  # captured but maybe not finished (the store was busy again): finish it before factory commit writes anything
         resumed(lambda: app.collect(key), lambda: app.execute(key, found.me), clock, wait, found.deadline)
-    verified = Verifier(app.store, app.checkouts, app.slot_files, gone, app.clock, _held).verify(key)
+    timing = partial(app.files.observe_operation, clock=app.monotonic, wall=app.clock, ids=app.agent.ids)
+    committed = FactoryCommit(app.store, app.checkouts, app.slot_files, gone, app.clock, _held,
+                        ids=app.agent.ids, timing=timing).commit(key)
     # newly stored facts or a stored verdict: read the terminal result back
-    latest = app.collect(key) if accepted or isinstance(verified, (Verified, Rejected)) else result
+    latest = app.collect(key) if accepted or isinstance(committed, (Committed, Rejected)) else result
     line = f"{latest.status} {latest.reason}"
+    if latest.explanation:
+        line += f": {latest.explanation}"
     if captured is not None:  # `publish=` is the log word of the capture retry's DB acceptance, not the branch push
         then = f" then={latest.status}:{latest.reason}" if accepted else ""
         line = f"{result.status} {result.reason} publish={captured.status}{then}"
-    return f"{line} verify={shown(verified)}", succeeded(latest), latest.status == "collected"
+    return f"{line} commit={shown(committed)}", succeeded(latest), latest.status == "collected"
 
 
 def resumed(
     read: Callable[[], AttemptResult], resume: Callable[[], AttemptResult], clock: Callable[[], float], wait: Callable[[float], None],
     deadline: float,
 ) -> AttemptResult:
-    """The stored result while it is unfinished (`unavailable`, or an `UNFINISHED` reason: `verification` is the normal
+    """The stored result while it is unfinished (`unavailable`, or an `UNFINISHED` reason: `commit` is the normal
     wait): `resume` (never the agent) after each wait, at most RESUMES times and never past the deadline."""
     latest = read()
     for _ in range(RESUMES):
@@ -243,16 +276,17 @@ def enter(
     stop: Stop,
     unclaim: Unclaim,
     publishing: Checkouts,
+    continuation: Callable[[], Continuation] | None = None,
 ) -> int:
     """Run the attempt as its registered entry; the return code is display only. After the identity check the entry
     takes its slot's custody lock (`slot_lock`, never waiting: `refused slot_busy`, or `refused lock`) and holds it
-    around everything else: preparation, the agent, the publish retries and the verify, whose own hold is a no-op.
-    `gone` observes the worker before the verification's Git write. The claim is renewed once before the agent (a lost
+    around everything else: preparation, the agent, the publish retries and factory commit, whose own hold is a no-op.
+    `gone` observes the worker before factory commit's Git write. The claim is renewed once before the agent (a lost
     claim refuses: never re-claimed), then by a thread until the step ends (`stop` ends it); a later loss or fault is
     only the log line's `claim=` word. A collected step then releases its own slot, settled (`unclaim` is the release's
-    port; a settled release never calls it). A verified plan is then published once, after the lock is released and the
+    port; a settled release never calls it). An accepted plan is then published once, after the lock is released and the
 keep-alive stopped, through `publishing` (the remote-capable Git views); the push never pins the slot."""
-    found = _registered(args, attempts, inspect)
+    found = _registered(args, attempts, inspect, continuation)
     if isinstance(found, str):
         log(found)
         return 1
@@ -277,10 +311,12 @@ keep-alive stopped, through `publishing` (the remote-capable Git views); the pus
 
 def _branch(found: _Registered, publishing: Checkouts) -> str:
     """The publication's word, once. A failure `publish` does not map itself (a Git view that cannot be opened, a file
-    read) is `unavailable:git` or `unavailable:store`: it never loses the step's log line or a verified plan's exit 0."""
+    read) is `unavailable:git` or `unavailable:store`: it never loses the step's log line or an accepted plan's exit 0."""
     app = found.app
     try:
-        return publish_word(BranchPublish(app.store, publishing, app.slot_files, app.clock).publish(found.key))
+        timing = partial(app.files.observe_operation, clock=app.monotonic, wall=app.clock, ids=app.agent.ids)
+        return publish_word(BranchPublish(app.store, publishing, app.slot_files, app.clock,
+                                          ids=app.agent.ids, timing=timing).publish(found.key))
     except (GitUnavailable, ValueError, OSError):
         return "unavailable:git"
     except (sqlite3.Error, StoreUnavailable):
@@ -297,17 +333,19 @@ def _claimed(
 ) -> tuple[str, bool]:
     """The step under the slot's lock, with the claim renewed before the agent and kept alive while it runs; a collected
     step's slot is then released (settled: parked when clean, the claim kept), still under the lock. The log line so far
-    and whether the plan was verified."""
+    and whether the plan was accepted by factory commit."""
     alive.renew()
-    if alive.word() == "lost":
+    if alive.word() is ClaimWord.LOST:
         return "refused claim_lost", False
+    if found.recovery is not None and alive.word() is not ClaimWord.HELD:
+        return "refused claim_unrenewed", False
     with keeping(alive):
         line, ok, collected = _step(found, clock, wait, gone, renewal(alive))
-    line = f"{line} claim={alive.word()}"
+    line = f"{line} claim={encode_claim(alive.word())}"
     if collected:
         app = found.app
         releaser = SlotRelease(app.store, app.checkouts, app.slot_files, entry_seen, gone, _unheld, unclaim, app.clock, setup_seen,
-                               RealEnvFiles().empty_scratch)
+                               RealEnvFiles().empty_scratch, ids=app.agent.ids)
         line += " release=" + release_word(releaser.release(found.key, False, found.me))
     return line, ok
 
@@ -326,7 +364,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             return 2
         claims, views = tracker_claims(), GitViews(args.read_seconds)
         return enter(args, partial(open_attempts, views=views), inspect_process, time.time, time.sleep, log, worker_gone,
-                     claims.heartbeat_for, threading.Event(), claims.unclaim, views.remotes)
+                     claims.heartbeat_for, threading.Event(), claims.unclaim, views.remotes,
+                     partial(open_continuation, args.database, args.artifacts, views))
     except SystemExit as ended:  # `any_agent.supervisor` raises 128 + signal number from its SIGTERM/SIGHUP handler (1: parent gone)
         log("failed " + (TERMINATED if isinstance(ended.code, int) and ended.code > 128 else type(ended).__name__))
         return 1

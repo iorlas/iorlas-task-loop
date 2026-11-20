@@ -10,7 +10,6 @@ from git_porcelain import Conflicted, GitUnavailable, MissingRevision, Repo, Sha
 from taskloop.check_admit import named
 from taskloop.check_store import ChecksRow, Required
 from taskloop.land_gate import gate_of
-from taskloop.land_guide import restart
 from taskloop.land_push import Origin, fetched
 from taskloop.land_summary import gate_lines, message_at
 from taskloop.operations import Failed
@@ -42,9 +41,9 @@ def fetched_target(profiles: Profiles, origin: Origin) -> tuple[str, Required] |
     return required if isinstance(required, Failed) else (o, required)
 
 
-def made_s(origin: Origin, checks: ChecksRow, title: str, o: str) -> Squashed | Conflicted | Failed:
+def made_s(origin: Origin, checks: ChecksRow, title: str, o: str, source: str | None = None) -> Squashed | Conflicted | Failed:
     """S made in Git objects only, with section 9's message."""
-    x = checks.commit
+    x = source or checks.commit
     try:
         return origin.repo.squash(o, x, message_at(origin.repo, title, checks, o))
     except MissingRevision:
@@ -61,14 +60,11 @@ def _files(repo: Repo, rev: str) -> Files:
     return dict(tree.files)
 
 
-def squashed_onto(origin: Origin, checks: ChecksRow, title: str, o: str) -> tuple[str, Files, Files, Files] | Failed:
-    """S, with the tree listings of S, X and O; a conflict is refused with its first paths."""
-    x, made = checks.commit, made_s(origin, checks, title, o)
-    if isinstance(made, Conflicted):
-        shown = ", ".join(made.paths[:20])
-        return Failed("refused", "conflict", f"X does not merge onto origin's main at {o} ({len(made.paths)} paths: "
-                      f"{shown}). Nothing was recorded. To land it, {restart(checks.task_id, x)}")
-    if isinstance(made, Failed):
+def squashed_onto(origin: Origin, checks: ChecksRow, title: str, o: str,
+                  source: str | None = None) -> tuple[str, Files, Files, Files] | Conflicted | Failed:
+    """S, with the tree listings of S, X and O, or the typed conflict for ordinary land's handoff."""
+    x, made = checks.commit, made_s(origin, checks, title, o, source)
+    if isinstance(made, (Conflicted, Failed)):
         return made
     try:
         return made.sha, _files(origin.repo, made.sha), _files(origin.repo, x), _files(origin.repo, o)

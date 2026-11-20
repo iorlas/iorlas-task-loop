@@ -27,6 +27,8 @@ The comparison is deterministic and mandatory; source implementation remains pen
 
 ## Owner-approved model
 
+See [ADR 02](../tl-8bh9.14.119/adr-02-ready-task-selection.md) for current scope and tests. Eligibility is separate from the hierarchy comparator in ADR 09.
+
 ```mermaid
 flowchart LR
     T[Tasks approved for automation] --> E[Dependencies ready; no hold or active competing claim]

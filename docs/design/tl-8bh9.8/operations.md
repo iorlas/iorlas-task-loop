@@ -1,5 +1,7 @@
 # Hooks and cleanup
 
+Status: **design**. Accepted decisions and pending proposals are distinguished below; historical source observations are not a delivery receipt. Explicit holds remain in force except where superseded.
+
 Task: tl-8bh9.8. Source review and two Astra consultations, 2026-11-09. No Git operation, service
 restart, prune, source edit or implementation test was performed. Findings refer to current source/vendor, not latest shelf HEAD.
 
@@ -74,6 +76,8 @@ reconcile apply and normal just/vendor tooling. Astra cross-checked the key boun
 
 
 ## Lightweight skill and hook retirement direction, 2026-11-09
+
+See [ADR 05](../tl-8bh9.14.119/adr-05-skills-and-hooks.md) for current scope and tests. Owner skill intent and Astra hook-retirement advice have distinct authority.
 
 Denis clarified that the skill should be lightweight: help set up/maintain the factory, author compliant tasks, handle
 asks and perform requested operations for the owner. He questioned whether hooks are needed. A further Astra review

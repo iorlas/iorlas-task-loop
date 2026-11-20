@@ -1,0 +1,165 @@
+"""Factory-owned committed context; renderers receive values, never perform I/O."""
+
+import re
+import tomllib
+from dataclasses import dataclass
+from shlex import join
+from typing import Protocol
+
+from pydantic import AliasPath, BaseModel, Field
+
+from taskloop import glossary_extract
+from taskloop.frame_markers import CONTEXT
+from taskloop.profile import NoCommit, NotAFile, Profile, ProfileFiles, Unavailable, read_profile
+from taskloop.shelf_digest.artifact import PATH as DIGEST_PATH
+from taskloop.shelf_digest.artifact import read_artifact
+from taskloop.shelf_digest.identities import PACKAGES, Identities, reconcile_manifests
+from taskloop.shelf_digest.source import SourceSnapshot
+
+BEGIN = f"BEGIN {CONTEXT}"
+END = f"END {CONTEXT}"
+SHELF_GUIDANCE = (
+    "Shelf is read-only for agents. Use this validated digest first. If the task requires a shelf change, "
+    "stop with needs_owner and describe the proposed shelf change."
+)
+
+
+class InputError(Exception):
+    """A committed input could not be constructed; its explanation prevents dispatch."""
+
+
+class InputFiles(ProfileFiles, Protocol):
+    def paths(self, commit: str) -> tuple[str, ...] | NoCommit | Unavailable:
+        """Tracked repository-relative names at the commit, never working-tree paths."""
+        ...
+
+
+class _PytestSettings(BaseModel):
+    pythonpath: tuple[str, ...] = Field(default=(), validation_alias=AliasPath("tool", "pytest", "ini_options", "pythonpath"))
+    addopts: str | tuple[str, ...] = Field(default="", validation_alias=AliasPath("tool", "pytest", "ini_options", "addopts"))
+
+
+class _ShelfSettings(BaseModel):
+    dependencies: tuple[str, ...] = Field(default=(), validation_alias=AliasPath("project", "dependencies"))
+    sources: dict[str, object] = Field(default_factory=dict, validation_alias=AliasPath("tool", "uv", "sources"))
+
+
+@dataclass(frozen=True)
+class InputContext:
+    commit: str
+    commands: tuple[str, ...]
+    glossary: str
+    paths: tuple[str, ...]
+    layout: str = ""
+    shelf: str = ""
+
+    def render(self) -> str:
+        commands = "\n".join(f"- {command}" for command in self.commands) or "(none)"
+        names = "\n".join(self.paths) or "(no tracked paths under src/, tests/ or docs/design/)"
+        return (f"{BEGIN}\nSource commit: {self.commit}\nCheck commands:\n{commands}\n\n"
+                f"{self.glossary}\n{self.shelf}CODE MAP\n{self.layout}{names}\n{END}")
+
+
+def read(files: InputFiles, commit: str) -> InputContext:
+    profile = read_profile(files, commit)
+    if not isinstance(profile, Profile):
+        raise InputError(f"Profile at {commit}: {profile.detail}")
+    blob = files.blob(commit, glossary_extract.PATH)
+    match blob:
+        case None:
+            glossary = "No docs/glossary.md exists at this commit; no glossary definitions are supplied.\n"
+        case bytes():
+            try:
+                glossary = glossary_extract.extract(blob)
+            except ValueError as error:
+                raise InputError(f"Glossary at {commit}: {error}") from error
+        case Unavailable(detail=detail):
+            raise InputError(f"Glossary at {commit}: {detail}")
+        case NotAFile(mode=mode):
+            raise InputError(f"Glossary at {commit} is not a regular file (mode {mode})")
+        case NoCommit():
+            raise InputError(f"Glossary source {commit} names no commit")
+    names = files.paths(commit)
+    if isinstance(names, Unavailable):
+        raise InputError(f"Code map at {commit}: {names.detail}")
+    if isinstance(names, NoCommit):
+        raise InputError(f"Code map source {commit} names no commit")
+    paths = tuple(sorted(path for path in names if path.startswith(("src/", "tests/", "docs/design/"))))
+    return InputContext(commit, tuple(join(check.argv) for check in profile.checks), glossary, paths,
+                        _layout(files, commit, names), _shelf(files, commit))
+
+
+def _shelf_blob(files: InputFiles, commit: str, path: str) -> bytes | None:
+    blob = files.blob(commit, path)
+    if blob is None or isinstance(blob, bytes):
+        return blob
+    if isinstance(blob, NotAFile):
+        detail = f"not a regular file (mode {blob.mode})"
+    elif isinstance(blob, NoCommit):
+        detail = "source names no commit"
+    else:
+        detail = blob.detail
+    raise InputError(f"Shelf digest {DIGEST_PATH} at {commit}: {path}: {detail}")
+
+
+def _shelf(files: InputFiles, commit: str) -> str:
+    try:
+        data = _shelf_blob(files, commit, DIGEST_PATH)
+        project = _shelf_blob(files, commit, "pyproject.toml")
+        settings = _ShelfSettings() if project is None else _ShelfSettings.model_validate(tomllib.loads(project.decode("utf-8")))
+        required = bool(set(settings.sources) & set(PACKAGES)) or any(
+            re.sub(r"[-_.]+", "-", re.split(r"[\s<>=!~\[;@]", dependency, maxsplit=1)[0]).lower() in PACKAGES
+            for dependency in settings.dependencies)
+        if data is None and not required:
+            return ""
+        if data is None:
+            raise ValueError("Required artifact is missing")
+        lock = _shelf_blob(files, commit, "uv.lock")
+        manifests = {path: blob for path, blob in (("pyproject.toml", project), ("uv.lock", lock)) if blob is not None}
+        identities = reconcile_manifests(SourceSnapshot(commit, manifests))
+        if not isinstance(identities, Identities):
+            raise ValueError(identities.explanation)
+        artifact = read_artifact(data, identities)
+        return f"{SHELF_GUIDANCE}\nValidated shelf digest ({DIGEST_PATH}):\n{artifact.encode().decode('utf-8')}\n"
+    except (ValueError, UnicodeError) as error:
+        raise InputError(f"Shelf digest {DIGEST_PATH} at {commit}: {error}") from error
+
+
+def _layout(files: InputFiles, commit: str, names: tuple[str, ...]) -> str:
+    """Only describe taskloop layout and helper imports established by this committed tree."""
+    if not any(path.startswith("src/taskloop/") and path.count("/") == 2 and path.endswith(".py") for path in names):
+        return ""
+    hints = ["In this repository, source modules are primarily src/taskloop/*.py."]
+    folders = tuple(folder for folder in ("agents", "drain", "check_repeat", "dash")
+                    if any(path.startswith(f"src/taskloop/{folder}/") for path in names))
+    if folders:
+        hints.append("Feature subfolders: " + ", ".join(f"src/taskloop/{folder}/" for folder in folders) + ".")
+    tests = tuple(folder for folder in ("steps", "cli", "rules") if any(path.startswith(f"tests/{folder}/") for path in names))
+    if tests:
+        hints.append("Tests: " + ", ".join(f"tests/{folder}/" for folder in tests) + ".")
+    if "tests/steps/doubles.py" in names and "pyproject.toml" in names:
+        blob = files.blob(commit, "pyproject.toml")
+        if not isinstance(blob, bytes):
+            raise InputError(f"Code map pytest configuration at {commit}: {blob}")
+        try:
+            config = _PytestSettings.model_validate(tomllib.loads(blob.decode("utf-8")))
+        except (ValueError, UnicodeDecodeError) as error:
+            raise InputError(f"Code map pytest configuration at {commit}: {error}") from error
+        options = config.addopts.split() if isinstance(config.addopts, str) else config.addopts
+        if config.pythonpath == ("tests/steps",) and "--import-mode=importlib" in options:
+            hints.append('Shared test helpers such as doubles.py live in tests/steps; committed pytest settings use '
+                         'importlib mode and pythonpath = ["tests/steps"].')
+    return "\n".join(hints) + "\n"
+
+
+def refresh(text: str, context: InputContext) -> str:
+    """Replace the factory's delimited block, including inside repeat frames, exactly once."""
+    lines = text.splitlines(keepends=True)
+    starts = [index for index, line in enumerate(lines) if line.rstrip("\r\n") == BEGIN]
+    ends = [index for index, line in enumerate(lines) if line.rstrip("\r\n") == END]
+    if not starts and not ends:
+        return text + "\n\n" + context.render() + "\n"
+    if len(starts) != 1 or len(ends) != 1 or starts[0] >= ends[0]:
+        raise InputError("Input has malformed or duplicate factory context")
+    lines[starts[0]:ends[0] + 1] = [context.render() + "\n"]
+    return "".join(lines)

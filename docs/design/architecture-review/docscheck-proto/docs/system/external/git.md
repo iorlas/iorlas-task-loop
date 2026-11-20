@@ -1,4 +1,5 @@
 ---
+# Status: evidence; historical format specimen, not current system authority
 owns_facts: [commits, branches, worktrees, remote refs]
 port: src/taskloop/git_views.py
 used_by: [area/engine, area/storage]
