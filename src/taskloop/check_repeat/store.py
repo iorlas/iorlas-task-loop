@@ -12,7 +12,7 @@ from taskloop.attempt_result import collect, succeeded
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import AttemptKey, FileRef
 from taskloop.check_repeat.feedback import CheckRepeatReason, FailedCheck
-from taskloop.check_repeat.status import CheckRepeatDecision, decision, failed_result
+from taskloop.check_repeat.status import CapStore, CheckRepeatDecision, decision, failed_result
 from taskloop.check_store import ChecksRow, CheckStore, ResultRow
 from taskloop.drain.models import BLOCKED, Reason
 from taskloop.drain.store import blocked
@@ -71,7 +71,11 @@ class CheckRepeatStore(StoreConnection):
         blocked = held is not None or (land is not None and (land.delivery is not None or land.holds_slot or land.pushable))
         results = checks.results(source)
         result = failed_result(row, results)
-        if decision(current.number, row, results, blocked=blocked) is not CheckRepeatDecision.REPEAT or result is None:
+        if (
+            decision(current.number, lambda: CapStore(self.connect, self.begin).of(previous.attempt_id), row, results, blocked=blocked)
+            is not CheckRepeatDecision.REPEAT
+            or result is None
+        ):
             return None
         return CheckRepeatState(current, row, result)
 

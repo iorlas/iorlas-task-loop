@@ -41,7 +41,7 @@ from taskloop.admit_store import previous as read_previous
 from taskloop.agents.settings import AgentSetting, Overrides, choose, encode_policy
 from taskloop.attempt_reads import StoreUnavailable
 from taskloop.attempt_store import AttemptStore
-from taskloop.attempt_types import ATTEMPTS, AttemptKey, Checkouts, FileRef, RepeatReason, SlotFiles
+from taskloop.attempt_types import AttemptKey, Checkouts, FileRef, RepeatReason, SlotFiles
 from taskloop.discussion import CollectDiscussion, empty
 from taskloop.drain.models import BLOCKED, Reason
 from taskloop.drain.store import blocked
@@ -56,7 +56,7 @@ from taskloop.input_context import read as read_context
 from taskloop.prepare import HEADS, ORIGIN_MAIN, REMOTES, lacks
 from taskloop.repo import RepoId
 from taskloop.slots import Probe, SlotGit
-from taskloop.step import Step
+from taskloop.step import ATTEMPTS, Step
 from taskloop.steps import next_step
 from taskloop.task import TaskInspection
 from taskloop.task_content import TaskContentDigest

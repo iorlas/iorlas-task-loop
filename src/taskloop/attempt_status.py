@@ -14,8 +14,8 @@ from taskloop.agents.stop_store import StopStore
 from taskloop.attempt_reads import AttemptRow, PublishedRow, ReleaseRow, StoreUnavailable
 from taskloop.attempt_result import PendingReason, collect, succeeded
 from taskloop.attempt_store import AttemptStore
-from taskloop.attempt_types import ATTEMPTS, REPEATABLE, AttemptKey, AttemptResult, CommitRefused, EntryIdentity, Observe, Uncommitted
-from taskloop.check_repeat.status import CheckRepeatDecision, decision
+from taskloop.attempt_types import REPEATABLE, AttemptKey, AttemptResult, CommitRefused, EntryIdentity, Observe, Uncommitted
+from taskloop.check_repeat.status import CapStore, CheckRepeatDecision, decision
 from taskloop.check_status import ChecksView, checks_next, checks_release, checks_result, commands_seen
 from taskloop.check_store import ChecksRow, CheckStore, ResultRow
 from taskloop.command_conclusion import CommandConclusion
@@ -31,6 +31,7 @@ from taskloop.profile import LandMode
 from taskloop.recovery.models import Observations, Outcome, Result
 from taskloop.recovery.status import process_gate
 from taskloop.setup_store import SETUP_RUNS, ProcessSeen, SetupRow, SetupSeen, SetupStore
+from taskloop.step import ATTEMPTS
 from taskloop.step_text import unsafe_details
 from taskloop.steps import CHECK, following
 
@@ -195,9 +196,9 @@ def _show(reads: StatusPorts, row: AttemptRow, *, probe: bool = True) -> Attempt
         results = store.results(rows[-1].key) if rows else ()
         setup = SetupStore(reads.store.connect, reads.store.begin).latest(rows[-1].key) if rows else None
         land = land_view(reads.store, rows[-1], reads.observe) if rows else None
+        return _swapped(reads, view, rows, results, None if setup is None else setup.unsettled, land) if rows else view
     except StoreUnavailable:
         return replace(view, next="unknown")
-    return _swapped(reads, view, rows, results, None if setup is None else setup.unsettled, land) if rows else view
 
 
 def _swapped(
@@ -215,7 +216,9 @@ def _swapped(
     commands: ProcessSeen = commands_seen(reads.commands, setup, results) if stopped else "gone"
     earlier = (*((each.key.attempt_id, "re-run") for each in reversed(rows[:-1])), (view.attempt_id, "advanced"))
     blocked = land is not None and (land.row.delivery is not None or land.row.holds_slot or land.row.pushable)
-    repeat = decision(view.number, latest, results, blocked=blocked)
+    repeat = decision(
+        view.number, lambda: CapStore(reads.store.connect, reads.store.begin).of(view.attempt_id), latest, results, blocked=blocked
+    )
     next_word = land_next(checks_next(latest, entry, expired, commands), latest, land)
     if repeat is CheckRepeatDecision.REPEAT:
         next_word = "wait" if entry == "running" else "unknown" if entry == "unknown" else "repeat"

@@ -223,6 +223,24 @@ def test_rounds_share_the_implement_cap_and_hold_once_after_three_attempts(rig: 
     assert rig.round() == [] and len(rig.tracker.comments) == 1
 
 
+def test_a_workflow_cap_of_two_holds_after_the_second_attempt_and_status_agrees_with_admission(rig: Repairing) -> None:
+    failed(rig)
+    stored = WORKFLOW_BYTES + b"\n[step.implement]\nmax_attempts = 2\n"
+    digest = hashlib.sha256(stored).hexdigest()
+    rig.con.execute("INSERT INTO workflow_file VALUES (?,?)", (digest, stored))
+    rig.con.execute("UPDATE attempt SET workflow_digest=?", (digest,))
+    repair_agent(rig)
+    assert rig.next_words() == {"tl-1": ("check", "repeat")}
+    assert rig.round() == [("tl-1", "implement", "repeat", "started")]
+    rig.round()  # commit, release, publish
+    rig.bodies = ["failed"]
+    rig.round()
+    assert rig.store.attempts("tasks", "tl-1")[0].number == 2
+    assert rig.next_words() == {"tl-1": ("check", "hold")}  # status never says repeat where admission refuses
+    assert rig.round() == [("tl-1", "check", "hold", "held failed:test:failed")]
+    assert rig.round() == [] and len(rig.tracker.comments) == 1
+
+
 def test_restart_after_admission_uses_one_successor_and_the_captured_input(rig: Repairing) -> None:
     previous, source = failed(rig)
     rig.failing = LaunchUnavailable("start")
@@ -266,7 +284,7 @@ def test_ineligible_or_changed_sources_never_launch_an_implement_repeat(rig: Rep
         # The shared decision uses the implement number, regardless of the checks attempt's number.
         row = rig.checks.row(source)
         assert row is not None
-        assert decision(3, row, rig.checks.results(source)) is CheckRepeatDecision.EXHAUSTED
+        assert decision(3, lambda: 3, row, rig.checks.results(source)) is CheckRepeatDecision.EXHAUSTED
         return
     elif condition == "running":
         row = rig.checks.row(source)
@@ -327,7 +345,7 @@ def test_required_order_selects_one_failure_and_optional_failure_alone_does_not_
         )
         for each in rig.checks.results(source)
     )
-    assert decision(1, row, results) is CheckRepeatDecision.INELIGIBLE
+    assert decision(1, lambda: 3, row, results) is CheckRepeatDecision.INELIGIBLE
     assert previous != rig.store.attempts("tasks", "tl-1")[0].key
 
 
@@ -336,7 +354,7 @@ def test_infrastructure_causes_with_old_test_results_do_not_trigger_repair(rig: 
     _, source = failed(rig)
     row = rig.checks.row(source)
     assert row is not None
-    assert decision(1, replace(row, reason=cause), rig.checks.results(source)) is CheckRepeatDecision.INELIGIBLE
+    assert decision(1, lambda: 3, replace(row, reason=cause), rig.checks.results(source)) is CheckRepeatDecision.INELIGIBLE
 
 
 def test_a_released_check_with_a_command_still_alive_cannot_launch_repair(rig: Repairing) -> None:
