@@ -1,4 +1,4 @@
-# Rendered by `blueprint render` -- never edit this file; `blueprint render` rewrites it and `just render` fails on any difference.
+# Rendered by `blueprint gate render` -- never edit this file; `blueprint gate render` rewrites it and `just render` fails on any difference.
 # The base of this repo's gate. The repo's own `justfile` imports it and owns everything else: a recipe defined there replaces the
 # one of the same name here (`set allow-duplicate-recipes`), and `check-extra` is the extension point for one more step.
 #
@@ -9,6 +9,10 @@
 [group('gate')]
 check: gate-start beads-lint (steps "guard" "preset" "render" "blueprint" "secrets" "lint" "typecheck" "spell" "deps" "test") check-extra
     uv run python -m any_gate passed --gate check
+
+# The release gate, rare (before a tag): every step over everything (all files, all history, every test, the coverage floor).
+[group('gate')]
+check-all: beads-lint (steps "guard" "preset" "render" "blueprint" "secrets-all" "lint" "typecheck" "spell" "deps" "test-all")
 
 # Extension point: a repo defines `check-extra` in its own justfile to run one more thing in the gate (after the steps, before the record).
 [private]
@@ -46,7 +50,7 @@ steps +names:
 # The blueprint's per-commit checkpoints: one line per one that is not passing.
 [group('gate')]
 blueprint:
-    uv run blueprint check --repo . --gate
+    uv run blueprint check --repo . --brief
 
 # Secrets in the code this branch changed: gitleaks (pinned in mise.toml) over the commits since the upstream merge-base plus the staged,
 # unstaged and untracked work. The commit hook scans only the index and a hook can be skipped; this is the enforcement.
@@ -63,17 +67,17 @@ secrets-all:
 # Reads HEAD (an uncommitted local override is the supported co-development workflow). Exit 2 means it could not run: never a pass.
 [group('gate')]
 guard:
-    uv run blueprint guard --committed
+    uv run blueprint gate guard --committed
 
 # The linter preset: fails on a difference from the blueprint's snapshot that the repo has not declared in [tool.shelf-preset].
 [group('gate')]
 preset:
-    uv run blueprint preset --repo .
+    uv run blueprint gate preset --repo .
 
-# This base and the stack parts equal what `blueprint render` writes now, and the justfile imports them.
+# This base and the stack parts equal what `blueprint gate render` writes now, and the justfile imports them.
 [group('gate')]
 render:
-    uv run blueprint render --repo . --check
+    uv run blueprint gate render --repo . --check
 
 # The pinned tools (mise.toml, locked by mise.lock). The user's own config is left out: its unlocked tools would make `--locked` refuse.
 tools:

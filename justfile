@@ -54,7 +54,3 @@ check-extra: rules tool-versions
 # see docs/design/dashboard-ui.md. The compiled dash.css is committed, so running the page never needs it.
 css: tool-versions
     tailwindcss -i src/taskloop/dash/static/dash.input.css -o src/taskloop/dash/static/dash.css --minify
-
-# The coverage floor, a regression backstop (the gate's `test` step is selection-based and measures none).
-cov:
-    uv run --no-sync pytest --cov --cov-fail-under=65 tests/cli tests/steps tests/rules
