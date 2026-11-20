@@ -7,7 +7,6 @@ from taskloop import rows_render
 from taskloop.agents.config import display
 from taskloop.attempt_export import AttemptExport
 from taskloop.attempt_status import Listed, Shown
-from taskloop.attempt_types import ATTEMPTS
 from taskloop.command_conclusion import encode
 from taskloop.drain.models import Reason
 from taskloop.hold_guide import hold_guide, pending_guide
@@ -39,6 +38,7 @@ from taskloop.show_render import last_command, setup_times, show_lines
 from taskloop.slot_list import SlotList
 from taskloop.slot_release import Released, is_released, release_word
 from taskloop.slots import Adopted
+from taskloop.step import ATTEMPTS
 from taskloop.step_guide import GUIDE, HELD, NEEDS_OWNER, STEP_ONLY, discard, guide, refusal_guide
 from taskloop.task_status import task_status
 from taskloop.task_status import words as status_words

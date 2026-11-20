@@ -13,13 +13,14 @@ from sqlite_store import SchemaError, Store
 from taskloop.attempt_reads import ReleaseRow, SlotUse, StoreUnavailable
 from taskloop.attempt_status import Listed, StatusPorts, list_attempts
 from taskloop.attempt_store import AttemptStore
-from taskloop.attempt_types import ATTEMPTS, AttemptKey, ChainLink, Seen
+from taskloop.attempt_types import AttemptKey, ChainLink, Seen
 from taskloop.dash_board import BoardPorts, build_board, tries
 from taskloop.dash_model import Board, Ready
 from taskloop.drain.models import Identity
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.factory_schema import SCHEMA
 from taskloop.operations import Failed
+from taskloop.step import ATTEMPTS
 from taskloop.task_event_codec import encode as encode_event
 
 

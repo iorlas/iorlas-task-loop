@@ -15,7 +15,6 @@ from taskloop.attempt_reads import StoreRefused, StoreUnavailable
 from taskloop.attempt_result import judged
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import (
-    ATTEMPTS,
     REPEATABLE,
     AttemptKey,
     AttemptRecord,
@@ -41,7 +40,7 @@ from taskloop.input_context import InputError
 from taskloop.operations import Clock, Failed, Launch, Started, deadline_after, launched
 from taskloop.slot_lock import SlotBusy, SlotLockUnavailable
 from taskloop.slot_release import ParkHold, entry_stopped, worker_stopped
-from taskloop.step import Step
+from taskloop.step import ATTEMPTS, Step
 from taskloop.steps import kind
 from taskloop.task_content import TaskContentDigest
 

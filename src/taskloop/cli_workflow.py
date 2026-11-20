@@ -57,6 +57,10 @@ def _section(section: Section) -> dict[str, str]:
     return {KIND: "text", "start": one_line(section.text or "", PREVIEW)}
 
 
+def _cap(pin: Pin) -> dict[str, object]:
+    return {"max_attempts": pin.workflow.implement_cap}
+
+
 def _table(table: StepTable) -> dict[str, object]:
     return {"agent": _agent(table.agent), "prompt": [_section(each) for each in table.prompt]}
 
@@ -67,7 +71,7 @@ def _data(pin: Pin, name: str, at: str) -> dict[str, object]:
         "at": at,
         "sha": pin.sha,
         "digest": pin.digest,
-        "steps": {"plan": _table(pin.workflow.step.plan), "implement": _table(pin.workflow.step.implement)},
+        "steps": {"plan": _table(pin.workflow.step.plan), "implement": _table(pin.workflow.step.implement) | _cap(pin)},
         "feedback_sections": len(pin.workflow.step.feedback),
     }
 
@@ -88,6 +92,7 @@ def _lines(pin: Pin, name: str, at: str) -> list[str]:
         f"Read at: {pin.sha}",
         *_step_lines("plan", steps.plan),
         *_step_lines("implement", steps.implement),
+        f"  max_attempts: {pin.workflow.implement_cap}",
         f"Feedback sections: {len(steps.feedback)}",
     ]
 

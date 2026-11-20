@@ -5,6 +5,7 @@ import pytest
 from taskloop import discussion, earlier_input, input_context
 from taskloop.frame_markers import RESERVED
 from taskloop.harness_choice import HarnessKind
+from taskloop.step import ATTEMPTS
 from taskloop.workflow import MAX_BYTES, Reason, Renderer, Workflow, WorkflowRefused, load
 
 VALID = b"""
@@ -72,6 +73,24 @@ def test_a_valid_file_loads_with_its_agent_choice_sections_and_order() -> None:
 )
 def test_a_refusal_is_a_typed_reason_with_the_offending_path(data: bytes, reason: Reason, where: str) -> None:
     assert refused(data) == WorkflowRefused(reason, where)
+
+
+def test_implement_max_attempts_is_optional_and_defaults_to_the_engine_ceiling() -> None:
+    capped = load(PLAN + IMPLEMENT + b"[step.implement]\nmax_attempts = 2\n")
+    plain = load(PLAN + IMPLEMENT)
+    assert isinstance(capped, Workflow) and isinstance(plain, Workflow)
+    assert (capped.implement_cap, plain.implement_cap) == (2, ATTEMPTS)
+
+
+@pytest.mark.parametrize("value", ["0", "-1", str(ATTEMPTS + 1), '"2"', "true", "2.0"])
+def test_max_attempts_is_a_whole_number_from_one_to_the_ceiling(value: str) -> None:
+    data = PLAN + IMPLEMENT + f"[step.implement]\nmax_attempts = {value}\n".encode()
+    assert refused(data) == WorkflowRefused(Reason.BAD_VALUE, "step.implement.max_attempts")
+
+
+def test_the_plan_step_has_no_max_attempts() -> None:
+    data = PLAN + IMPLEMENT + b"[step.plan]\nmax_attempts = 2\n"
+    assert refused(data) == WorkflowRefused(Reason.UNKNOWN_KEY, "step.plan.max_attempts")
 
 
 @pytest.mark.parametrize("name", RESERVED)
