@@ -4,13 +4,13 @@ import sqlite3
 from collections.abc import Callable
 from contextlib import AbstractContextManager
 
-from sqlite_store import begin_immediate
+from sqlite_sidecar import transaction
 
 from taskloop.drain.models import Action, ActionKind, ActionState, Boundary, Identity, State
 from taskloop.ids import Ids
 
 type Connect = Callable[[], sqlite3.Connection | None]
-type Begin = Callable[[sqlite3.Connection], AbstractContextManager[None]]
+type Begin = Callable[[sqlite3.Connection], AbstractContextManager[object]]
 
 
 def boundary(con: sqlite3.Connection) -> Boundary:
@@ -24,7 +24,7 @@ def blocked(con: sqlite3.Connection) -> bool:
 
 
 class DrainStore:
-    def __init__(self, connect: Connect, begin: Begin = begin_immediate, *, ids: Ids) -> None:
+    def __init__(self, connect: Connect, begin: Begin = transaction, *, ids: Ids) -> None:
         self.ids = ids
         self.connect, self.begin = connect, begin
 

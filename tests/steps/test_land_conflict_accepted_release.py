@@ -199,12 +199,12 @@ def test_accepted_parking_adopts_observed_effect(
     park = FakeWorktree.park
     calls: list[str] = []
 
-    def parking(self: FakeWorktree, base: str, *, clean_keep: Sequence[str] | None = None, keep_ignored: bool = False) -> Sha:
-        assert not c.con.in_transaction and clean_keep == () and keep_ignored
+    def parking(self: FakeWorktree, base: str, *, clean_keep: Sequence[str] | None = None) -> Sha:
+        assert not c.con.in_transaction and clean_keep == ()
         calls.append(base)
         if not after:
             raise KeyboardInterrupt
-        park(self, base, clean_keep=clean_keep, keep_ignored=keep_ignored)
+        park(self, base, clean_keep=clean_keep)
         raise KeyboardInterrupt
 
     with monkeypatch.context() as patch:

@@ -10,7 +10,7 @@ import pytest
 from doubles import CHECKS, REQUIRED
 from git_porcelain.history import Identity
 from git_porcelain.testing import apply_hermetic_env, git
-from sqlite_store import begin_immediate
+from sqlite_sidecar import transaction
 
 from taskloop.attempt_types import DEFAULT_GIT_READ_SECONDS, Seen
 from taskloop.check_release import ChecksRelease
@@ -53,7 +53,7 @@ def test_a_passed_block_s_leftovers_are_reset_away_and_the_slot_parked_at_d(
     (main / "README").write_text("two\n")
     git(main, "commit", "-q", "-am", "X")
     x = git(main, "rev-parse", "HEAD").strip()
-    with begin_immediate(factory):
+    with transaction(factory):
         factory.execute("INSERT INTO slot (repo_id,name,path) VALUES (?,'s0','/elsewhere/s0'),(?,'s1',?)", (repo_id, repo_id, str(slot)))
         factory.execute(
             """INSERT INTO attempt (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,

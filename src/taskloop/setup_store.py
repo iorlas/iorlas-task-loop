@@ -16,7 +16,7 @@ from math import isfinite
 from typing import Final, Literal, override
 
 from pydantic import BaseModel, ConfigDict, Field, computed_field
-from sqlite_store import begin_immediate
+from sqlite_sidecar import transaction
 from stream_proc import OwnedProcess
 
 from taskloop.attempt_reads import StoreRefused, StoreUnavailable, as_int, as_nullable_int, as_nullable_text, as_text
@@ -163,7 +163,7 @@ class SetupStore(AttemptReads):
     def __init__(
         self,
         connect: Callable[[], sqlite3.Connection | None],
-        begin: Callable[[sqlite3.Connection], AbstractContextManager[None]] = begin_immediate,
+        begin: Callable[[sqlite3.Connection], AbstractContextManager[object]] = transaction,
         registering: AttemptReads | None = None,
     ) -> None:
         super().__init__(connect, begin)

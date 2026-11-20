@@ -21,7 +21,7 @@ from git_porcelain import GitTimeout, GitUnavailable, HookRejected, MissingRemot
 from git_porcelain.api import PushResult
 from git_porcelain.testing import FakeRemote, FakeRepo, FakeWorktree
 from plan_fixtures import PLAN_TEXT
-from sqlite_store import begin_immediate
+from sqlite_sidecar import transaction
 
 from taskloop.agents.launch import AgentLaunch
 from taskloop.attempt import Attempts
@@ -63,10 +63,10 @@ class ScriptedPushRepo(FakeRepo):
         return super().is_ancestor(a, b)
 
     @override
-    def remote_url(self, remote: str, *, push: bool = False) -> str:
+    def remote_url(self, remote: str) -> str:
         if not self.origin:
             raise MissingRemote(f"error: No such remote '{remote}'")
-        return super().remote_url(remote, push=push)
+        return super().remote_url(remote)
 
 
 class Pushing(FakeWorktree):
@@ -100,7 +100,7 @@ def test_push_guard_rejects_a_write_transaction_before_effects(
     effects: list[str] = []
     repo.during = lambda: effects.append("push")
     before = remote.branches()
-    with begin_immediate(registered), pytest.raises(AssertionError, match="outside the write transaction"):
+    with transaction(registered), pytest.raises(AssertionError, match="outside the write transaction"):
         worktree.push("task/tl-1")
     assert effects == [] and remote.branches() == before
 
@@ -513,7 +513,7 @@ def test_a_failed_record_is_unavailable_store_and_a_rerun_records_it(
 ) -> None:
     x = run(registered, tmp_path, slot, checkouts, slot_files, {P: PLAN_TEXT})
 
-    def refused(_con: sqlite3.Connection) -> AbstractContextManager[None]:
+    def refused(_con: sqlite3.Connection) -> AbstractContextManager[object]:
         raise sqlite3.OperationalError("database is locked")
 
     files, now = EvidenceFiles(tmp_path), [0.0]

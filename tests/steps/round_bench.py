@@ -17,7 +17,7 @@ from beads_client import BdError, Bead
 from doubles import ENGINE, Environment, NoChecks, PinnedViews
 from git_porcelain.testing import FakeRepo, FakeWorktree
 from plan_fixtures import PLAN_TEXT
-from sqlite_store import begin_immediate
+from sqlite_sidecar import transaction
 
 from taskloop.admit import AdmitRefused, AdmitResult, AttemptAdmission
 from taskloop.admit_chain import NextAdmission
@@ -233,7 +233,7 @@ class Factory:
         files, clock = EvidenceFiles(self.tmp), lambda: self.now
         fresh = AttemptAdmission(
             lambda: self.con,
-            begin_immediate,
+            transaction,
             files,
             self.tracker.inspect,
             self.checkouts,
@@ -247,7 +247,7 @@ class Factory:
         )
         advance = NextAdmission(
             lambda: self.con,
-            begin_immediate,
+            transaction,
             files,
             self.tracker.inspect,
             self.checkouts,

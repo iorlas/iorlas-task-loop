@@ -85,7 +85,7 @@ class ChainAdmission:
     def __init__(
         self,
         connect: Callable[[], sqlite3.Connection | None],
-        begin: Callable[[sqlite3.Connection], AbstractContextManager[None]],
+        begin: Callable[[sqlite3.Connection], AbstractContextManager[object]],
         files: EvidenceFiles,
         clock: Callable[[], float],
         checkouts: Checkouts,
@@ -225,7 +225,7 @@ class NextAdmission:
     def __init__(
         self,
         connect: Callable[[], sqlite3.Connection | None],
-        begin: Callable[[sqlite3.Connection], AbstractContextManager[None]],
+        begin: Callable[[sqlite3.Connection], AbstractContextManager[object]],
         files: EvidenceFiles,
         tasks: Tasks,
         checkouts: Checkouts,

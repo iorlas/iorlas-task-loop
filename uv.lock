@@ -253,6 +253,7 @@ dependencies = [
     { name = "git-porcelain" },
     { name = "process-lock" },
     { name = "pydantic" },
+    { name = "sqlite-sidecar" },
     { name = "sqlite-store" },
     { name = "stream-proc" },
 ]
@@ -279,6 +280,7 @@ requires-dist = [
     { name = "git-porcelain", git = "https://github.com/yoselabs/shelf?subdirectory=packages%2Fgit-porcelain&tag=blueprint-v0.9.0" },
     { name = "process-lock", git = "https://github.com/yoselabs/shelf?subdirectory=packages%2Fprocess-lock&tag=blueprint-v0.9.0" },
     { name = "pydantic", specifier = "==2.14.3" },
+    { name = "sqlite-sidecar", git = "https://github.com/yoselabs/shelf?subdirectory=packages%2Fsqlite-sidecar&tag=blueprint-v0.9.0" },
     { name = "sqlite-store", git = "https://github.com/yoselabs/shelf?subdirectory=packages%2Fsqlite-store&tag=blueprint-v0.9.0" },
     { name = "stream-proc", git = "https://github.com/yoselabs/shelf?subdirectory=packages%2Fstream-proc&tag=blueprint-v0.9.0" },
 ]

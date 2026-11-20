@@ -14,7 +14,7 @@ from conftest import DONE
 from dash_read_support import KEY, Tracker, board_of, reads_of
 from doubles import CHECKS, D
 from hold_fixtures import event, event_for
-from sqlite_store import begin_immediate
+from sqlite_sidecar import transaction
 
 from taskloop import activity_file
 from taskloop.agents.stop_models import AgentStop, Identity, StopCause, encode
@@ -663,7 +663,7 @@ def test_each_check_carries_the_end_of_its_log_passed_or_failed_and_none_when_th
     checking: sqlite3.Connection,
     tmp_path: Path,
 ) -> None:
-    files, store = EvidenceFiles(tmp_path), CheckStore(lambda: checking, begin_immediate)
+    files, store = EvidenceFiles(tmp_path), CheckStore(lambda: checking, transaction)
     for position, name, rc, conclusion in (
         (0, "lint", 0, CommandConclusion.PASSED),
         (1, "test", 1, CommandConclusion.FAILED),

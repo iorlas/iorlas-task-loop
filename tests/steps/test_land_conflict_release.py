@@ -106,11 +106,11 @@ def test_parking_interruption_is_observed_before_retry(
     park = FakeWorktree.park
     calls: list[str] = []
 
-    def parking(self: FakeWorktree, base: str, *, clean_keep: Sequence[str] | None = None, keep_ignored: bool = False) -> Sha:
-        assert not c.con.in_transaction and clean_keep == () and keep_ignored
+    def parking(self: FakeWorktree, base: str, *, clean_keep: Sequence[str] | None = None) -> Sha:
+        assert not c.con.in_transaction and clean_keep == ()
         calls.append(base)
         if after:
-            park(self, base, clean_keep=clean_keep, keep_ignored=keep_ignored)
+            park(self, base, clean_keep=clean_keep)
         raise KeyboardInterrupt
 
     with monkeypatch.context() as context:
@@ -119,9 +119,9 @@ def test_parking_interruption_is_observed_before_retry(
             c.resume()
     c.restart()
 
-    def counted(self: FakeWorktree, base: str, *, clean_keep: Sequence[str] | None = None, keep_ignored: bool = False) -> Sha:
+    def counted(self: FakeWorktree, base: str, *, clean_keep: Sequence[str] | None = None) -> Sha:
         calls.append(base)
-        return park(self, base, clean_keep=clean_keep, keep_ignored=keep_ignored)
+        return park(self, base, clean_keep=clean_keep)
 
     monkeypatch.setattr(FakeWorktree, "park", counted)
     assert isinstance(c.resume(), Terminal) and calls == [c.record.base] * (1 if after else 2)
@@ -139,10 +139,10 @@ def test_unverified_parking_retains_custody(
     park = FakeWorktree.park
     observe = AbortMerge.observe
 
-    def parking(self: FakeWorktree, base: str, *, clean_keep: Sequence[str] | None = None, keep_ignored: bool = False) -> Sha:
+    def parking(self: FakeWorktree, base: str, *, clean_keep: Sequence[str] | None = None) -> Sha:
         if changed == "false_success":
             return Sha(base)
-        value = park(self, base, clean_keep=clean_keep, keep_ignored=keep_ignored)
+        value = park(self, base, clean_keep=clean_keep)
         if changed == "ignored":
             self.write_file("ignored", "changed bytes")
         elif changed == "protection":

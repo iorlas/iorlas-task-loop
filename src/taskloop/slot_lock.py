@@ -45,9 +45,7 @@ def lock_path(slot_path: str) -> Path:
 def acquire(slot_path: str, attempt_id: str, role: Role) -> ProcessLock:
     """Take the slot's lock now or refuse: `SlotBusy` when held (here or elsewhere), `SlotLockUnavailable` on an OS error."""
     try:
-        return ProcessLock.acquire(
-            lock_path(slot_path), timeout=0, label=LABEL, meta={"attempt": attempt_id, "role": role}, reentrant=False
-        )
+        return ProcessLock.acquire_exclusive(lock_path(slot_path), timeout=0, label=LABEL, meta={"attempt": attempt_id, "role": role})
     except LockHeldError as error:
         raise SlotBusy(str(error.path)) from error
     except OSError as error:

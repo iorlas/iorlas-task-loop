@@ -162,7 +162,7 @@ def made(slot: FakeWorktree, base: str) -> list[tuple[str, str]]:
 
 def adopt(slot: FakeWorktree, _files: FakeSlotFiles) -> None:
     """A crash after the factory's commit, before its recording: the slot HEAD is this attempt's trailer commit."""
-    slot.stage([P], literal=True)
+    slot.stage([P])
     assert isinstance(slot.record(f"Plan tl-1\n\n{TRAILER}", paths="staged"), Recorded)
 
 
@@ -200,7 +200,7 @@ def unreadable(path: str) -> After:
 def unregistered(slot: FakeWorktree, files: FakeSlotFiles) -> None:
     """Git forgets the slot; its pointer files stay readable (the fake port saw the slot listed at dispatch)."""
     assert files.lstat(slot.path / ".git") is not None
-    slot.repo.drop_worktree(slot.path, force=True)
+    slot.repo.discard_worktree(slot.path)
 
 
 LOST = "waiting:git:MissingRevision"  # B no longer resolves: permanently unknown, never a verdict
@@ -443,7 +443,7 @@ def test_the_staged_read_is_pinned_and_unknown_when_the_pointer_names_another_re
     other = FakeRepo.init(tmp_path / "other")
     views = PinnedViews(repo, other)
     slot.write_file(P, PLAN_TEXT)
-    slot.stage([P], literal=True)
+    slot.stage([P])
     assert factory_commit(registered, views, slot_files).staged(KEY) == (P,)
     assert views.slot_opens(slot.path) == [slot_files.common / "worktrees/s1"] * 2  # the status read and the staged read
     views.opened.clear()
@@ -765,8 +765,8 @@ def test_a_pointer_rewritten_during_stage_stops_before_record(
     captured(registered, tmp_path, slot, checkouts, slot_files, PLANNED)
     staged = FakeWorktree.stage
 
-    def stage(self: FakeWorktree, paths: Sequence[str], *, literal: bool = True) -> None:
-        staged(self, paths, literal=literal)
+    def stage(self: FakeWorktree, paths: Sequence[str]) -> None:
+        staged(self, paths)
         flip(slot, slot_files)
 
     monkeypatch.setattr(FakeWorktree, "stage", stage)
@@ -790,11 +790,11 @@ def test_a_factory_commit_racing_another_adopts_its_commit_never_nothing_written
     captured(registered, tmp_path, slot, checkouts, slot_files, PLANNED)
     recorded, raced = FakeWorktree.record, list[CommitResult]()
 
-    def record(self: FakeWorktree, message: str, **options: Literal["staged"] | bool) -> RecordResult:
+    def record(self: FakeWorktree, message: str, **options: Literal["staged"]) -> RecordResult:
         if not raced:
             raced.append(Uncommitted("racing"))
             raced[0] = factory_commit(registered, checkouts, slot_files, unheld).commit(KEY)
-        return recorded(self, message, paths="staged", hooks=False)
+        return recorded(self, message, paths="staged")
 
     monkeypatch.setattr(FakeWorktree, "record", record)
     found = factory_commit(registered, checkouts, slot_files, unheld).commit(KEY)

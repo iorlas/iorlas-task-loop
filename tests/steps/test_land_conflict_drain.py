@@ -136,13 +136,13 @@ def inject_release_failure(c: ExecutionCase, patch: pytest.MonkeyPatch, *, at_re
     effects = Effects()
     park, release = FakeWorktree.park, ConflictStore.release
 
-    def parking(self: FakeWorktree, base: str, *, clean_keep: Sequence[str] | None = None, keep_ignored: bool = False) -> Sha:
+    def parking(self: FakeWorktree, base: str, *, clean_keep: Sequence[str] | None = None) -> Sha:
         assert not c.con.in_transaction
         if base != c.record.base:
-            return park(self, base, clean_keep=clean_keep, keep_ignored=keep_ignored)
+            return park(self, base, clean_keep=clean_keep)
         if effects.interrupt and not at_release and not after:
             raise KeyboardInterrupt
-        result = park(self, base, clean_keep=clean_keep, keep_ignored=keep_ignored)
+        result = park(self, base, clean_keep=clean_keep)
         effects.parks += 1
         if effects.interrupt and not at_release:
             raise KeyboardInterrupt

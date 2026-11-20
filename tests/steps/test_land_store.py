@@ -12,7 +12,7 @@ import pytest
 from doubles import CANDIDATE, CHECKS, ORIGIN, REQUIRED, SQUASH, D, X, pin_workflow
 from git_porcelain.testing import FakeRepo
 from land_conflict_bench import bench, copy_row
-from sqlite_store import begin_immediate
+from sqlite_sidecar import transaction
 
 from taskloop import land_store
 from taskloop.attempt_reads import StoreRefused, StoreUnavailable
@@ -269,7 +269,7 @@ def admitted(number: int = 1, validation: Settled | None = "same_tree") -> LandA
 
 
 def insert(con: sqlite3.Connection, candidate: LandAdmitted) -> None:
-    with begin_immediate(con):
+    with transaction(con):
         land_store.insert(con, candidate)
 
 
@@ -331,7 +331,7 @@ def test_phase_starts_preserve_the_first_time_and_release_proof_revision(landing
     lands.start_phase(CANDIDATE, Phase.RELEASE, 40, proof)
     lands.start_phase(CANDIDATE, Phase.RELEASE, 50, proof)
     assert latest(landing).rev == proof[0]
-    with begin_immediate(landing):
+    with transaction(landing):
         assert land_store.record_release(landing, CANDIDATE, proof, D, 25, False) == "released"
     assert (latest(landing).validation_started_at, latest(landing).release_started_at) == (20, 40)
     with pytest.raises(StoreRefused):
@@ -556,7 +556,7 @@ def released(con: sqlite3.Connection, read: tuple[int, Validation | None], aband
 
 
 def recorded(con: sqlite3.Connection, read: tuple[int, Validation | None], abandoned: bool, key: AttemptKey = CANDIDATE) -> Recorded:
-    with begin_immediate(con):
+    with transaction(con):
         return land_store.record_release(con, key, read, D, 30, abandoned)
 
 

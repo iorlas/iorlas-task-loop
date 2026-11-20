@@ -128,7 +128,7 @@ def reset_to(view: Repo, path: Path, commit: str) -> bool:
         return False
     worktree = view.worktree(path)
     worktree.reset(commit, mode="hard")
-    worktree.clean(ignored=True, nested=True)
+    worktree.clean_ignored()
     return True
 
 
@@ -340,7 +340,7 @@ class Preparation:
         view = self.ports.checkouts(path, git_dir=gitdir)
         worktree = view.worktree(path)
         if commit is None:
-            worktree.clean(ignored=True, nested=True)
+            worktree.clean_ignored()
         elif not reset_to(view, path, commit):
             return _refused("environment:moved")
         if worktree.dirty(ignored_under=["."]).ignored:

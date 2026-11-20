@@ -19,7 +19,7 @@ from doubles import ENGINE, WORKFLOW_BYTES, WORKFLOW_PATH
 from git_porcelain.history import Identity
 from git_porcelain.testing import apply_hermetic_env, git
 from plan_fixtures import PLAN_TEXT
-from sqlite_store import begin_immediate
+from sqlite_sidecar import transaction
 
 from taskloop.admit import AdmitRequest, Admitted, AttemptAdmission
 from taskloop.agents.launch import AgentLaunch
@@ -92,7 +92,7 @@ class Repository:
         self.slot = slots / folder_name(VIEWS.checkouts(self.main).identity()) / "s1"
         git(self.main, "worktree", "add", "-q", "--detach", str(self.slot), "HEAD")
         self.d = self.rev("HEAD")
-        adopt(SlotsStore(lambda: factory, begin_immediate), VIEWS.checkouts(self.main), SlotGit(VIEWS.checkouts, RealSlotFiles()), slots, 1)
+        adopt(SlotsStore(lambda: factory, transaction), VIEWS.checkouts(self.main), SlotGit(VIEWS.checkouts, RealSlotFiles()), slots, 1)
         self.store, self.files = AttemptStore(lambda: factory), RealSlotFiles()
         self.releaser = SlotRelease(
             self.store,
@@ -109,7 +109,7 @@ class Repository:
         )
         self.admission = AttemptAdmission(
             lambda: factory,
-            begin_immediate,
+            transaction,
             EvidenceFiles(self.art),
             tasks,
             VIEWS.checkouts,
@@ -206,5 +206,5 @@ def test_a_slot_whose_pointer_names_another_git_directory_is_never_free_nor_adop
     s2 = real.slot.parent / "s2"
     git(real.main, "worktree", "add", "-q", "--detach", str(s2), "HEAD")
     (s2 / ".git").write_text(f"gitdir: {fake}\n")
-    found = adopt(SlotsStore(lambda: real.factory, begin_immediate), VIEWS.checkouts(real.main), slots, real.slot.parent.parent, 2)
+    found = adopt(SlotsStore(lambda: real.factory, transaction), VIEWS.checkouts(real.main), slots, real.slot.parent.parent, 2)
     assert found == (Adopted("s1", real.slot), NotAdopted("s2", "redirected", s2))

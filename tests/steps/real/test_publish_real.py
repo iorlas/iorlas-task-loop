@@ -20,7 +20,7 @@ from git_porcelain import Repo
 from git_porcelain.history import Identity
 from git_porcelain.testing import apply_hermetic_env, git
 from plan_fixtures import PLAN_TEXT
-from sqlite_store import begin_immediate
+from sqlite_sidecar import transaction
 
 from taskloop.admit import AdmitRequest, Admitted, AttemptAdmission
 from taskloop.agents.launch import AgentLaunch
@@ -93,12 +93,12 @@ class Published:
         self.slot = root / "slots" / folder_name(VIEWS.checkouts(self.main).identity()) / "s1"
         git(self.main, "worktree", "add", "-q", "--detach", str(self.slot), "HEAD")
         self.d = self.rev(self.slot, "HEAD")
-        slots = SlotsStore(lambda: factory, begin_immediate)
+        slots = SlotsStore(lambda: factory, transaction)
         adopt(slots, VIEWS.checkouts(self.main), SlotGit(VIEWS.checkouts, RealSlotFiles()), root / "slots", 1)
         self.store, self.files = AttemptStore(lambda: factory), RealSlotFiles()
         admission = AttemptAdmission(
             lambda: factory,
-            begin_immediate,
+            transaction,
             EvidenceFiles(root / "art"),
             tasks,
             VIEWS.checkouts,

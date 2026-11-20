@@ -5,7 +5,8 @@ from pathlib import Path
 
 import pytest
 from git_porcelain.testing import FakeRepo
-from sqlite_store import Store, begin_immediate
+from sqlite_sidecar import transaction
+from sqlite_store import Store
 from test_admit import Tracker, admission, request, slots, tasks
 from test_repeat import CONTENT_DIGEST
 
@@ -36,13 +37,13 @@ def test_admitted_evidence_survives_reopen_and_task_edits(tmp_path: Path, repo: 
 
 def test_duplicate_and_rolled_back_evidence_cannot_replace_saved_content(registered: sqlite3.Connection) -> None:
     store = TaskContentStore(lambda: registered)
-    with pytest.raises(RuntimeError, match="admission failed"), begin_immediate(registered):
+    with pytest.raises(RuntimeError, match="admission failed"), transaction(registered):
         TaskContentStore.insert(registered, "attempt", CONTENT_DIGEST)
         raise RuntimeError("admission failed")
     assert store.read("attempt") is None
-    with begin_immediate(registered):
+    with transaction(registered):
         TaskContentStore.insert(registered, "attempt", CONTENT_DIGEST)
-    with pytest.raises(sqlite3.IntegrityError), begin_immediate(registered):
+    with pytest.raises(sqlite3.IntegrityError), transaction(registered):
         TaskContentStore.insert(registered, "attempt", CONTENT_DIGEST)
     assert store.read("attempt") == CONTENT_DIGEST
 

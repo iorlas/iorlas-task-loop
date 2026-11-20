@@ -87,7 +87,7 @@ class EntryTargets(Protocol):
 
 
 type Connect = Callable[[], sqlite3.Connection | None]
-type Begin = Callable[[sqlite3.Connection], AbstractContextManager[None]]
+type Begin = Callable[[sqlite3.Connection], AbstractContextManager[object]]
 type Targets = Callable[[Connect, Begin], EntryTargets]
 
 

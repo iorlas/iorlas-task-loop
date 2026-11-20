@@ -4,7 +4,7 @@ import json
 from collections.abc import Sequence
 
 import pytest
-from doubles import PinnedViews
+from doubles import PinnedViews, record_all
 from git_porcelain import Diff, GitUnavailable, Recorded
 from git_porcelain.testing import FakeRepo, FakeWorktree
 from plan_fixtures import PLAN_TEXT
@@ -18,7 +18,7 @@ METADATA_PATH = "docs/design/tl-1/plan-metadata.json"
 
 
 def record(slot: FakeWorktree, message: str = "ordinary result") -> str:
-    result = slot.record(message, paths="all", allow_empty=True)
+    result = record_all(slot, message)
     assert isinstance(result, Recorded)
     return str(result.sha)
 

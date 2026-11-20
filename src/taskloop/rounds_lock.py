@@ -37,7 +37,7 @@ def hold(db: Path, backlog: str) -> ProcessLock:
     """Take the backlog's rounds lock now or refuse: `RoundsRunning` when held (here or elsewhere), `RoundsLockUnavailable`
     on an OS error."""
     try:
-        return ProcessLock.acquire(lock_path(db, backlog), timeout=0, label=LABEL, meta={"backlog": backlog}, reentrant=False)
+        return ProcessLock.acquire_exclusive(lock_path(db, backlog), timeout=0, label=LABEL, meta={"backlog": backlog})
     except LockHeldError as error:
         raise RoundsRunning(error.pid) from error
     except OSError as error:

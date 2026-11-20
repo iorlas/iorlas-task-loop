@@ -10,7 +10,7 @@ from threading import Barrier
 
 import pytest
 from any_agent.procs import Worker
-from sqlite_store import begin_immediate
+from sqlite_sidecar import transaction
 from test_recovery_store import CHANGES, OWNER, database, facts, observed
 
 from taskloop.attempt_reads import StoreUnavailable
@@ -105,7 +105,7 @@ def test_registration_rolls_back_both_writes_and_storage_loss_blocks_permit(tmp_
 
     @contextmanager
     def fail_commit(connection: sqlite3.Connection) -> Generator[None]:
-        with begin_immediate(connection):
+        with transaction(connection):
             yield
             raise sqlite3.OperationalError("lost commit")
 
@@ -117,7 +117,7 @@ def test_registration_rolls_back_both_writes_and_storage_loss_blocks_permit(tmp_
 
     @contextmanager
     def lost_ack(connection: sqlite3.Connection) -> Generator[None]:
-        with begin_immediate(connection):
+        with transaction(connection):
             yield
         raise sqlite3.OperationalError("acknowledgement lost after commit")
 

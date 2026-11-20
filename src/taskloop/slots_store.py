@@ -6,7 +6,7 @@ from contextlib import AbstractContextManager
 from functools import cached_property
 from pathlib import Path
 
-from sqlite_store import begin_immediate
+from sqlite_sidecar import transaction
 
 from taskloop.factory_schema import SLOT, marks
 from taskloop.factory_store import current
@@ -20,7 +20,7 @@ class SlotsStore:
     def __init__(
         self,
         connect: Callable[[], sqlite3.Connection | None],
-        begin: Callable[[sqlite3.Connection], AbstractContextManager[None]] = begin_immediate,
+        begin: Callable[[sqlite3.Connection], AbstractContextManager[object]] = transaction,
     ) -> None:
         self.connect = connect
         self.begin = begin

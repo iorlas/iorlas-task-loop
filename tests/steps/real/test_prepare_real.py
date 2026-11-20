@@ -18,7 +18,7 @@ from doubles import ENGINE, WORKFLOW_BYTES, WORKFLOW_PATH
 from git_porcelain.history import Identity
 from git_porcelain.testing import apply_hermetic_env, git
 from plan_fixtures import PLAN_TEXT
-from sqlite_store import begin_immediate
+from sqlite_sidecar import transaction
 
 from taskloop.admit import AdmitRequest, Admitted, AttemptAdmission
 from taskloop.agents.launch import AgentLaunch
@@ -71,7 +71,7 @@ def test_a_detached_slot_is_prepared_on_its_task_branch_and_the_plan_is_committe
     slot = slots / folder_name(VIEWS.checkouts(main).identity()) / "s1"
     git(main, "worktree", "add", "-q", "--detach", str(slot), "HEAD")
     d = git(slot, "rev-parse", "HEAD").strip()
-    adopt(SlotsStore(lambda: factory, begin_immediate), VIEWS.checkouts(main), SlotGit(VIEWS.checkouts, RealSlotFiles()), slots, 1)
+    adopt(SlotsStore(lambda: factory, transaction), VIEWS.checkouts(main), SlotGit(VIEWS.checkouts, RealSlotFiles()), slots, 1)
     origin = root / "origin"
     git(root, "clone", "-q", str(main), str(origin))
     git(main, "remote", "add", "origin", str(origin))
@@ -80,7 +80,7 @@ def test_a_detached_slot_is_prepared_on_its_task_branch_and_the_plan_is_committe
     m = git(origin, "rev-parse", "HEAD").strip()
     admission = AttemptAdmission(
         lambda: factory,
-        begin_immediate,
+        transaction,
         EvidenceFiles(art),
         tasks,
         VIEWS.checkouts,

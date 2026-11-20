@@ -206,6 +206,10 @@ GIT_WRITES = frozenset(
     {
         "stage",
         "stage_tracked",
+        "stage_pathspec",
+        "record_empty",
+        "record_with_hooks",
+        "clean_ignored",
         "record",
         "take_branch",
         "park",
@@ -283,6 +287,7 @@ def test_only_the_commit_prepare_release_publish_environment_and_land_modules_wr
     expected = {
         ("stage", "factory_commit.py"),
         ("record", "factory_commit.py"),
+        ("record_empty", "factory_commit.py"),
         ("take_branch", "prepare.py"),
         ("park", "prepare.py"),
         ("fetch", "prepare.py"),
@@ -309,7 +314,7 @@ def test_only_the_commit_prepare_release_publish_environment_and_land_modules_wr
         ("park", "land_conflict/release.py"),
         ("abort_merge", "land_conflict/abort.py"),
         ("push", "publish.py"),
-        ("clean", "environment.py"),
+        ("clean_ignored", "environment.py"),
         ("reset", "environment.py"),
         ("record", "publish.py"),  # PublishStore.record persists the publication; the matcher sees every receiver.
         ("squash", "land_target.py"),

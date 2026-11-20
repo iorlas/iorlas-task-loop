@@ -19,7 +19,8 @@ from doubles import ENGINE, WORKFLOW, WORKFLOW_BYTES, WORKFLOW_FILES, WORKFLOW_P
 from git_porcelain import GitTimeout, NotARepo, Repo
 from git_porcelain.testing import FakeRemote, FakeRepo
 from plan_fixtures import PLAN_TEXT
-from sqlite_store import Store, begin_immediate
+from sqlite_sidecar import transaction
+from sqlite_store import Store
 
 from taskloop.admit import AdmitRefused, AdmitRequest, AdmitResult, Admitted, AdmitUnavailable, AttemptAdmission, checkout_repo, read_task
 from taskloop.agents.launch import AgentLaunch
@@ -118,7 +119,7 @@ def slots(con: sqlite3.Connection, repo: FakeRepo, root: Path, count: int) -> No
     """A person's `git worktree add --detach` at each derived path, then adoption."""
     for number in range(1, count + 1):
         repo.add_worktree(root.resolve() / folder_name(repo.identity()) / f"s{number}", "HEAD")
-    adopt(SlotsStore(lambda: con, begin_immediate), repo, SlotGit(PinnedViews(repo), FakeSlotFiles(repo)), root, count)
+    adopt(SlotsStore(lambda: con, transaction), repo, SlotGit(PinnedViews(repo), FakeSlotFiles(repo)), root, count)
 
 
 def request(
@@ -147,7 +148,7 @@ def unlocked(_slot_path: str) -> bool:
 def admission(con: sqlite3.Connection, tmp_path: Path, tracker: Tracker, repo: FakeRepo) -> AttemptAdmission:
     return AttemptAdmission(
         lambda: con,
-        begin_immediate,
+        transaction,
         tracker.files,
         outside_transaction(con, tasks),
         PinnedViews(repo),
@@ -171,13 +172,13 @@ def external_ports(factory: sqlite3.Connection, monkeypatch: pytest.MonkeyPatch)
 def test_tracker_guard_rejects_a_write_transaction_before_effects(factory: sqlite3.Connection, tmp_path: Path, method: str) -> None:
     tracker = Tracker(factory, tmp_path)
     call = tracker.claim if method == "claim" else tracker.unclaim
-    with begin_immediate(factory), pytest.raises(AssertionError, match="outside any transaction"):
+    with transaction(factory), pytest.raises(AssertionError, match="outside any transaction"):
         call("tasks", "tl-1")
     assert tracker.calls == []
 
 
 def test_git_read_guard_rejects_a_write_transaction(factory: sqlite3.Connection, repo: FakeRepo) -> None:
-    with begin_immediate(factory), pytest.raises(AssertionError, match="outside the write transaction"):
+    with transaction(factory), pytest.raises(AssertionError, match="outside the write transaction"):
         repo.refs(["refs/heads/"])
 
 
@@ -186,7 +187,7 @@ def admit(con: sqlite3.Connection, tmp_path: Path, repo: FakeRepo, tracker: Trac
     return admission(con, tmp_path, tracker, repo).admit(request(tmp_path, repo))
 
 
-def breaking(error: BaseException) -> Callable[[sqlite3.Connection], AbstractContextManager[None]]:
+def breaking(error: BaseException) -> Callable[[sqlite3.Connection], AbstractContextManager[object]]:
     """A writer transaction that fails on entry, with nothing written."""
 
     @contextmanager
@@ -679,8 +680,8 @@ def test_composition_caps_each_heartbeat_at_one_bd_call_of_bd_timeout_and_claims
 
     class Recorded(Bd):
         def __init__(self, actor: str, cwd: str | None = None, **options: object) -> None:
-            built.append({"actor": actor, "cwd": cwd} | {key: value for key, value in options.items() if key != "run"})
-            super().__init__(actor, cwd, run=Script())
+            built.append({"actor": actor, "cwd": cwd} | {key: value for key, value in options.items() if key not in {"run", "env"}})
+            super().__init__(actor, cwd, exe="bd", run=Script())
 
     claims = tracker_claims(Script(), client=Recorded)
     claims.heartbeat_for(str(tmp_path / "x" / ".."), "tl-1")

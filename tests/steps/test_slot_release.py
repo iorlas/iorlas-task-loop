@@ -20,7 +20,7 @@ from doubles import ENGINE, FakeSlotFiles
 from git_porcelain import Repo, WorktreeInfo
 from git_porcelain.testing import FakeRemote, FakeWorktree
 from plan_fixtures import PLAN_TEXT
-from sqlite_store import begin_immediate
+from sqlite_sidecar import transaction
 from stream_proc import OwnedProcess
 
 from taskloop.admit import AdmitRefused
@@ -422,7 +422,7 @@ def test_a_change_before_the_record_transaction_keeps_the_reservation_and_claim(
     @contextmanager
     def raced(con: sqlite3.Connection) -> Generator[None]:
         con.execute(change)
-        with begin_immediate(con):
+        with transaction(con):
             yield
 
     releaser = replace(ports.releaser(), store=AttemptStore(lambda: registered, raced))
@@ -518,7 +518,7 @@ def test_after_a_release_every_other_writer_meets_the_fence_and_the_slot_is_free
         store.load(KEY)
     assert store.register_entry(KEY, (8, "later", "boot"), 10) == "refused"
     admission = ChainAdmission(
-        lambda: registered, begin_immediate, EvidenceFiles(tmp_path), lambda: 10, checkouts, slot_files, ids=NativeIds(), engine=ENGINE
+        lambda: registered, transaction, EvidenceFiles(tmp_path), lambda: 10, checkouts, slot_files, ids=NativeIds(), engine=ENGINE
     )
     assert admission.admit_repeat(RepeatRequest(KEY, "feedback", 1000, "unsafe")) == AdmitRefused("not_repeatable")
     opened: list[Path] = []
@@ -532,7 +532,7 @@ def test_after_a_release_every_other_writer_meets_the_fence_and_the_slot_is_free
         and opened == []
     )
     git = SlotGit(checkouts, slot_files)
-    store = SlotsStore(lambda: registered, begin_immediate)
+    store = SlotsStore(lambda: registered, transaction)
     adopt(store, slot.repo, git, root, 1)  # the freed slot, detached and clean, is free again
     repo_id = RepoId(slot.repo.identity().key)
     assert [view.state for view in observe(store, slot.repo, git, repo_id, probe)] == ["free"]
@@ -670,7 +670,7 @@ def test_a_checks_admission_committed_between_the_abandons_read_and_its_flip_ref
     @contextmanager
     def raced(con: sqlite3.Connection) -> Generator[None]:
         checks_attempt(registered, 1, False)
-        with begin_immediate(con):
+        with transaction(con):
             yield
 
     releaser = replace(ports.releaser(), store=AttemptStore(lambda: registered, raced))

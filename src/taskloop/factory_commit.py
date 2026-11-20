@@ -141,9 +141,7 @@ def _reviewed(
     path = Path(admission.slot_path)
     slot = checkouts(path, git_dir=state.gitdir).worktree(path)
     with measured(timing, admission.key, OperationKind.COMMIT) as observed:
-        made = slot.record(
-            f"Review saved work of {admission.task.task_id}\n\n{trailer(admission)}", paths="staged", hooks=False, allow_empty=True
-        )
+        made = slot.record_empty(f"Review saved work of {admission.task.task_id}\n\n{trailer(admission)}")
         observed.state = OperationState.COMPLETED if isinstance(made, Recorded) else OperationState.FAILED
     if isinstance(made, Recorded):
         return Committed(made.sha)
@@ -176,12 +174,12 @@ def _commit(
     if blocked is not None:
         return blocked
     with measured(timing, admission.key, OperationKind.COMMIT) as observed:
-        slot.stage(paths, literal=True)
+        slot.stage(paths)
         blocked = _blocked(quiet, files, admission, state) or _foreign(checkouts, admission, paths, state.gitdir)
         if blocked is not None:
             observed.state = OperationState.FAILED
             return blocked
-        made = slot.record(f"{answer.message}\n\n{trailer(admission)}", paths="staged", hooks=False)
+        made = slot.record(f"{answer.message}\n\n{trailer(admission)}", paths="staged")
         observed.state = OperationState.COMPLETED if isinstance(made, Recorded) else OperationState.FAILED
     if isinstance(made, Recorded):
         return Committed(made.sha)
