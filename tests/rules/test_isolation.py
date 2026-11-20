@@ -38,7 +38,7 @@ def test_noneditable_install_matches_current_source() -> None:
 
 
 # Every shared dependency is pinned at the one shelf snapshot tag, so all of them resolve to one shelf commit.
-SNAPSHOT = "blueprint-v0.4.0"
+SNAPSHOT = "blueprint-v0.5.0"
 SHARED = {"git-porcelain", "beads-client", "any-agent", "sqlite-store", "process-lock", "stream-proc"}
 
 
