@@ -48,10 +48,6 @@ WORKFLOW: dict[str, str] = {
     Reason.BAD_VALUE: "A workflow value is invalid. Correct the named key and commit the correction.",
     UNAVAILABLE: "Git could not read the workflow. Check access to the checkout and the selected revision, then read again.",
 }
-WORKFLOW_INIT = {
-    "exists": "That workflow file is already there and was left unchanged. Edit it in place, or choose another workflow name.",
-    "unwritable": "The starter could not be written. Check that the checkout exists and that its folders can be written.",
-}
 REPO = {
     "not_a_repo": "The path is not a Git repository. Select an existing checkout root.",
     "git_read_failure": "Git could not read the checkout. Check its Git metadata and access permissions before inspecting again.",

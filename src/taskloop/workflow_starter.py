@@ -1,13 +1,6 @@
-"""The generic starter workflow `tl workflow init` writes, and the one place that decides where it goes."""
+"""The generic starter workflow `tl init` writes."""
 
-from collections.abc import Callable
-from dataclasses import dataclass
-from pathlib import Path
 from typing import Final
-
-from taskloop.workflow_read import DIRECTORY
-
-Writer = Callable[[Path, str], None]  # creates the file and its folders; raises FileExistsError rather than overwrite
 
 _BEFORE: Final = """\
 [[step.{kind}.prompt]]
@@ -37,34 +30,3 @@ Failed check
 The factory's check failed. Fix the reported failure and run the checks before answering.\"\"\"
 """
 )
-
-
-@dataclass(frozen=True)
-class Created:
-    path: Path
-
-
-@dataclass(frozen=True)
-class Exists:
-    path: Path
-
-
-def starter_path(checkout: Path, name: str) -> Path:
-    return checkout / f"{DIRECTORY}{name}.toml"
-
-
-def scaffold(checkout: Path, name: str, write: Writer) -> Created | Exists:
-    """Write the starter into the checkout's working tree, never over a file: nothing is staged, committed or read from Git."""
-    path = starter_path(checkout, name)
-    try:
-        write(path, STARTER)
-    except FileExistsError:
-        return Exists(path)
-    return Created(path)
-
-
-def create_new(path: Path, text: str) -> None:
-    """The real writer: exclusive create, so a file that exists (or appears meanwhile) is never overwritten."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("x", encoding="utf-8") as handle:
-        handle.write(text)

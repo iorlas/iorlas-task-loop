@@ -9,7 +9,7 @@ Each command's own `--help` is the reference for its flags.
 
 | | Category | What it is |
 |---|---|---|
-| A | Machine setup | What this machine is configured with: config file, slots, installed version |
+| A | Setup | What this machine and repository are set up with: config file, slots, starter files, installed version |
 | B | Inputs (read-only) | What the factory reads before it works: repository, profile, workflow file, tracker task |
 | C | Scheduling | Rounds: pick tasks, move them forward, serve the dashboard |
 | D | Step execution by hand | Drive one named task by one attempt: start, factory commit, release, abandon, publish |
@@ -21,6 +21,7 @@ Each command's own `--help` is the reference for its flags.
 
 | command | cat | purpose | job (reads / writes) | writes? | who uses it |
 |---|---|---|---|---|---|
+| `tl init` | A | Write the starter `.task-loop.json` (the gate) and `.task-loop/workflows/NAME.toml` (the strategy) a repository lacks, uncommitted; `--workflow NAME` adds another workflow | writes the absent files only, never over one; no Git write; checks and `required` start empty so a task is refused until you name them | yes (files) | you, once per repository and once per extra A/B workflow |
 | `tl version` | A | Say which package runs | reads installed package metadata | no | you |
 | `tl config show` | A | Show each effective setting and where it came from (flag, file or default), including per-backlog bindings | reads the config file and flags | no | you |
 | `tl slot adopt` | A | Register hand-made worktrees as slots | reads Git worktrees; writes slot rows; creates `factory.db`; adds slots only | yes | you |
@@ -28,7 +29,6 @@ Each command's own `--help` is the reference for its flags.
 | `tl repo show` | B | Show a checkout's repository identity | reads Git | no | you |
 | `tl profile show` | B | Show the resolved profile `.task-loop.json` (setup and checks at a commit; required, target and land from the target) | reads Git | no | you |
 | `tl workflow show` | B | Show a workflow file as the factory would read it: digest, agent choice and prompt sections per step, feedback sections, or why it is refused | reads Git | no | you |
-| `tl workflow init` | B | Write a generic starter workflow file into a checkout's working tree, uncommitted | writes one new file; refuses if it exists; no Git write | yes (file) | you, once per repository |
 | `tl task show` | B | Show a task as the tracker holds it | reads the tracker | no | you |
 | `tl rounds once` | C | Run one scheduling round over the whole backlog | settles, advances and starts tasks; publishes; holds; under `land: auto` lands one | yes | you |
 | `tl rounds start` | C | The factory's long-running process: rounds on a timer and the read-only dashboard; reopens a completed drain | as `rounds once`, repeated | yes | you, in the background |
@@ -57,9 +57,12 @@ Each command's own `--help` is the reference for its flags.
   root, checkout and label can live in the machine config as `[backlogs.<key>]`; the flags override them.
 - Old spellings are deleted, not aliased.
 
+## Stopping rounds
+
+There is no `tl rounds stop`. Stopping rounds from another shell is `tl drain`: rounds poll the drain request and end when it is
+set, and running attempts finish in their own processes. Drain also refuses hand `tl step start` and `tl rounds once` until
+`tl rounds start` reopens it. No signal is sent, so the one signal owner stays `interrupts.py`.
+
 ## Not built
 
-- A stop for `tl rounds start`. Stopping is a signal to the rounds process, and the one signal owner is
-  `interrupts.py` (import contract `one-signal-owner`); a command that signals it needs the owner's decision first.
 - Slot retirement (`slot adopt` adds slots only).
-- A scaffold for `.task-loop.json` (the checks are repository-specific).

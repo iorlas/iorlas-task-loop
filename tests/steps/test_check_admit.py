@@ -23,6 +23,7 @@ from taskloop.check_store import ChecksAdmitted, CheckStore, insert
 from taskloop.checks import argv_digest
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.ids import NativeIds
+from taskloop.init_files import PROFILE_STARTER
 
 
 @pytest.fixture
@@ -95,6 +96,7 @@ def missing_x(bench: ChecksBench) -> None:
         (lambda b: refused_profile(b, required=["check", "smoke"]), "target_profile"),
         (lambda b: refused_profile(b, checks="many"), "target_profile"),
         (lambda b: refused_profile(b, required=[]), "no_required"),
+        (lambda b: b.main(json.loads(PROFILE_STARTER)), "no_required"),  # what `tl init` writes
         (lambda b: b.con.execute("INSERT INTO reservation VALUES ('s1',?,9,'another')", (b.repo.identity().key,)), "no_free_slot"),
     ],
     ids=[
@@ -112,6 +114,7 @@ def missing_x(bench: ChecksBench) -> None:
         "required_undefined",
         "bad_profile",
         "no_required",
+        "init_starter",
         "no_free_slot",
     ],
 )

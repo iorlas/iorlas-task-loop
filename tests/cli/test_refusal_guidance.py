@@ -9,7 +9,7 @@ from refusal_inventory import DYNAMIC_REASONS, REVIEWED_DYNAMIC, census, typed_r
 
 from taskloop import check_release, hold_cause, land, land_check, prepare
 from taskloop.hold_guide import HOLD, ON_HOLD, pending_guide
-from taskloop.inspection_guide import CONFIG, PROFILE, WORKFLOW, WORKFLOW_INIT
+from taskloop.inspection_guide import CONFIG, PROFILE, WORKFLOW
 from taskloop.land_guide import CANDIDATE_RELEASE, LAND_GUIDE
 from taskloop.machine_config import ConfigRefused, Refusal
 from taskloop.operations import Ended, Failed, Move, Round, refused_config
@@ -44,7 +44,6 @@ TEXT_TABLES = (
     CONFIG,
     PROFILE,
     WORKFLOW,
-    WORKFLOW_INIT,
     hold_cause.RULES,
     hold_cause.RUN,
     hold_cause.STUCK,
