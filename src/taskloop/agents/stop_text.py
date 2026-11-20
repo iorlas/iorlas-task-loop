@@ -27,16 +27,22 @@ def signal_name(number: int) -> str:
 
 def stop_text(record: AgentStop | None, rc: int | None = None) -> str | None:
     if record is None:
-        return (f"The agent ended with {signal_name(-rc)}; the factory has no recorded sender or stop cause."
-                if rc is not None and rc < 0 else None)
+        return (
+            f"The agent ended with {signal_name(-rc)}; the factory has no recorded sender or stop cause."
+            if rc is not None and rc < 0
+            else None
+        )
     signal = signal_name(record.requested_signal)
     proof = record.proof
     delivered = proof is not None and (proof.term_delivered or proof.kill_delivered)
     prefix = ""
     if record.trigger_signal is not None:
         prefix = f"The entry received {signal_name(record.trigger_signal)}; the sender of the entry signal is unknown. "
-    action = ("The factory sent " + ("SIGTERM" if proof is not None and proof.term_delivered else "SIGKILL")
-              if delivered else f"The factory requested an agent stop with {signal}")
+    action = (
+        "The factory sent " + ("SIGTERM" if proof is not None and proof.term_delivered else "SIGKILL")
+        if delivered
+        else f"The factory requested an agent stop with {signal}"
+    )
     text = prefix + action + " because " + _WHY[record.cause] + "."
     if proof is None:
         text += " No signal delivery was confirmed."

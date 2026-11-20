@@ -157,13 +157,22 @@ def pending(con: sqlite3.Connection) -> tuple[Action, ...]:
     """The owning read shared by drain and registration fences; it never authorizes an action."""
     rows = con.execute(
         "SELECT action_id,kind,pid,pgid,start,boot,subject,backlog,tracker_root,state,checkout,rev FROM drain_action "
-        "WHERE state<>? ORDER BY action_id", (ActionState.DONE.value,),
+        "WHERE state<>? ORDER BY action_id",
+        (ActionState.DONE.value,),
     ).fetchall()
     return tuple(
-        Action.model_validate({
-            "action_id": row[0], "kind": row[1],
-            "owner": {"pid": row[2], "pgid": row[3], "start": row[4], "boot": row[5]},
-            "subject": row[6], "backlog": row[7], "tracker_root": row[8], "state": row[9], "checkout": row[10], "rev": row[11],
-        })
+        Action.model_validate(
+            {
+                "action_id": row[0],
+                "kind": row[1],
+                "owner": {"pid": row[2], "pgid": row[3], "start": row[4], "boot": row[5]},
+                "subject": row[6],
+                "backlog": row[7],
+                "tracker_root": row[8],
+                "state": row[9],
+                "checkout": row[10],
+                "rev": row[11],
+            }
+        )
         for row in rows
     )

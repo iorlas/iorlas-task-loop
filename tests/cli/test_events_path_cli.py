@@ -14,13 +14,16 @@ from taskloop.machine_config import Loaded, defaults
 
 
 def test_show_prints_the_owning_events_path_in_human_and_json(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     files = EvidenceFiles(tmp_path / "custom artifacts with spaces")
     key = AttemptKey("attempt", "dispatch", 1)
     directory = files.root / files.directory(key)
-    view = AttemptView("tasks", "tl-1", "plan", key.attempt_id, "s1", "admitted", "none",
-                       AttemptResult("pending", "admitted"), False, "start")
+    view = AttemptView(
+        "tasks", "tl-1", "plan", key.attempt_id, "s1", "admitted", "none", AttemptResult("pending", "admitted"), False, "start"
+    )
     shown = Shown(view, directory, directory / "entry.log", files.events_path(key))
     loaded = Loaded(tmp_path / "config.toml", False, defaults(tmp_path))
     monkeypatch.setattr(cli_composition, "load_config", lambda *_args: loaded)

@@ -138,7 +138,8 @@ def issued(con: sqlite3.Connection, repo_id: RepoId, names: tuple[str, ...]) -> 
 
 def next_seq(con: sqlite3.Connection, backlog: str, task_id: str) -> int:
     row = con.execute(
-        "SELECT coalesce(max(seq),0)+1 FROM attempt WHERE adapter='beads' AND backlog=? AND task_id=?", (backlog, task_id),
+        "SELECT coalesce(max(seq),0)+1 FROM attempt WHERE adapter='beads' AND backlog=? AND task_id=?",
+        (backlog, task_id),
     ).fetchone()
     return _count(None if row is None else row[0])
 
@@ -148,7 +149,8 @@ def task_attempted(con: sqlite3.Connection, backlog: str, task_id: str) -> bool:
     found = con.execute(
         """SELECT EXISTS (SELECT 1 FROM slot_release r WHERE r.attempt_id=p.attempt_id
         AND r.claim IN ('unclaimed','not_held')) FROM attempt p
-        WHERE p.adapter='beads' AND p.backlog=? AND p.task_id=? ORDER BY p.seq DESC LIMIT 1""", (backlog, task_id),
+        WHERE p.adapter='beads' AND p.backlog=? AND p.task_id=? ORDER BY p.seq DESC LIMIT 1""",
+        (backlog, task_id),
     ).fetchone()
     return found is not None and not found[0]
 
@@ -190,6 +192,7 @@ def current(con: sqlite3.Connection, backlog: str, task_id: str) -> Current | No
 def task_of(con: sqlite3.Connection, key: AttemptKey) -> Task | None:
     row = con.execute(
         "SELECT p.backlog,p.task_id,p.tracker_root,p.repo_id,p.step,NOT " + LATER + ",p.end_commit FROM attempt p "
-        "WHERE p.attempt_id=? AND p.dispatch_token=? AND p.generation=?", astuple(key),
+        "WHERE p.attempt_id=? AND p.dispatch_token=? AND p.generation=?",
+        astuple(key),
     ).fetchone()
     return _decode(Task, row)

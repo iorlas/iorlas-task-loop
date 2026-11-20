@@ -58,9 +58,14 @@ class FactoryCodexAccess(CodexAccess):
         config = super().config()
         # https://learn.chatgpt.com/docs/config-file/config-reference (skills.include_instructions)
         # `codex features list` documents the feature names; `codex --help` documents per-run -c overrides.
-        config += ["-c", "skills.include_instructions=false",
-                   "-c", "features.multi_agent=false",
-                   "-c", "features.recommended_plugins=false"]
+        config += [
+            "-c",
+            "skills.include_instructions=false",
+            "-c",
+            "features.multi_agent=false",
+            "-c",
+            "features.recommended_plugins=false",
+        ]
         if self.sandbox is CodexSandbox.WORKSPACE_WRITE and not self.writable_roots:
             config += ["-c", "sandbox_workspace_write.writable_roots=[]"]
         if self.compaction_token_limit is not None:
@@ -71,14 +76,26 @@ class FactoryCodexAccess(CodexAccess):
 def codex_access(policy: CodexPolicy, found: Folders | None = None, *, compaction_token_limit: int | None = None) -> CodexAccess:
     shell_env = () if found is None else tuple(agent_env(found).items())
     if policy.sandbox is not CodexSandbox.WORKSPACE_WRITE:
-        return FactoryCodexAccess(sandbox=policy.sandbox, approval=CodexApproval.NEVER, tool_output_token_limit=3000,
-                                  shell_env=shell_env, ignore_user_config=True, ignore_rules=True,
-                                  compaction_token_limit=compaction_token_limit)
+        return FactoryCodexAccess(
+            sandbox=policy.sandbox,
+            approval=CodexApproval.NEVER,
+            tool_output_token_limit=3000,
+            shell_env=shell_env,
+            ignore_user_config=True,
+            ignore_rules=True,
+            compaction_token_limit=compaction_token_limit,
+        )
     return FactoryCodexAccess(
-        sandbox=policy.sandbox, network=False, writable_roots=() if found is None else tuple(str(p) for p in found.roots),
-        exclude_slash_tmp=True, exclude_tmpdir=True,
-        shell_env=shell_env, approval=CodexApproval.NEVER,
-        tool_output_token_limit=3000, ignore_user_config=True, ignore_rules=True,
+        sandbox=policy.sandbox,
+        network=False,
+        writable_roots=() if found is None else tuple(str(p) for p in found.roots),
+        exclude_slash_tmp=True,
+        exclude_tmpdir=True,
+        shell_env=shell_env,
+        approval=CodexApproval.NEVER,
+        tool_output_token_limit=3000,
+        ignore_user_config=True,
+        ignore_rules=True,
         compaction_token_limit=compaction_token_limit,
     )
 
@@ -98,11 +115,22 @@ class AgentLaunch:
         self.ids = ids
         self.credentials = credentials
 
-    def build(self, setting: AgentSetting, slot: Path, prepared: bool, root: Path, schema: str, out_file: str,
-              prompt: str, *, resume: str | None = None) -> LaunchedAgent | LaunchFailure:
+    def build(
+        self,
+        setting: AgentSetting,
+        slot: Path,
+        prepared: bool,
+        root: Path,
+        schema: str,
+        out_file: str,
+        prompt: str,
+        *,
+        resume: str | None = None,
+    ) -> LaunchedAgent | LaunchFailure:
         if resume is not None and (not resume or resume.startswith("-") or any(char.isspace() for char in resume)):
-            return LaunchFailure("launch:ValueError", "The saved session reference must be nonempty, contain no whitespace "
-                                 "and not start with a dash.")
+            return LaunchFailure(
+                "launch:ValueError", "The saved session reference must be nonempty, contain no whitespace and not start with a dash."
+            )
         try:
             exe, env = self.credentials(setting.harness)
         except CredentialsUnavailable as error:
@@ -128,11 +156,23 @@ class AgentLaunch:
         try:
             contract = Path(schema).read_text(encoding="utf-8")
             prompt += "\nReturn exactly one JSON object satisfying this answer schema:\n" + contract
-            inputs = LaunchInputs(exe=exe, cwd=str(slot), model=setting.model, effort=setting.effort, prompt=prompt,
-                                  env=env, schema=schema, out_file=out_file, access_policy=access, write=True,
-                                  session=self.ids.session() if resume is None else resume, resume=resume)
+            inputs = LaunchInputs(
+                exe=exe,
+                cwd=str(slot),
+                model=setting.model,
+                effort=setting.effort,
+                prompt=prompt,
+                env=env,
+                schema=schema,
+                out_file=out_file,
+                access_policy=access,
+                write=True,
+                session=self.ids.session() if resume is None else resume,
+                resume=resume,
+            )
             return LaunchedAgent(harness, harness.launch_spec(inputs), (exe, env), probe)
         except Exception as error:
             harness.cleanup()
-            return LaunchFailure("launch:" + type(error).__name__, f"The selected agent's launch could not be prepared "
-                                 f"({type(error).__name__}).")
+            return LaunchFailure(
+                "launch:" + type(error).__name__, f"The selected agent's launch could not be prepared ({type(error).__name__})."
+            )

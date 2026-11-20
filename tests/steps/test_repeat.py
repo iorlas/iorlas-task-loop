@@ -120,8 +120,10 @@ def agent(slot: FakeWorktree, files: Files, answer: Mapping[str, object] = PLAN,
         for path, text in files.items():
             slot.write_file(path, text)
         text = json.dumps(answer)
-        run = FakeRun(RunOutcome(rc=0, worker=WORKER, summary=Summary(text=text, rc=0, stands=True, res={"ref": session})),
-                      refs=() if session is None else (session,))
+        run = FakeRun(
+            RunOutcome(rc=0, worker=WORKER, summary=Summary(text=text, rc=0, stands=True, res={"ref": session})),
+            refs=() if session is None else (session,),
+        )
         return run(harness, spec, timeout, hooks)
 
     return call
@@ -131,8 +133,9 @@ def never(*_args: object, **_options: object) -> NoReturn:
     raise AssertionError("a repeat reads no tracker, opens no checkout and claims nothing")
 
 
-def admission(con: sqlite3.Connection, tmp_path: Path, checkouts: Checkouts, files: SlotFiles,
-              clock: Callable[[], float] = lambda: 10) -> ChainAdmission:
+def admission(
+    con: sqlite3.Connection, tmp_path: Path, checkouts: Checkouts, files: SlotFiles, clock: Callable[[], float] = lambda: 10
+) -> ChainAdmission:
     return ChainAdmission(lambda: con, begin_immediate, EvidenceFiles(tmp_path), clock, checkouts, files, ids=NativeIds(), engine=ENGINE)
 
 
@@ -159,18 +162,44 @@ def seen(word: Seen) -> Callable[[EntryIdentity], Seen]:
 
 
 def repeater(
-    con: sqlite3.Connection, tmp_path: Path, checkouts: Checkouts, files: SlotFiles, *,
-    factory_commit: Settle | None = None, observe: Seen = "gone", alive: bool = False, launcher: RegisteringLauncher | None = None,
+    con: sqlite3.Connection,
+    tmp_path: Path,
+    checkouts: Checkouts,
+    files: SlotFiles,
+    *,
+    factory_commit: Settle | None = None,
+    observe: Seen = "gone",
+    alive: bool = False,
+    launcher: RegisteringLauncher | None = None,
 ) -> StepRepeat:
     store = AttemptStore(lambda: con)
     check = factory_commit or FactoryCommit(store, checkouts, files, gone, lambda: 20, hold, ids=NativeIds())
     launcher = launcher or RegisteringLauncher(store, SECOND)
-    return StepRepeat(store, check, EvidenceFiles(tmp_path), admission(con, tmp_path, checkouts, files), launcher,
-                      lambda _worker: not alive, seen(observe), lambda: 10, repeating, ids=NativeIds(), discussion=refresh_discussion)
+    return StepRepeat(
+        store,
+        check,
+        EvidenceFiles(tmp_path),
+        admission(con, tmp_path, checkouts, files),
+        launcher,
+        lambda _worker: not alive,
+        seen(observe),
+        lambda: 10,
+        repeating,
+        ids=NativeIds(),
+        discussion=refresh_discussion,
+    )
 
 
-def captured(con: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, files: SlotFiles, written: Files,
-             *, session: str | None = None) -> None:
+def captured(
+    con: sqlite3.Connection,
+    tmp_path: Path,
+    slot: FakeWorktree,
+    checkouts: Checkouts,
+    files: SlotFiles,
+    written: Files,
+    *,
+    session: str | None = None,
+) -> None:
     run = agent(slot, written, session=session)
     attempts = Attempts(
         AttemptStore(lambda: con),
@@ -216,8 +245,7 @@ def renumber(con: sqlite3.Connection, number: int) -> None:
             (f"a{n}", f"d{n}", n, previous, None if previous is None else "uncommitted", "b" * 40, n, "b" * 40),
         )
         previous = f"a{n}"
-    con.execute("UPDATE attempt SET number=?,previous_attempt_id=?,repeat_reason='unsafe' WHERE attempt_id='attempt'",
-                (number, previous))
+    con.execute("UPDATE attempt SET number=?,previous_attempt_id=?,repeat_reason='unsafe' WHERE attempt_id='attempt'", (number, previous))
 
 
 def ignored(slot: FakeWorktree, _files: FakeSlotFiles) -> None:
@@ -238,11 +266,20 @@ LEFTOVERS: list[tuple[str, Change | None, Files, Change | None, str, bool]] = [
 ]
 
 
-@pytest.mark.parametrize(("before", "written", "after", "reason", "committed"), [case[1:] for case in LEFTOVERS],
-                         ids=[case[0] for case in LEFTOVERS])
+@pytest.mark.parametrize(
+    ("before", "written", "after", "reason", "committed"), [case[1:] for case in LEFTOVERS], ids=[case[0] for case in LEFTOVERS]
+)
 def test_a_repeat_takes_the_reservation_over_and_freezes_the_previous_attempt(
-    registered: sqlite3.Connection, slot: FakeWorktree, tmp_path: Path, checkouts: Checkouts, slot_files: FakeSlotFiles,
-    before: Change | None, written: Files, after: Change | None, reason: str, committed: bool,
+    registered: sqlite3.Connection,
+    slot: FakeWorktree,
+    tmp_path: Path,
+    checkouts: Checkouts,
+    slot_files: FakeSlotFiles,
+    before: Change | None,
+    written: Files,
+    after: Change | None,
+    reason: str,
+    committed: bool,
 ) -> None:
     if before is not None:
         before(slot, slot_files)
@@ -286,7 +323,11 @@ def test_a_repeat_takes_the_reservation_over_and_freezes_the_previous_attempt(
 
 
 def test_a_repeated_plan_launch_starts_with_the_warning_and_preserves_the_original_input(
-    registered: sqlite3.Connection, slot: FakeWorktree, tmp_path: Path, checkouts: Checkouts, slot_files: FakeSlotFiles,
+    registered: sqlite3.Connection,
+    slot: FakeWorktree,
+    tmp_path: Path,
+    checkouts: Checkouts,
+    slot_files: FakeSlotFiles,
 ) -> None:
     saved_session = "previous-attempt-session"
     captured(registered, tmp_path, slot, checkouts, slot_files, {P: PLAN_TEXT}, session=saved_session)
@@ -305,8 +346,9 @@ def test_a_repeated_plan_launch_starts_with_the_warning_and_preserves_the_origin
     assert repeated is not None
     retained = files.read(repeated.admission.input_ref)
     run = FakeRun(RunOutcome(rc=0, worker=WORKER, summary=Summary(text=json.dumps(PLAN), rc=0, stands=True)))
-    attempts = Attempts(store, files, AgentLaunch(lambda _kind: ("/bin/codex", {}), ids=NativeIds()), run,
-                        lambda: 10, checkouts, slot_files)
+    attempts = Attempts(
+        store, files, AgentLaunch(lambda _kind: ("/bin/codex", {}), ids=NativeIds()), run, lambda: 10, checkouts, slot_files
+    )
     assert attempts.execute(new, SECOND).reason == "commit"
     harness, spec, _, _ = run.calls[0]
     assert "resume" not in spec.argv and saved_session not in spec.argv
@@ -320,8 +362,9 @@ def test_a_superseded_attempt_shows_repeated_and_the_current_one_is_followed(
 ) -> None:
     unsafe(registered, tmp_path, slot, checkouts, slot_files)
     launcher = RegisteringLauncher(AttemptStore(lambda: registered), SECOND)
-    assert isinstance(repeater(registered, tmp_path, checkouts, slot_files, launcher=launcher).repeat("tasks", "tl-1", KEY, ENTRY, 30),
-                      Started)
+    assert isinstance(
+        repeater(registered, tmp_path, checkouts, slot_files, launcher=launcher).repeat("tasks", "tl-1", KEY, ENTRY, 30), Started
+    )
     probed: list[AttemptKey] = []
 
     def leftovers(key: AttemptKey) -> Uncommitted | None:
@@ -346,11 +389,20 @@ def test_a_superseded_attempt_shows_repeated_and_the_current_one_is_followed(
 
 
 GATES: list[tuple[str, str, float, str]] = [
-    ("verdict", "INSERT INTO factory_commit (attempt_id,dispatch_token,generation,verdict,reason,observed_at) "
-     "VALUES ('attempt','dispatch',1,'rejected','paths',1)", 1000, "not_repeatable"),
-    ("invalid_answer", "UPDATE execution SET answer_kind='schema_invalid',disposition=NULL,effect=NULL,commit_paths=NULL,"
-     f"commit_message=NULL,answer_failure='{encode(AnswerFailureData(rule=AnswerRule.SHAPE, explanation='Object required'))}'",
-     1000, "not_repeatable"),
+    (
+        "verdict",
+        "INSERT INTO factory_commit (attempt_id,dispatch_token,generation,verdict,reason,observed_at) "
+        "VALUES ('attempt','dispatch',1,'rejected','paths',1)",
+        1000,
+        "not_repeatable",
+    ),
+    (
+        "invalid_answer",
+        "UPDATE execution SET answer_kind='schema_invalid',disposition=NULL,effect=NULL,commit_paths=NULL,"
+        f"commit_message=NULL,answer_failure='{encode(AnswerFailureData(rule=AnswerRule.SHAPE, explanation='Object required'))}'",
+        1000,
+        "not_repeatable",
+    ),
     ("failed_run", "UPDATE execution SET rc=1", 1000, "not_repeatable"),
     ("timed_out", "UPDATE execution SET timed_out=1", 1000, "not_repeatable"),
     ("pending_session", "UPDATE execution SET session_state='pending'", 1000, "not_repeatable"),
@@ -365,8 +417,14 @@ GATES: list[tuple[str, str, float, str]] = [
 
 @pytest.mark.parametrize(("sql", "deadline", "reason"), [case[1:] for case in GATES], ids=[case[0] for case in GATES])
 def test_each_failed_gate_of_admit_repeat_admits_nothing(
-    registered: sqlite3.Connection, slot: FakeWorktree, tmp_path: Path, checkouts: Checkouts, slot_files: FakeSlotFiles,
-    sql: str, deadline: float, reason: str,
+    registered: sqlite3.Connection,
+    slot: FakeWorktree,
+    tmp_path: Path,
+    checkouts: Checkouts,
+    slot_files: FakeSlotFiles,
+    sql: str,
+    deadline: float,
+    reason: str,
 ) -> None:
     unsafe(registered, tmp_path, slot, checkouts, slot_files)
     if sql:
@@ -406,7 +464,11 @@ def test_a_second_repeat_of_the_same_attempt_is_task_attempted(
 
 
 def test_plan_repeat_requires_structured_collection_before_admitting(
-    registered: sqlite3.Connection, slot: FakeWorktree, tmp_path: Path, checkouts: Checkouts, slot_files: FakeSlotFiles,
+    registered: sqlite3.Connection,
+    slot: FakeWorktree,
+    tmp_path: Path,
+    checkouts: Checkouts,
+    slot_files: FakeSlotFiles,
 ) -> None:
     unsafe(registered, tmp_path, slot, checkouts, slot_files)
     app = dataclasses.replace(repeater(registered, tmp_path, checkouts, slot_files), discussion=None)
@@ -453,8 +515,9 @@ def test_two_starts_on_two_connections_admit_exactly_one(
     def contender() -> None:
         store = Store(SCHEMA)
         mine = store.open_rw(path)
-        admit = ChainAdmission(lambda: mine, store.begin_immediate, Racing(tmp_path), lambda: 10, checkouts, slot_files,
-                              ids=NativeIds(), engine=ENGINE)
+        admit = ChainAdmission(
+            lambda: mine, store.begin_immediate, Racing(tmp_path), lambda: 10, checkouts, slot_files, ids=NativeIds(), engine=ENGINE
+        )
         outcomes.append(admit.admit_repeat(RepeatRequest(KEY, "feedback", 1000, "unsafe", content_digest=CONTENT_DIGEST)))
 
     threads = [threading.Thread(target=contender) for _ in range(2)]
@@ -468,14 +531,23 @@ def test_two_starts_on_two_connections_admit_exactly_one(
     con.close()
 
 
-@pytest.mark.parametrize(("observe", "alive", "expected"), [
-    ("matching", False, Started("already_running", "tasks", "tl-1", "attempt", True, ENTRY)),
-    ("unknown", False, Failed("unavailable", "observe")),
-    ("gone", True, Failed("waiting", "worker_alive")),
-])
+@pytest.mark.parametrize(
+    ("observe", "alive", "expected"),
+    [
+        ("matching", False, Started("already_running", "tasks", "tl-1", "attempt", True, ENTRY)),
+        ("unknown", False, Failed("unavailable", "observe")),
+        ("gone", True, Failed("waiting", "worker_alive")),
+    ],
+)
 def test_no_commit_before_the_stop_proof(
-    registered: sqlite3.Connection, slot: FakeWorktree, tmp_path: Path, checkouts: Checkouts, slot_files: FakeSlotFiles,
-    observe: Seen, alive: bool, expected: Started | Failed,
+    registered: sqlite3.Connection,
+    slot: FakeWorktree,
+    tmp_path: Path,
+    checkouts: Checkouts,
+    slot_files: FakeSlotFiles,
+    observe: Seen,
+    alive: bool,
+    expected: Started | Failed,
 ) -> None:
     unsafe(registered, tmp_path, slot, checkouts, slot_files)
     factory_commit = Commits(Uncommitted("unsafe", (P,)))
@@ -484,20 +556,31 @@ def test_no_commit_before_the_stop_proof(
     assert factory_commit.keys == [] and len(rows(registered)) == 1
 
 
-@pytest.mark.parametrize(("committed", "expected"), [
-    (Committed("blob"), Started("already_dispatched", "tasks", "tl-1", "attempt", True, result="committed")),
-    (Committed("blob", reused=True), Started("already_dispatched", "tasks", "tl-1", "attempt", True, result="reused")),
-    (Rejected("nothing_written"), Started("already_dispatched", "tasks", "tl-1", "attempt", True, result="rejected:nothing_written")),
-    (NotApplicable("incomplete"), Started("already_dispatched", "tasks", "tl-1", "attempt", True, result="incomplete")),
-    (CommitRefused("redirected"), Failed("refused", "redirected")),
-    *[(CommitWaiting(reason), Failed("waiting", str(reason))) for reason in CommitWaitingReason],
-    (CommitRefused("session"), Failed("refused", "session")),
-    (CommitWaiting(CommitWaitingReason.GIT, "NotARepo"), Failed("waiting", "git:NotARepo")),
-    (CommitRefused("inconsistent"), Failed("refused", "inconsistent", "Contradictory retained facts: inconsistent verdict or end commit.")),
-])
+@pytest.mark.parametrize(
+    ("committed", "expected"),
+    [
+        (Committed("blob"), Started("already_dispatched", "tasks", "tl-1", "attempt", True, result="committed")),
+        (Committed("blob", reused=True), Started("already_dispatched", "tasks", "tl-1", "attempt", True, result="reused")),
+        (Rejected("nothing_written"), Started("already_dispatched", "tasks", "tl-1", "attempt", True, result="rejected:nothing_written")),
+        (NotApplicable("incomplete"), Started("already_dispatched", "tasks", "tl-1", "attempt", True, result="incomplete")),
+        (CommitRefused("redirected"), Failed("refused", "redirected")),
+        *[(CommitWaiting(reason), Failed("waiting", str(reason))) for reason in CommitWaitingReason],
+        (CommitRefused("session"), Failed("refused", "session")),
+        (CommitWaiting(CommitWaitingReason.GIT, "NotARepo"), Failed("waiting", "git:NotARepo")),
+        (
+            CommitRefused("inconsistent"),
+            Failed("refused", "inconsistent", "Contradictory retained facts: inconsistent verdict or end commit."),
+        ),
+    ],
+)
 def test_only_git_leftovers_repeat(
-    registered: sqlite3.Connection, slot: FakeWorktree, tmp_path: Path, checkouts: Checkouts, slot_files: FakeSlotFiles,
-    committed: CommitResult, expected: Started | Failed,
+    registered: sqlite3.Connection,
+    slot: FakeWorktree,
+    tmp_path: Path,
+    checkouts: Checkouts,
+    slot_files: FakeSlotFiles,
+    committed: CommitResult,
+    expected: Started | Failed,
 ) -> None:
     unsafe(registered, tmp_path, slot, checkouts, slot_files)
     factory_commit, launcher = Commits(committed), RegisteringLauncher(AttemptStore(lambda: registered), SECOND)
@@ -564,8 +647,19 @@ def test_start_repeats_a_captured_current_attempt_and_launches_any_other(
     request = StartRequest("tl-1", "tasks", "/tracker", Path("/checkout"), StepSettings(), Overrides(model="other-model", effort="low"), 45)
     store, launcher, repeats = AttemptStore(lambda: registered), Launching(), Repeats()
     fresh = AttemptAdmission(
-        lambda: registered, begin_immediate, EvidenceFiles(tmp_path), never, never, never, never, lambda: 10, never, slot_files
-    , ids=NativeIds(), engine=ENGINE)
+        lambda: registered,
+        begin_immediate,
+        EvidenceFiles(tmp_path),
+        never,
+        never,
+        never,
+        never,
+        lambda: 10,
+        never,
+        slot_files,
+        ids=NativeIds(),
+        engine=ENGINE,
+    )
     ports = StartPorts(store, fresh, launcher, lambda: 10, repeats, NoAdvance(), NO_CHECKS)
     assert start(ports, request) == Started("relaunched", "tasks", "tl-1", "attempt", True, ENTRY, step="plan")
     unsafe(registered, tmp_path, slot, checkouts, slot_files)
@@ -574,11 +668,15 @@ def test_start_repeats_a_captured_current_attempt_and_launches_any_other(
 
 
 def test_the_schema_numbers_attempts_and_links_each_to_the_one_it_repeats(registered: sqlite3.Connection) -> None:
-    insert = """INSERT INTO attempt (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,
+    insert = (
+        """INSERT INTO attempt (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,
     input_digest,schema_version,model,effort,access_policy,deadline,number,previous_attempt_id,repeat_reason,seq,slot_head,
     engine_digest,workflow_digest,workflow_sha,admitted_at)
     VALUES (?,?,2,'plan','beads','tasks','tl-1','/tracker','r','s1','i','d',1,'m','e','{"harness":"codex",
-    "sandbox":"workspace-write"}',1,?,?,?,?,'""" + "d" * 40 + f"','{ENGINE}','{PIN_DIGEST}','{PIN_SHA}',1.0)"
+    "sandbox":"workspace-write"}',1,?,?,?,?,'"""
+        + "d" * 40
+        + f"','{ENGINE}','{PIN_DIGEST}','{PIN_SHA}',1.0)"
+    )
     for values, constraint in [
         (("n", "t", 2, None, "unsafe", 2), "previous_attempt_id IS NULL"),
         (("n", "t", 2, "attempt", None, 2), "repeat_reason IS NULL"),
@@ -604,12 +702,18 @@ NONCE = "0123456789abcdef"
 STEP = kind("plan")
 
 
-@pytest.mark.parametrize(("reason", "words"), [
-    ("uncommitted", "Attempt 1 of this step left changes in the slot that it did not list for commit."),
-    ("unsafe", "These paths cannot be committed."),
-    ("ignored", "These paths are ignored by Git. Any ignored file under the plan folder, and any ignored attributes file, "
-     "blocks the commit whether it is listed or not"),
-])
+@pytest.mark.parametrize(
+    ("reason", "words"),
+    [
+        ("uncommitted", "Attempt 1 of this step left changes in the slot that it did not list for commit."),
+        ("unsafe", "These paths cannot be committed."),
+        (
+            "ignored",
+            "These paths are ignored by Git. Any ignored file under the plan folder, and any ignored attributes file, "
+            "blocks the commit whether it is listed or not",
+        ),
+    ],
+)
 def test_the_feedback_has_fixed_words_the_listing_as_data_and_the_task(reason: str, words: str) -> None:
     text = STEP.feedback(Uncommitted(reason, ("?? docs/design/tl-1/x.log",)), STEP.rules("tl-1"), 1, TASK, NONCE, unrecorded=False)
     assert text.startswith(PLAN_WARNING + "\n\n")
@@ -624,8 +728,9 @@ def test_the_feedback_has_fixed_words_the_listing_as_data_and_the_task(reason: s
 
 def test_after_an_attempt_that_committed_nothing_the_feedback_asks_for_every_file_again() -> None:
     text = STEP.feedback(Uncommitted("unsafe", (P,)), STEP.rules("tl-1"), 1, TASK, NONCE, unrecorded=True)
-    assert ("Nothing of attempt 1 was committed: answer `planned` and list in `paths` again every "
-            f"file you want committed, `{P}` included.") in text
+    assert (
+        f"Nothing of attempt 1 was committed: answer `planned` and list in `paths` again every file you want committed, `{P}` included."
+    ) in text
     assert "answer `unchanged`" not in text
 
 
@@ -639,7 +744,11 @@ def test_every_feedback_line_is_safe_and_cannot_close_the_block(reason: str) -> 
 
 
 def test_a_held_slot_lock_refuses_the_takeover_and_admits_nothing(
-    registered: sqlite3.Connection, slot: FakeWorktree, tmp_path: Path, checkouts: Checkouts, slot_files: FakeSlotFiles,
+    registered: sqlite3.Connection,
+    slot: FakeWorktree,
+    tmp_path: Path,
+    checkouts: Checkouts,
+    slot_files: FakeSlotFiles,
     occupy: Callable[[Path], AbstractContextManager[None]],
 ) -> None:
     """`admit_repeat` runs under the slot's lock, so an abandon parking the slot (or anyone else holding it) refuses it."""
@@ -652,12 +761,18 @@ def test_a_held_slot_lock_refuses_the_takeover_and_admits_nothing(
 
 
 def test_an_ordinary_repeat_copies_the_complete_captured_policy(
-    registered: sqlite3.Connection, slot: FakeWorktree, tmp_path: Path, checkouts: Checkouts, slot_files: FakeSlotFiles,
+    registered: sqlite3.Connection,
+    slot: FakeWorktree,
+    tmp_path: Path,
+    checkouts: Checkouts,
+    slot_files: FakeSlotFiles,
 ) -> None:
     policy = ClaudePolicy(settings_file=tmp_path / "deleted.json", settings='{"env":{"CAPTURED":"original"}}')
     selected = AgentSetting(harness=HarnessKind.CLAUDE, model="opus", effort="high", access=policy)
-    registered.execute("UPDATE attempt SET harness=?,provider=?,model=?,effort=?,access_policy=?",
-                       (selected.harness, selected.provider, selected.model, selected.effort, encode_policy(policy)))
+    registered.execute(
+        "UPDATE attempt SET harness=?,provider=?,model=?,effort=?,access_policy=?",
+        (selected.harness, selected.provider, selected.model, selected.effort, encode_policy(policy)),
+    )
     unsafe(registered, tmp_path, slot, checkouts, slot_files)
     launcher = RegisteringLauncher(AttemptStore(lambda: registered), SECOND)
     result = repeater(registered, tmp_path, checkouts, slot_files, launcher=launcher).repeat("tasks", "tl-1", KEY, ENTRY, 30)

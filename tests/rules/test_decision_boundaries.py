@@ -8,8 +8,14 @@ def test_factory_does_not_manage_host_power_or_ram_admission() -> None:
     runtime = Path(__file__).resolve().parents[2] / "src" / "taskloop"
     retired = {"keep_awake", "host_resources"}
     forbidden_modules = retired | {"psutil"}
-    forbidden_calls = {"virtual_memory", "swap_memory", "GlobalMemoryStatusEx", "SetThreadExecutionState",
-                       "IOPMAssertionCreateWithName", "IOPMAssertionRelease"}
+    forbidden_calls = {
+        "virtual_memory",
+        "swap_memory",
+        "GlobalMemoryStatusEx",
+        "SetThreadExecutionState",
+        "IOPMAssertionCreateWithName",
+        "IOPMAssertionRelease",
+    }
     forbidden_tools = {"caffeinate", "systemd-inhibit", "pmset"}
     for path in runtime.rglob("*.py"):
         assert path.stem not in retired, path

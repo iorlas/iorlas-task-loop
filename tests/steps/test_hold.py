@@ -49,7 +49,8 @@ def attempt(con: sqlite3.Connection, attempt_id: str = "a", *, seq: int = 1, lab
         'abababababababababababababababababababababababababababababababab',
         (SELECT digest FROM workflow_file),
         'eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',1.0)""",
-        (attempt_id, attempt_id + "-token", D, X, seq, D, label))
+        (attempt_id, attempt_id + "-token", D, X, seq, D, label),
+    )
 
 
 @dataclass
@@ -134,14 +135,27 @@ class Bench:
         """`fresh`, the task's status read now; None: the held view with its cause still standing (a stuck word, or the
         advance word of a round-passed refusal)."""
         standing = replace(view, next="advance" if reason in {str(each) for each in RoundReason} else "stuck:entry_lost")
-        return HoldPorts(HoldStore(lambda: self.con), AttemptStore(lambda: self.con), self.tracker.holds(), self.abandon, self.checks,
-                         lambda: self.now, EvidenceFiles(self.root), lambda _backlog, _task: self.fresh or standing)
+        return HoldPorts(
+            HoldStore(lambda: self.con),
+            AttemptStore(lambda: self.con),
+            self.tracker.holds(),
+            self.abandon,
+            self.checks,
+            lambda: self.now,
+            EvidenceFiles(self.root),
+            lambda _backlog, _task: self.fresh or standing,
+        )
 
     def hold(self, view: AttemptView | None = None, reason: str | None = None) -> HoldMove:
         found = view or VIEW
         decided = RoundCause(reason=RoundReason(reason)) if reason is not None else None
-        if (decided is None and found.checks is None and found.hold_due is not None
-                and found.result.execution is None and found.result.status == "collected"):
+        if (
+            decided is None
+            and found.checks is None
+            and found.hold_due is not None
+            and found.result.execution is None
+            and found.result.status == "collected"
+        ):
             decided = event_for(found.hold_due).cause
         return hold_task(self.ports(found, reason), found, decided)
 
@@ -149,8 +163,9 @@ class Bench:
         return HoldStore(lambda: self.con).of_attempts((attempt_id,))[attempt_id]
 
 
-VIEW = AttemptView("tasks", "tl-1", "plan", "a", "s1", "captured", "gone", NEEDS_OWNER, False, "hold", label="auto",
-                   hold_due="failed:needs_owner")
+VIEW = AttemptView(
+    "tasks", "tl-1", "plan", "a", "s1", "captured", "gone", NEEDS_OWNER, False, "hold", label="auto", hold_due="failed:needs_owner"
+)
 
 
 @pytest.fixture
@@ -212,10 +227,16 @@ def test_the_label_step_checks_a_is_still_current_right_before_it(bench: Bench) 
     assert bench.row().labels is None
 
 
-@pytest.mark.parametrize(("answer", "comments", "claim"), [
-    ("moved", True, "unclaimed"), ("absent", True, "unclaimed"), ("not_ours", True, "not_held"),
-    ("closed", False, "not_held"), ("missing", False, "not_held"),
-])
+@pytest.mark.parametrize(
+    ("answer", "comments", "claim"),
+    [
+        ("moved", True, "unclaimed"),
+        ("absent", True, "unclaimed"),
+        ("not_ours", True, "not_held"),
+        ("closed", False, "not_held"),
+        ("missing", False, "not_held"),
+    ],
+)
 def test_each_label_answer_and_whether_it_comments(bench: Bench, answer: LabelStep, comments: bool, claim: str) -> None:
     bench.tracker.labelled = answer
     bench.abandon.result = Released("s1", D, True, "not_held" if claim == "not_held" else "unclaimed", True)
@@ -227,12 +248,17 @@ def test_each_label_answer_and_whether_it_comments(bench: Bench, answer: LabelSt
         assert "changed no label" in bench.tracker.texts[0] and "resolve its ownership with the current actor" in bench.tracker.texts[0]
 
 
-@pytest.mark.parametrize(("answer", "refusal", "detail"), [
-    ("precondition", "unavailable:tracker", "precondition: the task's assignee changed after it was read"),
-    ("unavailable", "unavailable:tracker", "lock"), ("bad_label", "refused:bad_label", "The stored label 'auto' cannot be passed to bd"),
-])
-def test_a_label_step_that_wrote_nothing_is_retried_and_nothing_follows_it(bench: Bench, answer: LabelStep, refusal: str,
-                                                                           detail: str) -> None:
+@pytest.mark.parametrize(
+    ("answer", "refusal", "detail"),
+    [
+        ("precondition", "unavailable:tracker", "precondition: the task's assignee changed after it was read"),
+        ("unavailable", "unavailable:tracker", "lock"),
+        ("bad_label", "refused:bad_label", "The stored label 'auto' cannot be passed to bd"),
+    ],
+)
+def test_a_label_step_that_wrote_nothing_is_retried_and_nothing_follows_it(
+    bench: Bench, answer: LabelStep, refusal: str, detail: str
+) -> None:
     bench.tracker.labelled = answer
     assert bench.hold() == HoldMove("tl-1", "a", "plan", "failed:needs_owner", "pending", "labels", refusal, detail)
     assert bench.calls == ["labels /tracker tl-1 auto"] and bench.row().labels is None
@@ -280,8 +306,10 @@ TRANSIENT = [
     (NotReleased("unavailable", "slot_busy"), "unavailable:slot_busy"),
     (NotReleased("unsettled", "worker_unknown"), "unsettled:worker_unknown"),
     (NotReleased("unavailable", "setup_unknown"), "unavailable:setup_unknown"),
-    (NotReleased("unavailable", "store"), "unavailable:store"), (NotReleased("unavailable", "git"), "unavailable:git"),
-    (NotReleased("unavailable", "tracker"), "unavailable:tracker"), (NotReleased("refused", "entry_running"), "refused:entry_running"),
+    (NotReleased("unavailable", "store"), "unavailable:store"),
+    (NotReleased("unavailable", "git"), "unavailable:git"),
+    (NotReleased("unavailable", "tracker"), "unavailable:tracker"),
+    (NotReleased("refused", "entry_running"), "refused:entry_running"),
 ]
 
 
@@ -289,8 +317,11 @@ TRANSIENT = [
 def test_a_refusal_only_the_person_clears_comments_now_that_the_claim_is_still_held(
     bench: Bench, result: NotReleased, refusal: str, said: str
 ) -> None:
-    bench.con.execute("""INSERT INTO setup_run (attempt_id,run,dispatch_token,generation,commit_sha,digest,pid,pgid,proc_start,boot,
-                      started_at) VALUES ('a',1,'a-token',1,?,?,77,76,'st','boot',1)""", (D, "e" * 64))
+    bench.con.execute(
+        """INSERT INTO setup_run (attempt_id,run,dispatch_token,generation,commit_sha,digest,pid,pgid,proc_start,boot,
+                      started_at) VALUES ('a',1,'a-token',1,?,?,77,76,'st','boot',1)""",
+        (D, "e" * 64),
+    )
     bench.abandon.result = result
     found = bench.hold()
     assert (found.word, found.missing, found.refusal) == ("pending", "abandon", refusal)
@@ -398,10 +429,13 @@ def test_the_comment_quotes_the_agent_s_explanation_from_its_stored_answer(bench
     path = bench.root / "answer.json"
     path.write_text(json.dumps(answer))
     digest = hashlib.sha256(path.read_bytes()).hexdigest()
-    bench.con.execute("""INSERT INTO execution (attempt_id,dispatch_token,generation,rc,timed_out,work,stands,stdout_path,
+    bench.con.execute(
+        """INSERT INTO execution (attempt_id,dispatch_token,generation,rc,timed_out,work,stands,stdout_path,
         stdout_digest,stderr_path,stderr_digest,answer_path,answer_digest,diagnostic_path,diagnostic_digest,answer_kind,disposition,
         effect,session_state) VALUES ('a','a-token',1,0,0,1,1,'o','d','e','d','answer.json',?,'g','d','valid','needs_owner','none',
-        'complete')""", (digest,))
+        'complete')""",
+        (digest,),
+    )
     bench.hold(replace(VIEW, result=AttemptResult("pending", "")))
     assert "The agent explained:\n> Which database?\n> Pick one.\n" in bench.tracker.texts[0]
 
@@ -410,18 +444,37 @@ def test_a_checks_cause_holds_the_implement_attempt_and_names_its_failed_checks(
     """The swapped checks view: A is the implement attempt it follows; the abandon releases the checks attempt first; a
     check command still running keeps the claim, named with its checks slot."""
     checking.execute("UPDATE attempt SET label='auto'")
-    checking.executemany("INSERT INTO check_result VALUES ('checks',1,?,?,'checks-token',1,?,?,?,?,?,?,1,?,?,?)", [
-        (0, "check", "e" * 64, 60, None, None, None, None, 2, 0, "passed"),
-        (1, "test", "e" * 64, 60, 5, 5, "st", "boot", 2, 1, "lingering"),
-        (2, "lint", None, None, None, None, None, None, 2, None, "undefined")])
+    checking.executemany(
+        "INSERT INTO check_result VALUES ('checks',1,?,?,'checks-token',1,?,?,?,?,?,?,1,?,?,?)",
+        [
+            (0, "check", "e" * 64, 60, None, None, None, None, 2, 0, "passed"),
+            (1, "test", "e" * 64, 60, 5, 5, "st", "boot", 2, 1, "lingering"),
+            (2, "lint", None, None, None, None, None, None, 2, None, "undefined"),
+        ],
+    )
     bench = Bench(checking, tmp_path)
     row = CheckStore(lambda: checking).of_attempt("implement")[0]
-    results = (ResultRow(1, 0, "check", None, None, None, 1.0, 2.0, 0, CommandConclusion.PASSED),
-               ResultRow(1, 1, "test", "e" * 64, 60, OwnedProcess(5, 5, "st", "boot"), 1.0, 2.0, 1, CommandConclusion.LINGERING),
-               ResultRow(1, 2, "lint", None, None, None, 1.0, None, None, CommandConclusion.UNDEFINED))
+    results = (
+        ResultRow(1, 0, "check", None, None, None, 1.0, 2.0, 0, CommandConclusion.PASSED),
+        ResultRow(1, 1, "test", "e" * 64, 60, OwnedProcess(5, 5, "st", "boot"), 1.0, 2.0, 1, CommandConclusion.LINGERING),
+        ResultRow(1, 2, "lint", None, None, None, 1.0, None, None, CommandConclusion.UNDEFINED),
+    )
     failed = AttemptResult("collected", "failed:test:lingering")
-    view = AttemptView("tasks", "tl-1", "check", CHECKS.attempt_id, "s2", "concluded", "gone", failed, False, "hold", label="auto",
-                       hold_due="failed:test:lingering", checks=ChecksView(replace(row, reason="test:lingering"), results))
+    view = AttemptView(
+        "tasks",
+        "tl-1",
+        "check",
+        CHECKS.attempt_id,
+        "s2",
+        "concluded",
+        "gone",
+        failed,
+        False,
+        "hold",
+        label="auto",
+        hold_due="failed:test:lingering",
+        checks=ChecksView(replace(row, reason="test:lingering"), results),
+    )
     bench.checks.checks_result = NotReleased("unsettled", "check_running")
     found = bench.hold(view)
     assert (found.attempt_id, found.missing, found.refusal) == ("implement", "abandon", "unsettled:check_running")
@@ -477,17 +530,43 @@ def test_a_retried_comment_of_a_checks_cause_describes_the_checks_attempt_not_th
     """The first comment failed after the abandon finished; the next round's view is the implement attempt's (no checks
     view any more): the comment still names the checks attempt, its failed check and its evidence, with no explanation."""
     checking.execute("UPDATE attempt SET label='auto'")
-    checking.execute("INSERT INTO check_result VALUES ('checks',1,0,'test','checks-token',1,?,60,NULL,NULL,NULL,NULL,1,2,1,'failed')",
-                     ("e" * 64,))
+    checking.execute(
+        "INSERT INTO check_result VALUES ('checks',1,0,'test','checks-token',1,?,60,NULL,NULL,NULL,NULL,1,2,1,'failed')", ("e" * 64,)
+    )
     bench = Bench(checking, tmp_path)
     row = CheckStore(lambda: checking).of_attempt("implement")[0]
     failed = AttemptResult("collected", "failed:test:failed")
-    view = AttemptView("tasks", "tl-1", "check", CHECKS.attempt_id, "s2", "concluded", "gone", failed, False, "hold", label="auto",
-                       hold_due="failed:test:failed", checks=ChecksView(replace(row, reason="test:failed"), ()))
+    view = AttemptView(
+        "tasks",
+        "tl-1",
+        "check",
+        CHECKS.attempt_id,
+        "s2",
+        "concluded",
+        "gone",
+        failed,
+        False,
+        "hold",
+        label="auto",
+        hold_due="failed:test:failed",
+        checks=ChecksView(replace(row, reason="test:failed"), ()),
+    )
     bench.tracker.commented = "unavailable"
     assert bench.hold(view).missing == "comment"
-    after = AttemptView("tasks", "tl-1", "implement", "implement", "s1", "captured", "gone", AttemptResult("collected", "committed"),
-                        False, "hold", label="auto", release=ReleaseRow(D, 11.0, "unclaimed"))  # the hold's abandon is recorded
+    after = AttemptView(
+        "tasks",
+        "tl-1",
+        "implement",
+        "implement",
+        "s1",
+        "captured",
+        "gone",
+        AttemptResult("collected", "committed"),
+        False,
+        "hold",
+        label="auto",
+        release=ReleaseRow(D, 11.0, "unclaimed"),
+    )  # the hold's abandon is recorded
     bench.fresh = after
     bench.tracker.commented, bench.now = "done", 10.0 + COMMENT_LEASE + 1
     bench.abandon.result = AlreadyReleased("s1", "unclaimed", True)
@@ -499,10 +578,16 @@ def test_a_retried_comment_of_a_checks_cause_describes_the_checks_attempt_not_th
     assert "The agent explained" not in text
 
 
-@pytest.mark.parametrize(("answer", "assignee", "said"), [
-    ("not_ours", "", "(the claim is not the factory's)"), ("moved", "", "(the claim is not the factory's)"),
-    ("absent", "", "(the claim is not the factory's)"), ("moved", "taskloop", "the next round returns the claim"),
-], ids=["not_ours", "moved_unassigned", "absent_unassigned", "moved_ours"])
+@pytest.mark.parametrize(
+    ("answer", "assignee", "said"),
+    [
+        ("not_ours", "", "(the claim is not the factory's)"),
+        ("moved", "", "(the claim is not the factory's)"),
+        ("absent", "", "(the claim is not the factory's)"),
+        ("moved", "taskloop", "the next round returns the claim"),
+    ],
+    ids=["not_ours", "moved_unassigned", "absent_unassigned", "moved_ours"],
+)
 def test_a_kept_slot_promises_the_claim_only_when_the_label_step_read_it_as_the_factory_s(
     bench: Bench, answer: LabelStep, assignee: str, said: str
 ) -> None:
@@ -581,11 +666,14 @@ def test_a_retired_hold_that_moved_the_labels_removes_held_first_and_waits_on_a_
     assert bench.calls == ["clear tl-1"] * 3  # never a label step, an abandon or a comment
 
 
-@pytest.mark.parametrize(("fresh", "word"), [
-    (replace(VIEW, next="stuck:entry_lost"), "held"),  # still a hold cause, maybe another word
-    (replace(VIEW, next="stuck:hung"), "refused"),  # D7: not a cause
-    (replace(VIEW, release=ReleaseRow(D, 9.0, "unclaiming"), next="start"), "held"),  # an abandon under way is finished
-])
+@pytest.mark.parametrize(
+    ("fresh", "word"),
+    [
+        (replace(VIEW, next="stuck:entry_lost"), "held"),  # still a hold cause, maybe another word
+        (replace(VIEW, next="stuck:hung"), "refused"),  # D7: not a cause
+        (replace(VIEW, release=ReleaseRow(D, 9.0, "unclaiming"), next="start"), "held"),  # an abandon under way is finished
+    ],
+)
 def test_the_cause_is_fenced_on_the_status_read_now(bench: Bench, fresh: AttemptView, word: str) -> None:
     bench.fresh = fresh
     assert bench.hold().word == word

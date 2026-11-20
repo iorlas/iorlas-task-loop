@@ -19,12 +19,12 @@ def compact(text: str) -> str:
 
 def declarations(css: str, width: int, selector: str) -> dict[str, str]:
     """Read the layout rules, including the narrow media block when applicable."""
-    layout = css[css.index("#board-canvas"):css.index("@media (prefers-reduced-motion")]
+    layout = css[css.index("#board-canvas") : css.index("@media (prefers-reduced-motion")]
     media = re.search(r"@media\s*\(max-width:\s*([\d.]+)rem\)\s*\{", layout)
     assert media is not None
-    active = layout[:media.start()]
+    active = layout[: media.start()]
     if width <= float(media[1]) * 16:
-        active += layout[media.end():].rstrip().removesuffix("}")
+        active += layout[media.end() :].rstrip().removesuffix("}")
     result: dict[str, str] = {}
     for selectors, body in re.findall(r"([^{}]+)\{([^{}]*)\}", active):
         if compact(selector) in compact(selectors).split(","):
@@ -63,7 +63,7 @@ def test_board_minimum_is_inside_the_scrolling_panel_in_both_layouts(name: str, 
     building = app.split("function buildBoard() {", 1)[1].split("\n}\n", 1)[0]
     assert 'const board = $("board-canvas")' in building
     assert 'lanes ? "5.5rem " : ""' in building
-    assert "overflow-y-auto\", lanes" not in building
+    assert 'overflow-y-auto", lanes' not in building
     for caller in ("setLanes", "resyncBoard"):
         body = app.split(f"function {caller}(", 1)[1].split("\n}\n", 1)[0]
         assert "buildBoard()" in body
@@ -77,9 +77,10 @@ def test_rails_fit_and_stack_at_narrow_width_but_keep_desktop_widths(name: str, 
     css = source(name)
     narrow = width <= 768
     drawer_width = min(width, 64 * 16)
-    for filename, hook, selector, units in (("rail.js", "min-w-0 w-64 max-w-full", "#rail", 64),
-                                           ("taskview.js", "task-properties min-w-0 w-60 max-w-full",
-                                            ".task-properties", 60)):
+    for filename, hook, selector, units in (
+        ("rail.js", "min-w-0 w-64 max-w-full", "#rail", 64),
+        ("taskview.js", "task-properties min-w-0 w-60 max-w-full", ".task-properties", 60),
+    ):
         assert hook in source(filename)
         rule = declarations(css, width, selector)
         if narrow:
@@ -113,14 +114,15 @@ def test_controls_and_long_content_wrap_and_event_tracks_reflow(name: str) -> No
         assert declarations(css, width, ".log-row > :last-child")["white-space"] == "normal"
         assert declarations(css, width, ".event-row")["grid-template-columns"] == "3.25remminmax(0,1fr)"
         row = declarations(css, width, ".event-row > *")
-        assert row.get("grid-area") == "auto/1/auto/-1" or (
-            row.get("grid-row") == "auto" and row.get("grid-column") == "1/-1")
+        assert row.get("grid-area") == "auto/1/auto/-1" or (row.get("grid-row") == "auto" and row.get("grid-column") == "1/-1")
         assert declarations(css, width, ".event-row > .event-offset")["grid-column"] == "1"
         assert declarations(css, width, ".event-row > .event-kind")["grid-column"] == "2"
         assert declarations(css, width, ".event-row code")["white-space"] == "pre-wrap"
-    for filename, hooks in (("index.html", ("shell-header", "shell-controls")),
-                            ("logs.js", ("log-toolbar flex min-w-0 flex-wrap", "log-row grid")),
-                            ("lines.js", ("event-row grid", "event-pause", "event-offset", "event-kind")),
-                            ("accessibility.js", ("min-w-0 flex-wrap", "min-h-0 min-w-0 flex-1"))):
+    for filename, hooks in (
+        ("index.html", ("shell-header", "shell-controls")),
+        ("logs.js", ("log-toolbar flex min-w-0 flex-wrap", "log-row grid")),
+        ("lines.js", ("event-row grid", "event-pause", "event-offset", "event-kind")),
+        ("accessibility.js", ("min-w-0 flex-wrap", "min-h-0 min-w-0 flex-1")),
+    ):
         for hook in hooks:
             assert hook in source(filename)

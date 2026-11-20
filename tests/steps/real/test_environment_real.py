@@ -72,15 +72,35 @@ def test_setup_resets_the_slot_and_runs_the_committed_setup_in_it(
         '{"harness":"codex","sandbox":"workspace-write"}',?,7,'s','b',1,2,?,?,
         'abababababababababababababababababababababababababababababababab',
         (SELECT digest FROM workflow_file),
-        'eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',1.0)""", (slot.parent.name, time.time() + 600, d, d))
+        'eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',1.0)""",
+        (slot.parent.name, time.time() + 600, d, d),
+    )
     record = AttemptStore(lambda: factory).load(KEY)
     assert record is not None
-    ports = EnvironmentPorts(SetupStore(lambda: factory), VIEWS.checkouts, VIEWS.slot_profiles, RealEnvFiles(), setup_process, setup_seen,
-                             group_alive, EvidenceFiles(root / "art"), time.time, sys.platform, shutil.rmtree.avoids_symlink_attacks,
-                             lambda *_probe: True, (root / "art",), 4096)  # tmp_path is longer than the TMPDIR budget
+    ports = EnvironmentPorts(
+        SetupStore(lambda: factory),
+        VIEWS.checkouts,
+        VIEWS.slot_profiles,
+        RealEnvFiles(),
+        setup_process,
+        setup_seen,
+        group_alive,
+        EvidenceFiles(root / "art"),
+        time.time,
+        sys.platform,
+        shutil.rmtree.avoids_symlink_attacks,
+        lambda *_probe: True,
+        (root / "art",),
+        4096,
+    )  # tmp_path is longer than the TMPDIR budget
     gitdir = Path(git(slot, "rev-parse", "--absolute-git-dir").strip())
-    result = Preparation(ports).prepare(record, Prepared(d, gitdir, main), held, ("/bin/codex", {"PATH": os.environ["PATH"]}),
-                                        codex_access(CodexPolicy(), folders(slot)).sandbox_argv("/bin/codex", ["true"]))
+    result = Preparation(ports).prepare(
+        record,
+        Prepared(d, gitdir, main),
+        held,
+        ("/bin/codex", {"PATH": os.environ["PATH"]}),
+        codex_access(CodexPolicy(), folders(slot)).sandbox_argv("/bin/codex", ["true"]),
+    )
     assert result is None
     found = folders(slot)
     assert factory.execute("SELECT run,commit_sha,conclusion,rc FROM setup_run").fetchall() == [(1, d, "passed", 0)]

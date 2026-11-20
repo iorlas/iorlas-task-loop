@@ -62,9 +62,7 @@ def test_the_answer_is_stored_with_its_effect(
 
 @pytest.mark.parametrize("step", ["plan", "implement"])
 @pytest.mark.parametrize("disposition", ["incomplete", "needs_owner"])
-def test_unfinished_answers_are_collected_without_commit_or_repeat(
-    surroundings: AttemptSurroundings, step: str, disposition: str
-) -> None:
+def test_unfinished_answers_are_collected_without_commit_or_repeat(surroundings: AttemptSurroundings, step: str, disposition: str) -> None:
     con = database(surroundings)
     head = next(worktree.head for worktree in surroundings.slot.repo.worktrees() if worktree.path == surroundings.slot.path)
     con.execute("UPDATE attempt SET step=?,after_commit=?", (step, head if step == "implement" else None))
@@ -74,8 +72,13 @@ def test_unfinished_answers_are_collected_without_commit_or_repeat(
         answer["paths"] = [P, "../unused", P]
     execution = fake(json.dumps(answer))
     attempts = Attempts(
-        AttemptStore(lambda: con), EvidenceFiles(surroundings.tmp), AgentLaunch(codex, ids=NativeIds()), execution, lambda: 10,
-        surroundings.checkouts, surroundings.files,
+        AttemptStore(lambda: con),
+        EvidenceFiles(surroundings.tmp),
+        AgentLaunch(codex, ids=NativeIds()),
+        execution,
+        lambda: 10,
+        surroundings.checkouts,
+        surroundings.files,
         environment=Environment(con, surroundings.checkouts, surroundings.tmp, tmp_bytes=4096).preparation(),
     )
     result = attempts.execute(KEY, ENTRY, lambda: ClaimWord.HELD)
@@ -85,21 +88,31 @@ def test_unfinished_answers_are_collected_without_commit_or_repeat(
     assert attempts.collect(KEY) == result and attempts.execute(KEY, ENTRY) == result
     assert len(execution.calls) == 1
     assert con.execute("SELECT disposition,effect,commit_paths,commit_message FROM execution").fetchone() == (
-        disposition, "none", "[]", None)
+        disposition,
+        "none",
+        "[]",
+        None,
+    )
     raw = EvidenceFiles(surroundings.tmp).text(KEY, "answer.txt")
     assert raw is not None and json.loads(raw) == answer
 
 
-@pytest.mark.parametrize(("text", "rule", "detail"), [
-    ("", AnswerRule.MISSING, "empty"),
-    ("not json", AnswerRule.JSON, "strict JSON"),
-    ('{"disposition":1,"disposition":2}', AnswerRule.JSON, "strict JSON"),
-    ('{"plan":3}', AnswerRule.SHAPE, "exactly"),
-    (json.dumps(PLAN | {"paths": [P, P]}), AnswerRule.PATHS_DUPLICATE, "unique"),
-    (json.dumps(PLAN | {"message": None}), AnswerRule.MESSAGE, "1 to 500"),
-])
+@pytest.mark.parametrize(
+    ("text", "rule", "detail"),
+    [
+        ("", AnswerRule.MISSING, "empty"),
+        ("not json", AnswerRule.JSON, "strict JSON"),
+        ('{"disposition":1,"disposition":2}', AnswerRule.JSON, "strict JSON"),
+        ('{"plan":3}', AnswerRule.SHAPE, "exactly"),
+        (json.dumps(PLAN | {"paths": [P, P]}), AnswerRule.PATHS_DUPLICATE, "unique"),
+        (json.dumps(PLAN | {"message": None}), AnswerRule.MESSAGE, "1 to 500"),
+    ],
+)
 def test_failure_survives_reopening_and_missing_raw_answer(
-    surroundings: AttemptSurroundings, text: str, rule: AnswerRule, detail: str,
+    surroundings: AttemptSurroundings,
+    text: str,
+    rule: AnswerRule,
+    detail: str,
 ) -> None:
     path = surroundings.tmp / "factory.db"
     con = Store(SCHEMA).open_rw(path)

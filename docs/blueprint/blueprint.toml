@@ -1,16 +1,6 @@
 # Blueprint state for task-loop. Human-owned. Every exception to a checkpoint is one [[override]]; nothing else excuses a row.
 
-[[override]]
-id = "stack.python-uv.formatter"
-reason = "`ruff format --check` has never run here: a 163-file rewrite would conflict with the live worktrees. The reformat is its own commit (bead 'reformat commit'); until then `just lint` runs `ruff check` only."
-decided_by = "agent"
-expires = 2026-12-03
 
-[[override]]
-id = "stack.python-uv.hooks"
-reason = "The staged `ruff format --check` hook waits for the same reformat commit as stack.python-uv.formatter."
-decided_by = "agent"
-expires = 2026-12-03
 
 [[override]]
 id = "knowledge.glossary"

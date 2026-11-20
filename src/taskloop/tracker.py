@@ -27,6 +27,8 @@ GONES: Final = ("no issue found matching", "no issues found matching")
 def gone(text: str) -> bool:
     """bd answered a deleted task with an error, not an empty read."""
     return any(word in text for word in GONES)
+
+
 ACTOR: Final = "taskloop"  # the factory's tracker actor: its claims, and the assignee a round still treats as its own
 
 
@@ -44,8 +46,10 @@ class CommentsRead(Protocol):
 
 def leaked_claim(task: str) -> str:
     """The one wording for a start whose compensation could not return the claim: what is true, and the person's check."""
-    return (f"the tracker claim on {task} may still be held by {ACTOR}, so the task stays in progress for {ACTOR} and is not ready "
-            f"again until a person returns the claim: look at the task in the tracker and release the claim if {ACTOR} still holds it")
+    return (
+        f"the tracker claim on {task} may still be held by {ACTOR}, so the task stays in progress for {ACTOR} and is not ready "
+        f"again until a person returns the claim: look at the task in the tracker and release the claim if {ACTOR} still holds it"
+    )
 
 
 @dataclass(frozen=True)
@@ -143,9 +147,19 @@ def task_facts(client: TaskReadClient, task_id: str) -> TaskFacts | None:
     if record is None:
         return None
     return TaskFacts(
-        record.id, record.title, record.status, record.priority, record.labels, record.assignee or None,
-        record.description, record.design, record.acceptance_criteria, record.notes,
-        tuple(dependency.id for dependency in record.dependencies), record.created_at, record.updated_at,
+        record.id,
+        record.title,
+        record.status,
+        record.priority,
+        record.labels,
+        record.assignee or None,
+        record.description,
+        record.design,
+        record.acceptance_criteria,
+        record.notes,
+        tuple(dependency.id for dependency in record.dependencies),
+        record.created_at,
+        record.updated_at,
     )
 
 

@@ -25,8 +25,9 @@ TOTAL: Final = 6000
 CUT: Final = "[shortened]"
 QUOTE: Final = "> "  # each line of the agent's explanation
 type LabelsWord = Literal["moved", "absent", "not_ours"]  # the label step's words after which a comment is written
-type KeptWord = Literal["slot_dirty", "slot_branch", "slot_redirected", "slot_unborn", "worker_alive", "setup_running",
-                    "check_running", "landing", "landed"]  # an abandon refusal only the person clears (section 12)
+type KeptWord = Literal[
+    "slot_dirty", "slot_branch", "slot_redirected", "slot_unborn", "worker_alive", "setup_running", "check_running", "landing", "landed"
+]  # an abandon refusal only the person clears (section 12)
 
 
 @dataclass(frozen=True)
@@ -106,8 +107,10 @@ def _details(facts: HoldFacts) -> list[str]:
     when = f"{datetime.fromtimestamp(facts.held_at, UTC):%Y-%m-%d %H:%M:%S} UTC"
     branch = f"task branch task/{one_line(facts.task_id)}"
     at = f"{branch} at {one_line(facts.published)}" if facts.published else f"{branch} is not published"
-    lines = [f"taskloop hold: {one_line(facts.reason)}",
-             f"Step {one_line(facts.step)}, attempt {facts.number} ({one_line(facts.attempt_id)}), {when}; {at}."]
+    lines = [
+        f"taskloop hold: {one_line(facts.reason)}",
+        f"Step {one_line(facts.step)}, attempt {facts.number} ({one_line(facts.attempt_id)}), {when}; {at}.",
+    ]
     if facts.stop is None and facts.entry is not None and facts.entry.endswith(TERMINATED):
         lines.append("The attempt's entry was terminated by a signal; its sender is unknown.")
     if facts.explanation and (text := explained(facts.explanation)):
@@ -121,8 +124,10 @@ def _details(facts: HoldFacts) -> list[str]:
         lines.append(f"Left in the slot: {one_line(facts.leftovers.reason, 40)} {', '.join(one_line(path) for path in paths)}{more}")
     if facts.saved:
         ids = ", ".join(one_line(sha, 64) for sha in facts.saved)
-        lines.append(f"The slot's unfinished work was saved as commit {ids} on {branch}. The implementation is still incomplete: "
-                     "the saved work is not a result and no check ran on it. The slot was released.")
+        lines.append(
+            f"The slot's unfinished work was saved as commit {ids} on {branch}. The implementation is still incomplete: "
+            "the saved work is not a result and no check ran on it. The slot was released."
+        )
     lines.append(f"Evidence: {one_line(facts.evidence)}")
     return lines
 
@@ -131,9 +136,11 @@ def _labelled(facts: HoldFacts) -> str:
     if facts.label is None and facts.labels in ("moved", "absent"):
         return "The factory added `held` without removing an approval label"
     label = one_line(facts.label or "", 200)
-    return {"moved": f"The factory removed `{label}` and added `held`",
-            "absent": f"The factory added `held` (`{label}` is no longer on the task)",
-            "not_ours": "The factory changed no label (another actor holds this task)"}[facts.labels]
+    return {
+        "moved": f"The factory removed `{label}` and added `held`",
+        "absent": f"The factory added `held` (`{label}` is no longer on the task)",
+        "not_ours": "The factory changed no label (another actor holds this task)",
+    }[facts.labels]
 
 
 def claim_line(facts: HoldFacts, outcome: Returned | Kept) -> str:
@@ -143,24 +150,32 @@ def claim_line(facts: HoldFacts, outcome: Returned | Kept) -> str:
         return done + (" and returned its claim." if outcome.claim == "unclaimed" else "; the claim was no longer the factory's.")
     claim = "not_ours" if facts.labels == "not_ours" else outcome.claim
     kept = f"{done}, but still holds the claim: " if claim == "ours" else f"{done}, but keeps the attempt's slot: "
-    back = {"ours": "the next round returns the claim", "not_ours": "the next round frees the slot (the claim is not the factory's)",
-            "unknown": "the next round frees the slot and returns the claim if it is still the factory's"}[claim]
+    back = {
+        "ours": "the next round returns the claim",
+        "not_ours": "the next round frees the slot (the claim is not the factory's)",
+        "unknown": "the next round frees the slot and returns the claim if it is still the factory's",
+    }[claim]
     slot = f"slot {one_line(outcome.slot)}" if one_line(outcome.slot) else "its slot"
     match outcome.word:
         case "slot_dirty":
-            return (kept + f"{slot} has files left by this attempt. Save what you need, remove or restore them "
-                    f"after inspecting their status, and {back}. The factory never removes work.")
+            return (
+                kept + f"{slot} has files left by this attempt. Save what you need, remove or restore them "
+                f"after inspecting their status, and {back}. The factory never removes work."
+            )
         case "worker_alive" | "setup_running" | "check_running":
             group = "" if outcome.pgid is None else f", group {outcome.pgid}"
             pid = f"pid {outcome.pid}{group}" if outcome.pid is not None else "pid unknown: wait for verified process identity"
-            return (kept + f"a process of this attempt still runs ({pid}). When it has ended (or after you "
-                    f"stop it by its verified identity), {back}.")
+            return (
+                kept + f"a process of this attempt still runs ({pid}). When it has ended (or after you "
+                f"stop it by its verified identity), {back}."
+            )
         case "landing" | "landed":
-            return (kept + f"a land of this task holds its slot or may be on origin ({outcome.word}). Finish or withdraw it "
-                    f"after resolving its delivery state, and {back}.")
+            return (
+                kept + f"a land of this task holds its slot or may be on origin ({outcome.word}). Finish or withdraw it "
+                f"after resolving its delivery state, and {back}."
+            )
         case _:
-            return (kept + f"{slot} is not where the factory left it ({outcome.word}). "
-                    f"Restore its recorded location and state, and {back}.")
+            return kept + f"{slot} is not where the factory left it ({outcome.word}). Restore its recorded location and state, and {back}."
 
 
 def _answer(facts: HoldFacts, outcome: Returned | Kept) -> list[str]:
@@ -174,17 +189,21 @@ def _answer(facts: HoldFacts, outcome: Returned | Kept) -> list[str]:
     elif facts.label is None:
         retry = "decide whether to restart this task; it stays held until a person approves a fresh attempt"
     else:
-        retry = (f"restore the approval label `{one_line(facts.label or '', 200)}`: "
-                 f"the next round starts it again at plan on task/{task} as it is")
+        retry = (
+            f"restore the approval label `{one_line(facts.label or '', 200)}`: "
+            f"the next round starts it again at plan on task/{task} as it is"
+        )
     edit = "edit this task's description or acceptance criteria (the agent reads those, not comments)"
     lines = [] if found is None else [found.what]
     lines.append(next_step(found, retry, edit))
     if isinstance(outcome, Kept):
         lines.append("Do that once the slot or process above is cleared: until then the task is not taken again.")
     if facts.reason == "branch_moved":
-        lines.append(f"Restore task/{task} to contain {one_line(facts.end_commit or '')}, or rename it aside (`old/{task}-` and the "
-                     "first 12 characters of its tip), "
-                     "before adding the label.")
+        lines.append(
+            f"Restore task/{task} to contain {one_line(facts.end_commit or '')}, or rename it aside (`old/{task}-` and the "
+            "first 12 characters of its tip), "
+            "before adding the label."
+        )
     if facts.reason == "claim_lost":
         lines.append("Someone else changed this task's claim while the factory worked on it.")
     return lines
@@ -196,5 +215,5 @@ def comment(facts: HoldFacts, outcome: Returned | Kept) -> str:
     head = "\n".join(_details(facts))
     room = TOTAL - len(tail) - 1
     if len(head) > room:
-        head = head[:room - len(CUT) - 1].rstrip() + "\n" + CUT
+        head = head[: room - len(CUT) - 1].rstrip() + "\n" + CUT
     return head + "\n" + tail

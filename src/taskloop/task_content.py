@@ -51,15 +51,25 @@ def canonical(content: BaseModel) -> str:
 
 
 def digest(task: TaskInspection, sources: tuple[DiscussionSource, ...]) -> TaskContentDigest:
-    retained = tuple(SourceContent(
-        task_id=normalized(source.task_id), title=normalized(source.title),
-        relationships=tuple(sorted({normalized(each) for each in source.relationships})),
-        comments=tuple(CommentContent(author=normalized(comment.author), at=normalized(comment.at), text=normalized(comment.text))
-                       for comment in source.comments if not comment.generated),
-    ) for source in sources)
+    retained = tuple(
+        SourceContent(
+            task_id=normalized(source.task_id),
+            title=normalized(source.title),
+            relationships=tuple(sorted({normalized(each) for each in source.relationships})),
+            comments=tuple(
+                CommentContent(author=normalized(comment.author), at=normalized(comment.at), text=normalized(comment.text))
+                for comment in source.comments
+                if not comment.generated
+            ),
+        )
+        for source in sources
+    )
     content = TaskContent(
-        backlog=normalized(task.reference.scope.backlog), task_id=normalized(task.reference.task_id),
-        title=normalized(task.title), requirements=normalized(task.requirements), acceptance=normalized(task.acceptance),
+        backlog=normalized(task.reference.scope.backlog),
+        task_id=normalized(task.reference.task_id),
+        title=normalized(task.title),
+        requirements=normalized(task.requirements),
+        acceptance=normalized(task.acceptance),
         sources=tuple(sorted(retained, key=canonical)),
     )
     return TaskContentDigest(value=hashlib.sha256(canonical(content).encode("utf-8")).hexdigest())

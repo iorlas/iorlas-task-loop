@@ -128,9 +128,7 @@ def plan(slot: Path) -> None:
     (slot / P).write_text(PLAN_TEXT)
 
 
-def test_a_symlink_indirected_pointer_to_the_persons_git_directory_is_redirected(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_a_symlink_indirected_pointer_to_the_persons_git_directory_is_redirected(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     main, slot, markers = repository(tmp_path.resolve(), monkeypatch)
     base, branch = git(slot, "rev-parse", "HEAD").strip(), git(main, "rev-parse", "main").strip()
     attempt = admission(main, slot)
@@ -140,9 +138,7 @@ def test_a_symlink_indirected_pointer_to_the_persons_git_directory_is_redirected
     assert git(main, "rev-parse", "main").strip() == branch and list(markers.iterdir()) == []
 
 
-def test_a_fake_git_directory_in_the_slot_whose_filter_would_run_is_redirected(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_a_fake_git_directory_in_the_slot_whose_filter_would_run_is_redirected(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     main, slot, markers = repository(tmp_path.resolve(), monkeypatch)
     base, branch = git(slot, "rev-parse", "HEAD").strip(), git(main, "rev-parse", "main").strip()
     attempt = admission(main, slot)
@@ -156,7 +152,6 @@ def test_a_fake_git_directory_in_the_slot_whose_filter_would_run_is_redirected(
     assert settle(VIEWS.checkouts, RealSlotFiles(), attempt, base, ANSWER, quiet) == CommitRefused("redirected")
     assert list(markers.iterdir()) == [] and git(main, "rev-parse", "main").strip() == branch
     assert git(slot, "--git-dir", str(main / ".git/worktrees/s1"), "rev-parse", "HEAD").strip() == base
-
 
 
 class SwappedAfter(RealSlotFiles):
@@ -195,6 +190,7 @@ def test_a_pointer_swapped_after_the_check_before_the_stage_does_not_change_the_
     verified = ("--git-dir", str(main / ".git/worktrees/s1"), "--work-tree", str(slot))
     assert git(slot, *verified, "diff", "--cached", "--name-only").strip() == P
     assert git(slot, *verified, "rev-parse", "HEAD").strip() == base
+
 
 def test_a_relative_paths_worktree_is_accepted(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     main, slot, markers = repository(tmp_path.resolve(), monkeypatch, "--relative-paths")
@@ -299,8 +295,7 @@ def test_an_implement_commit_deletes_and_adds_anywhere_and_an_ignored_venv_does_
     assert isinstance(judge(VIEWS.checkouts(main), main, made.sha, IMPLEMENT, IMPLEMENT.rules("tl-1"), (link,)), Committed)
 
 
-@pytest.mark.parametrize(("paths", "unsafe"), [(("gone.py",), (".gitignore", "src/a.py")), (("src/a.py",), (".gitignore",))]
-)
+@pytest.mark.parametrize(("paths", "unsafe"), [(("gone.py",), (".gitignore", "src/a.py")), (("src/a.py",), (".gitignore",))])
 def test_a_changed_gitignore_is_unsafe_regardless_of_answer_paths(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, paths: tuple[str, ...], unsafe: tuple[str, ...]
 ) -> None:

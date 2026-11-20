@@ -66,10 +66,13 @@ def collector(client: Threads, con: sqlite3.Connection) -> Discussion:
 
 @pytest.mark.parametrize("step", ["plan", "implement"])
 def test_own_and_direct_linked_decisions_reach_both_steps(factory: sqlite3.Connection, step: str) -> None:
-    client = Threads([
-        Bead("tl-77", title="Needs the discussion", dependencies=(Dep("tl-58", "blocks"), Dep("tl-58", "related"), Dep("tl-77"))),
-        Bead("tl-58", title="Owner's discussion", dependencies=(Dep("tl-deep"),)),
-    ], {"tl-77": [Comment("factory", "Question\nsecond line", AT)], "tl-58": [Comment("owner", "Decision\nKeep all six", AT)]})
+    client = Threads(
+        [
+            Bead("tl-77", title="Needs the discussion", dependencies=(Dep("tl-58", "blocks"), Dep("tl-58", "related"), Dep("tl-77"))),
+            Bead("tl-58", title="Owner's discussion", dependencies=(Dep("tl-deep"),)),
+        ],
+        {"tl-77": [Comment("factory", "Question\nsecond line", AT)], "tl-58": [Comment("owner", "Decision\nKeep all six", AT)]},
+    )
     operation = collector(client, factory)
     task = operation.tasks("tl-77", "tasks", "/tracker")
     text = task_text(task, step, CONTEXT, WORKFLOW, operation.collect(task, "/tracker").text)
@@ -88,8 +91,12 @@ def test_latest_cleared_hold_classifies_all_six_decisions_without_changing_state
     recorded = held(factory, "recent", "recent", now=time)
     factory.execute("UPDATE task_hold SET labels='moved',labelled_at=?,cleared_at=? WHERE attempt_id='recent'", (time, time + 1))
     comments = [Comment("owner", f"Decision {number}\nDetails", AT) for number in range(1, 7)]
-    comments += [Comment("earlier", "Before", "2026-11-13T09:00:00Z"), Comment("equal", "Equal", "2026-11-13T10:00:00Z"),
-                 Comment("unknown", "Still useful", "not a time"), Comment("missing", "Also useful")]
+    comments += [
+        Comment("earlier", "Before", "2026-11-13T09:00:00Z"),
+        Comment("equal", "Equal", "2026-11-13T10:00:00Z"),
+        Comment("unknown", "Still useful", "not a time"),
+        Comment("missing", "Also useful"),
+    ]
     client = Threads([Bead("tl-109")], {"tl-109": comments})
     operation = collector(client, factory)
     reference = TaskReference(TaskScope("tasks"), "tl-109")
@@ -125,24 +132,33 @@ def test_delimiter_shaped_text_stays_data_across_repeat_and_context_refresh(fact
 
 @pytest.mark.parametrize("failure", ["count", "bytes", "missing", "unavailable", "malformed"])
 def test_failed_collection_refuses_before_input_claim_or_reservation(
-    factory: sqlite3.Connection, repo: FakeRepo, tmp_path: Path, failure: str,
+    factory: sqlite3.Connection,
+    repo: FakeRepo,
+    tmp_path: Path,
+    failure: str,
 ) -> None:
     slots(factory, repo, tmp_path / "slots", 1)
     links = tuple(Dep(f"tl-{number}") for number in range(20, 37)) if failure == "count" else (Dep("tl-linked"),)
-    client = Threads([Bead("tl-1", dependencies=links), Bead("tl-linked")],
-                     {"tl-1": [Comment("owner", "é" * MAX_BYTES, AT)]} if failure == "bytes" else {})
+    client = Threads(
+        [Bead("tl-1", dependencies=links), Bead("tl-linked")],
+        {"tl-1": [Comment("owner", "é" * MAX_BYTES, AT)]} if failure == "bytes" else {},
+    )
     operation = collector(client, factory)
     if failure == "missing":
         client = Threads([Bead("tl-1", dependencies=links)])
         operation = collector(client, factory)
     if failure == "unavailable":
+
         def broken(_task: TaskInspection, _root: str) -> tuple[DiscussionSource, ...]:
             raise TaskInspectionError("tracker_unavailable", "read failed")
+
         operation = replace(operation, read=broken)
     if failure == "malformed":
+
         def malformed(_task: TaskInspection, _root: str) -> tuple[DiscussionSource, ...]:
             DiscussionComment.model_validate({"author": 3, "at": AT, "text": "answer"})
             return ()
+
         operation = replace(operation, read=malformed)
     tracker = Tracker(factory, tmp_path)
     app = admission(factory, tmp_path, tracker, repo)
@@ -158,7 +174,11 @@ def test_failed_collection_refuses_before_input_claim_or_reservation(
 
 
 def test_initial_admission_snapshots_discussion_without_later_tracker_reads(
-    factory: sqlite3.Connection, repo: FakeRepo, tmp_path: Path, checkouts: Checkouts, slot_files: SlotFiles,
+    factory: sqlite3.Connection,
+    repo: FakeRepo,
+    tmp_path: Path,
+    checkouts: Checkouts,
+    slot_files: SlotFiles,
 ) -> None:
     slots(factory, repo, tmp_path / "slots", 1)
     client = Threads([Bead("tl-1")], {"tl-1": [Comment("owner", "Use this decision", AT)]})
@@ -184,7 +204,11 @@ def test_initial_admission_snapshots_discussion_without_later_tracker_reads(
 
 
 def test_restart_after_hold_receives_six_answers_without_releasing_the_hold_during_collection(
-    factory: sqlite3.Connection, repo: FakeRepo, tmp_path: Path, checkouts: Checkouts, slot_files: SlotFiles,
+    factory: sqlite3.Connection,
+    repo: FakeRepo,
+    tmp_path: Path,
+    checkouts: Checkouts,
+    slot_files: SlotFiles,
 ) -> None:
     slots(factory, repo, tmp_path / "slots", 1)
     client = Threads([Bead("tl-1")])
@@ -209,7 +233,12 @@ def test_restart_after_hold_receives_six_answers_without_releasing_the_hold_duri
 
 
 def test_advance_collects_new_comments(
-    planned: str, registered: sqlite3.Connection, tmp_path: Path, repo: FakeRepo, checkouts: Checkouts, slot_files: SlotFiles,
+    planned: str,
+    registered: sqlite3.Connection,
+    tmp_path: Path,
+    repo: FakeRepo,
+    checkouts: Checkouts,
+    slot_files: SlotFiles,
 ) -> None:
     client = Threads([Bead("tl-1")], {"tl-1": [Comment("owner", "New implementation decision", AT)]})
     app = advancing(registered, tmp_path, checkouts, slot_files)
@@ -222,7 +251,11 @@ def test_advance_collects_new_comments(
 
 
 def test_repeat_refreshes_discussion_and_preserves_feedback(
-    registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles,
+    registered: sqlite3.Connection,
+    tmp_path: Path,
+    slot: FakeWorktree,
+    checkouts: Checkouts,
+    slot_files: SlotFiles,
 ) -> None:
     files = EvidenceFiles(tmp_path)
     original = task_text(TASK, "plan", CONTEXT, WORKFLOW, frame(["Old decision"]))
@@ -238,8 +271,10 @@ def test_repeat_refreshes_discussion_and_preserves_feedback(
     assert text.count("Fresh repeat decision") == 1 and "stray" in text
     assert text.splitlines().count(BEGIN) == text.splitlines().count(END) == 1
     assert "Old decision" not in text and text.splitlines().count(CONTEXT_BEGIN) == 1
-    assert TaskContentStore(lambda: registered).read(row.key.attempt_id) == collector(client, registered).for_task(
-        TASK.reference, str(tmp_path)).digest
+    assert (
+        TaskContentStore(lambda: registered).read(row.key.attempt_id)
+        == collector(client, registered).for_task(TASK.reference, str(tmp_path)).digest
+    )
 
 
 def test_generated_hold_is_retained_in_input_but_only_owner_prose_changes_digest(factory: sqlite3.Connection) -> None:
@@ -277,7 +312,11 @@ def test_complete_discussion_fits_exact_utf8_bound_and_rejects_one_more_byte() -
 
 
 def test_failed_repeat_collection_preserves_attempt_reservation_and_never_launches(
-    registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles,
+    registered: sqlite3.Connection,
+    tmp_path: Path,
+    slot: FakeWorktree,
+    checkouts: Checkouts,
+    slot_files: SlotFiles,
 ) -> None:
     captured(registered, tmp_path, slot, checkouts, slot_files, {"stray": "leftovers"})
     before = registered.execute("SELECT * FROM reservation").fetchall()

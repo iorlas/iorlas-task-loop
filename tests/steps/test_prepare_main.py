@@ -31,7 +31,11 @@ def repo(tmp_path: Path, remote: FakeRemote) -> FakeRepo:
 
 @pytest.mark.parametrize("refs", ["local", "remote", "both"])
 def test_new_main_slot_can_continue_the_published_task_tip(
-    repo: FakeRepo, remote: FakeRemote, slot: FakeWorktree, tmp_path: Path, refs: str,
+    repo: FakeRepo,
+    remote: FakeRemote,
+    slot: FakeWorktree,
+    tmp_path: Path,
+    refs: str,
 ) -> None:
     tip = leave(repo, tmp_path, BRANCH, extra=True) if refs == "local" else pushed(repo, tmp_path)
     if refs == "both":
@@ -45,7 +49,9 @@ def test_new_main_slot_can_continue_the_published_task_tip(
 
 
 def test_selected_local_tip_allows_a_task_only_base_despite_a_stale_remote_tip(
-    repo: FakeRepo, remote: FakeRemote, tmp_path: Path,
+    repo: FakeRepo,
+    remote: FakeRemote,
+    tmp_path: Path,
 ) -> None:
     old = pushed(repo, tmp_path)
     tip = leave(repo, tmp_path, BRANCH, start=old, extra=True)
@@ -58,7 +64,9 @@ def test_selected_local_tip_allows_a_task_only_base_despite_a_stale_remote_tip(
 
 
 def test_origin_main_commits_are_not_foreign_unpublished_work_when_local_main_lags(
-    repo: FakeRepo, remote: FakeRemote, tmp_path: Path,
+    repo: FakeRepo,
+    remote: FakeRemote,
+    tmp_path: Path,
 ) -> None:
     main = remote.advance("main", {"other": "new main\n"})
     assert repo.fetch().ok
@@ -68,19 +76,23 @@ def test_origin_main_commits_are_not_foreign_unpublished_work_when_local_main_la
 
 
 def test_missing_origin_knowledge_is_target_unless_selected_start_proves_the_base(
-    repo: FakeRepo, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    repo: FakeRepo,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     tip = leave(repo, tmp_path, BRANCH)
     invalid = leave(repo, tmp_path, "other", extra=True)
     refs = repo.refs
-    monkeypatch.setattr(repo, "refs", lambda names: tuple(entry for entry in refs(names)
-                                                         if entry.name != "refs/remotes/origin/main"))
+    monkeypatch.setattr(repo, "refs", lambda names: tuple(entry for entry in refs(names) if entry.name != "refs/remotes/origin/main"))
     assert isinstance(branch_refusal(repo, "tl-1", (tip,)), Branch)
     assert branch_refusal(repo, "tl-1", (invalid,)) == "target"
 
 
 def test_unreadable_origin_ancestry_is_not_divergence(
-    repo: FakeRepo, remote: FakeRemote, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    repo: FakeRepo,
+    remote: FakeRemote,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     leave(repo, tmp_path, BRANCH)
     target = remote.advance("main", {"other": "landed\n"})
@@ -99,8 +111,14 @@ def test_unreadable_origin_ancestry_is_not_divergence(
 
 @pytest.mark.parametrize("source", ["new", "without_local_main", "local", "remote"])
 def test_admission_refreshes_origin_preserves_checkout_merges_retained_work_and_parks_at_recorded_tip(
-    factory: sqlite3.Connection, repo: FakeRepo, remote: FakeRemote, slot: FakeWorktree,
-    checkouts: PinnedViews, slot_files: FakeSlotFiles, tmp_path: Path, source: str,
+    factory: sqlite3.Connection,
+    repo: FakeRepo,
+    remote: FakeRemote,
+    slot: FakeWorktree,
+    checkouts: PinnedViews,
+    slot_files: FakeSlotFiles,
+    tmp_path: Path,
+    source: str,
 ) -> None:
     original = head(repo, repo.path)
     retained = None
@@ -156,8 +174,12 @@ def test_admission_refreshes_origin_preserves_checkout_merges_retained_work_and_
 
 @pytest.mark.parametrize("failure", ["raised", "result", "missing"])
 def test_refresh_failure_has_no_input_claim_or_reservation(
-    factory: sqlite3.Connection, repo: FakeRepo, root: Path, tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch, failure: str,
+    factory: sqlite3.Connection,
+    repo: FakeRepo,
+    root: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    failure: str,
 ) -> None:
     slots(factory, repo, root, 1)
     refs = repo.refs
@@ -165,7 +187,8 @@ def test_refresh_failure_has_no_input_claim_or_reservation(
     def unavailable(*args: object, **kwargs: object) -> object:
         assert not factory.in_transaction
         assert args == ("origin",) and kwargs == {
-            "refspecs": ["+refs/heads/main:refs/remotes/origin/main"], "timeout": 120,
+            "refspecs": ["+refs/heads/main:refs/remotes/origin/main"],
+            "timeout": 120,
         }
         if failure == "raised":
             raise GitUnavailable("offline")

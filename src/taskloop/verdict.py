@@ -69,8 +69,11 @@ def _changes(repo: Repo, root: Path, tip: Tree, base: Tree, step: StepKind, rule
     change, never turns a symlink, gitlink or executable into a plain file), and every committed blob at most
     `file_cap` bytes after the full read."""
     for change in repo.worktree(root).diff(base.sha, tip.sha, cap=0).changes:
-        if ((change.kind == "D" and not rules.deletions) or not path_allowed(change.path, rules)
-                or (step.step is Step.PLAN and change.path not in paths)):
+        if (
+            (change.kind == "D" and not rules.deletions)
+            or not path_allowed(change.path, rules)
+            or (step.step is Step.PLAN and change.path not in paths)
+        ):
             return "paths"
         if change.kind != "A":
             before = base.files.get(change.path)

@@ -59,8 +59,12 @@ def _setting(raw: StepInput, home: Path, built: AgentSetting) -> AgentSetting:
     if raw.harness is HarnessKind.CODEX:
         access = CodexInput.model_validate(raw.access)
         policy = CodexPolicy(sandbox=access.sandbox)
-        return AgentSetting(model=model if model is not None else built.model, effort=effort, access=policy,
-                            compaction_token_limit=raw.compaction_token_limit)
+        return AgentSetting(
+            model=model if model is not None else built.model,
+            effort=effort,
+            access=policy,
+            compaction_token_limit=raw.compaction_token_limit,
+        )
     if model is None:
         raise ValueError("model is required when harness is not codex")
     if raw.harness is HarnessKind.CLAUDE:
@@ -107,9 +111,14 @@ def display(settings: StepSettings, sources: dict[str, str]) -> dict[str, dict[s
     found: dict[str, dict[str, str]] = {}
     for step in Step:
         setting = settings.for_step(step)
-        values = {"harness": setting.harness.value, "provider": setting.provider.value,
-                  "model": setting.model, "effort": setting.effort, "access.summary": setting.summary,
-                  "compaction_token_limit": "null" if setting.compaction_token_limit is None else str(setting.compaction_token_limit)}
+        values = {
+            "harness": setting.harness.value,
+            "provider": setting.provider.value,
+            "model": setting.model,
+            "effort": setting.effort,
+            "access.summary": setting.summary,
+            "compaction_token_limit": "null" if setting.compaction_token_limit is None else str(setting.compaction_token_limit),
+        }
         access = setting.access
         if isinstance(access, CodexPolicy):
             values["access.sandbox"] = str(access.sandbox)

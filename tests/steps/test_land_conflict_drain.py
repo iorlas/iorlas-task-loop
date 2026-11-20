@@ -55,9 +55,7 @@ def reserved(c: ExecutionCase) -> None:
     assert c.con.execute("SELECT * FROM reservation").fetchall() == [
         (c.record.slot, c.record.request.repo_id, c.record.key.reservation_generation, c.record.key.attempt_id),
     ]
-    assert c.con.execute("SELECT generation FROM slot WHERE name=?", (c.record.slot,)).fetchone() == (
-        c.record.key.reservation_generation,
-    )
+    assert c.con.execute("SELECT generation FROM slot WHERE name=?", (c.record.slot,)).fetchone() == (c.record.key.reservation_generation,)
 
 
 def interrupted_wait(_seconds: float) -> None:
@@ -77,7 +75,9 @@ def watching(c: ExecutionCase, seen: Seen) -> Generator[Ports]:
 
 @pytest.mark.parametrize("registered_only", [False, True])
 def test_live_and_unknown_workers_keep_custody_across_interrupted_drain(
-    execution_case: ExecutionCase, monkeypatch: pytest.MonkeyPatch, registered_only: bool,
+    execution_case: ExecutionCase,
+    monkeypatch: pytest.MonkeyPatch,
+    registered_only: bool,
 ) -> None:
     c = execution_case
     c.gone, c.interrupt = False, registered_only
@@ -165,7 +165,10 @@ def inject_release_failure(c: ExecutionCase, patch: pytest.MonkeyPatch, *, at_re
 @pytest.mark.parametrize("at_release", [False, True])
 @pytest.mark.parametrize("after", [False, True])
 def test_confirmed_exit_allows_drain_then_reconciled_release(
-    execution_case: ExecutionCase, monkeypatch: pytest.MonkeyPatch, at_release: bool, after: bool,
+    execution_case: ExecutionCase,
+    monkeypatch: pytest.MonkeyPatch,
+    at_release: bool,
+    after: bool,
 ) -> None:
     c = execution_case
     c.gone, c.disposition, c.edit = False, Disposition.OWNER, edits
@@ -203,9 +206,7 @@ def test_confirmed_exit_allows_drain_then_reconciled_release(
     assert completed is not None and completed.release is not None and completed.release.phase is ReleasePhase.COMPLETE
     assert (completed.ref, completed.commit) == (saved.ref, saved.commit)
     assert c.con.execute("SELECT * FROM reservation").fetchall() == []
-    assert c.con.execute("SELECT generation FROM slot WHERE name=?", (c.record.slot,)).fetchone() == (
-        c.record.key.reservation_generation,
-    )
+    assert c.con.execute("SELECT generation FROM slot WHERE name=?", (c.record.slot,)).fetchone() == (c.record.key.reservation_generation,)
     assert head(c.slot) == c.record.base and c.slot.branch() is None and not c.slot.merging()
     assert c.slot.read_file("README") == "admitted base\n" and c.slot.read_file("base-only") == "base bytes\n"
     assert c.slot.read_file("ignored") == "ignored bytes\n" and c.slot.read_file("notes") is None

@@ -32,9 +32,7 @@ def declaration_kind(node: Declaration) -> SignatureKind:
         return SignatureKind.FUNCTION
     if isinstance(node, ast.ClassDef):
         return SignatureKind.CLASS
-    if isinstance(node, ast.TypeAlias) or (
-        isinstance(node, ast.AnnAssign) and ast.unparse(node.annotation).split(".")[-1] == "TypeAlias"
-    ):
+    if isinstance(node, ast.TypeAlias) or (isinstance(node, ast.AnnAssign) and ast.unparse(node.annotation).split(".")[-1] == "TypeAlias"):
         return SignatureKind.TYPE_ALIAS
     return SignatureKind.CONSTANT
 
@@ -49,7 +47,8 @@ def _skeleton(node: Declaration) -> Declaration:
         result.body = [ast.Expr(value=ast.Constant(value=Ellipsis))]
     elif isinstance(result, ast.ClassDef):
         result.body = [
-            _skeleton(member) for member in result.body
+            _skeleton(member)
+            for member in result.body
             if isinstance(member, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Assign, ast.AnnAssign, ast.TypeAlias))
             and any(_public_member(name) for name in declared_names(member))
         ] or [ast.Expr(value=ast.Constant(value=Ellipsis))]

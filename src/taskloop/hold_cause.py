@@ -21,10 +21,15 @@ class TerminalCause(StrEnum):
 
     @property
     def explanation(self) -> str:
-        what = ("Main's merge stopped for a decision." if self is TerminalCause.MERGE else
-                "The factory tried to land this task by itself and was refused: conflict resolution stopped for a decision.")
-        return (f"{what} The retained task work and resolution evidence remain available. "
-                "The task stays held; approval labels do not restart its plan or reset the resolution limit.")
+        what = (
+            "Main's merge stopped for a decision."
+            if self is TerminalCause.MERGE
+            else "The factory tried to land this task by itself and was refused: conflict resolution stopped for a decision."
+        )
+        return (
+            f"{what} The retained task work and resolution evidence remain available. "
+            "The task stays held; approval labels do not restart its plan or reset the resolution limit."
+        )
 
 
 def terminal_cause(reason: str) -> TerminalCause | None:
@@ -40,12 +45,18 @@ RULES = {  # the verdict rule words (`attempt_types.Rule`): what broke, and the 
     "plan_encoding": ("`plan.md` is not valid UTF-8 text", ""),
     "plan_empty": ("`plan.md` is empty or only whitespace", ""),
     "plan_size": ("the plan exceeds its depth's byte cap", "remove duplicated content or split the task into bounded parts"),
-    PlanContentRule.CHANGE_MAP: ("the plan needs a Change map with a nonempty bullet list",
-                                 "add the files, symbols and changes, including producers and callers"),
-    PlanContentRule.DEPTH: ("the plan does not declare exactly one valid depth",
-                           "put one line in Header that is only `Depth: small`, `Depth: medium` or `Depth: large`, not inside a sentence"),
-    PlanContentRule.HEADING: ("the plan has a forbidden status, as built or progress heading",
-                             "remove that heading and its status, as built or progress content"),
+    PlanContentRule.CHANGE_MAP: (
+        "the plan needs a Change map with a nonempty bullet list",
+        "add the files, symbols and changes, including producers and callers",
+    ),
+    PlanContentRule.DEPTH: (
+        "the plan does not declare exactly one valid depth",
+        "put one line in Header that is only `Depth: small`, `Depth: medium` or `Depth: large`, not inside a sentence",
+    ),
+    PlanContentRule.HEADING: (
+        "the plan has a forbidden status, as built or progress heading",
+        "remove that heading and its status, as built or progress content",
+    ),
     "paths": ("a listed path is not allowed (outside the step's folder, a Git file, or too many paths)", ""),
     "mode": ("a listed file is not a plain, non-executable file", ""),
     "file_size": ("a listed file is over the size limit", ""),
@@ -55,16 +66,22 @@ RULES = {  # the verdict rule words (`attempt_types.Rule`): what broke, and the 
     "nothing_written": ("the agent reported work but wrote no file, so there is nothing to commit", None),
 }
 RUN = {  # the run's classified end words the shelf names: what happened, and the fix
-    "vendor_blip": ("The agent CLI failed with an error the factory cannot tell from a blip; often the model or effort setting is "
-                    f"not offered to the account. The vendor's message is in {EVIDENCE}.",
-                    "correct the model or effort if the message says so"),
-    "bad_request": (f"The vendor rejected the request, often because of the model or effort setting; its message is in {EVIDENCE}.",
-                    "correct the model or effort"),
+    "vendor_blip": (
+        "The agent CLI failed with an error the factory cannot tell from a blip; often the model or effort setting is "
+        f"not offered to the account. The vendor's message is in {EVIDENCE}.",
+        "correct the model or effort if the message says so",
+    ),
+    "bad_request": (
+        f"The vendor rejected the request, often because of the model or effort setting; its message is in {EVIDENCE}.",
+        "correct the model or effort",
+    ),
     "hung": ("The agent printed nothing for too long and was stopped.", ""),
     "crash": ("The agent process crashed.", ""),
     "killed": ("The agent process was killed by a signal. The factory has no recorded sender or stop cause.", ""),
-    "secrets": ("A command of the agent exposed a secret, so the run was stopped.",
-                f"find what printed it in {EVIDENCE} and remove that source"),
+    "secrets": (
+        "A command of the agent exposed a secret, so the run was stopped.",
+        f"find what printed it in {EVIDENCE} and remove that source",
+    ),
     "exit": (f"The agent exited with an error and no answer; see {EVIDENCE}.", "read it and fix what it names"),
     "worker_failed": (f"The agent failed after starting work; see {EVIDENCE}.", "read it and fix what it names"),
     "logged_out": ("The agent's vendor refused the login.", "sign in again"),
@@ -78,8 +95,10 @@ STUCK = {
     "entry_lost": ("The attempt's entry process ended without recording a result.", ""),
     "uncollected": ("The attempt's result could not be read back in full.", ""),
     "conflict": ("The attempt's stored session facts conflict.", ""),
-    "setup_failed": ("The slot's setup command failed.", "fix the setup or environment first (the setup log is beside the attempt's "
-                     "entry log)"),
+    "setup_failed": (
+        "The slot's setup command failed.",
+        "fix the setup or environment first (the setup log is beside the attempt's entry log)",
+    ),
 }
 
 
@@ -116,20 +135,28 @@ def _answer(_rest: str) -> Cause:
 
 
 def _repeats(_rest: str) -> Cause:
-    return Cause("The agent was asked to repeat its step until its files were settled and did not manage it "
-                 "(`Left in the slot` names them).")
+    return Cause(
+        "The agent was asked to repeat its step until its files were settled and did not manage it (`Left in the slot` names them)."
+    )
 
 
 LAND_CAUSE = "land:"  # the prefix of a land refusal's hold reason (`round_land`)
-ASIDE = ("set the task's old branch aside (rename it to `old/<id>-` and the first 12 characters of its tip, saved work "
-         "included: nothing is deleted) so the work starts again on the current "
-         "`main`")
+ASIDE = (
+    "set the task's old branch aside (rename it to `old/<id>-` and the first 12 characters of its tip, saved work "
+    "included: nothing is deleted) so the work starts again on the current "
+    "`main`"
+)
 LAND = {  # a land refusal about the task's own change: what happened and the fix ("" = the same work may be tried again)
     "conflict": ("Conflict resolution stopped for a decision; the task's work and resolution evidence remain retained.", None),
-    "checks_failed": ("The checks failed on the change as squashed onto the current `main`, though they passed on the task's own "
-                      "commit (the land's check logs say which).", ASIDE),
-    "remote_rejected": ("Origin refused the push to `main` by its own policy (for example a protected branch), not because `main` "
-                        "moved.", "lift what blocks the push to `main`, or land the change by hand"),
+    "checks_failed": (
+        "The checks failed on the change as squashed onto the current `main`, though they passed on the task's own "
+        "commit (the land's check logs say which).",
+        ASIDE,
+    ),
+    "remote_rejected": (
+        "Origin refused the push to `main` by its own policy (for example a protected branch), not because `main` moved.",
+        "lift what blocks the push to `main`, or land the change by hand",
+    ),
     "branch_moved": ("The task branch no longer holds exactly the commit that was checked.", None),
     "claim_lost": ("Someone else changed this task's claim while it waited to land.", None),
 }
@@ -142,12 +169,20 @@ def _land(rest: str) -> Cause:
 
 OWNER = {
     "needs_owner": Cause("The agent needs a decision only the owner can give (its explanation is quoted above)."),
-    "main_moved": Cause("`main` moved while each of the last checks runs ran (more landing or pushing than the checks take), so "
-                        "none of them could conclude.", ""),
+    "main_moved": Cause(
+        "`main` moved while each of the last checks runs ran (more landing or pushing than the checks take), so "
+        "none of them could conclude.",
+        "",
+    ),
     "incomplete": Cause("The agent stopped without finishing (its explanation is quoted above)."),
 }
 BY_PREFIX: tuple[tuple[str, Callable[[str], Cause]], ...] = (  # the first prefix of the word that fits builds the cause
-    ("land:", _land), ("run:", _run), ("answer:", _answer), ("rejected:", _rejected), ("repeats_exhausted", _repeats), ("stuck:", _stuck),
+    ("land:", _land),
+    ("run:", _run),
+    ("answer:", _answer),
+    ("rejected:", _rejected),
+    ("repeats_exhausted", _repeats),
+    ("stuck:", _stuck),
 )
 
 

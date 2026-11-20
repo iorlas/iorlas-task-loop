@@ -78,13 +78,19 @@ def commentary_gap(replay: Replay) -> None:
     assert replay.supervisor.turn.stop is None
 
 
-@pytest.mark.parametrize(("answer", "kind", "reason"), [
-    (json.dumps(PLAN), "valid", "commit"),
-    ("The plan is ready.", "json_invalid", "answer:json_invalid"),
-    ("{}", "schema_invalid", "answer:schema_invalid"),
-])
+@pytest.mark.parametrize(
+    ("answer", "kind", "reason"),
+    [
+        (json.dumps(PLAN), "valid", "commit"),
+        ("The plan is ready.", "json_invalid", "answer:json_invalid"),
+        ("{}", "schema_invalid", "answer:schema_invalid"),
+    ],
+)
 def test_one_attempt_and_session_survive_commentary_until_the_confirmed_answer(
-    surroundings: AttemptSurroundings, answer: str, kind: str, reason: str,
+    surroundings: AttemptSurroundings,
+    answer: str,
+    kind: str,
+    reason: str,
 ) -> None:
     con = database(surroundings)
     registration = FakeRun(RunOutcome(worker=WORKER))
@@ -121,7 +127,8 @@ def test_one_attempt_and_session_survive_commentary_until_the_confirmed_answer(
 
 @pytest.mark.parametrize("reasoning", [False, True], ids=["no-further-stdout", "reasoning-after-commentary"])
 def test_unconfirmed_commentary_is_diagnostic_and_preserves_the_execution_failure(
-    surroundings: AttemptSurroundings, reasoning: bool,
+    surroundings: AttemptSurroundings,
+    reasoning: bool,
 ) -> None:
     con = database(surroundings)
     registration = FakeRun(RunOutcome(worker=WORKER))
@@ -164,8 +171,9 @@ def test_completed_turn_arms_the_answer_grace_for_a_worker_that_does_not_exit() 
 def test_terminal_answer_file_is_read_by_the_released_summary(tmp_path: Path) -> None:
     harness = CodexHarness()
     path = tmp_path / "answer.txt"
-    harness.launch_spec(LaunchInputs(exe="/bin/codex", cwd=str(tmp_path), model="chosen", effort="high", prompt="Plan the task",
-                                   env={}, out_file=str(path)))
+    harness.launch_spec(
+        LaunchInputs(exe="/bin/codex", cwd=str(tmp_path), model="chosen", effort="high", prompt="Plan the task", env={}, out_file=str(path))
+    )
     replay = Replay(harness)
     replay.start()
     replay.item("agent_message", COMMENTARY)

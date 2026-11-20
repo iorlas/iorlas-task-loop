@@ -31,8 +31,12 @@ from taskloop.tracker_client import inspect_tracker_task, tracker_claims
 
 def _owners(attempts: AttemptStore) -> tuple[Owner, ...]:
     connect, begin = attempts.connect, attempts.begin
-    return (attempts.drain_processes() + CheckStore(connect, begin).drain_processes()
-            + SetupStore(connect, begin).drain_processes() + MergeStore(connect, begin).active_processes())
+    return (
+        attempts.drain_processes()
+        + CheckStore(connect, begin).drain_processes()
+        + SetupStore(connect, begin).drain_processes()
+        + MergeStore(connect, begin).active_processes()
+    )
 
 
 def _return_claim(action: Action) -> bool:

@@ -57,8 +57,16 @@ class Checking(Factory):
     registered command's observation by pid (default gone). `entries`: each started entry's module and task; `launched`:
     each agent launch's task."""
 
-    def __init__(self, path: Path, con: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: PinnedViews,
-                 files: SlotFiles, tracker: Tracker) -> None:
+    def __init__(
+        self,
+        path: Path,
+        con: sqlite3.Connection,
+        tmp_path: Path,
+        slot: FakeWorktree,
+        checkouts: PinnedViews,
+        files: SlotFiles,
+        tracker: Tracker,
+    ) -> None:
         super().__init__(con, tmp_path, slot, checkouts, files, tracker)
         self.path, self.bodies, self.starts = path, list[str](), 0
         self.entries, self.launched, self.alive = list[tuple[str, str]](), list[str](), set[EntryIdentity]()
@@ -79,10 +87,29 @@ class Checking(Factory):
         return super().launch(backlog, task_id, minutes)
 
     def starting(self) -> StartPorts:
-        admission = ChecksAdmission(lambda: self.con, begin_immediate, self.tracker.inspect, self.checkouts, lambda: self.now,
-                                    lambda _p: True, self.files, lambda path: GitProfileFiles(path, self.checkouts), ids=NativeIds())
-        launcher = Launcher(self.path, EvidenceFiles(self.tmp), lambda: self.now, self.entry, self.process, "python",
-                            targets=CheckStore, module=CHECK_ENTRY_MODULE, read_seconds=DEFAULT_GIT_READ_SECONDS, ids=NativeIds())
+        admission = ChecksAdmission(
+            lambda: self.con,
+            begin_immediate,
+            self.tracker.inspect,
+            self.checkouts,
+            lambda: self.now,
+            lambda _p: True,
+            self.files,
+            lambda path: GitProfileFiles(path, self.checkouts),
+            ids=NativeIds(),
+        )
+        launcher = Launcher(
+            self.path,
+            EvidenceFiles(self.tmp),
+            lambda: self.now,
+            self.entry,
+            self.process,
+            "python",
+            targets=CheckStore,
+            module=CHECK_ENTRY_MODULE,
+            read_seconds=DEFAULT_GIT_READ_SECONDS,
+            ids=NativeIds(),
+        )
         return replace(super().starting(), checks=ChecksPorts(admission, launcher, self.releasing()))
 
     def observe(self, _entry: EntryIdentity) -> Seen:
@@ -94,8 +121,15 @@ class Checking(Factory):
         return ProcessObservation("matching", identity) if alive else ProcessObservation("gone")
 
     def entry(
-        self, argv: Sequence[str], *, registered: Callable[[OwnedProcess], None], cwd: object = None, env: object = None,
-        stderr: int = 0, start_new_session: bool = True, registration_timeout: float = 0.0,
+        self,
+        argv: Sequence[str],
+        *,
+        registered: Callable[[OwnedProcess], None],
+        cwd: object = None,
+        env: object = None,
+        stderr: int = 0,
+        start_new_session: bool = True,
+        registration_timeout: float = 0.0,
     ) -> tuple[Pipes, OwnedProcess]:
         """The registered start of `python -I -m taskloop.check_entry DB ARTIFACTS BACKLOG TASK`, its body run at once."""
         self.starts += 1
@@ -162,8 +196,17 @@ class Checking(Factory):
         return self.releasing()
 
     def releasing(self) -> ChecksRelease:
-        return ChecksRelease(self.checks, self.checkouts, self.files, lambda _entry: "gone", custody, lambda: self.now,
-                             self.command, lambda _scratch: True, ids=NativeIds())
+        return ChecksRelease(
+            self.checks,
+            self.checkouts,
+            self.files,
+            lambda _entry: "gone",
+            custody,
+            lambda: self.now,
+            self.command,
+            lambda _scratch: True,
+            ids=NativeIds(),
+        )
 
     def finish(self, task_id: str, body: str) -> None:
         """The running entry of the task's checks attempt ends with `body`."""
@@ -177,8 +220,10 @@ class Checking(Factory):
         return self.con.execute(row, (self.key(task_id).attempt_id,)).fetchone()
 
     def rows(self) -> list[tuple[object, ...]]:
-        return self.con.execute("SELECT a.task_id,c.number,c.phase,c.conclusion FROM checks_attempt c JOIN attempt a "
-                                "ON a.attempt_id=c.after_attempt_id ORDER BY a.task_id,c.number").fetchall()
+        return self.con.execute(
+            "SELECT a.task_id,c.number,c.phase,c.conclusion FROM checks_attempt c JOIN attempt a "
+            "ON a.attempt_id=c.after_attempt_id ORDER BY a.task_id,c.number"
+        ).fetchall()
 
     def logged(self, *words: str) -> int:
         """How many `rounds.log` lines end with these words."""
@@ -262,11 +307,14 @@ def test_a_land_that_moves_main_during_another_task_s_checks_re_runs_only_those_
     assert rig.tracker.beads["tl-1"].status == "in_progress"
 
 
-@pytest.mark.parametrize(("first", "advance"), [
-    ("unstartable", ("tl-1", "implement", "advance", "unavailable:start")),
-    ("crash", ("tl-1", "check", "advance", "started")),
-    ("counted", ("tl-1", "check", "advance", "started")),
-])
+@pytest.mark.parametrize(
+    ("first", "advance"),
+    [
+        ("unstartable", ("tl-1", "implement", "advance", "unavailable:start")),
+        ("crash", ("tl-1", "check", "advance", "started")),
+        ("counted", ("tl-1", "check", "advance", "started")),
+    ],
+)
 def test_an_admitted_checks_attempt_is_relaunched_with_the_checks_launcher_only(
     rig: Checking, first: str, advance: tuple[str, str, str, str]
 ) -> None:
@@ -346,8 +394,10 @@ def test_two_done_tasks_and_one_slot_check_in_release_order_and_the_freed_slot_w
     assert rig.next_words() == {"tl-1": ("implement", "advance"), "tl-2": ("implement", "commit")}
     rig.bodies = ["running", "passed"]
     ready(rig, "tl-3")
-    assert rig.round() == [("tl-2", "implement", "commit", "committed release=released branch=published"),
-                           ("tl-1", "check", "advance", "started")]
+    assert rig.round() == [
+        ("tl-2", "implement", "commit", "committed release=released branch=published"),
+        ("tl-1", "check", "advance", "started"),
+    ]
     reads = rig.tracker.ready_reads
     assert rig.round() == [("tl-1", "check", "report", "running")] and rig.last.stopped == "no_free_slot"
     assert rig.tracker.ready_reads == reads and rig.next_words()["tl-2"] == ("implement", "advance")  # tl-2 and tl-3 wait
@@ -357,9 +407,14 @@ def test_two_done_tasks_and_one_slot_check_in_release_order_and_the_freed_slot_w
     assert rig.rows() == [("tl-1", 1, "concluded", "passed")] and rig.next_words()["tl-2"] == ("implement", "advance")
 
 
-@pytest.mark.parametrize(("body", "pid", "seen"), [
-    ("orphan", 900, "alive"), ("orphan", 900, "unknown"), ("setup_orphan", 902, "alive"),
-])
+@pytest.mark.parametrize(
+    ("body", "pid", "seen"),
+    [
+        ("orphan", 900, "alive"),
+        ("orphan", 900, "unknown"),
+        ("setup_orphan", 902, "alive"),
+    ],
+)
 def test_a_command_outliving_its_dead_entry_is_waited_for_never_relaunched_or_counted_then_resumed(
     rig: Checking, body: str, pid: int, seen: ProcessSeen
 ) -> None:
@@ -421,9 +476,23 @@ def _candidate(rig: Checking, *, slot: bool) -> AttemptKey:
         if slot:
             reserve(rig.con, repo_id, "s1", key)
         d = rig.con.execute("SELECT parked FROM checks_attempt WHERE attempt_id=?", (checks,)).fetchone()[0]
-        land_store.insert(rig.con, land_store.LandAdmitted(key, checks, 1, x, x, True, (("check", "c" * 64),), "s1" if slot else None,
-                                                           d if slot else None, rig.now + 600 if slot else None,
-                                                           None if slot else "same_tree", rig.now))
+        land_store.insert(
+            rig.con,
+            land_store.LandAdmitted(
+                key,
+                checks,
+                1,
+                x,
+                x,
+                True,
+                (("check", "c" * 64),),
+                "s1" if slot else None,
+                d if slot else None,
+                rig.now + 600 if slot else None,
+                None if slot else "same_tree",
+                rig.now,
+            ),
+        )
     return key
 
 
@@ -478,8 +547,10 @@ def test_a_pending_hold_refuses_a_start_by_hand_and_never_abandons_a_passing_re_
     implement = rig.store.attempt_of("tasks", "tl-1")
     assert implement is not None
     starting = rig.starting()
-    rig.during = lambda: (starting.checks.admission.admit_checks(ChecksRequest(implement[0], rig.slot.repo.path, rig.now + 1800, 2)),
-                          starting.checks.launcher.launch("tasks", "tl-1", 30))
+    rig.during = lambda: (
+        starting.checks.admission.admit_checks(ChecksRequest(implement[0], rig.slot.repo.path, rig.now + 1800, 2)),
+        starting.checks.launcher.launch("tasks", "tl-1", 30),
+    )
     rig.tracker.down = set()
     assert rig.round() == [("tl-1", "check", "hold", "refused refused:retired")]
     assert rig.rows() == [("tl-1", 1, "concluded", "failed"), ("tl-1", 2, "concluded", "passed")]

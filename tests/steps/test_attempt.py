@@ -82,8 +82,15 @@ class AttemptSurroundings:
         registration_store: AttemptStore | None = None,
     ) -> Attempts:
         return Attempts(
-            store, EvidenceFiles(self.tmp), AgentLaunch(credentials, ids=NativeIds()), execution, clock, self.checkouts, self.files,
-            registration_store=registration_store, monotonic=monotonic,
+            store,
+            EvidenceFiles(self.tmp),
+            AgentLaunch(credentials, ids=NativeIds()),
+            execution,
+            clock,
+            self.checkouts,
+            self.files,
+            registration_store=registration_store,
+            monotonic=monotonic,
         )
 
 
@@ -110,14 +117,16 @@ def seed(con: sqlite3.Connection, surroundings: AttemptSurroundings) -> sqlite3.
         con.execute("INSERT INTO slot (repo_id,name,path) VALUES (?,'s1',?)", (repo_id, str(surroundings.slot.path)))
         con.execute("INSERT INTO reservation VALUES ('s1',?,1,'attempt')", (repo_id,))
         pin_workflow(con)
-        con.execute("""INSERT INTO attempt
+        con.execute(
+            """INSERT INTO attempt
             (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,input_digest,
              schema_version,model,effort,access_policy,deadline,entry_pid,entry_start,entry_boot,number,seq,slot_head,engine_digest,workflow_digest,workflow_sha,
              admitted_at)
             VALUES ('attempt','dispatch',1,'plan','beads','tasks','tl-1','/tracker',?,'s1','input.txt',?,1,'chosen','high',
             '{"harness":"codex","sandbox":"workspace-write"}',100,7,'entry-start','boot',1,1,'dddddddddddddddddddddddddddddddddddddddd',
             ?,(SELECT digest FROM workflow_file),'eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',1.0)""",
-            (repo_id, hashlib.sha256(b"Plan the actual task").hexdigest(), ENGINE))
+            (repo_id, hashlib.sha256(b"Plan the actual task").hexdigest(), ENGINE),
+        )
     (surroundings.tmp / "input.txt").write_text("Plan the actual task")
     return con
 
@@ -327,9 +336,7 @@ def test_storage_loss_keeps_first_ref_and_conflict_then_capture_retries(tmp_path
     assert flaky.con.execute("SELECT session_ref FROM attempt").fetchone() == ("first",)
 
 
-def test_capture_conflicts_on_different_facts_and_a_stale_capture_cannot_rewrite(
-    tmp_path: Path, surroundings: AttemptSurroundings
-) -> None:
+def test_capture_conflicts_on_different_facts_and_a_stale_capture_cannot_rewrite(tmp_path: Path, surroundings: AttemptSurroundings) -> None:
     flaky = Flaky(database(surroundings))
     result = owner(flaky, surroundings, registered_run(fake(), flaky, down_after_start=True)).execute(KEY, ENTRY)
     assert result.pending is not None

@@ -36,8 +36,11 @@ from taskloop.ids import NativeIds
 from taskloop.setup_store import SetupStore
 from taskloop.slot_lock import custody
 
-PROFILE = {"setup": [["just", "bootstrap"]], "required": ["check", "test"], "checks": [
-    {"name": "check", "argv": ["just", "check"], "timeout": 600}, {"name": "test", "argv": ["just", "test"], "timeout": 30}]}
+PROFILE = {
+    "setup": [["just", "bootstrap"]],
+    "required": ["check", "test"],
+    "checks": [{"name": "check", "argv": ["just", "check"], "timeout": 600}, {"name": "test", "argv": ["just", "test"], "timeout": 30}],
+}
 RESULTS = "SELECT block,name,conclusion FROM check_result ORDER BY block,position"
 ATTEMPT = "SELECT phase,conclusion,reason,refusal,refusals,target_seen,released_at IS NOT NULL FROM checks_attempt"
 
@@ -121,15 +124,27 @@ class Bench:
     def checking(self, _database: Path, _artifacts: Path) -> Checking:
         env = self.environment
         block = Block(BlockPorts(env.process, env.process.lingering, self.clock))
-        return Checking(self.store, SetupStore(lambda: self.con), EvidenceFiles(env.artifacts), self.views, self.files, env.profiles,
-                        env.preparation(), block, env.observe, lambda _entry: "gone", self.scratch,
-                            self.clock, self.environ, ids=NativeIds())
+        return Checking(
+            self.store,
+            SetupStore(lambda: self.con),
+            EvidenceFiles(env.artifacts),
+            self.views,
+            self.files,
+            env.profiles,
+            env.preparation(),
+            block,
+            env.observe,
+            lambda _entry: "gone",
+            self.scratch,
+            self.clock,
+            self.environ,
+            ids=NativeIds(),
+        )
 
     def __call__(self, inspect: object = inspect_process) -> int:
         observe = inspect_process if inspect is inspect_process else self.other
         args = EntryArgs(self.db, self.db.parent, 600, "tasks", "tl-1")
-        return enter(args, self.checking, observe, self.lines.append, self.heartbeat_for,
-                     Stop(self.go))
+        return enter(args, self.checking, observe, self.lines.append, self.heartbeat_for, Stop(self.go))
 
     @staticmethod
     def other(_pid: int) -> ProcessObservation:
@@ -146,10 +161,22 @@ class Bench:
 
     def result(self, block: int, position: int, name: str, conclusion: str | None, pid: int | None = None) -> None:
         """A result row of an earlier entry, written straight into the table."""
-        self.con.execute("""INSERT INTO check_result (attempt_id,dispatch_token,generation,block,position,name,argv_digest,timeout,
+        self.con.execute(
+            """INSERT INTO check_result (attempt_id,dispatch_token,generation,block,position,name,argv_digest,timeout,
             pid,pgid,proc_start,boot,started_at,ended_at,conclusion) VALUES ('checks','checks-token',1,?,?,?,?,60,?,?,?,?,1,?,?)""",
-                         (block, position, name, "e" * 64, pid, pid, None if pid is None else "start", None if pid is None else "boot",
-                          None if conclusion is None else 2, conclusion))
+            (
+                block,
+                position,
+                name,
+                "e" * 64,
+                pid,
+                pid,
+                None if pid is None else "start",
+                None if pid is None else "boot",
+                None if conclusion is None else 2,
+                conclusion,
+            ),
+        )
 
 
 @pytest.fixture
@@ -288,10 +315,14 @@ def test_main_moved_during_the_block_fails_a_passing_block(bench: Bench) -> None
     assert bench.results() == [(1, "check", "passed"), (1, "test", "passed")]
 
 
-@pytest.mark.parametrize(("blob", "line"), [
-    (b"not json", "collected failed:profile:not_json claim=held release=released"),
-    (None, "collected failed:profile:missing claim=held release=released"),
-], ids=["invalid", "missing"])
+@pytest.mark.parametrize(
+    ("blob", "line"),
+    [
+        (b"not json", "collected failed:profile:not_json claim=held release=released"),
+        (None, "collected failed:profile:missing claim=held release=released"),
+    ],
+    ids=["invalid", "missing"],
+)
 def test_the_candidate_s_own_profile_refused_at_x_concludes(bench: Bench, blob: bytes | None, line: str) -> None:
     bench.environment.profiles = FakeProfiles(blob=blob)
     assert bench() == 1 and bench.lines == [line] and bench.execs() == []
@@ -305,11 +336,15 @@ def test_a_slot_on_a_branch_concludes_and_a_dirty_slot_elsewhere_is_counted(benc
     assert bench.attempt()[:5] == ("concluded", "failed", "slot:branch", None, 0)  # the conclusion clears the count
 
 
-@pytest.mark.parametrize(("arrange", "line"), [
-    (lambda b: setattr(b.environment, "platform", "darwin"), "collected failed:environment:platform claim=held release=released"),
-    (lambda b: b.environment.process.script.append(Command(rc=1)), "unavailable environment:exit claim=held"),
-    (lambda b: b.environment.files.unemptiable.add(b.slot.path.parent / ".t" / "s1"), "unavailable environment:files claim=held"),
-], ids=["platform", "exit", "files"])
+@pytest.mark.parametrize(
+    ("arrange", "line"),
+    [
+        (lambda b: setattr(b.environment, "platform", "darwin"), "collected failed:environment:platform claim=held release=released"),
+        (lambda b: b.environment.process.script.append(Command(rc=1)), "unavailable environment:exit claim=held"),
+        (lambda b: b.environment.files.unemptiable.add(b.slot.path.parent / ".t" / "s1"), "unavailable environment:files claim=held"),
+    ],
+    ids=["platform", "exit", "files"],
+)
 def test_the_environment_concludes_its_refusals_and_counts_the_rest(bench: Bench, arrange: object, line: str) -> None:
     assert callable(arrange)
     arrange(bench)
@@ -366,17 +401,24 @@ def test_a_busy_slot_lock_is_counted_with_nothing_read(bench: Bench) -> None:
     assert bench.lines == ["refused slot_busy"] and bench.environment.events == [] and bench.attempt()[3:5] == ("slot_busy", 1)
 
 
-@pytest.mark.parametrize(("result", "verdict"), [
-    (AttemptResult("refused", "commit_missing"), Verdict("failed", "commit_missing")),
-    (AttemptResult("refused", "slot:moved"), Verdict("failed", "slot:moved")),
-    (AttemptResult("refused", "slot_unborn"), Verdict("failed", "slot:unborn")),
-    (AttemptResult("refused", "slot:redirected"), Verdict("failed", "slot:redirected")),
-    (AttemptResult("refused", "environment:reset"), Verdict("failed", "environment:reset")),
-    (AttemptResult("refused", "slot_busy"), None), (AttemptResult("refused", "slot_dirty"), None),
-    (AttemptResult("refused", "stale_reservation"), None), (AttemptResult("unavailable", "repo"), None),
-    (AttemptResult("unavailable", "not_listed"), None), (AttemptResult("unavailable", "environment:files"), None),
-    (AttemptResult("unavailable", "git"), None), (AttemptResult("unavailable", "store"), None),
-])
+@pytest.mark.parametrize(
+    ("result", "verdict"),
+    [
+        (AttemptResult("refused", "commit_missing"), Verdict("failed", "commit_missing")),
+        (AttemptResult("refused", "slot:moved"), Verdict("failed", "slot:moved")),
+        (AttemptResult("refused", "slot_unborn"), Verdict("failed", "slot:unborn")),
+        (AttemptResult("refused", "slot:redirected"), Verdict("failed", "slot:redirected")),
+        (AttemptResult("refused", "environment:reset"), Verdict("failed", "environment:reset")),
+        (AttemptResult("refused", "slot_busy"), None),
+        (AttemptResult("refused", "slot_dirty"), None),
+        (AttemptResult("refused", "stale_reservation"), None),
+        (AttemptResult("unavailable", "repo"), None),
+        (AttemptResult("unavailable", "not_listed"), None),
+        (AttemptResult("unavailable", "environment:files"), None),
+        (AttemptResult("unavailable", "git"), None),
+        (AttemptResult("unavailable", "store"), None),
+    ],
+)
 def test_section_6_1_concludes_what_a_relaunch_cannot_clear(result: AttemptResult, verdict: Verdict | None) -> None:
     assert concluded(result) == verdict
 

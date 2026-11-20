@@ -77,7 +77,12 @@ class EntryTargets(Protocol):
     def attempt_of(self, backlog: str, task_id: str) -> tuple[AttemptKey, str, EntryIdentity | None] | None: ...
 
     def register_entry(
-        self, key: AttemptKey, entry: EntryIdentity, now: float, replacing: Replaced | None = None, renewed: float | None = None,
+        self,
+        key: AttemptKey,
+        entry: EntryIdentity,
+        now: float,
+        replacing: Replaced | None = None,
+        renewed: float | None = None,
     ) -> Literal["accepted", "conflict", "refused"]: ...
 
 
@@ -136,9 +141,19 @@ def entry_process(entry: EntryIdentity) -> OwnedProcess:
 
 class Launcher:
     def __init__(
-        self, database: Path, files: EvidenceFiles, clock: Callable[[], float], start: Start, observe: ObserveProcess, executable: str,
-        targets: Targets = AttemptStore, module: str = ENTRY_MODULE,
-        *, read_seconds: int, ids: Ids, recovery: Callable[[AttemptKey, Identity, float], Result] | None = None,
+        self,
+        database: Path,
+        files: EvidenceFiles,
+        clock: Callable[[], float],
+        start: Start,
+        observe: ObserveProcess,
+        executable: str,
+        targets: Targets = AttemptStore,
+        module: str = ENTRY_MODULE,
+        *,
+        read_seconds: int,
+        ids: Ids,
+        recovery: Callable[[AttemptKey, Identity, float], Result] | None = None,
         timing: OperationTiming | None = None,
     ) -> None:
         """`targets` and `module`: the agent attempts' store and entry by default, `CheckStore` and `CHECK_ENTRY_MODULE`
@@ -172,17 +187,17 @@ class Launcher:
                 return LaunchUnavailable("store")
             configure_registration(writer)
             drain = DrainStore(lambda: writer, store.begin_immediate, ids=self.ids)
-            return self._authorized(drain, target, (backlog, task_id), self.targets(lambda: writer,
-                store.begin_immediate), minutes)
-        except (sqlite3.Error, StoreUnavailable):
+            return self._authorized(drain, target, (backlog, task_id), self.targets(lambda: writer, store.begin_immediate), minutes)
+        except sqlite3.Error, StoreUnavailable:
             return LaunchUnavailable("store")
         finally:
             for con in (reader, writer):
                 if con is not None:
                     con.close()
 
-    def _authorized(self, drain: DrainStore, target: tuple[AttemptKey, Replaced | None, bool], task: tuple[str, str],
-                    writer: EntryTargets, minutes: int) -> LaunchResult:
+    def _authorized(
+        self, drain: DrainStore, target: tuple[AttemptKey, Replaced | None, bool], task: tuple[str, str], writer: EntryTargets, minutes: int
+    ) -> LaunchResult:
         try:
             with operation(drain, ActionKind.DISPATCH, ids=self.ids, subject=target[0].attempt_id):
                 return self._start(target[0], task, writer, target[1], minutes, recovering=target[2])
@@ -209,8 +224,14 @@ class Launcher:
         return key, Replaced(stored, seen.kind), False
 
     def _register(
-        self, key: AttemptKey, identity: OwnedProcess, writer: EntryTargets, replacing: Replaced | None, minutes: int,
-        *, recovering: bool,
+        self,
+        key: AttemptKey,
+        identity: OwnedProcess,
+        writer: EntryTargets,
+        replacing: Replaced | None,
+        minutes: int,
+        *,
+        recovering: bool,
     ) -> None:
         now = self.clock()
         try:
@@ -218,8 +239,9 @@ class Launcher:
         except OverflowError:  # no float holds it: the store refuses a non-finite renewal
             renewed = math.inf
         if recovering and self.recovery is not None:
-            authorized = self.recovery(key, Identity(pid=identity.pid, pgid=identity.pgid, start=identity.start, boot=identity.boot),
-                                       renewed)
+            authorized = self.recovery(
+                key, Identity(pid=identity.pid, pgid=identity.pgid, start=identity.start, boot=identity.boot), renewed
+            )
             if authorized.outcome is not Outcome.AUTHORIZED:
                 raise _CallbackRefused(LaunchRefused(authorized.outcome, authorized.explanation))
         else:
@@ -228,8 +250,14 @@ class Launcher:
                 raise _CallbackRefused(LaunchRefused("registration_conflict" if answer == "conflict" else "registration_refused"))
 
     def _start(
-        self, key: AttemptKey, task: tuple[str, str], writer: EntryTargets, replacing: Replaced | None, minutes: int,
-        *, recovering: bool = False,
+        self,
+        key: AttemptKey,
+        task: tuple[str, str],
+        writer: EntryTargets,
+        replacing: Replaced | None,
+        minutes: int,
+        *,
+        recovering: bool = False,
     ) -> LaunchResult:
         """`task` (backlog, task id) names the attempt to the entry; the dispatch token never enters argv."""
         committed = False
@@ -242,13 +270,18 @@ class Launcher:
         argv = [self.executable, "-I", "-m", self.module, str(self.database), str(self.files.root), str(self.read_seconds), *task]
         try:
             log = os.open(self.files.entry_log(key), os.O_WRONLY | os.O_APPEND | os.O_CREAT | os.O_CLOEXEC, 0o600)
-        except (EvidenceError, OSError):
+        except EvidenceError, OSError:
             return LaunchUnavailable("log")
         with measured(self.timing if self.module == CHECK_ENTRY_MODULE else None, key, OperationKind.CHECKS_START) as observed:
             try:
                 child, identity = self.start(
-                    argv, registered=registered, cwd=str(self.files.root), env=None, stderr=log,
-                    start_new_session=True, registration_timeout=REGISTRATION_TIMEOUT,
+                    argv,
+                    registered=registered,
+                    cwd=str(self.files.root),
+                    env=None,
+                    stderr=log,
+                    start_new_session=True,
+                    registration_timeout=REGISTRATION_TIMEOUT,
                 )
                 observed.state = OperationState.COMPLETED
             except _CallbackRefused as refused:
@@ -259,7 +292,7 @@ class Launcher:
                 return LaunchUnavailable("store")
             except RegisteredStartUncertainError as uncertain:
                 return LaunchUncertain(key, entry_identity(uncertain.identity))
-            except (OSError, IdentityUnavailableError, RuntimeError):
+            except OSError, IdentityUnavailableError, RuntimeError:
                 observed.state = OperationState.FAILED
                 # before registration the child is cleaned; after it the exec failed
                 return LaunchUnavailable("exec_failed_after_commit" if committed else "start")

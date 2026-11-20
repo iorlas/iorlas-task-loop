@@ -30,7 +30,10 @@ def wired(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[MemoryDistri
 
 @pytest.mark.parametrize("explicit", [False, True])
 def test_cli_success_and_default_checkout_revision(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], explicit: bool,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    explicit: bool,
 ) -> None:
     _, seen = wired(tmp_path, monkeypatch)
     arguments = ["--checkout", str(tmp_path / "root"), "--at", SOURCE_COMMIT] if explicit else []
@@ -43,7 +46,9 @@ def test_cli_success_and_default_checkout_revision(
 
 
 def test_module_entry_point(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     wired(tmp_path, monkeypatch)
     monkeypatch.setattr(sys, "argv", ["taskloop.shelf_digest"])
@@ -65,7 +70,10 @@ def test_invalid_arguments_emit_only_stderr(arguments: list[str], capsys: pytest
 
 @pytest.mark.parametrize("failure", ["revision", "missing", "identity", "source", "signature", "documentation", "encoding"])
 def test_source_and_late_package_failures_leave_stdout_empty(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], failure: str,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    failure: str,
 ) -> None:
     distributions, seen = wired(tmp_path, monkeypatch)
     stream = distributions.records["stream-proc"]
@@ -93,7 +101,9 @@ def test_source_and_late_package_failures_leave_stdout_empty(
 
 
 def test_render_failure_is_explained_before_stdout(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     wired(tmp_path, monkeypatch)
 
@@ -107,7 +117,8 @@ def test_render_failure_is_explained_before_stdout(
 
 
 def test_git_failure_is_explained_without_stdout(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     def unavailable(_views: object, _path: Path) -> Repo:
         raise GitUnavailable("object storage unavailable")
@@ -120,7 +131,10 @@ def test_git_failure_is_explained_without_stdout(
 
 @pytest.mark.parametrize("failure", ["contract", "overflow"])
 def test_fact_and_bound_failures_are_buffered(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], failure: str,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    failure: str,
 ) -> None:
     distributions, _ = wired(tmp_path, monkeypatch)
     if failure == "contract":

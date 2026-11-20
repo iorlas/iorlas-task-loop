@@ -124,21 +124,36 @@ class SlotRelease:
         return self._run_release(key, True, None, reconciling=True)
 
     def _run_release(
-        self, key: AttemptKey, abandon: bool, me: EntryIdentity | None, *, reconciling: bool = False,
+        self,
+        key: AttemptKey,
+        abandon: bool,
+        me: EntryIdentity | None,
+        *,
+        reconciling: bool = False,
     ) -> ReleaseResult:
         try:
-            with operation(self.store, ActionKind.FINALIZE, ids=self.ids, subject=key.attempt_id,
-                           existing=lambda owner: self.store.owns_entry(key, owner)):
+            with operation(
+                self.store,
+                ActionKind.FINALIZE,
+                ids=self.ids,
+                subject=key.attempt_id,
+                existing=lambda owner: self.store.owns_entry(key, owner),
+            ):
                 return self._release(key, abandon, me, reconciling=reconciling)
         except Fenced:
             return NotReleased("refused", Reason.DRAINING, BLOCKED)
         except Unobservable:
             return NotReleased("unavailable", "observe", "The calling process cannot be observed.")
-        except (sqlite3.Error, StoreUnavailable):
+        except sqlite3.Error, StoreUnavailable:
             return NotReleased("unavailable", "store")
 
     def _release(
-        self, key: AttemptKey, abandon: bool, me: EntryIdentity | None, *, reconciling: bool,
+        self,
+        key: AttemptKey,
+        abandon: bool,
+        me: EntryIdentity | None,
+        *,
+        reconciling: bool,
     ) -> ReleaseResult:
         """Release the attempt's reservation (settled) or abandon it; `me` is the calling entry's own identity."""
         try:
@@ -187,8 +202,9 @@ class SlotRelease:
                 return NotReleased("unavailable", "store", f"The result could not be read. {NOTHING}")
             if result.status != "collected":
                 return NotReleased("refused", "not_terminal", f"The step has not ended: finish it, repeat it, or abandon it. {NOTHING}")
-        refused = (stop_proof(self.observe, self.gone, me, row.stopping) or setup_stopped(self.setup_seen, row.setup)
-                   or self._merge_stopped(row))
+        refused = (
+            stop_proof(self.observe, self.gone, me, row.stopping) or setup_stopped(self.setup_seen, row.setup) or self._merge_stopped(row)
+        )
         if refused is None and not reconcile(StopStore(self.store.connect, self.store.begin), row.key, self.gone, self.clock()):
             return NotReleased("unsettled", "worker_alive", "A recorded survivor may still run; the slot stays reserved.")
         return refused
@@ -198,8 +214,9 @@ class SlotRelease:
         if work is not None:
             for execution in work.executions:
                 process = execution.worker
-                if process is not None and not self.gone(Worker(pid=process.pid, pgid=process.pgid,
-                                                               start=process.start, boot=process.boot)):
+                if process is not None and not self.gone(
+                    Worker(pid=process.pid, pgid=process.pgid, start=process.start, boot=process.boot)
+                ):
                     return NotReleased("unsettled", "worker_alive", "A merge resolution process may still run; the slot stays reserved.")
         return None
 
@@ -248,11 +265,16 @@ class SlotRelease:
         if refused is not None:
             return refused
         try:
-            slot = park_slot(self.checkouts, self.slot_files, path, row.repo_id, row.slot_head, task_branch(row.task_id),
-                             self._saver(row, abandon))
+            slot = park_slot(
+                self.checkouts, self.slot_files, path, row.repo_id, row.slot_head, task_branch(row.task_id), self._saver(row, abandon)
+            )
         except GitUnavailable as error:
-            return NotReleased("unavailable", "git", f"Git could not read or park the slot ({type(error).__name__}: {error}): "
-                               "it may be half checked out; inspect it, then rerun. Nothing was recorded.")
+            return NotReleased(
+                "unavailable",
+                "git",
+                f"Git could not read or park the slot ({type(error).__name__}: {error}): "
+                "it may be half checked out; inspect it, then rerun. Nothing was recorded.",
+            )
         if isinstance(slot, NotReleased):
             return slot
         head, parked = slot
@@ -287,8 +309,11 @@ class SlotRelease:
         try:
             back = self.unclaim(row.tracker_root, row.task_id)
         except BdError as error:
-            return NotReleased("unavailable", "tracker", f"Released; the tracker claim is still to be returned ({error.kind}). "
-                               "The claim return remains pending for reconciliation.")
+            return NotReleased(
+                "unavailable",
+                "tracker",
+                f"Released; the tracker claim is still to be returned ({error.kind}). The claim return remains pending for reconciliation.",
+            )
         claim: Literal["unclaimed", "not_held"] = "unclaimed" if back else "not_held"
         try:
             self._releases.complete(row.key.attempt_id, claim)

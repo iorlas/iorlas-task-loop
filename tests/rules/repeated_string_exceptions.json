@@ -157,7 +157,7 @@
   },
   "src/taskloop/cli_composition.py": {
     "refused": 6,
-    "unavailable": 4
+    "unavailable": 3
   },
   "src/taskloop/cli_step.py": {
     "TASK": 4,
@@ -410,7 +410,7 @@
     "abandoned": 3,
     "absent": 3,
     "already_dispatched": 4,
-    "refused": 20,
+    "refused": 19,
     "release": 3,
     "store": 6,
     "unavailable": 10

@@ -68,7 +68,7 @@ def _registered(
         found = work.store.attempt_of(args.backlog, args.task_id)
         row = None if found is None else work.store.row(found[0])
         slot = None if found is None else work.store.slot_path(found[0])
-    except (sqlite3.Error, StoreUnavailable):
+    except sqlite3.Error, StoreUnavailable:
         return "unavailable store"
     if found is None or row is None:
         return "refused absent"
@@ -152,8 +152,9 @@ def _ended(found: _Registered, verdict: Verdict, claim: ClaimWord) -> tuple[str,
         return f"refused {refused.reason} claim={encode_claim(claim)}", False
     except StoreUnavailable:
         return f"{_counted(found, AttemptResult('unavailable', 'store'))} claim={encode_claim(claim)}", False
-    release = ChecksRelease(work.store, work.checkouts, work.slot_files, work.entry_seen, _unheld, work.clock,
-        work.seen, work.scratch, ids=work.ids)
+    release = ChecksRelease(
+        work.store, work.checkouts, work.slot_files, work.entry_seen, _unheld, work.clock, work.seen, work.scratch, ids=work.ids
+    )
     word = release_word(release.release(key, False, found.me))
     shown = verdict.outcome if verdict.reason is None else f"{verdict.outcome}:{verdict.reason}"
     return f"collected {shown} claim={encode_claim(claim)} release={word}", verdict.outcome == "passed"
@@ -162,8 +163,16 @@ def _ended(found: _Registered, verdict: Verdict, claim: ClaimWord) -> tuple[str,
 def _target(found: _Registered) -> Target:
     """The checks attempt's validation: X in its held slot, `main` watched from its target, its own profile digest."""
     store, row = found.work.store, found.row
-    return Target(row.key, row.repo_id, found.slot_path, row.commit, row.required, row.deadline, row.target,
-                  lambda digest: store.profiled(row.key, digest))
+    return Target(
+        row.key,
+        row.repo_id,
+        found.slot_path,
+        row.commit,
+        row.required,
+        row.deadline,
+        row.target,
+        lambda digest: store.profiled(row.key, digest),
+    )
 
 
 def main(argv: Sequence[str] | None = None) -> int:

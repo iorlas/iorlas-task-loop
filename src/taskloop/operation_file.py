@@ -38,7 +38,7 @@ def read(directory: Path, identity: str) -> tuple[OperationSample, ...]:
                 except FileNotFoundError:
                     sample = _load(path / ACTIVE, identity)
                 samples.append(sample)
-            except (OSError, ValueError):
+            except OSError, ValueError:
                 continue
     except OSError:
         pass

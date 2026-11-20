@@ -21,10 +21,22 @@ from taskloop.slot_release import AlreadyReleased, NotReleased
 
 @pytest.fixture
 def factory(
-    tmp_path: Path, slot: FakeWorktree, checkouts: PinnedViews, slot_files: SlotFiles, monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    slot: FakeWorktree,
+    checkouts: PinnedViews,
+    slot_files: SlotFiles,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> Generator[RestartFactory]:
-    built = RestartFactory(connect(tmp_path / "factory.db", initialize=True), tmp_path, slot, checkouts, slot_files,
-                           Tracker(task("tl-1")), Effects(), monkeypatch)
+    built = RestartFactory(
+        connect(tmp_path / "factory.db", initialize=True),
+        tmp_path,
+        slot,
+        checkouts,
+        slot_files,
+        Tracker(task("tl-1")),
+        Effects(),
+        monkeypatch,
+    )
     try:
         yield built
     finally:
@@ -69,7 +81,9 @@ def assert_completed(factory: RestartFactory, remote: FakeRemote, attempt: Attem
 
 @pytest.fixture
 def delivery_counts(
-    factory: RestartFactory, remote: FakeRemote, monkeypatch: pytest.MonkeyPatch,
+    factory: RestartFactory,
+    remote: FakeRemote,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> tuple[list[Path], list[str], list[str]]:
     parks: list[Path] = []
     pushes: list[str] = []
@@ -82,7 +96,11 @@ def delivery_counts(
         return result
 
     def pushed(
-        slot: FakeWorktree, dst: str, *, remote: str = "origin", hook_env: Mapping[str, str] | None = None,
+        slot: FakeWorktree,
+        dst: str,
+        *,
+        remote: str = "origin",
+        hook_env: Mapping[str, str] | None = None,
         head: Sha | None = None,
     ) -> PushResult:
         before = dict(remote_state.branches())
@@ -101,7 +119,10 @@ def delivery_counts(
 
 @pytest.mark.parametrize("boundary", ["session", "capture", "commit", "release", "push", "publish"])
 def test_restart_completes_and_delivers_once(
-    factory: RestartFactory, remote: FakeRemote, monkeypatch: pytest.MonkeyPatch, boundary: str,
+    factory: RestartFactory,
+    remote: FakeRemote,
+    monkeypatch: pytest.MonkeyPatch,
+    boundary: str,
     delivery_counts: tuple[list[Path], list[str], list[str]],
 ) -> None:
     parks, pushes, deliveries = delivery_counts
@@ -158,7 +179,9 @@ def test_restart_completes_and_delivers_once(
 @pytest.mark.parametrize("pid", [42, OWNER.pid, WORKER.pid])
 @pytest.mark.parametrize("seen", [Seen.ALIVE, Seen.UNKNOWN])
 def test_reopened_completion_waits_for_every_recovery_process(
-    factory: RestartFactory, pid: int, seen: Seen,
+    factory: RestartFactory,
+    pid: int,
+    seen: Seen,
 ) -> None:
     with pytest.raises(Killed):
         factory.round()

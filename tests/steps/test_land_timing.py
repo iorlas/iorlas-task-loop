@@ -35,8 +35,9 @@ def test_distinct_phase_times_are_stored_before_effects(tmp_path: Path, monkeypa
     b.advance({"OTHER": "another task\n"})
     start = b.lands.start_phase
 
-    def advancing(key: AttemptKey, phase: Phase, now: float,
-                  read: tuple[int, Validation | None] | None = None, *, abandon: bool = False) -> None:
+    def advancing(
+        key: AttemptKey, phase: Phase, now: float, read: tuple[int, Validation | None] | None = None, *, abandon: bool = False
+    ) -> None:
         start(key, phase, now, read, abandon=abandon)
         assert not b.con.in_transaction
         b.now += 10
@@ -122,8 +123,9 @@ def test_abandon_records_release_and_replacement_cause(tmp_path: Path) -> None:
     pending = inserted(b.ports(), b.repo, checks, (1, b.base, b.x, False, REQUIRED), None, 100)
     assert not isinstance(pending, Failed)
     b.now = 20
-    release = ChecksRelease(work.store, work.checkouts, work.slot_files, work.entry_seen, landing, work.clock,
-                            work.seen, work.scratch, ids=b.ports().ids)
+    release = ChecksRelease(
+        work.store, work.checkouts, work.slot_files, work.entry_seen, landing, work.clock, work.seen, work.scratch, ids=b.ports().ids
+    )
     assert isinstance(release.release_candidate(pending.key, True, b.me), Released)
     row = b.rows()[0]
     assert row.validation_started_at is None and row.validated_at is None

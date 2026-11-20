@@ -38,10 +38,18 @@ def first(candidates: list[TaskRow], lookup: Lookup, attempts: Mapping[str, bool
 SCENARIOS: list[tuple[str, list[TaskRow], list[TaskRow], str]] = [
     ("own priority dominates every ancestor", [row("a-1", 0, "p2"), row("a-2", 3, "p0")], [row("p2", 2), row("p0", 0)], "a-1"),
     ("direct parent breaks an own-priority tie", [row("a-1", 1, "p2"), row("a-2", 1, "p0")], [row("p2", 2), row("p0", 0)], "a-2"),
-    ("outward only while nearer ties", [row("a-1", 1, "x"), row("a-2", 1, "y")],
-     [row("x", 2, "g3"), row("y", 2, "g0"), row("g3", 3), row("g0", 0)], "a-2"),
-    ("specific subgroup beats broad portfolio", [row("a-1", 1, "p4"), row("a-2", 1, "q0")],
-     [row("p4", 4, "r0"), row("q0", 0, "r2"), row("r0", 0), row("r2", 2)], "a-2"),
+    (
+        "outward only while nearer ties",
+        [row("a-1", 1, "x"), row("a-2", 1, "y")],
+        [row("x", 2, "g3"), row("y", 2, "g0"), row("g3", 3), row("g0", 0)],
+        "a-2",
+    ),
+    (
+        "specific subgroup beats broad portfolio",
+        [row("a-1", 1, "p4"), row("a-2", 1, "q0")],
+        [row("p4", 4, "r0"), row("q0", 0, "r2"), row("r0", 0), row("r2", 2)],
+        "a-2",
+    ),
     ("standalone vs only P2 ancestors: id decides", [row("a-2", 1), row("a-1", 1, "p2")], [row("p2", 2)], "a-1"),
     ("standalone vs only P2 ancestors: id decides, other way", [row("a-1", 1), row("a-2", 1, "p2")], [row("p2", 2)], "a-1"),
     ("known urgent parent beats default context", [row("a-1", 1), row("a-2", 1, "p0")], [row("p0", 0)], "a-2"),

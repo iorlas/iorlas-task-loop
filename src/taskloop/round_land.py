@@ -42,8 +42,15 @@ def _waiting(current: Iterable[AttemptView]) -> list[AttemptView]:
     return sorted(found, key=lambda each: (each.checks.row.released_at or 0.0 if each.checks else 0.0, each.task_id))
 
 
-def land_passed(landing: Landing | None, backlog: str, checkout: Path, minutes: int, current: Iterable[AttemptView], trail: Trail,
-                hold: Callable[[AttemptView, LandCause], Move]) -> frozenset[str]:
+def land_passed(
+    landing: Landing | None,
+    backlog: str,
+    checkout: Path,
+    minutes: int,
+    current: Iterable[AttemptView],
+    trail: Trail,
+    hold: Callable[[AttemptView, LandCause], Move],
+) -> frozenset[str]:
     """The tasks this phase finished (landed or held): the free-slot reserve for a waiting land no longer counts them."""
     waiting = _waiting(current)
     if landing is None or not waiting:
@@ -61,10 +68,12 @@ def land_passed(landing: Landing | None, backlog: str, checkout: Path, minutes: 
             trail.add(Move(each.task_id, "land", found, each.attempt_id, step=each.step))
             return frozenset({each.task_id})
         if found.kind == "refused" and found.reason in HOLDING:
-            decision = LandCause(reason=LandReason(found.reason),
-                                 explanation=found.detail or f"Automatic land was refused: {found.reason}.",
-                                 source=each.checks.row.commit if each.checks is not None else None,
-                                 target=each.checks.row.target if each.checks is not None else None)
+            decision = LandCause(
+                reason=LandReason(found.reason),
+                explanation=found.detail or f"Automatic land was refused: {found.reason}.",
+                source=each.checks.row.commit if each.checks is not None else None,
+                target=each.checks.row.target if each.checks is not None else None,
+            )
             trail.add(hold(each, decision))
             return frozenset({each.task_id})
         trail.add(Move(each.task_id, "land", found.word, each.attempt_id, found.detail, each.step))

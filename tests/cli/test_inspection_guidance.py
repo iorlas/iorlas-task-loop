@@ -23,7 +23,9 @@ from taskloop.task import TaskInspectionError
 
 @pytest.mark.parametrize("reason", get_args(Reason.__value__))
 def test_each_profile_reason_has_human_guidance_and_preserves_json(
-    reason: Reason, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str],
+    reason: Reason,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     found = Refused(reason, "key", "arbitrary detail", "target")
     monkeypatch.setattr(cli, "resolve", lambda *_args: found)
@@ -31,14 +33,16 @@ def test_each_profile_reason_has_human_guidance_and_preserves_json(
     output = capsys.readouterr()
     assert output.out == "" and PROFILE[reason] in output.err and "arbitrary detail" in output.err
     assert cli.main(["profile", "show", "--json"]) == 1
-    assert json.loads(capsys.readouterr().err) == {
-        "error": {"kind": reason, "side": "target", "key": "key", "message": "arbitrary detail"}}
+    assert json.loads(capsys.readouterr().err) == {"error": {"kind": reason, "side": "target", "key": "key", "message": "arbitrary detail"}}
 
 
 @pytest.mark.parametrize("reason", get_args(Refusal.__value__))
 @pytest.mark.parametrize("command", [["config", "show"], ["drain"]])
 def test_each_machine_config_reason_is_guided_in_its_context(
-    reason: Refusal, command: list[str], monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str],
+    reason: Refusal,
+    command: list[str],
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     monkeypatch.setattr(cli_composition, "load_config", lambda *_args: ConfigRefused(reason, "key", "detail"))
     # Drain imports the owning loader directly.
@@ -49,9 +53,11 @@ def test_each_machine_config_reason_is_guided_in_its_context(
 
 
 SLOT_REASONS = {
-    node.value for alias in ast.walk(ast.parse((ROOT / "slots.py").read_text()))
+    node.value
+    for alias in ast.walk(ast.parse((ROOT / "slots.py").read_text()))
     if isinstance(alias, ast.TypeAlias) and isinstance(alias.name, ast.Name) and alias.name.id in {"Unclean", "Unadoptable"}
-    for node in ast.walk(alias.value) if isinstance(node, ast.Constant) and isinstance(node.value, str)
+    for node in ast.walk(alias.value)
+    if isinstance(node, ast.Constant) and isinstance(node.value, str)
 }
 
 
@@ -64,7 +70,8 @@ def test_each_adoption_reason_has_its_own_remedy(reason: Unadoptable) -> None:
 @pytest.mark.parametrize("reason", get_args(TaskInspectionError.__init__.__annotations__["kind"]))
 def test_each_task_inspection_failure_keeps_adapter_explanation_and_adds_guidance(
     reason: Literal["not_found", "malformed", "tracker_unavailable", "invalid_binding"],
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     def inspect(*_args: object) -> None:
         raise TaskInspectionError(reason, "adapter explanation")

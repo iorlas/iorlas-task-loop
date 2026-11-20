@@ -30,23 +30,26 @@ def api_example(root: Path, source: str) -> ModuleType:
     return module
 
 
-API = '''from pydantic import BaseModel
+API = """from pydantic import BaseModel
 class Record(BaseModel):
     value: int
 def read(key: str) -> Record:
     return Record(value=1)
 __all__ = ["Record", "read"]
-'''
+"""
 
 
-@pytest.mark.parametrize("changed", [
-    API.replace('["Record", "read"]', '["Record"]'),
-    API.replace('["Record", "read"]', '["Record", "read", "added"]') + '\nadded = 1\n',
-    API.replace("key: str", "key: int"),
-    API.replace("value: int", "value: str"),
-    API.replace("value: int", "value: int\n    optional: str | None = None"),
-    API.replace("value: int", "value: int\n    def changed(self, flag: bool) -> int:\n        return 1"),
-])
+@pytest.mark.parametrize(
+    "changed",
+    [
+        API.replace('["Record", "read"]', '["Record"]'),
+        API.replace('["Record", "read"]', '["Record", "read", "added"]') + "\nadded = 1\n",
+        API.replace("key: str", "key: int"),
+        API.replace("value: int", "value: str"),
+        API.replace("value: int", "value: int\n    optional: str | None = None"),
+        API.replace("value: int", "value: int\n    def changed(self, flag: bool) -> int:\n        return 1"),
+    ],
+)
 def test_api_exports_signatures_and_model_fields_require_refresh(tmp_path: Path, changed: str) -> None:
     module = api_example(tmp_path, API)
     baseline = render(api_surfaces(tmp_path, lambda _name: module))

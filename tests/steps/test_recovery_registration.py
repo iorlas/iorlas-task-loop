@@ -57,7 +57,12 @@ def test_independent_registration_winners_and_reopen(tmp_path: Path) -> None:
     assert current is not None and current.execution is not None and current.execution.worker is not None
     worker = current.execution.worker
     assert con.execute("SELECT worker_pid,worker_pgid,worker_start,worker_boot,rev FROM attempt").fetchone() == (
-        worker.pid, worker.pgid, worker.start, worker.boot, 5)
+        worker.pid,
+        worker.pgid,
+        worker.start,
+        worker.boot,
+        5,
+    )
     assert store.register(expected, worker, lambda: 10).intent == current
     assert callback(current).worker == worker
     con.close()
@@ -109,6 +114,7 @@ def test_registration_rolls_back_both_writes_and_storage_loss_blocks_permit(tmp_
             registration_hook(store, expected, lambda: 10)(Worker(pid=80, pgid=81, start="replacement", boot="boot"))
     assert facts(con) == before
     assert con.execute("SELECT data FROM recovery_intent").fetchone() == (expected.model_dump_json(),)
+
     @contextmanager
     def lost_ack(connection: sqlite3.Connection) -> Generator[None]:
         with begin_immediate(connection):
@@ -118,7 +124,8 @@ def test_registration_rolls_back_both_writes_and_storage_loss_blocks_permit(tmp_
     executed = []
     with pytest.raises(StoreUnavailable):
         registration_hook(RecoveryStore(lambda: con, lost_ack), expected, lambda: 10)(
-            Worker(pid=80, pgid=81, start="replacement", boot="boot"))
+            Worker(pid=80, pgid=81, start="replacement", boot="boot")
+        )
         executed.append(True)
     assert executed == []
     con.close()
@@ -127,12 +134,20 @@ def test_registration_rolls_back_both_writes_and_storage_loss_blocks_permit(tmp_
     con.close()
 
 
-@pytest.mark.parametrize("execution", [
-    {}, {"phase": "registered"},
-    {"drain": {"generation": 0, "state": "open"}, "phase": "registered", "worker": None, "revision": 5},
-    {"drain": {"generation": 0, "state": "open"}, "phase": "registered",
-     "worker": {"pid": 80, "pgid": 81, "start": "new", "boot": "boot"}, "revision": 999},
-])
+@pytest.mark.parametrize(
+    "execution",
+    [
+        {},
+        {"phase": "registered"},
+        {"drain": {"generation": 0, "state": "open"}, "phase": "registered", "worker": None, "revision": 5},
+        {
+            "drain": {"generation": 0, "state": "open"},
+            "phase": "registered",
+            "worker": {"pid": 80, "pgid": 81, "start": "new", "boot": "boot"},
+            "revision": 999,
+        },
+    ],
+)
 def test_malformed_execution_records_are_preserved_as_unavailable(tmp_path: Path, execution: dict[str, object]) -> None:
     con = database(tmp_path / "factory.db")
     store = RecoveryStore(lambda: con)

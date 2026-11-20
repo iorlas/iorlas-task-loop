@@ -23,9 +23,20 @@ from taskloop.repo import RepoId
 
 
 def candidate(b: Bench, validation: Settled | None = "same_tree") -> LandAdmitted:
-    return LandAdmitted(AttemptKey("candidate", "candidate-token", 1), "checks", 1, ORIGIN, SQUASH, True, REQUIRED,
-                        "s2" if validation is None else None, D if validation is None else None,
-                        300 if validation is None else None, validation, 10)
+    return LandAdmitted(
+        AttemptKey("candidate", "candidate-token", 1),
+        "checks",
+        1,
+        ORIGIN,
+        SQUASH,
+        True,
+        REQUIRED,
+        "s2" if validation is None else None,
+        D if validation is None else None,
+        300 if validation is None else None,
+        validation,
+        10,
+    )
 
 
 def test_repetition_and_reopening_keep_original_admission(on_slot: Path, repo: FakeRepo, tmp_path: Path) -> None:
@@ -45,7 +56,9 @@ def test_repetition_and_reopening_keep_original_admission(on_slot: Path, repo: F
     assert repeated.outcome is Outcome.RETAINED and repeated.record == first.record and repeated.explanation
     assert con.execute("SELECT count(*) FROM land_conflict").fetchone() == (1,)
     assert con.execute("SELECT attempt_id,generation FROM reservation").fetchone() == (
-        first.record.key.attempt_id, first.record.key.reservation_generation)
+        first.record.key.attempt_id,
+        first.record.key.reservation_generation,
+    )
     con.close()
 
 
@@ -130,16 +143,18 @@ def test_record_failure_rolls_back_reservation_and_generation(on_slot: Path, rep
     b.con.close()
 
 
-@pytest.mark.parametrize("change,outcome", [
-    ("UPDATE checks_attempt SET released_at=NULL,parked=NULL", Outcome.NOT_CHECKED),
-    ("UPDATE checks_attempt SET abandoned=1", Outcome.NOT_CHECKED),
-    ("UPDATE checks_attempt SET conclusion='failed',reason='failed'", Outcome.NOT_CHECKED),
-    ("UPDATE slot_release SET claim='unclaimed'", Outcome.NOT_DONE),
-    ("UPDATE checks_attempt SET dispatch_token='changed'", Outcome.SOURCE),
-    ("UPDATE attempt SET end_commit='ffffffffffffffffffffffffffffffffffffffff'", Outcome.SOURCE),
-])
-def test_ineligible_source_has_no_admission_effect(on_slot: Path, repo: FakeRepo, tmp_path: Path,
-                                                 change: str, outcome: Outcome) -> None:
+@pytest.mark.parametrize(
+    "change,outcome",
+    [
+        ("UPDATE checks_attempt SET released_at=NULL,parked=NULL", Outcome.NOT_CHECKED),
+        ("UPDATE checks_attempt SET abandoned=1", Outcome.NOT_CHECKED),
+        ("UPDATE checks_attempt SET conclusion='failed',reason='failed'", Outcome.NOT_CHECKED),
+        ("UPDATE slot_release SET claim='unclaimed'", Outcome.NOT_DONE),
+        ("UPDATE checks_attempt SET dispatch_token='changed'", Outcome.SOURCE),
+        ("UPDATE attempt SET end_commit='ffffffffffffffffffffffffffffffffffffffff'", Outcome.SOURCE),
+    ],
+)
+def test_ineligible_source_has_no_admission_effect(on_slot: Path, repo: FakeRepo, tmp_path: Path, change: str, outcome: Outcome) -> None:
     b = bench(on_slot, repo, tmp_path)
     b.con.execute(change)
     result = admit(b.ports, b.request)
@@ -165,7 +180,10 @@ def test_candidate_first_excludes_conflict(on_slot: Path, repo: FakeRepo, tmp_pa
 
 @pytest.mark.parametrize("validation", ["same_tree", "no_change", None])
 def test_conflict_first_excludes_candidate_and_rolls_back_its_reservation(
-    on_slot: Path, repo: FakeRepo, tmp_path: Path, validation: Settled | None,
+    on_slot: Path,
+    repo: FakeRepo,
+    tmp_path: Path,
+    validation: Settled | None,
 ) -> None:
     b = bench(on_slot, repo, tmp_path)
     assert admit(b.ports, b.request).outcome is Outcome.ADMITTED
@@ -192,8 +210,7 @@ def test_a_released_conflict_reservation_does_not_exclude_candidate(on_slot: Pat
 
 
 @pytest.mark.parametrize("earlier_candidate", [False, True])
-def test_later_checks_cannot_hide_an_earlier_candidate(on_slot: Path, repo: FakeRepo, tmp_path: Path,
-                                                     earlier_candidate: bool) -> None:
+def test_later_checks_cannot_hide_an_earlier_candidate(on_slot: Path, repo: FakeRepo, tmp_path: Path, earlier_candidate: bool) -> None:
     b = bench(on_slot, repo, tmp_path)
     if earlier_candidate:
         with begin_immediate(b.con):
@@ -209,30 +226,56 @@ def test_later_checks_cannot_hide_an_earlier_candidate(on_slot: Path, repo: Fake
 
 @pytest.mark.parametrize("same_task", [False, True])
 def test_other_sources_cannot_take_the_reservation_and_later_attempts_fence_the_source(
-    on_slot: Path, repo: FakeRepo, tmp_path: Path, same_task: bool,
+    on_slot: Path,
+    repo: FakeRepo,
+    tmp_path: Path,
+    same_task: bool,
 ) -> None:
     b = bench(on_slot, repo, tmp_path)
     if not same_task:
         assert admit(b.ports, b.request).outcome is Outcome.ADMITTED
-    copy_row(b.con, "attempt", "implement", {"attempt_id": "other", "dispatch_token": "other-token", "seq": 3,
-                                           "task_id": "tl-1" if same_task else "tl-2"})
+    copy_row(
+        b.con,
+        "attempt",
+        "implement",
+        {"attempt_id": "other", "dispatch_token": "other-token", "seq": 3, "task_id": "tl-1" if same_task else "tl-2"},
+    )
     if same_task:
         assert admit(b.ports, b.request).outcome is Outcome.NOT_DONE
     else:
         copy_row(b.con, "slot_release", "implement", {"attempt_id": "other", "dispatch_token": "other-token"})
-        copy_row(b.con, "checks_attempt", "checks", {"attempt_id": "other-checks", "dispatch_token": "other-checks-token",
-                                                    "after_attempt_id": "other"})
-        request = b.request.model_copy(update={"source": AttemptKey("other", "other-token", 1), "task_id": "tl-2",
-                                               "checks": AttemptKey("other-checks", "other-checks-token", 1)})
+        copy_row(
+            b.con,
+            "checks_attempt",
+            "checks",
+            {"attempt_id": "other-checks", "dispatch_token": "other-checks-token", "after_attempt_id": "other"},
+        )
+        request = b.request.model_copy(
+            update={
+                "source": AttemptKey("other", "other-token", 1),
+                "task_id": "tl-2",
+                "checks": AttemptKey("other-checks", "other-checks-token", 1),
+            }
+        )
         assert admit(b.ports, request).outcome is Outcome.NO_SLOT
         assert b.con.execute("SELECT count(*) FROM reservation").fetchone() == (1,)
     b.con.close()
 
 
-@pytest.mark.parametrize("column,value", [("operation_id", "wrong"), ("dispatch_token", "wrong"), ("generation", 100),
-                                        ("implement_id", "missing"), ("repo_id", "other"), ("slot", "missing")])
-def test_schema_rejects_inconsistent_admission_identity(on_slot: Path, repo: FakeRepo, tmp_path: Path,
-                                                      column: str, value: str | int) -> None:
+@pytest.mark.parametrize(
+    "column,value",
+    [
+        ("operation_id", "wrong"),
+        ("dispatch_token", "wrong"),
+        ("generation", 100),
+        ("implement_id", "missing"),
+        ("repo_id", "other"),
+        ("slot", "missing"),
+    ],
+)
+def test_schema_rejects_inconsistent_admission_identity(
+    on_slot: Path, repo: FakeRepo, tmp_path: Path, column: str, value: str | int
+) -> None:
     b = bench(on_slot, repo, tmp_path)
     assert admit(b.ports, b.request).outcome is Outcome.ADMITTED
     with pytest.raises(sqlite3.IntegrityError):
@@ -242,7 +285,10 @@ def test_schema_rejects_inconsistent_admission_identity(on_slot: Path, repo: Fak
 
 
 def test_database_failure_after_slot_observation_is_unavailable(
-    on_slot: Path, repo: FakeRepo, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    on_slot: Path,
+    repo: FakeRepo,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     b = bench(on_slot, repo, tmp_path)
     original = b.ports.store.find
@@ -262,7 +308,10 @@ def test_database_failure_after_slot_observation_is_unavailable(
 
 
 def test_all_external_observations_precede_the_write_transaction(
-    on_slot: Path, repo: FakeRepo, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    on_slot: Path,
+    repo: FakeRepo,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     b = bench(on_slot, repo, tmp_path)
     original_read, original_worktrees = b.ports.files.read, repo.worktrees
@@ -292,7 +341,10 @@ def test_all_external_observations_precede_the_write_transaction(
 
 @pytest.mark.parametrize("conflict_first", [False, True])
 def test_reciprocal_exclusion_uses_actual_reservation_generation(
-    on_slot: Path, repo: FakeRepo, tmp_path: Path, conflict_first: bool,
+    on_slot: Path,
+    repo: FakeRepo,
+    tmp_path: Path,
+    conflict_first: bool,
 ) -> None:
     b = bench(on_slot, repo, tmp_path)
     if conflict_first:

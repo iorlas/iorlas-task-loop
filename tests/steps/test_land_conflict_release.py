@@ -90,15 +90,16 @@ def test_base_is_independent_and_release_keeps_saved_work(execution_case: Execut
     assert tree is not None and tree.read("README") == b"saved edits\n" and tree.read("notes") == b"saved untracked bytes\n"
     assert dict(c.ports.repo.branches("task-loop/conflicts/")) == {saved.ref.removeprefix("refs/heads/"): saved.commit}
     assert c.con.execute("SELECT count(*) FROM reservation").fetchone() == (0,)
-    assert c.con.execute("SELECT generation FROM slot WHERE name=?", (c.record.slot,)).fetchone() == (
-        c.record.key.reservation_generation,)
+    assert c.con.execute("SELECT generation FROM slot WHERE name=?", (c.record.slot,)).fetchone() == (c.record.key.reservation_generation,)
     with pytest.raises(StoreRefused):
         c.ports.store.load(c.record.key)
 
 
 @pytest.mark.parametrize("after", [False, True])
 def test_parking_interruption_is_observed_before_retry(
-    execution_case: ExecutionCase, monkeypatch: pytest.MonkeyPatch, after: bool,
+    execution_case: ExecutionCase,
+    monkeypatch: pytest.MonkeyPatch,
+    after: bool,
 ) -> None:
     c = execution_case
     pending(c, monkeypatch)
@@ -129,7 +130,9 @@ def test_parking_interruption_is_observed_before_retry(
 
 @pytest.mark.parametrize("changed", ["false_success", "observation", "ignored", "protection", "index", "branch", "untracked"])
 def test_unverified_parking_retains_custody(
-    execution_case: ExecutionCase, monkeypatch: pytest.MonkeyPatch, changed: str,
+    execution_case: ExecutionCase,
+    monkeypatch: pytest.MonkeyPatch,
+    changed: str,
 ) -> None:
     c = execution_case
     saved = pending(c, monkeypatch)
@@ -190,8 +193,7 @@ def test_atomic_release_rolls_back_both_writes(execution_case: ExecutionCase, mo
     saved = pending(c, monkeypatch, parked=True)
     assert saved.release is not None
     updated = saved.model_copy(update={"release": saved.release.model_copy(update={"phase": ReleasePhase.COMPLETE})})
-    c.con.execute("CREATE TEMP TRIGGER refuse_release BEFORE DELETE ON reservation "
-                  "BEGIN SELECT RAISE(ABORT,'stop'); END")
+    c.con.execute("CREATE TEMP TRIGGER refuse_release BEFORE DELETE ON reservation BEGIN SELECT RAISE(ABORT,'stop'); END")
     with pytest.raises(StoreUnavailable):
         c.ports.store.release(c.record.key, saved, updated)
     assert c.ports.store.saved(c.record.key) == saved and c.ports.store.completed(c.record.key) is None
@@ -204,7 +206,9 @@ def test_atomic_release_rolls_back_both_writes(execution_case: ExecutionCase, mo
 
 @pytest.mark.parametrize("after", [False, True])
 def test_release_completion_interruption_is_restartable(
-    execution_case: ExecutionCase, monkeypatch: pytest.MonkeyPatch, after: bool,
+    execution_case: ExecutionCase,
+    monkeypatch: pytest.MonkeyPatch,
+    after: bool,
 ) -> None:
     c = execution_case
     saved = pending(c, monkeypatch, parked=True)
@@ -229,15 +233,18 @@ def test_release_preserves_unrelated_reservations(execution_case: ExecutionCase,
     c = execution_case
     pending(c, monkeypatch, parked=True)
     c.con.execute("INSERT INTO slot(repo_id,name,path,generation) VALUES (?,'other','/other',7)", (c.record.request.repo_id,))
-    c.con.execute("INSERT INTO reservation(repo_id,slot,attempt_id,generation) VALUES (?,'other','other-attempt',7)",
-                  (c.record.request.repo_id,))
+    c.con.execute(
+        "INSERT INTO reservation(repo_id,slot,attempt_id,generation) VALUES (?,'other','other-attempt',7)", (c.record.request.repo_id,)
+    )
     assert isinstance(c.resume(), Terminal)
     assert c.con.execute("SELECT slot,attempt_id,generation FROM reservation").fetchall() == [("other", "other-attempt", 7)]
 
 
 @pytest.mark.parametrize("changed", ["missing", "foreign", "worker", "ref", "files"])
 def test_pending_release_requires_live_custody_and_unchanged_evidence(
-    execution_case: ExecutionCase, monkeypatch: pytest.MonkeyPatch, changed: str,
+    execution_case: ExecutionCase,
+    monkeypatch: pytest.MonkeyPatch,
+    changed: str,
 ) -> None:
     c = execution_case
     saved = pending(c, monkeypatch)
@@ -259,7 +266,9 @@ def test_pending_release_requires_live_custody_and_unchanged_evidence(
 
 @pytest.mark.parametrize("changed", ["token", "key_generation", "slot_generation", "path", "foreign", "save"])
 def test_stale_release_changes_neither_record_nor_reservations(
-    execution_case: ExecutionCase, monkeypatch: pytest.MonkeyPatch, changed: str,
+    execution_case: ExecutionCase,
+    monkeypatch: pytest.MonkeyPatch,
+    changed: str,
 ) -> None:
     c = execution_case
     saved = pending(c, monkeypatch, parked=True)
@@ -282,8 +291,10 @@ def test_stale_release_changes_neither_record_nor_reservations(
     before = c.con.execute("SELECT save_data FROM land_conflict").fetchall(), c.con.execute("SELECT * FROM reservation").fetchall()
     with pytest.raises(StoreRefused):
         c.ports.store.release(key, saved, updated)
-    assert before == (c.con.execute("SELECT save_data FROM land_conflict").fetchall(),
-                      c.con.execute("SELECT * FROM reservation").fetchall())
+    assert before == (
+        c.con.execute("SELECT save_data FROM land_conflict").fetchall(),
+        c.con.execute("SELECT * FROM reservation").fetchall(),
+    )
     assert c.ports.store.completed(c.record.key) is None
 
 
@@ -298,7 +309,8 @@ def test_ordinary_save_cannot_complete_release(execution_case: ExecutionCase, mo
 
 
 def test_completed_replay_after_reuse_has_no_external_access(
-    execution_case: ExecutionCase, monkeypatch: pytest.MonkeyPatch,
+    execution_case: ExecutionCase,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     c = execution_case
     c.disposition, c.edit = Disposition.OWNER, edits
@@ -306,8 +318,10 @@ def test_completed_replay_after_reuse_has_no_external_access(
     assert isinstance(result, Terminal)
     c.restart()
     c.con.execute("UPDATE slot SET generation=generation+1,path='/reused' WHERE name=?", (c.record.slot,))
-    c.con.execute("INSERT INTO reservation(repo_id,slot,attempt_id,generation) VALUES (?,?,?,?)",
-                  (c.record.request.repo_id, c.record.slot, "new-attempt", c.record.key.reservation_generation + 1))
+    c.con.execute(
+        "INSERT INTO reservation(repo_id,slot,attempt_id,generation) VALUES (?,?,?,?)",
+        (c.record.request.repo_id, c.record.slot, "new-attempt", c.record.key.reservation_generation + 1),
+    )
     c.slot.write_file("new-owner", "keep new slot bytes")
 
     def forbidden(*_args: object, **_kwargs: object) -> Never:
@@ -321,7 +335,9 @@ def test_completed_replay_after_reuse_has_no_external_access(
     c.ports = replace(c.ports, gone=forbidden, checkouts=forbidden, run=forbidden)
     assert c.resume() == result and c.slot.read_file("new-owner") == "keep new slot bytes"
     assert c.con.execute("SELECT attempt_id,generation FROM reservation").fetchone() == (
-        "new-attempt", c.record.key.reservation_generation + 1)
+        "new-attempt",
+        c.record.key.reservation_generation + 1,
+    )
     key = c.record.key
     assert c.ports.store.completed(AttemptKey(key.attempt_id, "forged", key.reservation_generation)) is None
     assert c.ports.store.completed(AttemptKey(key.attempt_id, key.dispatch_token, key.reservation_generation + 1)) is None

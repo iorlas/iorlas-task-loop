@@ -112,7 +112,9 @@ def test_an_unreadable_profile_lands_nothing_and_says_why_once(rig: Checking) ->
 @pytest.mark.parametrize("reason", ["conflict", "checks_failed", "remote_rejected", "branch_moved", "claim_lost"])
 @pytest.mark.parametrize("label", [None, "auto"])
 def test_a_refusal_about_the_change_holds_the_task_once_with_the_cause_and_never_tries_it_again(
-    rig: Checking, reason: str, label: str | None,
+    rig: Checking,
+    reason: str,
+    label: str | None,
 ) -> None:
     passed(rig)
     rig.con.execute("UPDATE attempt SET label=?", (label,))
@@ -151,20 +153,46 @@ def test_terminal_notice_captures_verified_resolution_before_effects_and_keeps_i
     assert checks is not None
     store = ConflictStore(lambda: rig.con)
     request = request_for(agent.key, checks, checks.commit, rig.now + 300)
-    ports = Ports(store, AttemptLoads(lambda: rig.con), EvidenceFiles(rig.tmp), rig.slot.repo,
-                  SlotGit(rig.checkouts, rig.files), lambda _p: True, lambda: rig.now, NativeIds())
+    ports = Ports(
+        store,
+        AttemptLoads(lambda: rig.con),
+        EvidenceFiles(rig.tmp),
+        rig.slot.repo,
+        SlotGit(rig.checkouts, rig.files),
+        lambda _p: True,
+        lambda: rig.now,
+        NativeIds(),
+    )
     admitted = admit(ports, request)
     assert admitted.record is not None
     record = admitted.record
-    work = Work(attempt_id=record.key.attempt_id, dispatch_token=record.key.dispatch_token,
-                generation=record.key.reservation_generation, task_id=request.task_id, repo_id=request.repo_id,
-                root=rig.root, slot=Path(record.slot_path), gitdir=rig.root / "gitdir", base=record.base,
-                source=request.checked, target=request.target, branch=None, deadline=request.deadline,
-                setting=record.inputs.setting, input_path=record.inputs.input_ref.path, input_digest=record.inputs.input_ref.digest,
-                phase=Phase.TERMINAL, reason=Reason.OWNER, explanation="The retained resolution needs the owner's choice.")
+    work = Work(
+        attempt_id=record.key.attempt_id,
+        dispatch_token=record.key.dispatch_token,
+        generation=record.key.reservation_generation,
+        task_id=request.task_id,
+        repo_id=request.repo_id,
+        root=rig.root,
+        slot=Path(record.slot_path),
+        gitdir=rig.root / "gitdir",
+        base=record.base,
+        source=request.checked,
+        target=request.target,
+        branch=None,
+        deadline=request.deadline,
+        setting=record.inputs.setting,
+        input_path=record.inputs.input_ref.path,
+        input_digest=record.inputs.input_ref.digest,
+        phase=Phase.TERMINAL,
+        reason=Reason.OWNER,
+        explanation="The retained resolution needs the owner's choice.",
+    )
     merges = MergeStore(lambda: rig.con)
-    stored = work.model_copy(update={"dispatch_token": "another-operation"}) if evidence == "identity" else (
-        work.model_copy(update={"phase": Phase.RESOLVE}) if evidence == "active" else work)
+    stored = (
+        work.model_copy(update={"dispatch_token": "another-operation"})
+        if evidence == "identity"
+        else (work.model_copy(update={"phase": Phase.RESOLVE}) if evidence == "active" else work)
+    )
     merges.start(stored)
     if evidence == "malformed":
         rig.con.execute("UPDATE merge_operation SET data='{}' WHERE attempt_id=?", (record.key.attempt_id,))
@@ -200,7 +228,8 @@ def test_terminal_notice_captures_verified_resolution_before_effects_and_keeps_i
 
 
 def test_a_crash_after_posting_a_terminal_notice_reconciles_without_posting_it_twice(
-    rig: Checking, monkeypatch: pytest.MonkeyPatch,
+    rig: Checking,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     passed(rig)
     lands = Lands(LandMode.AUTO, Failed("refused", "conflict"))

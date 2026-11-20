@@ -37,8 +37,12 @@ class OperationSample(BaseModel):
 
 class OperationObserver:
     def __init__(
-        self, identity: Callable[[], tuple[str, str]], kind: OperationKind, clock: Callable[[], float],
-        wall: Callable[[], float], write: Callable[[OperationSample], None],
+        self,
+        identity: Callable[[], tuple[str, str]],
+        kind: OperationKind,
+        clock: Callable[[], float],
+        wall: Callable[[], float],
+        write: Callable[[OperationSample], None],
     ) -> None:
         self.clock, self.write = clock, write
         self._sample: OperationSample | None = None
@@ -48,8 +52,9 @@ class OperationObserver:
             self._origin = clock()
             if not math.isfinite(self._origin):
                 raise ValueError("Invalid monotonic origin")
-            sample = OperationSample(operation=operation, attempt=attempt, kind=kind, started_at=wall(),
-                                     elapsed=0.0, state=OperationState.ACTIVE)
+            sample = OperationSample(
+                operation=operation, attempt=attempt, kind=kind, started_at=wall(), elapsed=0.0, state=OperationState.ACTIVE
+            )
             write(sample)
             self._sample = sample
         except Exception:
@@ -62,8 +67,14 @@ class OperationObserver:
         try:
             if state is OperationState.ACTIVE:
                 raise ValueError("Operation result must be final")
-            final = OperationSample(operation=sample.operation, attempt=sample.attempt, kind=sample.kind,
-                                    started_at=sample.started_at, elapsed=self.clock() - self._origin, state=state)
+            final = OperationSample(
+                operation=sample.operation,
+                attempt=sample.attempt,
+                kind=sample.kind,
+                started_at=sample.started_at,
+                elapsed=self.clock() - self._origin,
+                state=state,
+            )
             self.write(final)
         except Exception:
             pass  # preserve incomplete evidence, without extending it across a restart

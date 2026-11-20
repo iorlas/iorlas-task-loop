@@ -15,16 +15,24 @@ def render_digest(digest: Digest) -> bytes:
     package_indices = {item.name: index for index, item in enumerate(packages)}
     repositories = tuple(sorted({item.repository_url for item in packages}))
     commits = tuple(sorted({item.commit for item in packages}))
-    evidence = sorted({item for fact in digest.facts for item in fact.evidence}, key=lambda item: (
-        item.package, item.path, item.start_line, item.end_line, item.sha256))
+    evidence = sorted(
+        {item for fact in digest.facts for item in fact.evidence},
+        key=lambda item: (item.package, item.path, item.start_line, item.end_line, item.sha256),
+    )
     evidence_indices = {item: index for index, item in enumerate(evidence)}
     directories = {item.name: item.subdirectory for item in packages}
     result = DigestArtifact(
-        source_commit=digest.identities.source_commit, repositories=repositories, commits=commits,
-        packages=tuple((p.name, p.version, repositories.index(p.repository_url), p.requested_tag, p.subdirectory,
-                        commits.index(p.commit)) for p in packages),
-        sources=tuple((package_indices[e.package], e.path.removeprefix(directories[e.package] + "/"),
-                       e.start_line, e.end_line, e.sha256) for e in evidence),
+        source_commit=digest.identities.source_commit,
+        repositories=repositories,
+        commits=commits,
+        packages=tuple(
+            (p.name, p.version, repositories.index(p.repository_url), p.requested_tag, p.subdirectory, commits.index(p.commit))
+            for p in packages
+        ),
+        sources=tuple(
+            (package_indices[e.package], e.path.removeprefix(directories[e.package] + "/"), e.start_line, e.end_line, e.sha256)
+            for e in evidence
+        ),
         facts={fact.name: (fact.text, tuple(sorted(evidence_indices[e] for e in fact.evidence))) for fact in digest.facts},
     )
     return result.encode(TOKEN_LIMIT)

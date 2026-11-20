@@ -28,18 +28,21 @@ def database(tmp_path: Path) -> Path:
         con.execute("INSERT INTO slot (repo_id,name,path) VALUES ('repo','s1','/slots/s1')")
         con.execute("INSERT INTO slot (repo_id,name,path) VALUES ('repo','s2','/slots/s2')")
         con.execute("INSERT INTO reservation VALUES ('s1','repo',1,'attempt')")
-        con.execute("""INSERT INTO attempt
+        con.execute(
+            """INSERT INTO attempt
             (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,input_digest,
             schema_version,model,effort,access_policy,deadline,number,seq,slot_head,engine_digest,workflow_digest,workflow_sha,admitted_at)
             VALUES ('attempt','token',1,'plan','beads','tasks','tl-1','/tracker','repo','s1','input',?,1,'m','high',
             '{"harness":"codex","sandbox":"workspace-write"}',100,1,1,?,?,(SELECT digest FROM workflow_file),?,1.0)""",
-                    ("d" * 64, "b" * 40, "a" * 64, "e" * 40))
+            ("d" * 64, "b" * 40, "a" * 64, "e" * 40),
+        )
     con.close()
     return db
 
 
 def test_the_export_prints_csv_with_a_header_or_a_json_array_and_writes_nothing(
-    database: Path, capsys: pytest.CaptureFixture[str],
+    database: Path,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     before = database.read_bytes()
     assert main(["attempt", "export", "--db", str(database)]) == 0

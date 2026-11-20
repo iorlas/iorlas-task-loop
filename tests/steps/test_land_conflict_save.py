@@ -36,7 +36,8 @@ def saved(c: ExecutionCase) -> Save:
     assert c.con.execute("SELECT count(*) FROM land_conflict WHERE save_data IS NOT NULL").fetchone() == (1,)
     assert dict(c.ports.repo.branches("task/")) == {"task/tl-1": c.record.request.checked}
     assert c.con.execute("SELECT attempt_id,generation FROM reservation").fetchone() == (
-        None if completed else (c.record.key.attempt_id, c.record.key.reservation_generation))
+        None if completed else (c.record.key.attempt_id, c.record.key.reservation_generation)
+    )
     assert c.slot.branch() is None
     assert [ref.sha for ref in c.ports.repo.refs([result.ref]) if ref.name == result.ref] == [result.commit]
     return result
@@ -72,7 +73,8 @@ def test_unfinished_bytes_deletions_and_both_inputs_are_retained(execution_case:
     assert tree.read("staged") == b"working version wins\n" and tree.read("new") == b"untracked bytes\n"
     assert "ignored" not in tree.files and c.slot.read_file("ignored") == "local data\n"
     assert {c.record.request.checked, c.record.request.target, record.head} <= {
-        str(entry.sha) for entry in c.ports.repo.history([record.commit or ""])}
+        str(entry.sha) for entry in c.ports.repo.history([record.commit or ""])
+    }
     assert f"Task-Loop-Merge-Start: {record.source}" in record.message
     assert f"Task-Loop-Merge-Target: {record.target}" in record.message
     assert head(c.slot) == c.record.base and not c.slot.merging() and c.calls == 1
@@ -141,7 +143,10 @@ def interrupt_at(c: ExecutionCase, monkeypatch: pytest.MonkeyPatch, boundary: st
 @pytest.mark.parametrize("boundary", ["intent", "capture", "object", "ref", "complete", "stage", "commit_tree", "update_ref"])
 @pytest.mark.parametrize("after", [False, True])
 def test_interrupted_saves_reconcile_without_duplicate_effects(
-    execution_case: ExecutionCase, monkeypatch: pytest.MonkeyPatch, boundary: str, after: bool,
+    execution_case: ExecutionCase,
+    monkeypatch: pytest.MonkeyPatch,
+    boundary: str,
+    after: bool,
 ) -> None:
     c = execution_case
     c.disposition = Disposition.OWNER
@@ -191,7 +196,9 @@ def test_interrupted_saves_reconcile_without_duplicate_effects(
 
 @pytest.mark.parametrize("after", [False, True])
 def test_completed_ref_reconciles_after_interruption(
-    execution_case: ExecutionCase, monkeypatch: pytest.MonkeyPatch, after: bool,
+    execution_case: ExecutionCase,
+    monkeypatch: pytest.MonkeyPatch,
+    after: bool,
 ) -> None:
     c = execution_case
     with monkeypatch.context() as patch:
@@ -206,7 +213,9 @@ def test_completed_ref_reconciles_after_interruption(
 
 @pytest.mark.parametrize("error", [GitUnavailable, EmbeddedRepositories, StoreUnavailable])
 def test_unavailable_capture_keeps_original_reason_and_retries(
-    execution_case: ExecutionCase, monkeypatch: pytest.MonkeyPatch, error: type[Exception],
+    execution_case: ExecutionCase,
+    monkeypatch: pytest.MonkeyPatch,
+    error: type[Exception],
 ) -> None:
     c = execution_case
     c.disposition = Disposition.OWNER
@@ -233,7 +242,9 @@ def test_unavailable_capture_keeps_original_reason_and_retries(
 
 @pytest.mark.parametrize("changed", ["ref", "files", "head", "merge", "reservation", "worker"])
 def test_changed_work_cannot_replace_a_pending_save(
-    execution_case: ExecutionCase, monkeypatch: pytest.MonkeyPatch, changed: str,
+    execution_case: ExecutionCase,
+    monkeypatch: pytest.MonkeyPatch,
+    changed: str,
 ) -> None:
     c = execution_case
     c.disposition = Disposition.OWNER
@@ -279,7 +290,9 @@ def test_completed_save_never_absorbs_later_edits(execution_case: ExecutionCase)
 
 @pytest.mark.parametrize("reason", [Reason.EXPIRED, Reason.UNSUPPORTED, Reason.EXHAUSTED])
 def test_owned_terminal_outcomes_preserve_before_returning(
-    execution_case: ExecutionCase, monkeypatch: pytest.MonkeyPatch, reason: Reason,
+    execution_case: ExecutionCase,
+    monkeypatch: pytest.MonkeyPatch,
+    reason: Reason,
 ) -> None:
     c = execution_case
     if reason is Reason.EXPIRED:
@@ -294,13 +307,13 @@ def test_owned_terminal_outcomes_preserve_before_returning(
     assert isinstance(result, Terminal) and result.reason is reason
     record = saved(c)
     assert not record.accepted
-    assert {record.source, record.target, record.head} <= {
-        str(entry.sha) for entry in c.ports.repo.history([record.commit or ""])}
+    assert {record.source, record.target, record.head} <= {str(entry.sha) for entry in c.ports.repo.history([record.commit or ""])}
     assert c.calls == (3 if reason is Reason.EXHAUSTED else 0)
 
 
 def test_ref_contention_is_retryable_without_another_resolution(
-    execution_case: ExecutionCase, monkeypatch: pytest.MonkeyPatch,
+    execution_case: ExecutionCase,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     c = execution_case
     c.disposition = Disposition.OWNER
@@ -315,7 +328,8 @@ def test_ref_contention_is_retryable_without_another_resolution(
 
 
 def test_foreign_ref_during_initial_intent_is_never_overwritten(
-    execution_case: ExecutionCase, monkeypatch: pytest.MonkeyPatch,
+    execution_case: ExecutionCase,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     c = execution_case
     c.disposition = Disposition.OWNER
@@ -337,7 +351,8 @@ def test_foreign_ref_during_initial_intent_is_never_overwritten(
 
 
 def test_ownership_loss_after_ref_write_cannot_record_completion(
-    execution_case: ExecutionCase, monkeypatch: pytest.MonkeyPatch,
+    execution_case: ExecutionCase,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     c = execution_case
     c.disposition = Disposition.OWNER
@@ -371,7 +386,8 @@ def test_stale_save_write_cannot_replace_completed_work(execution_case: Executio
 
 
 def test_work_arriving_during_ref_publication_stays_reserved(
-    execution_case: ExecutionCase, monkeypatch: pytest.MonkeyPatch,
+    execution_case: ExecutionCase,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     c = execution_case
     c.disposition = Disposition.OWNER
@@ -392,7 +408,8 @@ def test_work_arriving_during_ref_publication_stays_reserved(
 
 
 def test_pending_save_prevents_another_resolution_if_merge_progress_changes(
-    execution_case: ExecutionCase, monkeypatch: pytest.MonkeyPatch,
+    execution_case: ExecutionCase,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     c = execution_case
     c.disposition = Disposition.OWNER

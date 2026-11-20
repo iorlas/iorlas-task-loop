@@ -29,8 +29,10 @@ def save(con: sqlite3.Connection, value: Intent, previous: Intent | None) -> Non
     if previous is None:
         con.execute("INSERT INTO recovery_intent(attempt_id,data) VALUES(?,?)", (value.key.attempt_id, value.model_dump_json()))
     else:
-        changed = con.execute("UPDATE recovery_intent SET data=? WHERE attempt_id=? AND data=?",
-                              (value.model_dump_json(), value.key.attempt_id, previous.model_dump_json())).rowcount
+        changed = con.execute(
+            "UPDATE recovery_intent SET data=? WHERE attempt_id=? AND data=?",
+            (value.model_dump_json(), value.key.attempt_id, previous.model_dump_json()),
+        ).rowcount
         if changed != 1:
             raise StoreRefused("recovery_changed")
 

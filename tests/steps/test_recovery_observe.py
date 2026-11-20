@@ -23,7 +23,11 @@ from taskloop.recovery.observe import NativeProcesses
     ],
 )
 def test_process_observation_never_confuses_pid_reuse_with_an_empty_group(
-    monkeypatch: pytest.MonkeyPatch, seen: NativeSeen, group: bool, boot: str | None, expected: Seen,
+    monkeypatch: pytest.MonkeyPatch,
+    seen: NativeSeen,
+    group: bool,
+    boot: str | None,
+    expected: Seen,
 ) -> None:
     observation = ProcessObservation(seen, OwnedProcess(8, 8, "worker", "boot"))
     monkeypatch.setattr(owned_processes, "observe_owned", lambda _process: observation)

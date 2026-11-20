@@ -1,4 +1,5 @@
 """Current cards hydrate one row per task; explicit history and whole-step addressing survive restarts."""
+
 import sqlite3
 from dataclasses import replace
 from pathlib import Path
@@ -22,15 +23,36 @@ from taskloop.operations import Failed
 from taskloop.task_event_codec import encode as encode_event
 
 
-def add(con: sqlite3.Connection, key: str, seq: int, backlog: str = "tasks", task: str = "tl-1", repo: str = "repo",
-        previous: str | None = None, step: str = "plan") -> None:
-    con.execute("""INSERT INTO attempt (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,
+def add(
+    con: sqlite3.Connection,
+    key: str,
+    seq: int,
+    backlog: str = "tasks",
+    task: str = "tl-1",
+    repo: str = "repo",
+    previous: str | None = None,
+    step: str = "plan",
+) -> None:
+    con.execute(
+        """INSERT INTO attempt (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,
         repo_id,slot,input_path,input_digest,schema_version,model,effort,access_policy,deadline,number,seq,slot_head,
         previous_attempt_id,repeat_reason,after_commit,engine_digest,workflow_digest,workflow_sha,admitted_at)
         SELECT ?,?,1,?,adapter,?,?,tracker_root,?,slot,input_path,input_digest,schema_version,model,effort,access_policy,
         deadline,?,?,slot_head,?,?,?,engine_digest,workflow_digest,workflow_sha,admitted_at FROM attempt WHERE attempt_id='attempt'""",
-        (key, key, step, backlog, task, repo, 2 if previous else 1, seq, previous, "unsafe" if previous else None,
-         "a" * 40 if step == "implement" and previous is None else None))
+        (
+            key,
+            key,
+            step,
+            backlog,
+            task,
+            repo,
+            2 if previous else 1,
+            seq,
+            previous,
+            "unsafe" if previous else None,
+            "a" * 40 if step == "implement" and previous is None else None,
+        ),
+    )
 
 
 class Tracker:
@@ -65,8 +87,9 @@ def test_scoped_history_and_current_rows_keep_all_identities_and_restart_counts(
     store = AttemptStore(lambda: registered)
     all_rows = store.attempts()
     for backlog, task in ((None, None), ("tasks", None), (None, "tl-1"), ("tasks", "tl-1")):
-        assert store.attempts(backlog, task) == tuple(row for row in all_rows
-            if (backlog is None or row.backlog == backlog) and (task is None or row.task_id == task))
+        assert store.attempts(backlog, task) == tuple(
+            row for row in all_rows if (backlog is None or row.backlog == backlog) and (task is None or row.task_id == task)
+        )
     current = store.current_attempts()
     assert [row.key.attempt_id for row in current] == ["other-backlog", "restart", "other-task"]
     numbers = tries(all_rows)
@@ -91,10 +114,12 @@ def test_board_selects_current_once_and_retains_restart_try_addressing(registere
 
 def test_listing_finishes_its_selection_before_external_observation(registered: sqlite3.Connection) -> None:
     store = AttemptStore(lambda: registered)
+
     def observed(_: object) -> Seen:
         assert not registered.in_transaction
         add(registered, "admitted-during-observation", 2)
         return "gone"
+
     reads = replace(ports(store), observe=observed)
     listed = list_attempts(reads)
     assert isinstance(listed, Listed) and [row.attempt_id for row in listed.attempts] == ["attempt"]
@@ -102,15 +127,19 @@ def test_listing_finishes_its_selection_before_external_observation(registered: 
 
 
 @pytest.mark.parametrize("metadata", ["slot_names", "slot_use"])
-def test_missing_store_and_board_metadata_are_typed_failures(registered: sqlite3.Connection, tmp_path: Path,
-                                                             monkeypatch: pytest.MonkeyPatch, metadata: str) -> None:
+def test_missing_store_and_board_metadata_are_typed_failures(
+    registered: sqlite3.Connection, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, metadata: str
+) -> None:
     assert isinstance(list_attempts(ports(AttemptStore(lambda: None))), Failed)
     store = AttemptStore(lambda: registered)
+
     def unavailable() -> tuple[str, ...]:
         raise StoreUnavailable("unavailable metadata")
+
     monkeypatch.setattr(store, metadata, unavailable)
     assert build_board(BoardPorts(ports(store), EvidenceFiles(tmp_path), Tracker())) == Failed(
-        "unavailable", "store", "unavailable metadata")
+        "unavailable", "store", "unavailable metadata"
+    )
 
 
 def test_scoped_predicates_use_the_task_index(registered: sqlite3.Connection) -> None:
@@ -219,9 +248,12 @@ def test_previous_schema_is_refused_without_changing_the_database(tmp_path: Path
 
 
 def test_slot_lookup_seeks_agent_and_check_keys_without_a_repository_scan(registered: sqlite3.Connection) -> None:
-    registered.execute("""INSERT INTO checks_attempt
+    registered.execute(
+        """INSERT INTO checks_attempt
         (attempt_id,dispatch_token,generation,after_attempt_id,number,slot,slot_head,target_commit,required,deadline)
-        VALUES ('check','check',1,'attempt',1,'s1',?,?,'[]',100)""", (D, D))
+        VALUES ('check','check',1,'attempt',1,'s1',?,?,'[]',100)""",
+        (D, D),
+    )
     store = AttemptStore(lambda: registered)
     assert store.slot_path("attempt") == store.slot_path("check")
     assert store.slot_path("absent") is None
@@ -237,25 +269,33 @@ def test_board_keeps_landed_cards_and_uses_the_checks_number(landing: sqlite3.Co
     landing.execute(DONE[0])
     landing.execute(DONE[1])
     landing.execute("INSERT INTO published_branch VALUES ('implement','implement-token',1,?,?,6)", (D, D))
-    landing.execute("""UPDATE land_candidate SET validation='passed',validated_at=5,delivery='pushed',delivered_at=6,
-        remote_head=?,close='closed',closed_at=7,released_at=6,parked=?""", (D, D))
+    landing.execute(
+        """UPDATE land_candidate SET validation='passed',validated_at=5,delivery='pushed',delivered_at=6,
+        remote_head=?,close='closed',closed_at=7,released_at=6,parked=?""",
+        (D, D),
+    )
     board = build_board(BoardPorts(ports(CurrentOnly(lambda: landing)), EvidenceFiles(tmp_path), Tracker()))
     assert isinstance(board, Board) and len(board.tasks) == 1
-    assert (board.tasks[0].column, board.tasks[0].attempt, board.tasks[0].step_started_at) == (
-        "landed", 1, "1970-01-01T00:00:07Z")
+    assert (board.tasks[0].column, board.tasks[0].attempt, board.tasks[0].step_started_at) == ("landed", 1, "1970-01-01T00:00:07Z")
 
 
 @pytest.mark.parametrize("finished", [False, True])
 def test_board_keeps_finished_and_unfinished_holds(registered: sqlite3.Connection, tmp_path: Path, finished: bool) -> None:
     registered.execute("UPDATE attempt SET label='auto'")
-    registered.execute("""INSERT INTO task_hold (attempt_id,event,held_at,labels,labelled_at,commenting_at,commented_at)
-        VALUES ('attempt',?,1,'moved',2,3,?)""", (encode_event(event(attempt_id="attempt")), 4 if finished else None))
+    registered.execute(
+        """INSERT INTO task_hold (attempt_id,event,held_at,labels,labelled_at,commenting_at,commented_at)
+        VALUES ('attempt',?,1,'moved',2,3,?)""",
+        (encode_event(event(attempt_id="attempt")), 4 if finished else None),
+    )
     if finished:
         registered.execute("INSERT INTO slot_release VALUES ('attempt','dispatch',1,?,5,'unclaimed')", (D,))
     board = build_board(BoardPorts(ports(CurrentOnly(lambda: registered)), EvidenceFiles(tmp_path), Tracker()))
     assert isinstance(board, Board) and len(board.tasks) == 1
     assert (board.tasks[0].column, board.tasks[0].hold_cause, board.tasks[0].step_started_at) == (
-        "held", "failed:needs_owner", "1970-01-01T00:00:01Z")
+        "held",
+        "failed:needs_owner",
+        "1970-01-01T00:00:01Z",
+    )
 
 
 def test_admission_during_selection_cannot_mix_the_current_row_and_its_count(registered: sqlite3.Connection, tmp_path: Path) -> None:
@@ -267,12 +307,14 @@ def test_admission_during_selection_cannot_mix_the_current_row_and_its_count(reg
     assert reader is not None and writer is not None
     registered.backup(reader)
     admitted = False
+
     def admission() -> int:
         nonlocal admitted
         if not admitted:
             admitted = True
             add(writer, "concurrent", 51)
         return 0
+
     try:
         reader.execute("SELECT count(*) FROM attempt").fetchone()
         reader.set_progress_handler(admission, 500)

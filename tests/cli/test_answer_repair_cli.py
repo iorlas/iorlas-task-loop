@@ -21,7 +21,10 @@ from taskloop.operations import Failed, StartPorts
 
 @pytest.mark.parametrize("valid", [False, True], ids=["invalid-repair", "valid-repair"])
 def test_cli_repairs_once_and_reports_the_latest_rule(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], valid: bool,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    valid: bool,
 ) -> None:
     remote = FakeRemote("https://example.invalid/repo.git")
     remote.advance("main", {"README": "one", ".task-loop.json": "{}", **WORKFLOW_FILES})
@@ -38,8 +41,24 @@ def test_cli_repairs_once_and_reports_the_latest_rule(
 
     monkeypatch.setattr(cli_composition, "open_start", opener)
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
-    arguments = ["step", "start", "tl-1", "--backlog", "tasks", "--tracker-root", "/tracker", "--checkout", str(repo.path),
-                 "--model", "m", "--effort", "high", "--minutes", "30", "--json"]
+    arguments = [
+        "step",
+        "start",
+        "tl-1",
+        "--backlog",
+        "tasks",
+        "--tracker-root",
+        "/tracker",
+        "--checkout",
+        str(repo.path),
+        "--model",
+        "m",
+        "--effort",
+        "high",
+        "--minutes",
+        "30",
+        "--json",
+    ]
     first = fake("not json", refs=("saved",))
     factory.agents["tl-1", "plan"] = first
     try:

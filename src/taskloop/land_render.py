@@ -27,8 +27,10 @@ HOW: Final = {
 
 def _candidate(row: LandRow) -> str:
     validated = {"same_tree": "same tree as X, no checks", "no_change": "no change, no checks", "passed": "checks passed on S"}
-    return (f"Candidate {row.number} ({row.key.attempt_id}): S {row.commit} onto origin main at {row.origin}; "
-            f"{validated.get(row.validation or '', row.validation or 'pending')}")
+    return (
+        f"Candidate {row.number} ({row.key.attempt_id}): S {row.commit} onto origin main at {row.origin}; "
+        f"{validated.get(row.validation or '', row.validation or 'pending')}"
+    )
 
 
 def landed_lines(found: Landed) -> list[str]:
@@ -54,9 +56,11 @@ def land_lines(command: str, found: Landed | Withdrawn | LandSummary | Failed) -
 
 def withdrawn_lines(found: Withdrawn) -> list[str]:
     row = found.row
-    return [f"withdrawn: {row.task_id} (backlog {row.backlog}); candidate {row.number} ({row.key.attempt_id}) superseded, S "
-            f"{row.commit} was not on origin's main", "the task may now be abandoned; landing it again makes "
-            "a new candidate."]
+    return [
+        f"withdrawn: {row.task_id} (backlog {row.backlog}); candidate {row.number} ({row.key.attempt_id}) superseded, S "
+        f"{row.commit} was not on origin's main",
+        "the task may now be abandoned; landing it again makes a new candidate.",
+    ]
 
 
 def summary_lines(found: LandSummary) -> list[str]:
@@ -67,6 +71,5 @@ def failed_lines(command: str, found: Failed) -> list[str]:
     """A refusal (exit 1) or unknown (exit 3) of `tl land`: its word, its detail as printable lines, then each guide
     once: the reason, its first word and the kind, each from the land's table before the step commands'."""
     detail = [one_line(line, 2000) for line in found.detail.split("\n") if one_line(line, 2000)]
-    guides = dict.fromkeys([refusal_guide(found.reason, land=True),
-                            *([LAND_GUIDE[found.kind]] if found.kind in LAND_GUIDE else [])])
+    guides = dict.fromkeys([refusal_guide(found.reason, land=True), *([LAND_GUIDE[found.kind]] if found.kind in LAND_GUIDE else [])])
     return [f"{command}: {found.word}", *detail, *guides]

@@ -45,8 +45,19 @@ def test_round_rounds_and_taskless_lines_keep_no_task() -> None:
     assert parse_round_line(stamped(10.0, "main", "no_free_slot")) == LogRow(AT, "main", None, None, "no_free_slot", (), None)
 
 
-@pytest.mark.parametrize("line", ["", "garbage", "not-a-time main round", "1970-01-01T00:00:10Z", "1970-01-01T00:00:10Z main",
-                                  "1970-01-01T00:00:10Z bad/\x00 round x", "1970-01-01T00:00:10Z  main round", "é � �"])
+@pytest.mark.parametrize(
+    "line",
+    [
+        "",
+        "garbage",
+        "not-a-time main round",
+        "1970-01-01T00:00:10Z",
+        "1970-01-01T00:00:10Z main",
+        "1970-01-01T00:00:10Z bad/\x00 round x",
+        "1970-01-01T00:00:10Z  main round",
+        "é � �",
+    ],
+)
 def test_garbage_is_no_row(line: str) -> None:
     assert parse_round_line(line) is None
 

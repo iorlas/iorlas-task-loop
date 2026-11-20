@@ -64,7 +64,11 @@ def continue_saved(path: Path, artifacts: Path, views: GitViews) -> None:
 @pytest.mark.parametrize("direct", [False, True])
 @pytest.mark.parametrize("expired", [False, True])
 def test_reopened_start_and_rounds_resume_one_saved_attempt(
-    tmp_path: Path, surroundings: AttemptSurroundings, monkeypatch: pytest.MonkeyPatch, direct: bool, expired: bool,
+    tmp_path: Path,
+    surroundings: AttemptSurroundings,
+    monkeypatch: pytest.MonkeyPatch,
+    direct: bool,
+    expired: bool,
 ) -> None:
     path = tmp_path / "factory.db"
     con = database(path)
@@ -83,8 +87,7 @@ def test_reopened_start_and_rounds_resume_one_saved_attempt(
     views = GitViews(30)
     authorized: list[tuple[object, ...]] = []
     for index in range(4):
-        processes.states = {OWNER.pid: ProcessSeen.ALIVE} if index == 1 else (
-            {OWNER.pid: ProcessSeen.UNKNOWN} if index == 2 else {})
+        processes.states = {OWNER.pid: ProcessSeen.ALIVE} if index == 1 else ({OWNER.pid: ProcessSeen.UNKNOWN} if index == 2 else {})
         if index == 3:
             continue_saved(path, tmp_path, views)
         reopened = sqlite3.connect(path, isolation_level=None)
@@ -94,16 +97,23 @@ def test_reopened_start_and_rounds_resume_one_saved_attempt(
             ports = bench.ports()
             observed = recovery(reopened, processes)
             observed.clock = ports.reads.clock
-            ports = replace(ports, reads=replace(ports.reads, recovery=observed.status),
-                            starting=replace(ports.starting, launcher=composition.open_launcher(path, tmp_path, views)))
+            ports = replace(
+                ports,
+                reads=replace(ports.reads, recovery=observed.status),
+                starting=replace(ports.starting, launcher=composition.open_launcher(path, tmp_path, views)),
+            )
             if direct and index == 0:
                 result = start(ports.starting, START_REQUEST)
                 assert isinstance(result, Started) and result.existing and result.attempt_id == KEY.attempt_id
             else:
                 result = run_round(ports, REQUEST)
                 assert isinstance(result, Round)
-                expected = [("relaunch", "relaunched"), ("report", "running"), ("report", "unknown"),
-                            ("commit", "committed release=released branch=published")][index]
+                expected = [
+                    ("relaunch", "relaunched"),
+                    ("report", "running"),
+                    ("report", "unknown"),
+                    ("commit", "committed release=released branch=published"),
+                ][index]
                 assert [(move.action, move.word) for move in result.moves] == [expected]
                 assert all(move.attempt_id == KEY.attempt_id for move in result.moves)
             assert bench.launcher.calls == bench.admission.requests == bench.repeats.calls == []
@@ -122,7 +132,10 @@ def test_reopened_start_and_rounds_resume_one_saved_attempt(
 
 
 def complete_round(
-    reopened: sqlite3.Connection, surroundings: AttemptSurroundings, execution: NativeRun, index: int,
+    reopened: sqlite3.Connection,
+    surroundings: AttemptSurroundings,
+    execution: NativeRun,
+    index: int,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     attempts = surroundings.attempts(AttemptStore(lambda: reopened), execution)
@@ -156,8 +169,7 @@ def complete_round(
         assert [(move.action, move.word) for move in result.moves] == [("commit", "unavailable:store")]
         assert events == ["complete"] and bench.recorded.calls == []
     else:
-        assert [(move.action, move.word) for move in result.moves] == [
-            ("commit", "committed release=released branch=published")]
+        assert [(move.action, move.word) for move in result.moves] == [("commit", "committed release=released branch=published")]
         assert events == (["complete", "commit"] if index == 1 else ["commit"])
         stored = attempts.store.collect(KEY)
         assert stored is not None and stored.answer.kind == "valid" and stored.session_state == "complete"
@@ -166,7 +178,11 @@ def complete_round(
 
 @pytest.mark.parametrize("pending", ["answer", "pending", "fault"])
 def test_reopened_round_finishes_captured_work_before_committing(
-    tmp_path: Path, surroundings: AttemptSurroundings, captured_work: Attempts, pending: str, monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    surroundings: AttemptSurroundings,
+    captured_work: Attempts,
+    pending: str,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     con = captured_work.store.connect()
     assert con is not None
@@ -189,21 +205,32 @@ def test_reopened_round_finishes_captured_work_before_committing(
     assert execution.calls == [] and execution.permits == 0
 
 
-@pytest.mark.parametrize("phase, seen, action, word, launches", [
-    ("dispatching", "matching", "report", "unknown", 0),
-    ("admitted", "gone", "relaunch", "relaunched", 1),
-    ("dispatching", "unknown", "report", "unknown", 0),
-])
+@pytest.mark.parametrize(
+    "phase, seen, action, word, launches",
+    [
+        ("dispatching", "matching", "report", "unknown", 0),
+        ("admitted", "gone", "relaunch", "relaunched", 1),
+        ("dispatching", "unknown", "report", "unknown", 0),
+    ],
+)
 def test_compatible_restart_keeps_progress_sessions_and_reservation_and_reconciles_the_same_attempt(
-    done: Done, tmp_path: Path, phase: str, seen: Seen, action: str, word: str, launches: int,
+    done: Done,
+    tmp_path: Path,
+    phase: str,
+    seen: Seen,
+    action: str,
+    word: str,
+    launches: int,
 ) -> None:
     original = Store(SCHEMA)
     con = original.shared_rw(done.path)
     assert con is not None
     con.execute("UPDATE attempt SET session_ref='completed-session' WHERE attempt_id='implement'")
     seed(con, "tl-2", "unfinished", phase=phase, entry=ENTRY)
-    con.execute("UPDATE attempt SET repo_id=(SELECT repo_id FROM slot WHERE name='s1'),session_ref='unfinished-session' "
-                "WHERE attempt_id='unfinished'")
+    con.execute(
+        "UPDATE attempt SET repo_id=(SELECT repo_id FROM slot WHERE name='s1'),session_ref='unfinished-session' "
+        "WHERE attempt_id='unfinished'"
+    )
     con.execute("INSERT INTO reservation SELECT 's1',repo_id,1,'unfinished' FROM slot WHERE name='s1'")
     progress = {table: con.execute(f"SELECT * FROM {table} WHERE attempt_id='implement'").fetchall() for table in PROGRESS}
     reservation = con.execute("SELECT * FROM reservation").fetchall()
@@ -221,13 +248,17 @@ def test_compatible_restart_keeps_progress_sessions_and_reservation_and_reconcil
         bench.seen = seen
         started = FakeStart()
         ports = bench.ports()
-        starting = replace(ports.starting, launcher=launcher(done.path, started, Observe(seen)),
-                           checks=replace(ports.starting.checks, admission=NoRequired()))
+        starting = replace(
+            ports.starting,
+            launcher=launcher(done.path, started, Observe(seen)),
+            checks=replace(ports.starting.checks, admission=NoRequired()),
+        )
         ports = replace(ports, starting=starting)
         result = run_round(ports, REQUEST)
         assert isinstance(result, Round)
         assert [(move.action, move.word, move.attempt_id) for move in result.moves if move.task_id == "tl-2"] == [
-            (action, word, "unfinished")]
+            (action, word, "unfinished")
+        ]
         assert len(started.calls) == launches
         assert bench.admission.requests == bench.repeats.calls == bench.recorded.calls == []
         assert reopened.execute("SELECT * FROM reservation").fetchall() == reservation

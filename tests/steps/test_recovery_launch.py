@@ -25,8 +25,17 @@ from taskloop.recovery.store import RecoveryStore
 
 
 def launcher(path: Path, start: FakeStart, recovery: Recovery) -> Launcher:
-    return Launcher(path, EvidenceFiles(path.parent), lambda: 10, start, Observe(), "/venv/bin/python",
-                    read_seconds=DEFAULT_GIT_READ_SECONDS, ids=NativeIds(), recovery=RecoveryLaunch(recovery))
+    return Launcher(
+        path,
+        EvidenceFiles(path.parent),
+        lambda: 10,
+        start,
+        Observe(),
+        "/venv/bin/python",
+        read_seconds=DEFAULT_GIT_READ_SECONDS,
+        ids=NativeIds(),
+        recovery=RecoveryLaunch(recovery),
+    )
 
 
 @pytest.fixture
@@ -39,8 +48,7 @@ def con(tmp_path: Path) -> Generator[sqlite3.Connection]:
 
 
 def recovery(con: sqlite3.Connection, processes: Processes | None = None, claim: Claim = OWNED) -> Recovery:
-    return Recovery(RecoveryStore(lambda: con), processes or Processes(), lambda _admission: claim,
-                    slot_lock.hold, lambda: 10, NativeIds())
+    return Recovery(RecoveryStore(lambda: con), processes or Processes(), lambda _admission: claim, slot_lock.hold, lambda: 10, NativeIds())
 
 
 def test_child_authority_is_durable_before_permit(con: sqlite3.Connection, tmp_path: Path) -> None:
@@ -66,7 +74,10 @@ def test_child_authority_is_durable_before_permit(con: sqlite3.Connection, tmp_p
 
 @pytest.mark.parametrize(("pid", "seen"), [(7, Seen.ALIVE), (7, Seen.UNKNOWN), (8, Seen.ALIVE), (8, Seen.UNKNOWN)])
 def test_live_or_unknown_original_processes_receive_no_permit(
-    con: sqlite3.Connection, tmp_path: Path, pid: int, seen: Seen,
+    con: sqlite3.Connection,
+    tmp_path: Path,
+    pid: int,
+    seen: Seen,
 ) -> None:
     processes = Processes()
     processes.states[pid] = seen
@@ -101,16 +112,23 @@ def test_uncertain_start_retains_authority_until_its_owner_is_gone(con: sqlite3.
     assert isinstance(snapshot, Snapshot) and snapshot.intent is not None and snapshot.intent.generation == 2
 
 
-@pytest.mark.parametrize(("change", "outcome"), [
-    (STUCK_SQL, Outcome.INELIGIBLE),
-    ("INSERT INTO drain_state VALUES(1,1,'draining')", Outcome.DRAINING),
-    ("UPDATE attempt SET rev=rev+1", Outcome.CHANGED),
-])
+@pytest.mark.parametrize(
+    ("change", "outcome"),
+    [
+        (STUCK_SQL, Outcome.INELIGIBLE),
+        ("INSERT INTO drain_state VALUES(1,1,'draining')", Outcome.DRAINING),
+        ("UPDATE attempt SET rev=rev+1", Outcome.CHANGED),
+    ],
+)
 def test_changed_or_fenced_work_runs_no_child(
-    con: sqlite3.Connection, tmp_path: Path, change: str, outcome: Outcome,
+    con: sqlite3.Connection,
+    tmp_path: Path,
+    change: str,
+    outcome: Outcome,
 ) -> None:
     app = recovery(con)
     if outcome is Outcome.CHANGED:
+
         def changed_claim(_admission: object) -> Claim:
             con.execute(change)
             return OWNED

@@ -18,7 +18,12 @@ from taskloop.task_input import task_text
 CONTEXT = InputContext("a" * 40, ("just check", "just test"), "Partial glossary: task: Work.\n", ())
 
 TASK = TaskInspection(
-    TaskReference(TaskScope("tasks"), "tl-1"), "Add a widget", "It must do X.\nAnd Y.", "- X works\n- Y works", (), "in_progress",
+    TaskReference(TaskScope("tasks"), "tl-1"),
+    "Add a widget",
+    "It must do X.\nAnd Y.",
+    "- X works\n- Y works",
+    (),
+    "in_progress",
     "taskloop",
 )
 
@@ -32,18 +37,36 @@ def plan_input(request: pytest.FixtureRequest) -> str:
 
 
 def test_plan_producer_and_feedback_require_committed_preparation_evidence(plan_input: str) -> None:
-    for phrase in ("docs/design/tl-1/plan-metadata.json", "include it in `paths`", "`prepared_commit`", "full Source commit",
-                   "`cited_paths`", "nonempty array of unique literal repository-relative", "files or folders consulted",
-                   "without valid committed metadata needs revision", "retain its metadata and original prepared_commit"):
+    for phrase in (
+        "docs/design/tl-1/plan-metadata.json",
+        "include it in `paths`",
+        "`prepared_commit`",
+        "full Source commit",
+        "`cited_paths`",
+        "nonempty array of unique literal repository-relative",
+        "files or folders consulted",
+        "without valid committed metadata needs revision",
+        "retain its metadata and original prepared_commit",
+    ):
         assert phrase in plan_input
     repaired = PLAN.feedback(Uncommitted("uncommitted"), PLAN.rules("tl-1"), 1, "short task", "nonce", unrecorded=True)
     assert "plan-metadata.json" in repaired and "`prepared_commit`" in repaired
 
 
-@pytest.mark.parametrize(("current", "done", "expected"), [
-    (None, False, Step.PLAN), (None, True, Step.PLAN), ("plan", True, Step.IMPLEMENT), ("implement", True, CHECK),
-    (CHECK, True, None), ("plan", False, None), ("implement", False, None), (CHECK, False, None), ("review", False, None),
-])
+@pytest.mark.parametrize(
+    ("current", "done", "expected"),
+    [
+        (None, False, Step.PLAN),
+        (None, True, Step.PLAN),
+        ("plan", True, Step.IMPLEMENT),
+        ("implement", True, CHECK),
+        (CHECK, True, None),
+        ("plan", False, None),
+        ("implement", False, None),
+        (CHECK, False, None),
+        ("review", False, None),
+    ],
+)
 def test_next_step_follows_the_fixed_order_only_after_a_done_step(current: str | None, done: bool, expected: str | None) -> None:
     """None: a fresh start (or after an abandon returned the claim) is the first step; a done step advances; the last
     built step (`check`) is done; an attempt not done keeps its own `Next`."""
@@ -78,9 +101,14 @@ def test_the_check_step_follows_implement_and_is_no_agent_kind() -> None:
         next_step("review", True)
 
 
-@pytest.mark.parametrize(("decision", "expected"), [
-    (ReuseDecision.REUSE, Step.IMPLEMENT), (ReuseDecision.PLAN, Step.PLAN), (ReuseDecision.UNAVAILABLE, Step.PLAN),
-])
+@pytest.mark.parametrize(
+    ("decision", "expected"),
+    [
+        (ReuseDecision.REUSE, Step.IMPLEMENT),
+        (ReuseDecision.PLAN, Step.PLAN),
+        (ReuseDecision.UNAVAILABLE, Step.PLAN),
+    ],
+)
 def test_plan_selection_produces_the_shared_step_member(decision: ReuseDecision, expected: Step) -> None:
     assert Selection(decision, "Selected from the plan evidence.").step is expected
 
@@ -121,7 +149,6 @@ def test_the_implement_contract_names_the_committed_plan_its_scope_and_the_answe
     ) in contract
 
 
-
 @pytest.mark.parametrize("unrecorded", [True, False])
 def test_an_implement_repeat_frames_the_listing_and_preserves_the_complete_input(unrecorded: bool) -> None:
     found = Uncommitted("ignored", ("!! .venv/x",))
@@ -143,8 +170,15 @@ def test_implement_allows_latest_shelf_releases_and_stops_for_missing_capabiliti
     if route == "repeat":
         text = IMPLEMENT.feedback(Uncommitted("uncommitted"), IMPLEMENT.rules("tl-1"), 1, text, "nonce", unrecorded=True)
     elif route == "failed_check":
-        failed = FailedCheck(source=AttemptKey("check", "dispatch", 1), block=1, commit="a" * 40, name="test",
-                             argv=("just", "test"), rc=1, output=OutputTail(availability=Availability.EMPTY))
+        failed = FailedCheck(
+            source=AttemptKey("check", "dispatch", 1),
+            block=1,
+            commit="a" * 40,
+            name="test",
+            argv=("just", "test"),
+            rc=1,
+            output=OutputTail(availability=Availability.EMPTY),
+        )
         text = failed_check_feedback(failed, text, "nonce", FEEDBACK_OPENING)
     for phrase in (
         "You may add or upgrade only shelf packages, and only to their most recent released version",
@@ -180,19 +214,17 @@ def test_implement_contract_does_not_let_the_plan_be_edited() -> None:
     assert "handoff of what was built belongs in the one-line commit message" in text
 
 
-
 @pytest.mark.parametrize(("step", "success"), [("plan", "planned"), ("implement", "implemented")])
 def test_fixed_input_and_repeat_keep_unfinished_answer_and_saved_work_guidance(step: str, success: str) -> None:
     operation = kind(step)
     text = task_text(TASK, step, CONTEXT, WORKFLOW)
     condition = (
         f"Only with `{success}` should `paths` list files; otherwise return `paths: []` and `message: null`"
-        if step == "plan" else
-        "Only with `implemented` should `message` contain a commit message; otherwise return `message: null`"
+        if step == "plan"
+        else "Only with `implemented` should `message` contain a commit message; otherwise return `message: null`"
     )
     guidance = (
-        f"{condition}, and the factory "
-        "saves unfinished slot work as a work-in-progress commit on the task branch when holding the task."
+        f"{condition}, and the factory saves unfinished slot work as a work-in-progress commit on the task branch when holding the task."
     )
     assert guidance in text and SAVED_WORK in text
     if step == "plan":
@@ -206,8 +238,9 @@ def test_fixed_input_and_repeat_keep_unfinished_answer_and_saved_work_guidance(s
         assert GIT_WRITES in text
     assert "ANSWER FORMAT" not in text
     for unrecorded in (False, True):
-        repeated = operation.feedback(Uncommitted("uncommitted", ("?? new.txt",)), operation.rules("tl-1"), 1,
-                                      text, "nonce", unrecorded=unrecorded)
+        repeated = operation.feedback(
+            Uncommitted("uncommitted", ("?? new.txt",)), operation.rules("tl-1"), 1, text, "nonce", unrecorded=unrecorded
+        )
         assert repeated.endswith(text) and guidance in repeated and SAVED_WORK in repeated
         if step == "implement":
             instructions = repeated.removesuffix(text)
@@ -219,8 +252,15 @@ def test_fixed_input_and_repeat_keep_unfinished_answer_and_saved_work_guidance(s
 
 def test_failed_check_feedback_keeps_the_fixed_implement_guidance() -> None:
     text = task_text(TASK, "implement", CONTEXT, WORKFLOW)
-    failed = FailedCheck(source=AttemptKey("check", "dispatch", 1), block=1, commit="a" * 40, name="test",
-                         argv=("just", "test"), rc=1, output=OutputTail(availability=Availability.EMPTY))
+    failed = FailedCheck(
+        source=AttemptKey("check", "dispatch", 1),
+        block=1,
+        commit="a" * 40,
+        name="test",
+        argv=("just", "test"),
+        rc=1,
+        output=OutputTail(availability=Availability.EMPTY),
+    )
     feedback = failed_check_feedback(failed, text, "nonce", FEEDBACK_OPENING)
     assert feedback.endswith(text) and "Only with `implemented` should `message` contain a commit message" in feedback
     assert "`paths`" not in feedback and "paths list" not in feedback
@@ -238,17 +278,41 @@ def test_plan_requests_fixed_lean_template_and_immutable_handoff(repeat: bool) -
     text = PLAN.input_text(WORKFLOW.table(PLAN.step), TASK, PLAN.rules("tl-1"), CONTEXT)
     if repeat:
         text = PLAN.feedback(Uncommitted("uncommitted"), PLAN.rules("tl-1"), 1, text, "nonce", unrecorded=True)
-    headings = ("# Header:", "## Outcome and non-goals:", "## Settled decisions:", "## Open decisions:",
-                "## Change map:", "## Read list:", "## Contract:", "## Work packages:", "## Acceptance behaviours:")
+    headings = (
+        "# Header:",
+        "## Outcome and non-goals:",
+        "## Settled decisions:",
+        "## Open decisions:",
+        "## Change map:",
+        "## Read list:",
+        "## Contract:",
+        "## Work packages:",
+        "## Acceptance behaviours:",
+    )
     assert [text.index(heading) for heading in headings] == sorted(text.index(heading) for heading in headings)
-    for phrase in ("300 bytes", "800 bytes", "1,500 bytes", "2,000 bytes", "small 4,000, medium 8,000, large 12,000",
-                   "symbol names instead of line numbers", "list every caller found", "producers and callers",
-                   "Mark new files as new", "A plan missing this template needs revision, not `unchanged`",
-                   "any open decision requires `needs_owner`", "Never grow beyond the cap", "no test names or gate boilerplate",
-                   "numbered, with files and the acceptance lines each closes", "intent, effect, result",
-                   "cite the task's own decision numbers instead of restating them", "alternatives paragraphs",
-                   "restating task text, AGENTS.md or glossary rules", "history or provenance", "tables repeating decisions or code",
-                   "Status, As built, Progress or Implementation progress headings and content"):
+    for phrase in (
+        "300 bytes",
+        "800 bytes",
+        "1,500 bytes",
+        "2,000 bytes",
+        "small 4,000, medium 8,000, large 12,000",
+        "symbol names instead of line numbers",
+        "list every caller found",
+        "producers and callers",
+        "Mark new files as new",
+        "A plan missing this template needs revision, not `unchanged`",
+        "any open decision requires `needs_owner`",
+        "Never grow beyond the cap",
+        "no test names or gate boilerplate",
+        "numbered, with files and the acceptance lines each closes",
+        "intent, effect, result",
+        "cite the task's own decision numbers instead of restating them",
+        "alternatives paragraphs",
+        "restating task text, AGENTS.md or glossary rules",
+        "history or provenance",
+        "tables repeating decisions or code",
+        "Status, As built, Progress or Implementation progress headings and content",
+    ):
         assert phrase in text
     assert "## Size" not in text
 
@@ -258,26 +322,30 @@ def test_plan_requires_bounded_read_ranges_and_revises_plans_missing_them(repeat
     text = PLAN.input_text(WORKFLOW.table(PLAN.step), TASK, PLAN.rules("tl-1"), CONTEXT)
     if repeat:
         text = PLAN.feedback(Uncommitted("uncommitted"), PLAN.rules("tl-1"), 1, text, "nonce", unrecorded=True)
-    read_list = text[text.index("## Read list:"):text.index("## Contract:")]
-    for phrase in ("nonempty Markdown bullet list of at most 25 entries", "Each entry names an existing file as",
-                   "`path:first-last`", "a short reason", "a narrow, useful line range",
-                   "Cover every file implementation must edit or consult, including producers and callers",
-                   "For new files, mark them as new in the implementation narrative",
-                   "list their existing integration points here", "never invent ranges in nonexistent files",
-                   "Targeted searches for omitted callers or source that changed after planning are allowed"):
+    read_list = text[text.index("## Read list:") : text.index("## Contract:")]
+    for phrase in (
+        "nonempty Markdown bullet list of at most 25 entries",
+        "Each entry names an existing file as",
+        "`path:first-last`",
+        "a short reason",
+        "a narrow, useful line range",
+        "Cover every file implementation must edit or consult, including producers and callers",
+        "For new files, mark them as new in the implementation narrative",
+        "list their existing integration points here",
+        "never invent ranges in nonexistent files",
+        "Targeted searches for omitted callers or source that changed after planning are allowed",
+    ):
         assert phrase in read_list
     assert "An existing plan missing `## Read list` needs revision before answering `planned` or `unchanged`" in text
 
 
 def test_plan_read_list_exempts_only_committed_single_target_renames(plan_input: str) -> None:
-    read_list = plan_input[plan_input.index("## Read list:"):plan_input.index("## Contract:")]
+    read_list = plan_input[plan_input.index("## Read list:") : plan_input.index("## Contract:")]
     assert (
         "Cover every file implementation must edit or consult, including producers and callers. "
         "Exception: a file whose only change is a one-to-one rename listed in a committed naming map is not listed. "
         "Instead, name the map rows and one rg -nw command that must return no matches after implementation. "
         "List the files where the rename touches signatures, logic or behaviour."
     ) in read_list
-    assert (
-        "Only map rows with one target name qualify; rows whose target depends on a cause stay in normal plan scope."
-    ) in read_list
+    assert ("Only map rows with one target name qualify; rows whose target depends on a cause stay in normal plan scope.") in read_list
     assert "The rg search returning nothing must be an acceptance line." in read_list

@@ -51,10 +51,27 @@ def bench(path: Path, repo: FakeRepo, tmp_path: Path) -> Bench:
     con.execute("UPDATE checks_attempt SET phase='concluded',conclusion='passed',concluded_at=5,released_at=6,parked=slot_head")
     con.execute("DELETE FROM reservation WHERE attempt_id='checks'")
     checked = con.execute("SELECT end_commit FROM attempt WHERE attempt_id='implement'").fetchone()[0]
-    request = Request(source=key, checks=CHECKS, repo_id=repo.identity().key, backlog="tasks", task_id="tl-1",
-                      tracker_root="/tracker", checked=checked, target="e" * 40, deadline=300)
-    ports = Ports(ConflictStore(lambda: con), AttemptLoads(lambda: con), files, repo,
-                  SlotGit(PinnedViews(repo), FakeSlotFiles(repo)), lambda _: True, lambda: 10, NativeIds())
+    request = Request(
+        source=key,
+        checks=CHECKS,
+        repo_id=repo.identity().key,
+        backlog="tasks",
+        task_id="tl-1",
+        tracker_root="/tracker",
+        checked=checked,
+        target="e" * 40,
+        deadline=300,
+    )
+    ports = Ports(
+        ConflictStore(lambda: con),
+        AttemptLoads(lambda: con),
+        files,
+        repo,
+        SlotGit(PinnedViews(repo), FakeSlotFiles(repo)),
+        lambda _: True,
+        lambda: 10,
+        NativeIds(),
+    )
     return Bench(con, ports, request, files.root / ref.path)
 
 
@@ -111,14 +128,28 @@ class ExecutionCase:
         assert con is not None
         self.con = con
         self.environment.con = con
-        self.ports = ExecutionPorts(ConflictStore(lambda: con), MergeStore(lambda: con), self.ports.repo,
-            self.ports.checkouts, self.ports.remotes, self.ports.files, self.ports.evidence, self.ports.agent,
-            self.run, lambda _worker: self.gone, self.ports.clock, self.environment.preparation(),
-            self.ports.renew, self.ports.credentials, self.ports.probe)
+        self.ports = ExecutionPorts(
+            ConflictStore(lambda: con),
+            MergeStore(lambda: con),
+            self.ports.repo,
+            self.ports.checkouts,
+            self.ports.remotes,
+            self.ports.files,
+            self.ports.evidence,
+            self.ports.agent,
+            self.run,
+            lambda _worker: self.gone,
+            self.ports.clock,
+            self.environment.preparation(),
+            self.ports.renew,
+            self.ports.credentials,
+            self.ports.probe,
+        )
 
 
-def execution_case(on_slot: Path, repo: FakeRepo, slot: FakeWorktree, tmp_path: Path,
-                   target_edit: Callable[[FakeWorktree], None] | None = None) -> Generator[ExecutionCase]:
+def execution_case(
+    on_slot: Path, repo: FakeRepo, slot: FakeWorktree, tmp_path: Path, target_edit: Callable[[FakeWorktree], None] | None = None
+) -> Generator[ExecutionCase]:
     b = bench(on_slot, repo, tmp_path)
     author = repo.add_worktree(tmp_path / "author", head(slot))
     author.write_file("README", "current main\n")
@@ -132,9 +163,23 @@ def execution_case(on_slot: Path, repo: FakeRepo, slot: FakeWorktree, tmp_path: 
     assert admitted.record is not None
     views = PinnedViews(repo)
     environment = Environment(b.con, views, tmp_path / "artifacts", tmp_bytes=4096)
-    ports = ExecutionPorts(b.ports.store, MergeStore(lambda: b.con), repo, views, views, FakeSlotFiles(repo), b.ports.files,
-        AgentLaunch(lambda _h: ("/bin/codex", {}), ids=NativeIds()), lambda *_args: pytest.fail("unwired agent"),
-        lambda _worker: True, lambda: 10, environment.preparation(), lambda: ClaimWord.HELD, ("/bin/codex", {}), ("probe",))
+    ports = ExecutionPorts(
+        b.ports.store,
+        MergeStore(lambda: b.con),
+        repo,
+        views,
+        views,
+        FakeSlotFiles(repo),
+        b.ports.files,
+        AgentLaunch(lambda _h: ("/bin/codex", {}), ids=NativeIds()),
+        lambda *_args: pytest.fail("unwired agent"),
+        lambda _worker: True,
+        lambda: 10,
+        environment.preparation(),
+        lambda: ClaimWord.HELD,
+        ("/bin/codex", {}),
+        ("probe",),
+    )
     case = ExecutionCase(on_slot, b.con, admitted.record, ports, slot, environment)
     case.restart()
     try:

@@ -30,8 +30,9 @@ class Folders:
 
 
 def folders(slot: Path) -> Folders:
-    return Folders(slot.parent / ".t" / slot.name, slot.parent / ".env" / slot.name / "uv-cache",
-                   slot.parent / ".env" / slot.name / "uv-tools")
+    return Folders(
+        slot.parent / ".t" / slot.name, slot.parent / ".env" / slot.name / "uv-cache", slot.parent / ".env" / slot.name / "uv-tools"
+    )
 
 
 def agent_env(found: Folders) -> dict[str, str]:
@@ -39,7 +40,6 @@ def agent_env(found: Folders) -> dict[str, str]:
     in the roots, and uv offline (setup filled the cache). No name contains KEY, SECRET or TOKEN, which Codex's default
     `shell_environment_policy` drops."""
     return {"TMPDIR": str(found.tmp), "UV_CACHE_DIR": str(found.cache), "UV_TOOL_DIR": str(found.tools), "UV_OFFLINE": "1"}
-
 
 
 # Checks the shell got TMPDIR (the first root) and UV_OFFLINE (exit 5), creates and removes a folder of an unpredictable

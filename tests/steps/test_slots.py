@@ -128,9 +128,7 @@ def test_failed_adoption_rolls_back_every_accepted_slot(factory: sqlite3.Connect
     assert not factory.in_transaction
 
 
-def test_adoption_rereads_a_slot_adopted_elsewhere_before_the_write(
-    factory: sqlite3.Connection, repo: FakeRepo, root: Path
-) -> None:
+def test_adoption_rereads_a_slot_adopted_elsewhere_before_the_write(factory: sqlite3.Connection, repo: FakeRepo, root: Path) -> None:
     add(repo, root, "s1", "s2")
     other_path = root / "elsewhere" / "s1"
 
@@ -263,9 +261,7 @@ def test_a_slot_reserved_while_it_was_probed_is_held_not_free(factory: sqlite3.C
     assert views == (SlotView("s1", derived(repo, root, "s1"), "held", attempt_id="won"),)
 
 
-def test_reservation_read_failure_after_the_probe_never_shows_free(
-    factory: sqlite3.Connection, repo: FakeRepo, root: Path
-) -> None:
+def test_reservation_read_failure_after_the_probe_never_shows_free(factory: sqlite3.Connection, repo: FakeRepo, root: Path) -> None:
     add(repo, root, "s1")
     adopted(factory, repo, root, 1)
 
@@ -311,11 +307,14 @@ def test_a_slot_is_read_only_through_its_verified_pinned_view_and_a_redirected_o
     assert views.slot_opens(s1) == [] and (other.identity().root, None) in views.opened  # its identity was read, not the slot
 
 
-@pytest.mark.parametrize(("origin", "name"), [
-    ("git@github.com:iorlas/iorlas-task-loop.git", "iorlas-task-loop"),
-    ("https://github.com/iorlas/iorlas-task-loop/", "iorlas-task-loop"),
-    ("/srv/git/my repo.git", "my-repo"),
-])
+@pytest.mark.parametrize(
+    ("origin", "name"),
+    [
+        ("git@github.com:iorlas/iorlas-task-loop.git", "iorlas-task-loop"),
+        ("https://github.com/iorlas/iorlas-task-loop/", "iorlas-task-loop"),
+        ("/srv/git/my repo.git", "my-repo"),
+    ],
+)
 def test_the_folder_is_the_origins_readable_name(origin: str, name: str) -> None:
     assert folder_name(RepoIdentity(Path("/checkouts/other"), Path("/checkouts/other/.git"), origin, "0123456789ab")) == name
 

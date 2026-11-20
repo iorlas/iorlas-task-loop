@@ -28,5 +28,10 @@ def latest(con: sqlite3.Connection, previous: AttemptKey) -> LatestChecks | None
     if row is None:
         return None
     number, phase, conclusion, released, abandoned, landed, landing = row
-    return LatestChecks(number=as_int(number), failed_released=phase == "concluded" and conclusion == "failed" and bool(released),
-                        abandoned=bool(abandoned), landed=bool(landed), landing=bool(landing))
+    return LatestChecks(
+        number=as_int(number),
+        failed_released=phase == "concluded" and conclusion == "failed" and bool(released),
+        abandoned=bool(abandoned),
+        landed=bool(landed),
+        landing=bool(landing),
+    )

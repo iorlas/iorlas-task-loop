@@ -48,6 +48,8 @@ class DiscussionSource(BaseModel):
 
 
 type ReadDiscussion = Callable[[TaskInspection, str], tuple[DiscussionSource, ...]]
+
+
 class DiscussionSnapshot(BaseModel):
     model_config = ConfigDict(frozen=True, strict=True, extra="forbid")
     text: str
@@ -95,10 +97,13 @@ class Discussion:
 
 
 def render(sources: tuple[DiscussionSource, ...], own: str, hold: HoldRow | None) -> str:
-    lines = [] if hold is None else [
-        f"Latest recorded hold: {hold.reason}; time: {datetime.fromtimestamp(hold.held_at, UTC).isoformat()}; "
-        f"cause: {hold.cause_id}",
-    ]
+    lines = (
+        []
+        if hold is None
+        else [
+            f"Latest recorded hold: {hold.reason}; time: {datetime.fromtimestamp(hold.held_at, UTC).isoformat()}; cause: {hold.cause_id}",
+        ]
+    )
     for source in sources:
         lines.append(f"Task: {source.task_id}; title: {source.title}; relationship: {', '.join(source.relationships)}")
         if not source.comments:
@@ -107,8 +112,13 @@ def render(sources: tuple[DiscussionSource, ...], own: str, hold: HoldRow | None
             classification = ""
             if source.task_id == own and hold is not None:
                 at = comment.timestamp
-                classification = ("; time unclassified" if at is None else
-                                  "; comment after hold" if at.timestamp() > hold.held_at else "; comment at or before hold")
+                classification = (
+                    "; time unclassified"
+                    if at is None
+                    else "; comment after hold"
+                    if at.timestamp() > hold.held_at
+                    else "; comment at or before hold"
+                )
             lines.extend((f"Author: {comment.author}; time: {comment.at or '(unknown)'}{classification}", comment.text))
         if len(frame(lines).encode("utf-8")) > MAX_BYTES:
             raise InputError(f"Discussion source {source.task_id} exceeds {MAX_BYTES} UTF-8 bytes including framing")
@@ -126,7 +136,7 @@ def replace_block(text: str, block: str) -> str:
     elif len(starts) == len(ends) == 1 and starts[0] < ends[0]:
         # The notice belongs outside the data and is retained on replacement.
         data = block.removeprefix(NOTICE + "\n")
-        lines[starts[0]:ends[0] + 1] = [data + "\n"]
+        lines[starts[0] : ends[0] + 1] = [data + "\n"]
     else:
         raise InputError("Input has malformed or duplicate tracker discussion data")
     return "".join(lines)

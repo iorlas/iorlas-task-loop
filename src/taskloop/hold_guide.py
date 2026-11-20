@@ -12,18 +12,27 @@ from taskloop.hold_store import HoldRow
 from taskloop.printable import one_line
 from taskloop.round_guide import automatic_guide
 
-OPEN: Final = ("The factory holds this task for a person but has not finished the hold. The next round records it, "
-               "moves its labels, abandons the attempt and writes one comment on the task. The round's "
-               "hold pending <step> <word> line names the reason it must wait. Once that cause is resolved, "
-               "the next round returns the claim and finishes the hold.")
+OPEN: Final = (
+    "The factory holds this task for a person but has not finished the hold. The next round records it, "
+    "moves its labels, abandons the attempt and writes one comment on the task. The round's "
+    "hold pending <step> <word> line names the reason it must wait. Once that cause is resolved, "
+    "the next round returns the claim and finishes the hold."
+)
 HOLD: Final = OPEN
 LEAD: Final = "Held: the factory abandoned the attempt and waits for a person (the hold's comment on the task says why)."
-ON_HOLD: Final = (LEAD + " To answer, edit the task's description or acceptance criteria (the agent reads those, not comments), then "
-                  "restore the approval label the task was taken under. The next round under that label starts it again at plan "
-                  "on its retained task branch. To give up, close the task.")
-LABELS: Final = {"moved": "`{label}` removed, `held` added", "absent": "`held` added (`{label}` was not on the task)",
-                 "not_ours": "no label changed (another actor holds the task)", "closed": "nothing written (the task is closed)",
-                 "missing": "nothing written (no such task)", "superseded": "superseded (the task was taken again first)"}
+ON_HOLD: Final = (
+    LEAD + " To answer, edit the task's description or acceptance criteria (the agent reads those, not comments), then "
+    "restore the approval label the task was taken under. The next round under that label starts it again at plan "
+    "on its retained task branch. To give up, close the task."
+)
+LABELS: Final = {
+    "moved": "`{label}` removed, `held` added",
+    "absent": "`held` added (`{label}` was not on the task)",
+    "not_ours": "no label changed (another actor holds the task)",
+    "closed": "nothing written (the task is closed)",
+    "missing": "nothing written (no such task)",
+    "superseded": "superseded (the task was taken again first)",
+}
 
 
 def _when(at: float) -> str:
@@ -33,8 +42,11 @@ def _when(at: float) -> str:
 def _tracker(row: HoldRow) -> str:
     if row.labels is None:
         return "Hold tracker: labels not yet, not commented"
-    written = ("`held` added (no approval label was removed)" if row.label is None and row.labels == "absent" else
-               LABELS[row.labels].format(label=one_line(row.label or "", 200)))
+    written = (
+        "`held` added (no approval label was removed)"
+        if row.label is None and row.labels == "absent"
+        else LABELS[row.labels].format(label=one_line(row.label or "", 200))
+    )
     said = "commented" if row.commented_at is not None else "no comment" if row.labels in ("closed", "missing") else "not commented yet"
     return f"Hold tracker: {written}, {said}{'' if row.cleared_at is None else ', `held` cleared'}"
 
@@ -45,14 +57,17 @@ def hold_lines(view: AttemptView) -> list[str]:
     if row is None:
         return [] if view.hold_due is None else [f"Hold: due {one_line(view.hold_due)} (the next round holds it)"]
     ended = view.release if view.checks is None else None
-    claim = ("returned" if ended is not None and ended.claim == "unclaimed" else
-             "not held (it was no longer the factory's)" if ended is not None and ended.claim == "not_held" else
-             "kept: the abandon has not finished")
+    claim = (
+        "returned"
+        if ended is not None and ended.claim == "unclaimed"
+        else "not held (it was no longer the factory's)"
+        if ended is not None and ended.claim == "not_held"
+        else "kept: the abandon has not finished"
+    )
     rc = None if view.result.execution is None or row.cause_id != view.attempt_id else view.result.execution.facts.rc
     attribution = stop_text(view.stop, rc)
     detail = [] if attribution is None else [f"Hold cause: {attribution}"]
-    return [f"Hold: {one_line(row.reason)} at {_when(row.held_at)} (cause {row.cause_id})", *detail,
-            _tracker(row), f"Hold claim: {claim}"]
+    return [f"Hold: {one_line(row.reason)} at {_when(row.held_at)} (cause {row.cause_id})", *detail, _tracker(row), f"Hold claim: {claim}"]
 
 
 def pending_guide(word: str) -> str:
@@ -78,28 +93,42 @@ def hold_guide(view: AttemptView) -> str:
     found, ours = cause(row.reason, stop=view.stop, rc=rc), row.labels != "not_ours"
     edit = "edit the task's description or acceptance criteria (the agent reads those, not comments)"
     again = f"the next round under that label starts it again at plan on task/{task} as it is"
-    back = (f"restore its approval label `{label}`: {again}" if ours and row.label is not None else
-            "arrange manual continuation with the current owner; rounds do not take it again" if not ours else
-            "choose manual continuation; no approval label was recorded for rounds to take it again")
+    back = (
+        f"restore its approval label `{label}`: {again}"
+        if ours and row.label is not None
+        else "arrange manual continuation with the current owner; rounds do not take it again"
+        if not ours
+        else "choose manual continuation; no approval label was recorded for rounds to take it again"
+    )
     what = "" if found is None else " " + found.what
     reason = row.reason.removeprefix("failed:")
     if reason in ("run:vendor_blip", "run:bad_request") and stop_text(view.stop, rc) is None:
-        what = (" The agent's vendor could not accept or complete the request. Review its explanation in the retained "
-                "evidence and the account's available model and reasoning effort choices.")
+        what = (
+            " The agent's vendor could not accept or complete the request. Review its explanation in the retained "
+            "evidence and the account's available model and reasoning effort choices."
+        )
     recovery = f"To answer, {edit}, then {back}."
     if found is not None and found.fix is not None:
-        decision = ("allow more time for the next attempt" if reason in ("run:timeout", "stuck:expired_admitted") else
-                    "decide whether to retry the retained work" if found.fix == "" else
-                    "review the retained evidence and resolve the recorded cause")
+        decision = (
+            "allow more time for the next attempt"
+            if reason in ("run:timeout", "stuck:expired_admitted")
+            else "decide whether to retry the retained work"
+            if found.fix == ""
+            else "review the retained evidence and resolve the recorded cause"
+        )
         recovery = f"To continue, {decision}, then {back}."
         if reason == "land:checks_failed":
-            recovery = ("Decide whether to retry a flaky check or preserve the old task branch and restart from plan on "
-                        f"current main. Once that choice is settled, {back}.")
+            recovery = (
+                "Decide whether to retry a flaky check or preserve the old task branch and restart from plan on "
+                f"current main. Once that choice is settled, {back}."
+            )
     answer = f"{LEAD}{what} {recovery} To give up, close the task."
     if row.reason == "branch_moved":
-        answer += (f" First restore task/{task} to contain the commit accepted by factory commit, "
-                   "or rename it aside (`old/<id>-` and the first 12 "
-                   "characters of its tip).")
+        answer += (
+            f" First restore task/{task} to contain the commit accepted by factory commit, "
+            "or rename it aside (`old/<id>-` and the first 12 "
+            "characters of its tip)."
+        )
     if row.reason == "claim_lost":
         answer += " Someone else changed this task's claim while the factory worked on it."
     return answer

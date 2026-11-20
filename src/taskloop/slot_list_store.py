@@ -26,5 +26,7 @@ class SlotListStore(StoreConnection):
             rows = con.execute("""SELECT s.name,s.path,s.repo_id,r.attempt_id FROM slot s
                 LEFT JOIN reservation r ON r.repo_id=s.repo_id AND r.slot=s.name
                 ORDER BY s.repo_id,length(s.name),s.name""").fetchall()
-        return tuple(SlotRow(as_text(r[0]), as_text(r[1]), as_text(r[2]), SlotHold.FREE if r[3] is None else SlotHold.HELD,
-                             as_nullable_text(r[3])) for r in rows)
+        return tuple(
+            SlotRow(as_text(r[0]), as_text(r[1]), as_text(r[2]), SlotHold.FREE if r[3] is None else SlotHold.HELD, as_nullable_text(r[3]))
+            for r in rows
+        )

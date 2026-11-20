@@ -12,8 +12,15 @@ from taskloop.cli import main
 from taskloop.inspection_guide import PROFILE
 from taskloop.profile import NoCommit, Unavailable
 
-MAIN = {"setup": [["just", "install"]], "checks": [{"name": "check", "argv": ["just", "check"], "timeout": 1800},
-        {"name": "test", "argv": ["just", "test", "-k", "a b"], "timeout": 60}], "required": ["check", "test"], "target": "main"}
+MAIN = {
+    "setup": [["just", "install"]],
+    "checks": [
+        {"name": "check", "argv": ["just", "check"], "timeout": 1800},
+        {"name": "test", "argv": ["just", "test", "-k", "a b"], "timeout": 60},
+    ],
+    "required": ["check", "test"],
+    "target": "main",
+}
 
 
 @dataclass
@@ -55,27 +62,33 @@ def test_the_resolved_profile_in_lines_and_json(monkeypatch: pytest.MonkeyPatch,
 
 
 @pytest.mark.parametrize("structured", [False, True])
-def test_a_refusal_is_exit_1_and_unavailable_exit_3(structured: bool, monkeypatch: pytest.MonkeyPatch,
-                                                     capsys: pytest.CaptureFixture[str]) -> None:
+def test_a_refusal_is_exit_1_and_unavailable_exit_3(
+    structured: bool, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
     wired(monkeypatch, {"HEAD": b'{"engine": {}}'})
     flags = ["--json"] if structured else []
     assert main(["profile", "show", *flags]) == 1
     output = capsys.readouterr()
     assert output.out == ""
     if structured:
-        assert json.loads(output.err) == {"error": {"kind": "unknown_key", "side": "commit", "key": "engine",
-                                                    "message": "Unknown keys: engine"}}
+        assert json.loads(output.err) == {
+            "error": {"kind": "unknown_key", "side": "commit", "key": "engine", "message": "Unknown keys: engine"}
+        }
     else:
         assert output.err == "tl profile show: refused unknown_key (commit, engine): Unknown keys: engine\n" + PROFILE["unknown_key"] + "\n"
     wired(monkeypatch, None)
     assert main(["profile", "show", *flags]) == 3
     error = capsys.readouterr().err
-    assert (json.loads(error) == {"error": {"kind": "unavailable", "message": "git down"}} if structured else
-            error == "tl profile show: unavailable: git down\n" + PROFILE["unavailable"] + "\n")
+    assert (
+        json.loads(error) == {"error": {"kind": "unavailable", "message": "git down"}}
+        if structured
+        else error == "tl profile show: unavailable: git down\n" + PROFILE["unavailable"] + "\n"
+    )
 
 
-def test_zero_checks_print_none_and_a_forged_line_cannot_appear(monkeypatch: pytest.MonkeyPatch,
-                                                               capsys: pytest.CaptureFixture[str]) -> None:
+def test_zero_checks_print_none_and_a_forged_line_cannot_appear(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
     wired(monkeypatch, {"HEAD": b"{}", "main": b"{}"})
     assert main(["profile", "show"]) == 0
     assert capsys.readouterr().out.splitlines()[1:] == ["Setup: just install", "Checks: (none)", "Required: (none)", "Target: main"]

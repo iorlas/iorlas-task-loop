@@ -62,8 +62,11 @@ def applicable(stored: StoredExecution | None) -> StoredExecution | CommitResult
     if not committing(stored):
         return NotApplicable(end_word(stored))
     if stored.session_state != "complete":  # the verdict's writer requires a complete session state too
-        return (CommitRefused("session" if stored.session_state == "conflict" else "session_fault")
-                if stored.session_state in ("conflict", "fault") else CommitWaiting(CommitWaitingReason.SESSION_PENDING))
+        return (
+            CommitRefused("session" if stored.session_state == "conflict" else "session_fault")
+            if stored.session_state in ("conflict", "fault")
+            else CommitWaiting(CommitWaitingReason.SESSION_PENDING)
+        )
     return stored
 
 
@@ -72,8 +75,16 @@ class FactoryCommit:
     clean tree at it, then one verdict over immutable facts, stored once and then returned with no Git read."""
 
     def __init__(
-        self, store: AttemptStore, checkouts: Checkouts, files: SlotFiles, gone: WorkerGone,
-        clock: Callable[[], float], hold: CommitHold, *, ids: Ids, timing: OperationTiming | None = None,
+        self,
+        store: AttemptStore,
+        checkouts: Checkouts,
+        files: SlotFiles,
+        gone: WorkerGone,
+        clock: Callable[[], float],
+        hold: CommitHold,
+        *,
+        ids: Ids,
+        timing: OperationTiming | None = None,
     ) -> None:
         """`gone` observes the registered worker before the factory writes Git in its slot (`worker_alive` otherwise).
         `hold` is the slot's custody around the commit through the verdict: the entry already holds it (a no-op here),
@@ -86,8 +97,13 @@ class FactoryCommit:
 
     def commit(self, key: AttemptKey) -> CommitResult:
         try:
-            with operation(self.store, ActionKind.FINALIZE, ids=self.ids, subject=key.attempt_id,
-                           existing=lambda owner: self.store.owns_entry(key, owner)):
+            with operation(
+                self.store,
+                ActionKind.FINALIZE,
+                ids=self.ids,
+                subject=key.attempt_id,
+                existing=lambda owner: self.store.owns_entry(key, owner),
+            ):
                 return self._committed(key)
         except Fenced:
             return CommitRefused(Reason.DRAINING)
@@ -140,7 +156,7 @@ class FactoryCommit:
                 return None
             admission = record.admission
             return leftovers(self.checkouts, self.files, admission, record.base_commit, stored.answer, record.end_commit)
-        except (StoreUnavailable, StoreRefused, NotSettled, GitUnavailable, Unreadable):
+        except StoreUnavailable, StoreRefused, NotSettled, GitUnavailable, Unreadable:
             return None
 
     def staged(self, key: AttemptKey) -> tuple[str, ...] | None:
@@ -156,7 +172,7 @@ class FactoryCommit:
                 return None
             path = Path(admission.slot_path)  # read on the view pinned to the Git directory the full check verified
             return bounded(staged(self.checkouts(path, git_dir=state.gitdir), path))
-        except (StoreUnavailable, StoreRefused, GitUnavailable):
+        except StoreUnavailable, StoreRefused, GitUnavailable:
             return None
 
     def _quiet(self, record: AttemptRecord) -> CommitWaiting | CommitRefused | None:
@@ -196,4 +212,3 @@ class FactoryCommit:
     def _kept(self, record: AttemptRecord, base: str, commit: str | None, found: Verdict) -> Verdict | CommitRefused:
         kept = self.store.verdict(record.admission, base, commit, found, self.clock())
         return found if kept == found else CommitRefused("inconsistent")  # same inputs, same rules: a defect
-

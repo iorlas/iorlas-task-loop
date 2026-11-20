@@ -52,26 +52,22 @@ REFUSALS = {
     "claimed_elsewhere": "Another actor holds the tracker claim. Leave its work intact and wait for that actor's decision.",
     "constraint": "Admission conflicted with a retained reservation or task. Inspect the current attempt and "
     "slots before deciding which work may proceed.",
-    "deadline": "The requested deadline is outside the supported range. Choose a positive number of minutes within "
-    "the allowed maximum.",
+    "deadline": "The requested deadline is outside the supported range. Choose a positive number of minutes within the allowed maximum.",
     "expired": "The attempt's deadline has passed. Inspect its retained evidence and current status before "
     "deciding whether to abandon or continue it.",
     "registration_refused": "The entry registration was refused by the retained attempt state. Inspect the "
     "current attempt before allowing another launch.",
-    "dispatched": "This attempt was already dispatched. Observe its existing entry and evidence; a second worker "
-    "must not be launched.",
+    "dispatched": "This attempt was already dispatched. Observe its existing entry and evidence; a second worker must not be launched.",
     "observe": "Process identity could not be established. Wait for reliable process observation; do not release "
     "or stop an unverified process.",
     "store": "Local execution state could not be read or recorded. Check database access and free space, preserve "
     "the database and evidence, then inspect again.",
     "log": "The entry or check log could not be opened. Check the artifacts directory's permissions and free "
     "space; preserve existing evidence.",
-    "launch": "The entry launch is uncertain and may already be running. Inspect the registered entry before "
-    "deciding on another launch.",
+    "launch": "The entry launch is uncertain and may already be running. Inspect the registered entry before deciding on another launch.",
     "exec_failed_after_commit": "The entry was registered but execution failed. Inspect the registered entry and "
     "its log before relaunching it.",
-    "absent": "No retained attempt exists in the selected scope. Check the task ID, backlog and database path "
-    "before starting new work.",
+    "absent": "No retained attempt exists in the selected scope. Check the task ID, backlog and database path before starting new work.",
     "tracker": "The task tracker could not answer reliably. Check its supplied explanation and access to the "
     "configured tracker before proceeding.",
     "not_repeatable": "The current attempt cannot be repeated in this state. Inspect its status and settle or "
@@ -97,25 +93,20 @@ REFUSALS = {
     "slot_branch": "The slot is on an unexpected branch. Inspect and restore its expected branch before releasing it.",
     "slot_unborn": "The slot has no HEAD commit. Inspect and restore its expected commit before continuing.",
     "slot_redirected": "The slot's Git pointer changed. Restore the verified repository pointer; preserve the slot and its evidence.",
-    "slot_staged": "The slot has staged changes. Inspect and settle those changes before continuing; the factory "
-    "will not discard them.",
-    "slot_detached": "The task slot is unexpectedly detached. Restore the task branch containing the attempt's "
-    "work before factory commit.",
+    "slot_staged": "The slot has staged changes. Inspect and settle those changes before continuing; the factory will not discard them.",
+    "slot_detached": "The task slot is unexpectedly detached. Restore the task branch containing the attempt's work before factory commit.",
     "not_captured": "No agent result has been captured. Wait for the entry, then inspect its evidence if it has stopped.",
-    "no_base": "The attempt has no retained admission base. Preserve its evidence and ask the owner to resolve "
-    "the inconsistent state.",
+    "no_base": "The attempt has no retained admission base. Preserve its evidence and ask the owner to resolve the inconsistent state.",
     "session": "The recorded session conflicts with the answer. Preserve the transcript and ask the owner to resolve it.",
     "session_pending": "The session is not complete yet. Wait for collection before factory commit.",
-    "session_fault": "The session could not be collected. Preserve its evidence and inspect the supplied "
-    "diagnostic before proceeding.",
+    "session_fault": "The session could not be collected. Preserve its evidence and inspect the supplied diagnostic before proceeding.",
     "validation_pending": "Answer validation has not completed. Wait for the owning entry to finish collection.",
     "inconsistent": "The retained facts do not produce a consistent verdict. Preserve all evidence and ask the owner to investigate.",
     "read_only": "Factory commit requires writes but this reader is read-only. Commit it through the step "
     "that owns writes after inspecting status.",
     "released": "The attempt has already released its slot. Inspect the current task status before starting its next step.",
     "uncommitted": "The attempt left uncommitted work. Inspect and settle the listed files before factory commit or release.",
-    "unsafe": "The attempt left paths the factory cannot safely settle. Inspect the listing and preserve needed "
-    "work before resolving it.",
+    "unsafe": "The attempt left paths the factory cannot safely settle. Inspect the listing and preserve needed work before resolving it.",
     "ignored": "Ignored files remain in the slot. Inspect them and preserve needed data before clearing the slot.",
     "head_moved": "The slot HEAD moved away from the attempt's commit. Inspect and restore the expected commit before continuing.",
     "branch": "The slot is on an unexpected branch. Restore the attempt's expected branch before factory commit.",
@@ -148,36 +139,40 @@ REFUSALS = {
 }
 
 # Compound reason domains carry different remedies, even when the surrounding operation is the same.
-REFUSALS.update({
-    "environment:dirty": "Setup left changes in the slot. Inspect and preserve needed files, then restore the expected clean state.",
-    "environment:moved": "Setup moved the slot HEAD or branch. Restore the expected commit and branch before continuing.",
-    "environment:failed": "Setup exhausted its allowed attempts. Inspect its setup log and fix the cause before approving new work.",
-    "environment:exit": "Setup exited unsuccessfully. Read its setup log and correct the command or environment before continuing.",
-    "environment:profile": "Setup could not use the committed profile. Correct .task-loop.json on the task branch before continuing.",
-    "environment:platform": "The slot environment requires Linux. Use a supported Linux host for implementation.",
-    "environment:path_long": "The slot's temporary path exceeds its supported length. Configure a shorter slots root before admission.",
-    "environment:roots": "The writable environment folders overlap protected paths or escape the slots "
-    "root. Separate the configured roots.",
-    "environment:sandbox": "The sandbox probe failed. Inspect its supplied diagnostic and correct the host sandbox configuration.",
-    "environment:files": "Setup's environment folders cannot be prepared. Check their permissions and free space before continuing.",
-    "environment:remove_unsafe": "The environment cannot safely clear its scratch folder. Restore its "
-    "expected location and ownership first.",
-    "environment:reset": "The slot could not be reset to its admitted base. Preserve its changes and "
-    "restore the expected checkout state.",
-    "environment:lingering": "A setup process survived its entry or deadline. Wait for it to end; retain "
-    "the slot until its identity is verified.",
-    "environment:running": "An earlier setup process still runs. Wait for it to end before reusing the slot.",
-    "environment:uncertain": "Setup may have started but its launch is uncertain. Wait for process "
-    "reconciliation before reusing the slot.",
-    "environment:unknown": "Setup process liveness cannot be established. Wait for reliable process observation before reusing the slot.",
-    "checks:running": "An earlier check process still runs. Wait for it to end before another checks block can start.",
-    "checks:unknown": "Check process liveness cannot be established. Wait for reliable process observation before continuing.",
-    "checks:uncertain": "A check may have started but its launch is uncertain. Wait for reconciliation before continuing.",
-    "answer:validation_pending": "The answer has not finished validation. Wait for the owning entry to complete collection.",
-    "answer:valid": "The stored answer has no usable disposition. Preserve the answer and diagnostics for the owner's investigation.",
-    "answer:missing": "The agent supplied no answer. Inspect its retained stdout, stderr and diagnostics "
-    "before deciding on another attempt.",
-    "answer:json_invalid": "The agent answer is not valid JSON. Inspect the answer and diagnostics before deciding on another attempt.",
-    "answer:schema_invalid": "The agent answer does not meet its schema. Inspect the answer and "
-    "diagnostics before deciding on another attempt.",
-})
+REFUSALS.update(
+    {
+        "environment:dirty": "Setup left changes in the slot. Inspect and preserve needed files, then restore the expected clean state.",
+        "environment:moved": "Setup moved the slot HEAD or branch. Restore the expected commit and branch before continuing.",
+        "environment:failed": "Setup exhausted its allowed attempts. Inspect its setup log and fix the cause before approving new work.",
+        "environment:exit": "Setup exited unsuccessfully. Read its setup log and correct the command or environment before continuing.",
+        "environment:profile": "Setup could not use the committed profile. Correct .task-loop.json on the task branch before continuing.",
+        "environment:platform": "The slot environment requires Linux. Use a supported Linux host for implementation.",
+        "environment:path_long": "The slot's temporary path exceeds its supported length. Configure a shorter slots root before admission.",
+        "environment:roots": "The writable environment folders overlap protected paths or escape the slots "
+        "root. Separate the configured roots.",
+        "environment:sandbox": "The sandbox probe failed. Inspect its supplied diagnostic and correct the host sandbox configuration.",
+        "environment:files": "Setup's environment folders cannot be prepared. Check their permissions and free space before continuing.",
+        "environment:remove_unsafe": "The environment cannot safely clear its scratch folder. Restore its "
+        "expected location and ownership first.",
+        "environment:reset": "The slot could not be reset to its admitted base. Preserve its changes and "
+        "restore the expected checkout state.",
+        "environment:lingering": "A setup process survived its entry or deadline. Wait for it to end; retain "
+        "the slot until its identity is verified.",
+        "environment:running": "An earlier setup process still runs. Wait for it to end before reusing the slot.",
+        "environment:uncertain": "Setup may have started but its launch is uncertain. Wait for process "
+        "reconciliation before reusing the slot.",
+        "environment:unknown": (
+            "Setup process liveness cannot be established. Wait for reliable process observation before reusing the slot."
+        ),
+        "checks:running": "An earlier check process still runs. Wait for it to end before another checks block can start.",
+        "checks:unknown": "Check process liveness cannot be established. Wait for reliable process observation before continuing.",
+        "checks:uncertain": "A check may have started but its launch is uncertain. Wait for reconciliation before continuing.",
+        "answer:validation_pending": "The answer has not finished validation. Wait for the owning entry to complete collection.",
+        "answer:valid": "The stored answer has no usable disposition. Preserve the answer and diagnostics for the owner's investigation.",
+        "answer:missing": "The agent supplied no answer. Inspect its retained stdout, stderr and diagnostics "
+        "before deciding on another attempt.",
+        "answer:json_invalid": "The agent answer is not valid JSON. Inspect the answer and diagnostics before deciding on another attempt.",
+        "answer:schema_invalid": "The agent answer does not meet its schema. Inspect the answer and "
+        "diagnostics before deciding on another attempt.",
+    }
+)

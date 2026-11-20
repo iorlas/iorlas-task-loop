@@ -56,7 +56,10 @@ def test_mismatched_tool_fails(declarations: Path, capsys: pytest.CaptureFixture
 @pytest.mark.parametrize("tool", SUPPORTED)
 @pytest.mark.parametrize("detail", ["", "command not found\nprobe failed", "malformed version", "\nprobe failed"])
 def test_missing_failed_and_malformed_probes_fail(
-    declarations: Path, capsys: pytest.CaptureFixture[str], tool: str, detail: str,
+    declarations: Path,
+    capsys: pytest.CaptureFixture[str],
+    tool: str,
+    detail: str,
 ) -> None:
     output = SUPPORTED[tool] + detail if detail == "\nprobe failed" else detail
     assert run(declarations, {**SUPPORTED, tool: output}) == 1
@@ -73,7 +76,13 @@ def test_missing_failed_and_malformed_probes_fail(
     ],
 )
 def test_committed_declaration_drift_fails(
-    declarations: Path, capsys: pytest.CaptureFixture[str], name: str, old: str, new: str, tool: str, declaration: str,
+    declarations: Path,
+    capsys: pytest.CaptureFixture[str],
+    name: str,
+    old: str,
+    new: str,
+    tool: str,
+    declaration: str,
 ) -> None:
     target = declarations / name
     original = target.read_text()
@@ -106,7 +115,9 @@ def test_mise_has_no_codex_and_names_git_as_a_minimum() -> None:
 
 @pytest.mark.parametrize("replacement", ["3.15", "latest", ""])
 def test_python_pin_is_one_exact_version_in_python_version_file(
-    declarations: Path, capsys: pytest.CaptureFixture[str], replacement: str,
+    declarations: Path,
+    capsys: pytest.CaptureFixture[str],
+    replacement: str,
 ) -> None:
     (declarations / ".python-version").write_text(replacement + "\n")
     assert run(declarations, SUPPORTED) == 1

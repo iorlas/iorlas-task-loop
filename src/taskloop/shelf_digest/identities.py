@@ -128,8 +128,7 @@ def _selector(url: str, *, locked: bool) -> tuple[_Source, str]:
     commit = parsed.fragment
     if (locked and re.fullmatch(r"[0-9a-f]{40}", commit) is None) or (not locked and commit):
         raise _Invalid(f"Source {url!r}: expected {'a full immutable commit' if locked else 'no commit fragment'}")
-    source = _Source(git=urlunsplit(parsed._replace(query="", fragment="")),
-                     subdirectory=query["subdirectory"][0], tag=query["tag"][0])
+    source = _Source(git=urlunsplit(parsed._replace(query="", fragment="")), subdirectory=query["subdirectory"][0], tag=query["tag"][0])
     _repository(source.git)
     if not relative_path(source.subdirectory):
         raise _Invalid(f"Invalid package subdirectory {source.subdirectory!r} in {url!r}")
@@ -150,8 +149,9 @@ def _equal(expected: object, observed: object, context: str) -> None:
 def _identity(name: str, project: _ProjectManifest, lock: _Lock, root: _LockedPackage) -> PackageIdentity:
     context = f"{name} in pyproject.toml / uv.lock"
     try:
-        declaration = _one([item for item in project.project.dependencies
-                            if re.split(r"[\s<>=!~\[;@]", item, maxsplit=1)[0] == name], context)
+        declaration = _one(
+            [item for item in project.project.dependencies if re.split(r"[\s<>=!~\[;@]", item, maxsplit=1)[0] == name], context
+        )
         matched = re.fullmatch(re.escape(name) + r"==([A-Za-z0-9][A-Za-z0-9.!+_-]*)", declaration)
         if matched is None:
             raise _Invalid(f"Expected an exact version for {name}, observed {declaration!r}")
@@ -166,8 +166,7 @@ def _identity(name: str, project: _ProjectManifest, lock: _Lock, root: _LockedPa
         locked, commit = _selector(package.source["git"], locked=True)
         _equal(declared, locked, f"{context} source")
         dependency = _one([item for item in root.dependencies if item.name == name], f"{context} root dependency")
-        _equal((None, None, None), (dependency.git, dependency.specifier, dependency.marker),
-               f"{context} root dependency selectors")
+        _equal((None, None, None), (dependency.git, dependency.specifier, dependency.marker), f"{context} root dependency selectors")
         if root.metadata is None:
             raise _Invalid("Missing task-loop lock metadata")
         metadata = _one([item for item in root.metadata.requires_dist if item.name == name], f"{context} requires-dist")
@@ -190,8 +189,9 @@ def _reconcile(project: _ProjectManifest, lock: _Lock) -> tuple[PackageIdentity,
     _equal({"editable": "."}, root.source, "uv.lock task-loop source")
     identities = tuple(_identity(name, project, lock, root) for name in PACKAGES)
     agent, stream = identities[0], identities[-1]
-    _equal((agent.repository_url, agent.commit), (stream.repository_url, stream.commit),
-           "any-agent / stream-proc uv.lock shared source commit")
+    _equal(
+        (agent.repository_url, agent.commit), (stream.repository_url, stream.commit), "any-agent / stream-proc uv.lock shared source commit"
+    )
     return identities
 
 

@@ -97,8 +97,11 @@ def _status(path: Path | None) -> os.stat_result | None:
 
 
 def _changed(previous: Offset, status: os.stat_result | None) -> bool:
-    return status is not None and previous.inode != 0 and (
-        (previous.device, previous.inode) != (status.st_dev, status.st_ino) or previous.offset > status.st_size)
+    return (
+        status is not None
+        and previous.inode != 0
+        and ((previous.device, previous.inode) != (status.st_dev, status.st_ino) or previous.offset > status.st_size)
+    )
 
 
 def _records(data: bytes, start: int, log: CheckLog, block: int, final: bool, tail: bool) -> tuple[list[Record], int]:
@@ -109,9 +112,18 @@ def _records(data: bytes, start: int, log: CheckLog, block: int, final: bool, ta
         length = newline + 1 - offset if newline >= 0 else min(LINE_CAP, len(data) - offset)
         if newline < 0 and length < LINE_CAP and not final:
             break
-        records.append(Record(block=block, position=log.position, name=log.name, offset=start + offset, end=start + offset + length,
-                              text=data[offset:offset + length].decode("utf-8", "replace"), state=log.state,
-                              conclusion=log.conclusion))
+        records.append(
+            Record(
+                block=block,
+                position=log.position,
+                name=log.name,
+                offset=start + offset,
+                end=start + offset + length,
+                text=data[offset : offset + length].decode("utf-8", "replace"),
+                state=log.state,
+                conclusion=log.conclusion,
+            )
+        )
         offset += length
         if not tail and len(records) == EVENT_CAP:
             break
@@ -149,8 +161,10 @@ def read(attempt: str, block: int, logs: tuple[tuple[CheckLog, Path | None], ...
         if previous is not None and (previous.log.name != log.name or _changed(previous, _status(path))):
             replaced = True
     tail = prior is None or replaced
-    offsets = {log.position: Offset(log=log) if tail or log.position not in old
-               else old[log.position].model_copy(update={"log": log}) for log, _path in logs}
+    offsets = {
+        log.position: Offset(log=log) if tail or log.position not in old else old[log.position].model_copy(update={"log": log})
+        for log, _path in logs
+    }
     records: deque[Record] = deque(maxlen=EVENT_CAP)
     budget, available = READ_CAP, bool(logs)
     for log, path in reversed(logs) if tail else logs:
@@ -161,7 +175,7 @@ def read(attempt: str, block: int, logs: tuple[tuple[CheckLog, Path | None], ...
         budget -= used
         available = available and readable
         if not tail:
-            found = found[:EVENT_CAP - len(records)]
+            found = found[: EVENT_CAP - len(records)]
             if found and found[-1].end is not None:
                 current = current.model_copy(update={"offset": found[-1].end})
         emitted = list(found)

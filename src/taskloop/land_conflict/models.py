@@ -31,7 +31,13 @@ class Request(Value):
 
     def matches(self, inputs: RetainedInputs) -> bool:
         return (self.source, self.repo_id, self.backlog, self.task_id, self.tracker_root, self.checked) == (
-            inputs.key, inputs.repo_id, inputs.backlog, inputs.task_id, inputs.tracker_root, inputs.checked)
+            inputs.key,
+            inputs.repo_id,
+            inputs.backlog,
+            inputs.task_id,
+            inputs.tracker_root,
+            inputs.checked,
+        )
 
 
 class Record(Value):
@@ -114,8 +120,11 @@ class Save(Value):
     @model_validator(mode="after")
     def consistent_release(self) -> Self:
         if self.release is not None and (
-                self.cleanup is None or self.cleanup.phase is not CleanupPhase.COMPLETE
-                or self.release.work != self.cleanup.work or self.release.before != self.cleanup.after):
+            self.cleanup is None
+            or self.cleanup.phase is not CleanupPhase.COMPLETE
+            or self.release.work != self.cleanup.work
+            or self.release.before != self.cleanup.after
+        ):
             raise ValueError("release requires completed cleanup and the exact saved work")
         return self
 
@@ -125,27 +134,44 @@ class Save(Value):
             cleanup = self.cleanup
             if self.phase is not SavePhase.COMPLETE:
                 raise ValueError("cleanup requires completely retained work")
-            if ((cleanup.work.attempt_id, cleanup.work.dispatch_token, cleanup.work.generation)
-                    != (self.key.attempt_id, self.key.dispatch_token, self.key.reservation_generation)
-                    or (cleanup.work.repo_id, cleanup.work.slot, cleanup.work.gitdir, cleanup.work.source, cleanup.work.target)
-                    != (self.repo_id, self.slot_path, self.gitdir, self.source, self.target)):
+            if (cleanup.work.attempt_id, cleanup.work.dispatch_token, cleanup.work.generation) != (
+                self.key.attempt_id,
+                self.key.dispatch_token,
+                self.key.reservation_generation,
+            ) or (cleanup.work.repo_id, cleanup.work.slot, cleanup.work.gitdir, cleanup.work.source, cleanup.work.target) != (
+                self.repo_id,
+                self.slot_path,
+                self.gitdir,
+                self.source,
+                self.target,
+            ):
                 raise ValueError("cleanup must retain the exact saved merge identity")
             if self.accepted and (
-                    self.merging or cleanup.work.phase is not Phase.COMPLETE or cleanup.work.result != self.commit
-                    or self.head != self.commit or cleanup.before.head != self.commit
-                    or cleanup.before.branch is not None or cleanup.before.merging
-                    or cleanup.before.merge_head is not None or cleanup.before.index):
+                self.merging
+                or cleanup.work.phase is not Phase.COMPLETE
+                or cleanup.work.result != self.commit
+                or self.head != self.commit
+                or cleanup.before.head != self.commit
+                or cleanup.before.branch is not None
+                or cleanup.before.merging
+                or cleanup.before.merge_head is not None
+                or cleanup.before.index
+            ):
                 raise ValueError("accepted cleanup requires the exact clean detached completed work")
-            if self.merging and cleanup.phase is not CleanupPhase.EXCLUDE and (
-                    self.abort is None or self.abort.phase is not AbortPhase.COMPLETE):
+            if (
+                self.merging
+                and cleanup.phase is not CleanupPhase.EXCLUDE
+                and (self.abort is None or self.abort.phase is not AbortPhase.COMPLETE)
+            ):
                 raise ValueError("cleanup parking requires a completed abort")
         if self.abort is not None and (self.phase is not SavePhase.COMPLETE or self.accepted or not self.merging):
             raise ValueError("abort requires a completely retained unfinished merge")
         if self.abort is not None and (
-                (self.abort.work.attempt_id, self.abort.work.dispatch_token, self.abort.work.generation)
-                != (self.key.attempt_id, self.key.dispatch_token, self.key.reservation_generation)
-                or (self.abort.work.repo_id, self.abort.work.slot, self.abort.work.gitdir, self.abort.work.source, self.abort.work.target)
-                != (self.repo_id, self.slot_path, self.gitdir, self.source, self.target)):
+            (self.abort.work.attempt_id, self.abort.work.dispatch_token, self.abort.work.generation)
+            != (self.key.attempt_id, self.key.dispatch_token, self.key.reservation_generation)
+            or (self.abort.work.repo_id, self.abort.work.slot, self.abort.work.gitdir, self.abort.work.source, self.abort.work.target)
+            != (self.repo_id, self.slot_path, self.gitdir, self.source, self.target)
+        ):
             raise ValueError("abort must retain the exact saved merge identity")
         if self.expected is not None:
             raise ValueError("a conflict save creates its own ref")

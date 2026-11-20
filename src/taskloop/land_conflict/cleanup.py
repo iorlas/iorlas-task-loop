@@ -59,7 +59,8 @@ class CleanupSaved:
                 raise AbortRefused("The checkout changed before ignored paths could be protected.")
             p.fence()
             p.checkouts(work.slot, git_dir=work.gitdir).worktree(work.slot).exclude(
-                tuple(literal_pattern(path) for path in cleanup.ignored))
+                tuple(literal_pattern(path) for path in cleanup.ignored)
+            )
             if saved.merging:
                 assert isinstance(result, Terminal)
                 aborted = AbortMerge(p)(record, work, saved, result)
@@ -78,9 +79,10 @@ class CleanupSaved:
         p = self.preservation
         slot = p.checkouts(work.slot, git_dir=work.gitdir).worktree(work.slot)
         if saved.abort is None and (
-                (before.head, before.branch, before.merging, before.merge_head)
-                != (saved.head, None, saved.merging, f"{saved.target}\n".encode().hex() if saved.merging else None)
-                or str(slot.capture()) != saved.tree):
+            (before.head, before.branch, before.merging, before.merge_head)
+            != (saved.head, None, saved.merging, f"{saved.target}\n".encode().hex() if saved.merging else None)
+            or str(slot.capture()) != saved.tree
+        ):
             raise AbortRefused("The checkout changed after its work was retained.")
         dirty = slot.dirty(ignored_under=(".",))
         ignored = {path: identity for path, identity in before.files.items() if _under(path, dirty.ignored)}
@@ -91,8 +93,16 @@ class CleanupSaved:
         if any(a == b or a.startswith(b + "/") or b.startswith(a + "/") for a in ignored for b in tracked):
             raise AbortRefused("An ignored path overlaps the cleanup HEAD.")
         survivors = {path: identity for path, identity in before.files.items() if _under(path, (*dirty.untracked, *dirty.ignored))}
-        restored = before.model_copy(update={"head": str(target.sha), "branch": None, "merging": False,
-                                             "merge_head": None, "index": (), "files": tracked | survivors})
+        restored = before.model_copy(
+            update={
+                "head": str(target.sha),
+                "branch": None,
+                "merging": False,
+                "merge_head": None,
+                "index": (),
+                "files": tracked | survivors,
+            }
+        )
         after = restored.model_copy(update={"files": tracked | ignored})
         return Cleanup(work=work, before=before, restored=restored, after=after, ignored=ignored)
 
@@ -129,5 +139,7 @@ def _under(path: str, names: tuple[str, ...]) -> bool:
 
 def _parking(current: Checkout, cleanup: Cleanup) -> bool:
     """Cleaning may have removed any subset of the recorded untracked paths."""
-    return (current.model_dump(exclude={"files"}) == cleanup.after.model_dump(exclude={"files"})
-            and cleanup.after.files.items() <= current.files.items() <= cleanup.restored.files.items())
+    return (
+        current.model_dump(exclude={"files"}) == cleanup.after.model_dump(exclude={"files"})
+        and cleanup.after.files.items() <= current.files.items() <= cleanup.restored.files.items()
+    )

@@ -78,7 +78,8 @@ def test_busy_slot_has_no_setup_or_merge_effect(execution_case: ExecutionCase) -
 
 @pytest.mark.parametrize("seen", ["alive", "unknown"])
 def test_previous_setup_blocks_parking_and_remains_visible_to_drain(
-    execution_case: ExecutionCase, seen: Literal["alive", "unknown"],
+    execution_case: ExecutionCase,
+    seen: Literal["alive", "unknown"],
 ) -> None:
     c = execution_case
     store = SetupStore(lambda: c.con)

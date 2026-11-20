@@ -60,28 +60,49 @@ def test_map_refresh_replaces_old_paths_once(repo: FakeRepo, checkouts: PinnedVi
     assert text.startswith("retry frame\n") and text.endswith("\ntask")
 
 
-@pytest.mark.parametrize("settings", [SETTINGS, SETTINGS.replace('pythonpath = ["tests/steps"]', 'pythonpath = ["tests"]'),
-                                     SETTINGS.replace("--import-mode=importlib", "--import-mode=prepend")])
+@pytest.mark.parametrize(
+    "settings",
+    [
+        SETTINGS,
+        SETTINGS.replace('pythonpath = ["tests/steps"]', 'pythonpath = ["tests"]'),
+        SETTINGS.replace("--import-mode=importlib", "--import-mode=prepend"),
+    ],
+)
 @pytest.mark.parametrize("missing_folders", [False, True])
 def test_taskloop_hints_follow_committed_paths_and_pytest_settings(
-    repo: FakeRepo, checkouts: PinnedViews, settings: str, missing_folders: bool,
+    repo: FakeRepo,
+    checkouts: PinnedViews,
+    settings: str,
+    missing_folders: bool,
 ) -> None:
-    paths = ("src/taskloop/app.py", "src/taskloop/agents/a.py", "src/taskloop/drain/a.py", "src/taskloop/check_repeat/a.py",
-             "src/taskloop/dash/a.py", "tests/steps/doubles.py", "tests/cli/a.py", "tests/rules/a.py")
+    paths = (
+        "src/taskloop/app.py",
+        "src/taskloop/agents/a.py",
+        "src/taskloop/drain/a.py",
+        "src/taskloop/check_repeat/a.py",
+        "src/taskloop/dash/a.py",
+        "tests/steps/doubles.py",
+        "tests/cli/a.py",
+        "tests/rules/a.py",
+    )
     if missing_folders:
         paths = tuple(path for path in paths if path not in ("src/taskloop/drain/a.py", "tests/rules/a.py"))
     commit = record(repo, dict.fromkeys(paths, "") | {"pyproject.toml": settings})
     repo.worktree(repo.path).write_file("pyproject.toml", "dirty invalid toml")
     context = read(GitProfileFiles(repo.path, checkouts), commit)
-    hints = ["In this repository, source modules are primarily src/taskloop/*.py.",
-             "Feature subfolders: src/taskloop/agents/, src/taskloop/drain/, src/taskloop/check_repeat/, src/taskloop/dash/.",
-             "Tests: tests/steps/, tests/cli/, tests/rules/."]
+    hints = [
+        "In this repository, source modules are primarily src/taskloop/*.py.",
+        "Feature subfolders: src/taskloop/agents/, src/taskloop/drain/, src/taskloop/check_repeat/, src/taskloop/dash/.",
+        "Tests: tests/steps/, tests/cli/, tests/rules/.",
+    ]
     if missing_folders:
         hints[1] = "Feature subfolders: src/taskloop/agents/, src/taskloop/check_repeat/, src/taskloop/dash/."
         hints[2] = "Tests: tests/steps/, tests/cli/."
     if settings == SETTINGS:
-        hints.append('Shared test helpers such as doubles.py live in tests/steps; committed pytest settings use '
-                     'importlib mode and pythonpath = ["tests/steps"].')
+        hints.append(
+            "Shared test helpers such as doubles.py live in tests/steps; committed pytest settings use "
+            'importlib mode and pythonpath = ["tests/steps"].'
+        )
     text = context.render()
     assert text.splitlines().count("CODE MAP") == text.splitlines().count(BEGIN) == text.splitlines().count(END) == 1
     assert text.index(BEGIN) < text.index(context.glossary) < text.index("\nCODE MAP\n") < text.index(END)
@@ -90,7 +111,10 @@ def test_taskloop_hints_follow_committed_paths_and_pytest_settings(
 
 @pytest.mark.parametrize("failure", [Unavailable("listing failed"), NoCommit()])
 def test_listing_failure_prevents_input_with_explanation(
-    repo: FakeRepo, checkouts: PinnedViews, monkeypatch: pytest.MonkeyPatch, failure: Unavailable | NoCommit,
+    repo: FakeRepo,
+    checkouts: PinnedViews,
+    monkeypatch: pytest.MonkeyPatch,
+    failure: Unavailable | NoCommit,
 ) -> None:
     commit = record(repo, {"src/a.py": "code"})
     monkeypatch.setattr(GitProfileFiles, "paths", lambda _self, _commit: failure)

@@ -56,17 +56,35 @@ class Ports:
     def __init__(self, static: Path, max_streams: int = 16, queue_depth: int = 256) -> None:
         self.cards, self.mode = [card()], "ok"
         self.rows: tuple[LogRow, ...] = (row(),)
-        self.ports = DashPorts(self.board, self.task, self.tracker, self.body, lambda: self.rows, self.feed, self.delivery,
-                               "tl", static, 0.03, 0.05,
-                               max_streams, queue_depth)
+        self.ports = DashPorts(
+            self.board,
+            self.task,
+            self.tracker,
+            self.body,
+            lambda: self.rows,
+            self.feed,
+            self.delivery,
+            "tl",
+            static,
+            0.03,
+            0.05,
+            max_streams,
+            queue_depth,
+        )
 
     def delivery(self, task_id: str) -> LandDetail | Failed | None:
         if task_id == "broken":
             return Failed("unavailable", "git", "Delivery facts are temporarily unavailable.")
         if task_id != "tl-1":
             return None
-        return LandDetail(actions=("Integrate changes.",), summary=("One changed file.",), diff_files=1, added=2, deleted=1,
-                          pr_url="https://example.invalid/pull/1")
+        return LandDetail(
+            actions=("Integrate changes.",),
+            summary=("One changed file.",),
+            diff_files=1,
+            added=2,
+            deleted=1,
+            pr_url="https://example.invalid/pull/1",
+        )
 
     def board(self) -> Board | Failed:
         if self.mode == "raise":
@@ -80,13 +98,19 @@ class Ports:
         if (task_id, step, number) != ("tl-1", "implement", 2):
             return None
         line = FeedEvent("command", "2026-11-12T10:00:00Z", id="c1", state="running", cmd="ls")
-        return (FeedPage((line,), "7:42", replaced=False, available=True, duration=self.cards[0].duration) if cursor is None
-                else FeedPage((), cursor, False, True, self.cards[0].duration))
+        return (
+            FeedPage((line,), "7:42", replaced=False, available=True, duration=self.cards[0].duration)
+            if cursor is None
+            else FeedPage((), cursor, False, True, self.cards[0].duration)
+        )
 
     def task(self, task_id: str) -> TaskDetail | Failed:
         usage = Usage(16, 13, 7, 1, 1, 1)
-        return (Failed("unavailable", "store") if task_id == "broken"
-                else TaskDetail(replace(card(task_id), duration=self.cards[0].duration), (), {"plan": usage}, usage))
+        return (
+            Failed("unavailable", "store")
+            if task_id == "broken"
+            else TaskDetail(replace(card(task_id), duration=self.cards[0].duration), (), {"plan": usage}, usage)
+        )
 
     def body(self, task_id: str, step: str, number: int) -> AttemptBody | Failed | None:
         return AttemptBody("prompt", Outcome("committed", None, (), None)) if (task_id, step, number) == ("tl-1", "plan", 1) else None
@@ -148,12 +172,22 @@ def get(server: DashServer, path: str, host: str | None = None) -> tuple[int, by
     return response.status, response.read()
 
 
-@pytest.mark.parametrize(("host", "family", "authority"), [
-    ("127.0.0.2", socket.AF_INET, "127.0.0.2:8123"), ("::1", socket.AF_INET6, "[::1]:8123"),
-    ("192.0.2.4", socket.AF_INET, None), ("0.0.0.0", socket.AF_INET, None), ("::", socket.AF_INET6, None),
-])
+@pytest.mark.parametrize(
+    ("host", "family", "authority"),
+    [
+        ("127.0.0.2", socket.AF_INET, "127.0.0.2:8123"),
+        ("::1", socket.AF_INET6, "[::1]:8123"),
+        ("192.0.2.4", socket.AF_INET, None),
+        ("0.0.0.0", socket.AF_INET, None),
+        ("::", socket.AF_INET6, None),
+    ],
+)
 def test_listener_uses_the_selected_literal_family_and_allocated_port(
-    host: str, family: int, authority: str | None, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    host: str,
+    family: int,
+    authority: str | None,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     bound: list[tuple[str, int]] = []
 
@@ -171,7 +205,9 @@ def test_listener_uses_the_selected_literal_family_and_allocated_port(
 
 
 def test_explicit_non_loopback_allows_proxy_hosts_for_page_api_and_events(
-    tmp_path: Path, require_loopback: None, monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    require_loopback: None,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     def local_listener(address: tuple[str, int], handler: type[BaseHTTPRequestHandler]) -> ThreadingHTTPServer:
         assert address == ("192.0.2.4", 0)
@@ -213,8 +249,11 @@ def test_the_endpoints_answer_json_the_page_is_served_and_nothing_else_is(served
     assert get(server, "/") == (200, b"<html>page</html>")
     assert get(server, "/api/tasks/unknown")[0] == 200 and get(server, "/api/tasks/broken")[0] == 503
     detail = json.loads(get(server, "/api/tasks/tl-1")[1])
-    assert detail["step_usage"]["plan"] == detail["usage"] == {
-        "fresh": 16, "cached": 13, "output": 7, "turns": 1, "attempts": 1, "complete": 1}
+    assert (
+        detail["step_usage"]["plan"]
+        == detail["usage"]
+        == {"fresh": 16, "cached": 13, "output": 7, "turns": 1, "attempts": 1, "complete": 1}
+    )
     assert get(server, "/secret.txt")[0] == 404 and get(server, "/../secret.txt")[0] == 404 and get(server, "/api/tasks/a%2F..")[0] == 404
 
 
@@ -260,10 +299,26 @@ def test_delivery_details_are_selected_by_task_and_preserve_failure_explanations
 
 def test_task_detail_encodes_nested_land_events_waits_and_operations() -> None:
     wait = LandWait(after="checks/ready", started_at=AT, ended_at=None, open=True, awaited="Waiting for delivery.")
-    event = LandEvent(id=wait.after, kind=LandEventKind.READY, checks_id="checks", checks_n=1, at=AT,
-                      past=False, explanation="Ready for delivery.", waits=(wait,))
-    operation = OperationDetail(operation="a" * 32, step="checks", n=1, past=False, kind=OperationKind.CHECKS_START,
-                                state=OperationState.ACTIVE, started_at=AT, elapsed_ms=None)
+    event = LandEvent(
+        id=wait.after,
+        kind=LandEventKind.READY,
+        checks_id="checks",
+        checks_n=1,
+        at=AT,
+        past=False,
+        explanation="Ready for delivery.",
+        waits=(wait,),
+    )
+    operation = OperationDetail(
+        operation="a" * 32,
+        step="checks",
+        n=1,
+        past=False,
+        kind=OperationKind.CHECKS_START,
+        state=OperationState.ACTIVE,
+        started_at=AT,
+        elapsed_ms=None,
+    )
     reply = dash_server._json(TaskDetail(card(), (), {}, Usage(), (event,), (operation,)))
     assert reply.status == 200
     assert json.loads(reply.body)["land_events"] == [event.model_dump(mode="json")]
@@ -390,7 +445,12 @@ def test_the_feed_endpoint_answers_the_tail_then_a_follow_and_refuses_a_bad_curs
     status, body = get(server, "/api/tasks/tl-1/attempts/implement/2/feed")
     assert status == 200 and json.loads(body)["cursor"] == "7:42" and json.loads(body)["events"][0]["cmd"] == "ls"
     assert json.loads(get(server, "/api/tasks/tl-1/attempts/implement/2/feed?after=7:42")[1]) == {
-        "events": [], "cursor": "7:42", "replaced": False, "available": True, "duration": None}
+        "events": [],
+        "cursor": "7:42",
+        "replaced": False,
+        "available": True,
+        "duration": None,
+    }
     assert get(server, "/api/tasks/tl-1/attempts/implement/2/feed?after=junk")[0] == 400
     assert get(server, "/api/tasks/tl-1/attempts/implement/9/feed")[0] == 404
 

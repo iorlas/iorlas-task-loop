@@ -133,7 +133,7 @@ def load(data: bytes) -> Workflow | WorkflowRefused:
         return WorkflowRefused(Reason.TOO_LARGE, "")
     try:
         table = tomllib.loads(data.decode("utf-8"))
-    except (UnicodeDecodeError, tomllib.TOMLDecodeError):
+    except UnicodeDecodeError, tomllib.TOMLDecodeError:
         return WorkflowRefused(Reason.NOT_TOML, "")
     try:
         return Workflow.model_validate(table)

@@ -26,8 +26,9 @@ def reconcile(store: StopStore, key: AttemptKey, gone: WorkerGone, now: float) -
         return False
     if record.proof is not None:
         for survivor in record.proof.survivors:
-            if survivor.start is None or not gone(Worker(pid=survivor.pid, pgid=record.agent.pgid,
-                                                        start=survivor.start, boot=record.agent.boot)):
+            if survivor.start is None or not gone(
+                Worker(pid=survivor.pid, pgid=record.agent.pgid, start=survivor.start, boot=record.agent.boot)
+            ):
                 return False
     store.observed_gone(record, now)
     return True
@@ -37,13 +38,24 @@ def owned_worker(record: AgentStop) -> Worker:
     agent = record.agent
     return Worker(pid=agent.pid, pgid=agent.pgid, start=agent.start, boot=agent.boot)
 
+
 _CAUSES = {
-    "timeout": StopCause.DEADLINE, "secret": StopCause.POLICY, "answer": StopCause.ANSWER,
-    "hung:first_event": StopCause.FIRST_OUTPUT, "hung:silence": StopCause.INACTIVITY, "hung:stall": StopCause.STALLED,
-    "stall": StopCause.STALLED, "limit": StopCause.LIMIT, "credit": StopCause.CREDIT,
-    "logged_out": StopCause.AUTHENTICATION, "network": StopCause.NETWORK, "watchdog": StopCause.WATCHDOG,
-    "entry_signal": StopCause.ENTRY_SIGNAL, "interrupt": StopCause.INTERRUPT,
-    "parent_gone": StopCause.PARENT_LOST, "caller": StopCause.CALLER_EXIT,
+    "timeout": StopCause.DEADLINE,
+    "secret": StopCause.POLICY,
+    "answer": StopCause.ANSWER,
+    "hung:first_event": StopCause.FIRST_OUTPUT,
+    "hung:silence": StopCause.INACTIVITY,
+    "hung:stall": StopCause.STALLED,
+    "stall": StopCause.STALLED,
+    "limit": StopCause.LIMIT,
+    "credit": StopCause.CREDIT,
+    "logged_out": StopCause.AUTHENTICATION,
+    "network": StopCause.NETWORK,
+    "watchdog": StopCause.WATCHDOG,
+    "entry_signal": StopCause.ENTRY_SIGNAL,
+    "interrupt": StopCause.INTERRUPT,
+    "parent_gone": StopCause.PARENT_LOST,
+    "caller": StopCause.CALLER_EXIT,
 }
 
 
@@ -56,11 +68,15 @@ class AgentStops:
         admission, worker = self.admission, intent.worker
         reason = _CAUSES[intent.reason]
         return AgentStop(
-            attempt_id=admission.key.attempt_id, dispatch_token=admission.key.dispatch_token,
+            attempt_id=admission.key.attempt_id,
+            dispatch_token=admission.key.dispatch_token,
             generation=admission.key.reservation_generation,
             entry=Identity(pid=admission.entry[0], pgid=admission.entry[0], start=admission.entry[1], boot=admission.entry[2]),
-            agent=Identity(pid=worker.pid, pgid=worker.pgid, start=worker.start, boot=worker.boot), cause=reason,
-            requested_signal=intent.first_signal, trigger_signal=intent.trigger_signal, requested_at=now,
+            agent=Identity(pid=worker.pid, pgid=worker.pgid, start=worker.start, boot=worker.boot),
+            cause=reason,
+            requested_signal=intent.first_signal,
+            trigger_signal=intent.trigger_signal,
+            requested_at=now,
         )
 
     def before(self, intent: StopIntent) -> None:
@@ -70,8 +86,11 @@ class AgentStops:
         if self.intent is None or self._record(intent, self.intent.requested_at) != self.intent:
             raise ValueError("Agent stop report has no matching committed intent")
         proof = StopProof(
-            term_attempted=report.term_sent, term_delivered=report.term_delivered,
-            kill_attempted=report.kill_sent, kill_delivered=report.kill_delivered, error=report.error,
+            term_attempted=report.term_sent,
+            term_delivered=report.term_delivered,
+            kill_attempted=report.kill_sent,
+            kill_delivered=report.kill_delivered,
+            error=report.error,
             survivors=tuple(Survivor(pid=each.pid, start=each.start) for each in report.survivors),
         )
         self.store.report(self.intent, proof, self.clock())

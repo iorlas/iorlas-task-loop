@@ -58,12 +58,22 @@ def exit_code(result: Result) -> ExitCode:
             return ExitCode.UNKNOWN if kind in UNKNOWN_KINDS else ExitCode.REFUSED
         case Adoption(slots=slots):
             reasons = {each.reason for each in slots if isinstance(each, NotAdopted)}
-            return (ExitCode.UNKNOWN if reasons & {"git_unavailable", "store_unavailable"}
-                    else ExitCode.REFUSED if reasons else ExitCode.SUCCESS)
+            return (
+                ExitCode.UNKNOWN
+                if reasons & {"git_unavailable", "store_unavailable"}
+                else ExitCode.REFUSED
+                if reasons
+                else ExitCode.SUCCESS
+            )
         case Round():
             return _round_exit(result)
         case Ended(reason=reason):
-            return (ExitCode.SUCCESS if reason in {"interrupted", Reason.DRAINING, Reason.DRAINED} else
-                    ExitCode.INTERRUPTED if reason == "abrupt" else ExitCode.REFUSED)
+            return (
+                ExitCode.SUCCESS
+                if reason in {"interrupted", Reason.DRAINING, Reason.DRAINED}
+                else ExitCode.INTERRUPTED
+                if reason == "abrupt"
+                else ExitCode.REFUSED
+            )
         case _:
             return ExitCode.SUCCESS

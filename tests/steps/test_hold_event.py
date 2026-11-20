@@ -50,10 +50,24 @@ def execution(root: Path, step: Step = Step.PLAN) -> StoredExecution:
     path = root / "answer.json"
     path.write_text(json.dumps(answer))
     ref = FileRef("answer.json", hashlib.sha256(path.read_bytes()).hexdigest())
-    facts = ExecutionFacts(rc=0, timed_out=False, stop=None, watch=None, work=True, stands=True, answered=True,
-                           reason=None, http_status=None, tokens=None, cumulative=None, turns=None, session=None)
-    return StoredExecution(AttemptKey("a", "a-token", 1), facts, Evidence(ref, ref, ref, ref),
-                           AnswerState("valid", "needs_owner", "none"), "complete")
+    facts = ExecutionFacts(
+        rc=0,
+        timed_out=False,
+        stop=None,
+        watch=None,
+        work=True,
+        stands=True,
+        answered=True,
+        reason=None,
+        http_status=None,
+        tokens=None,
+        cumulative=None,
+        turns=None,
+        session=None,
+    )
+    return StoredExecution(
+        AttemptKey("a", "a-token", 1), facts, Evidence(ref, ref, ref, ref), AnswerState("valid", "needs_owner", "none"), "complete"
+    )
 
 
 @pytest.mark.parametrize("failure", ["disposition", "run", "answer", "rejection"])
@@ -122,12 +136,25 @@ def test_stuck_and_repeat_decisions_survive_the_hold_projection(bench: Bench, ac
 
 def test_checks_capture_colon_names_and_failed_results_before_retry(checking: sqlite3.Connection, tmp_path: Path) -> None:
     checking.execute("UPDATE attempt SET label='auto'")
-    checking.execute("INSERT INTO check_result VALUES ('checks',1,0,'test:unit','checks-token',1,"
-                     "?,60,NULL,NULL,NULL,NULL,1,2,1,'failed')", ("e" * 64,))
+    checking.execute(
+        "INSERT INTO check_result VALUES ('checks',1,0,'test:unit','checks-token',1,?,60,NULL,NULL,NULL,NULL,1,2,1,'failed')", ("e" * 64,)
+    )
     checks = CheckStore(lambda: checking).of_attempt("implement")[0]
-    view = AttemptView("tasks", "tl-1", "check", "checks", "s2", "concluded", "gone",
-                       AttemptResult("collected", "ignored display"), False, "hold", label="auto", hold_due="ignored display",
-                       checks=ChecksView(replace(checks, reason="test:unit:failed"), ()))
+    view = AttemptView(
+        "tasks",
+        "tl-1",
+        "check",
+        "checks",
+        "s2",
+        "concluded",
+        "gone",
+        AttemptResult("collected", "ignored display"),
+        False,
+        "hold",
+        label="auto",
+        hold_due="ignored display",
+        checks=ChecksView(replace(checks, reason="test:unit:failed"), ()),
+    )
     bench = Bench(checking, tmp_path)
     bench.tracker.commented = "unavailable"
     assert hold_task(bench.ports(view), view).missing == "comment"
@@ -140,8 +167,13 @@ def test_checks_capture_colon_names_and_failed_results_before_retry(checking: sq
     assert "Failed checks: test:unit failed" in restarted.tracker.texts[0]
 
 
-@pytest.mark.parametrize("decided", [RoundCause(reason=RoundReason.CLAIM_LOST, explanation="The claim changed."),
-                                    LandCause(reason=LandReason.REMOTE_REJECTED, explanation="The remote requires review.")])
+@pytest.mark.parametrize(
+    "decided",
+    [
+        RoundCause(reason=RoundReason.CLAIM_LOST, explanation="The claim changed."),
+        LandCause(reason=LandReason.REMOTE_REJECTED, explanation="The remote requires review."),
+    ],
+)
 def test_round_and_land_decisions_capture_the_refusal(bench: Bench, decided: RoundCause | LandCause) -> None:
     view = replace(VIEW, next="land" if isinstance(decided, LandCause) else "advance", hold_due=None)
     bench.fresh = view
@@ -150,8 +182,13 @@ def test_round_and_land_decisions_capture_the_refusal(bench: Bench, decided: Rou
 
 
 def test_merge_decision_captures_retained_context(bench: Bench, monkeypatch: pytest.MonkeyPatch) -> None:
-    retained = MergeCause(reason=MergeReason.NEEDS_OWNER, explanation="Choose the retained resolution.",
-                          source="source", target="target", conflicts=("src/conflict.py",))
+    retained = MergeCause(
+        reason=MergeReason.NEEDS_OWNER,
+        explanation="Choose the retained resolution.",
+        source="source",
+        target="target",
+        conflicts=("src/conflict.py",),
+    )
     monkeypatch.setattr("taskloop.hold_event.merge_cause", lambda _reader, _attempt_id: retained)
     view = replace(VIEW, result=AttemptResult("refused", "ignored display"))
     assert hold_task(bench.ports(view), view).word == "held"

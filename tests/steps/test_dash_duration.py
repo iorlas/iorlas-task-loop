@@ -112,11 +112,18 @@ def test_terminal_duration_requires_a_seal_and_freezes_across_restarts(tmp_path:
         assert projections(reopened, root, 2000000000) == (expected,) * 4
 
 
-@pytest.mark.parametrize("data", [None, b"broken", b'{}',
-    b'{"execution":"wrong","elapsed":5,"number":1,"state":"active"}',
-    b'{"execution":"IDENTITY","elapsed":-1,"number":1,"state":"active"}',
-    b'{"execution":"IDENTITY","elapsed":1,"command_offset":2,"number":1,"state":"active"}',
-    b'{"execution":"IDENTITY","elapsed":NaN,"number":1,"state":"active"}'])
+@pytest.mark.parametrize(
+    "data",
+    [
+        None,
+        b"broken",
+        b"{}",
+        b'{"execution":"wrong","elapsed":5,"number":1,"state":"active"}',
+        b'{"execution":"IDENTITY","elapsed":-1,"number":1,"state":"active"}',
+        b'{"execution":"IDENTITY","elapsed":1,"command_offset":2,"number":1,"state":"active"}',
+        b'{"execution":"IDENTITY","elapsed":NaN,"number":1,"state":"active"}',
+    ],
+)
 def test_invalid_evidence_is_unknown_without_mutating_task_data(tmp_path: Path, data: bytes | None) -> None:
     root = tmp_path / "evidence"
     con = database(tmp_path / "factory.db")

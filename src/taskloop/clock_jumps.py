@@ -34,7 +34,10 @@ def encode(jump: ClockJump) -> str:
 
 class ClockJumps:
     def __init__(
-        self, context: ClockContext, wall: Callable[[], float], monotonic: Callable[[], float],
+        self,
+        context: ClockContext,
+        wall: Callable[[], float],
+        monotonic: Callable[[], float],
         write: Callable[[ClockJump], None],
     ) -> None:
         self.context, self.wall, self.monotonic, self.write = context, wall, monotonic, write
@@ -48,7 +51,13 @@ class ClockJumps:
         if abs(difference) <= 1:
             return
         with suppress(Exception):  # evidence loss must never affect the observed operation
-            self.write(ClockJump(
-                context=self.context, direction=ClockDirection.FORWARD if difference > 0 else ClockDirection.BACKWARD,
-                wall_before=before, wall_after=wall, monotonic_elapsed=elapsed, difference=difference,
-            ))
+            self.write(
+                ClockJump(
+                    context=self.context,
+                    direction=ClockDirection.FORWARD if difference > 0 else ClockDirection.BACKWARD,
+                    wall_before=before,
+                    wall_after=wall,
+                    monotonic_elapsed=elapsed,
+                    difference=difference,
+                )
+            )

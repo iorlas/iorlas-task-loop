@@ -100,8 +100,7 @@ def is_saved(repo: Repo, sha: str) -> bool:
 
 def saved_since(repo: Repo, prepared: str, head: str) -> bool:
     """Saved-work trailers anywhere in the new ancestry, including beneath ordinary or merge commits."""
-    return any(line.startswith(f"{WIP}: ")
-               for entry in repo.history([head], not_on=[prepared]) for line in entry.body.splitlines())
+    return any(line.startswith(f"{WIP}: ") for entry in repo.history([head], not_on=[prepared]) for line in entry.body.splitlines())
 
 
 def needs_review(repo: Repo, sha: str) -> bool:
@@ -115,12 +114,16 @@ def needs_review(repo: Repo, sha: str) -> bool:
         if not found:
             return False
         lines = found[0].body.splitlines()
-        source = next((line.removeprefix("Task-Loop-Merge-Start: ") for line in lines
-                       if line.startswith("Task-Loop-Merge-Start: ")), None)
+        source = next((line.removeprefix("Task-Loop-Merge-Start: ") for line in lines if line.startswith("Task-Loop-Merge-Start: ")), None)
         first, second = repo.tree(f"{sha}^1"), repo.tree(f"{sha}^2")
-        if (source is None or first is None or first.sha != source or second is None
-                or f"Task-Loop-Merge-Target: {second.sha}" not in lines
-                or not any(line.startswith(f"{TRAILER}: ") for line in lines)):
+        if (
+            source is None
+            or first is None
+            or first.sha != source
+            or second is None
+            or f"Task-Loop-Merge-Target: {second.sha}" not in lines
+            or not any(line.startswith(f"{TRAILER}: ") for line in lines)
+        ):
             return False
         sha = source
     return False
@@ -162,8 +165,9 @@ def save(repo: Repo, slot: Worktree, source: Source, head: str, when: int, log: 
     if not merging and source.merge is not None:
         ancestors = {str(each.sha) for each in repo.history([head])}
         if head not in source.merge and not set(source.merge) <= ancestors:
-            return Refused(SaveReason.MERGE_CHANGED,
-                           "The slot's HEAD does not retain both recorded merge inputs. Its work remains reserved.")
+            return Refused(
+                SaveReason.MERGE_CHANGED, "The slot's HEAD does not retain both recorded merge inputs. Its work remains reserved."
+            )
     tip = _tip(repo, source.task_id)
     parent = tip or source.base
     if source.merge is not None:
@@ -180,8 +184,10 @@ def save(repo: Repo, slot: Worktree, source: Source, head: str, when: int, log: 
         wip = repo.commit_tree(str(tree), parents, message(source), when=when)
         moved = repo.update_ref(ref, str(wip), expected=tip)
         if isinstance(moved, RefMoved):
-            return Refused(SaveReason.REF_MOVED, f"{task_branch(source.task_id)} moved while the slot's work was being saved. "
-                           "The working files remain in the slot.")
+            return Refused(
+                SaveReason.REF_MOVED,
+                f"{task_branch(source.task_id)} moved while the slot's work was being saved. The working files remain in the slot.",
+            )
         made = str(wip)
     if made is not None:
         if made not in {each.sha for each in log.saved(source.attempt_id)}:
@@ -198,14 +204,18 @@ def _saved_tree(repo: Repo, tip: str, source: Source, head: str, tree: str) -> b
     if source.merge is None:
         return True
     found = repo.history([tip], limit=1)
-    return (bool(found) and found[0].body.strip() == message(source).partition("\n\n")[2]
-            and head in {str(each.sha) for each in repo.history([tip])})
+    return (
+        bool(found)
+        and found[0].body.strip() == message(source).partition("\n\n")[2]
+        and head in {str(each.sha) for each in repo.history([tip])}
+    )
 
 
 def park(slot: Worktree, base: str) -> str | Refused:
     """After a save: detach at D, the ignored files kept. A merge's owner must reconcile and abort it first."""
     if slot.merging():
-        return Refused(SaveReason.MERGE_PENDING,
-                       "The slot still has a merge in progress. Its owning release must preserve it and abort it before parking.")
+        return Refused(
+            SaveReason.MERGE_PENDING,
+            "The slot still has a merge in progress. Its owning release must preserve it and abort it before parking.",
+        )
     return str(slot.park(base, keep_ignored=True))
-

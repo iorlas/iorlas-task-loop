@@ -24,14 +24,24 @@ def test_help(arguments: list[str], capsys: pytest.CaptureFixture[str]) -> None:
     assert output.err == ""
 
 
-BUILT = ("Steps built: plan, implement and check. Committed results are published on the task branch. "
-         "The profile selects automatic land during a round or manual land by the owner.")
+BUILT = (
+    "Steps built: plan, implement and check. Committed results are published on the task branch. "
+    "The profile selects automatic land during a round or manual land by the owner."
+)
 
 
 def test_step_help_names_the_steps_built_once_and_each_command_help_does_not_repeat_it(capsys: pytest.CaptureFixture[str]) -> None:
-    for arguments in (["step", "-h"], ["step", "start", "-h"], ["attempt", "show", "-h"], ["attempt", "list", "-h"],
-                      ["step", "commit", "-h"], ["step", "release", "-h"],
-                      ["step", "abandon", "-h"], ["land", "-h"], ["land", "run", "-h"]):
+    for arguments in (
+        ["step", "-h"],
+        ["step", "start", "-h"],
+        ["attempt", "show", "-h"],
+        ["attempt", "list", "-h"],
+        ["step", "commit", "-h"],
+        ["step", "release", "-h"],
+        ["step", "abandon", "-h"],
+        ["land", "-h"],
+        ["land", "run", "-h"],
+    ):
         with pytest.raises(SystemExit) as result:
             main(arguments)
         assert result.value.code == 0
@@ -43,8 +53,7 @@ def test_publish_help_says_it_pushes_as_you_never_forced(capsys: pytest.CaptureF
         main(["step", "publish", "-h"])
     assert result.value.code == 0
     text = " ".join(capsys.readouterr().out.split())
-    assert ("Push the step's commit accepted by factory commit to origin's task/<id> as you, "
-            "never forced; nothing merges or lands") in text
+    assert ("Push the step's commit accepted by factory commit to origin's task/<id> as you, never forced; nothing merges or lands") in text
 
 
 def test_commit_help_describes_judgment_release_and_publication(capsys: pytest.CaptureFixture[str]) -> None:
@@ -52,8 +61,10 @@ def test_commit_help_describes_judgment_release_and_publication(capsys: pytest.C
         main(["step", "commit", "-h"])
     assert result.value.code == 0
     text = " ".join(capsys.readouterr().out.split())
-    assert ("Complete factory commit: obtain the result commit and judge the step's rules, "
-            "then release a clean slot and publish an accepted result") in text
+    assert (
+        "Complete factory commit: obtain the result commit and judge the step's rules, "
+        "then release a clean slot and publish an accepted result"
+    ) in text
     assert "verify" not in text and "verification" not in text
 
 
@@ -73,9 +84,24 @@ def test_renamed_commands_keep_no_old_spelling(arguments: list[str]) -> None:
 
 @pytest.mark.parametrize(
     "arguments",
-    [["plan"], ["step"], ["implement"], ["--unknown"], ["--he"], ["land", "tl-123"], ["step", "prepare"], ["slot"], ["config"],
-     ["install"], ["pin"], ["report"], ["repo", "register"], ["task", "create"],
-     ["slot", "release"], ["slot", "hold"]],
+    [
+        ["plan"],
+        ["step"],
+        ["implement"],
+        ["--unknown"],
+        ["--he"],
+        ["land", "tl-123"],
+        ["step", "prepare"],
+        ["slot"],
+        ["config"],
+        ["install"],
+        ["pin"],
+        ["report"],
+        ["repo", "register"],
+        ["task", "create"],
+        ["slot", "release"],
+        ["slot", "hold"],
+    ],
 )
 def test_invalid_request(arguments: list[str], capsys: pytest.CaptureFixture[str]) -> None:
     with pytest.raises(SystemExit) as result:

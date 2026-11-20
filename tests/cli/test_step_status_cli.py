@@ -24,14 +24,18 @@ D = "d" * 40
 
 @pytest.mark.parametrize("seen", [Seen.ALIVE, Seen.UNKNOWN, Seen.GONE])
 def test_status_composition_observes_worker_groups_without_writing(
-    factory: sqlite3.Connection, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str], seen: Seen,
+    factory: sqlite3.Connection,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    seen: Seen,
 ) -> None:
     attempt(factory, "a", "tasks", deadline=1e12)
     factory.execute("INSERT INTO reservation VALUES('s1','repo',1,'a')")
     factory.execute(
         """UPDATE attempt SET phase='registered',entry_pid=7,entry_start='entry',entry_boot='boot',
-        worker_pid=8,worker_pgid=8,worker_start='worker',worker_boot='boot',session_ref='saved',base_commit=?""", (D,),
+        worker_pid=8,worker_pgid=8,worker_start='worker',worker_boot='boot',session_ref='saved',base_commit=?""",
+        (D,),
     )
     calls: list[int] = []
 
@@ -40,8 +44,7 @@ def test_status_composition_observes_worker_groups_without_writing(
         return ProcessObservation(seen=seen, explanation="Worker group observation.")
 
     monkeypatch.setattr(cli_composition, "entry_seen", lambda _entry: "gone")
-    monkeypatch.setattr(NativeProcesses, "entry", lambda _self, _entry: ProcessObservation(
-        seen=Seen.GONE, explanation="Entry is absent."))
+    monkeypatch.setattr(NativeProcesses, "entry", lambda _self, _entry: ProcessObservation(seen=Seen.GONE, explanation="Entry is absent."))
     monkeypatch.setattr(NativeProcesses, "process", process)
     db, artifacts = tmp_path / "factory.db", tmp_path / "artifacts"
     before, rows = db.read_bytes(), list(factory.iterdump())
@@ -68,8 +71,9 @@ def factory(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Generator[sqlite
         con.close()
 
 
-def attempt(con: sqlite3.Connection, key: str, backlog: str, task: str = "tl-1", *, seq: int = 1,
-            label: str | None = None, deadline: float = 100) -> None:
+def attempt(
+    con: sqlite3.Connection, key: str, backlog: str, task: str = "tl-1", *, seq: int = 1, label: str | None = None, deadline: float = 100
+) -> None:
     with begin_immediate(con):
         pin_workflow(con)
         con.execute(
@@ -92,7 +96,10 @@ def release(con: sqlite3.Connection, key: str) -> None:
 
 @pytest.mark.parametrize("structured", [False, True])
 def test_show_reports_persisted_answer_failure_without_artifacts(
-    factory: sqlite3.Connection, tmp_path: Path, capsys: pytest.CaptureFixture[str], structured: bool,
+    factory: sqlite3.Connection,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    structured: bool,
 ) -> None:
     attempt(factory, "broken", "tasks")
     failure = AnswerFailureData(rule=AnswerRule.MESSAGE, explanation="A commit message must contain 1 to 500 characters")
@@ -107,14 +114,16 @@ def test_show_reports_persisted_answer_failure_without_artifacts(
         )
     db, artifacts = tmp_path / "factory.db", tmp_path / "artifacts"
     before = db.read_bytes()
-    assert main(["attempt", "show", "tl-1", "--db", str(db), "--artifacts", str(artifacts),
-                 *(["--json"] if structured else [])]) == 0
+    assert main(["attempt", "show", "tl-1", "--db", str(db), "--artifacts", str(artifacts), *(["--json"] if structured else [])]) == 0
     output = capsys.readouterr()
     assert not output.err
     if structured:
         result = json.loads(output.out)["result"]
-        assert result == {"status": "collected", "reason": "answer:schema_invalid",
-                          "explanation": failure.describe() + " Usage was not reported by the agent stream."}
+        assert result == {
+            "status": "collected",
+            "reason": "answer:schema_invalid",
+            "explanation": failure.describe() + " Usage was not reported by the agent stream.",
+        }
     else:
         assert "Result: collected answer:schema_invalid" in output.out
         assert "Answer: " + failure.describe() in output.out
@@ -129,15 +138,17 @@ def config(tmp_path: Path, backlog: str) -> list[str]:
 
 @pytest.mark.parametrize("structured", [False, True])
 def test_show_defaults_to_one_distinct_backlog_and_writes_nothing(
-    factory: sqlite3.Connection, tmp_path: Path, capsys: pytest.CaptureFixture[str], structured: bool,
+    factory: sqlite3.Connection,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    structured: bool,
 ) -> None:
     attempt(factory, "first", "tasks")
     release(factory, "first")
     attempt(factory, "second", "tasks", seq=2)
     db, artifacts = tmp_path / "factory.db", tmp_path / "artifacts"
     before = db.read_bytes()
-    assert main(["attempt", "show", "tl-1", "--db", str(db), "--artifacts", str(artifacts),
-                 *(["--json"] if structured else [])]) == 0
+    assert main(["attempt", "show", "tl-1", "--db", str(db), "--artifacts", str(artifacts), *(["--json"] if structured else [])]) == 0
     output = capsys.readouterr()
     assert not output.err
     if structured:
@@ -151,18 +162,40 @@ def test_show_defaults_to_one_distinct_backlog_and_writes_nothing(
     assert not artifacts.exists() and not (tmp_path / "home").exists()
 
 
-@pytest.mark.parametrize(("chosen", "explicit", "expected"), [
-    ("alpha", None, "alpha"), ("alpha", "zeta", "zeta"),
-])
+@pytest.mark.parametrize(
+    ("chosen", "explicit", "expected"),
+    [
+        ("alpha", None, "alpha"),
+        ("alpha", "zeta", "zeta"),
+    ],
+)
 @pytest.mark.parametrize("structured", [False, True])
 def test_show_prefers_the_explicit_backlog_then_the_machine_config(
-    factory: sqlite3.Connection, tmp_path: Path, capsys: pytest.CaptureFixture[str],
-    chosen: str, explicit: str | None, expected: str, structured: bool,
+    factory: sqlite3.Connection,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    chosen: str,
+    explicit: str | None,
+    expected: str,
+    structured: bool,
 ) -> None:
     attempt(factory, "a", "alpha")
     attempt(factory, "z", "zeta")
-    assert main([*config(tmp_path, chosen), "attempt", "show", "tl-1", "--db", str(tmp_path / "factory.db"),
-                 *(["--backlog", explicit] if explicit is not None else []), *(["--json"] if structured else [])]) == 0
+    assert (
+        main(
+            [
+                *config(tmp_path, chosen),
+                "attempt",
+                "show",
+                "tl-1",
+                "--db",
+                str(tmp_path / "factory.db"),
+                *(["--backlog", explicit] if explicit is not None else []),
+                *(["--json"] if structured else []),
+            ]
+        )
+        == 0
+    )
     output = capsys.readouterr()
     assert not output.err
     if structured:
@@ -173,13 +206,29 @@ def test_show_prefers_the_explicit_backlog_then_the_machine_config(
 
 @pytest.mark.parametrize("explicit", [False, True])
 def test_a_selected_backlog_without_the_task_refuses_absent_without_falling_through(
-    factory: sqlite3.Connection, tmp_path: Path, capsys: pytest.CaptureFixture[str], explicit: bool,
+    factory: sqlite3.Connection,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    explicit: bool,
 ) -> None:
     attempt(factory, "a", "alpha", "tl-other")
     attempt(factory, "z", "zeta")
     flags = ["--backlog", "alpha"] if explicit else []
-    assert main([*config(tmp_path, "zeta" if explicit else "alpha"), "attempt", "show", "tl-1", *flags,
-                 "--db", str(tmp_path / "factory.db"), "--json"]) == 1
+    assert (
+        main(
+            [
+                *config(tmp_path, "zeta" if explicit else "alpha"),
+                "attempt",
+                "show",
+                "tl-1",
+                *flags,
+                "--db",
+                str(tmp_path / "factory.db"),
+                "--json",
+            ]
+        )
+        == 1
+    )
     output = capsys.readouterr()
     error = json.loads(output.err)["error"]
     assert (error["kind"], error["reason"]) == ("refused", "absent")
@@ -189,14 +238,17 @@ def test_a_selected_backlog_without_the_task_refuses_absent_without_falling_thro
 @pytest.mark.parametrize("ambiguous", [False, True])
 @pytest.mark.parametrize("structured", [False, True])
 def test_show_requires_a_selection_when_backlogs_are_empty_or_ambiguous(
-    factory: sqlite3.Connection, tmp_path: Path, capsys: pytest.CaptureFixture[str], ambiguous: bool, structured: bool,
+    factory: sqlite3.Connection,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    ambiguous: bool,
+    structured: bool,
 ) -> None:
     if ambiguous:
         attempt(factory, "z", "zeta")
         release(factory, "z")  # Ended attempts still make the selection ambiguous.
         attempt(factory, "a", "alpha", "tl-other")  # TASK's uniqueness is irrelevant.
-    assert main(["attempt", "show", "tl-1", "--db", str(tmp_path / "factory.db"),
-                 *(["--json"] if structured else [])]) == 1
+    assert main(["attempt", "show", "tl-1", "--db", str(tmp_path / "factory.db"), *(["--json"] if structured else [])]) == 1
     output = capsys.readouterr()
     if structured:
         error = json.loads(output.err)["error"]
@@ -215,9 +267,11 @@ def hold(con: sqlite3.Connection, key: str, reason: str, *, completed: bool = Fa
     if captured.cause_id != key:
         captured = event_for(reason, key, f"{key}-checks")
         con.execute("UPDATE attempt SET step='implement',after_commit=? WHERE attempt_id=?", (D, key))
-        con.execute("""INSERT INTO checks_attempt(attempt_id,dispatch_token,generation,after_attempt_id,number,slot,
+        con.execute(
+            """INSERT INTO checks_attempt(attempt_id,dispatch_token,generation,after_attempt_id,number,slot,
             slot_head,target_commit,required,deadline) VALUES(?,?,1,?,1,'s1',?,?,'[]',100)""",
-                    (captured.cause_id, captured.cause_id + "-token", key, D, D))
+            (captured.cause_id, captured.cause_id + "-token", key, D, D),
+        )
     row = store.insert(HoldInsert(event=captured, now=10))
     if completed:
         row = store.labelled(key, row.rev, "moved", 11)
@@ -229,11 +283,13 @@ def hold(con: sqlite3.Connection, key: str, reason: str, *, completed: bool = Fa
 
 @pytest.mark.parametrize("stuck", [False, True])
 def test_list_shows_recorded_and_due_hold_causes_without_changing_stuck_membership(
-    factory: sqlite3.Connection, tmp_path: Path, capsys: pytest.CaptureFixture[str], stuck: bool,
+    factory: sqlite3.Connection,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    stuck: bool,
 ) -> None:
     for number in range(1, 6):
-        attempt(factory, f"a{number}", "tasks", f"tl-{number}", label="auto" if number < 5 else None,
-                deadline=100 if number < 5 else 1e12)
+        attempt(factory, f"a{number}", "tasks", f"tl-{number}", label="auto" if number < 5 else None, deadline=100 if number < 5 else 1e12)
     hold(factory, "a1", "failed:needs_owner")
     hold(factory, "a2", "failed:main_moved", completed=True)
     hold(factory, "a4", "failed:test:failed")
@@ -244,12 +300,28 @@ def test_list_shows_recorded_and_due_hold_causes_without_changing_stuck_membersh
     output = capsys.readouterr()
     lines = output.out.splitlines()
     header = lines[0].split("\t")
-    assert header == ["task", "backlog", "step", "attempt", "slot", "phase", "entry", "result", "status", "next", "hold cause",
-                      "last command"]
-    rows = {row["task"]: row for line in lines[1:] if line.startswith("tl-")
-            for row in [dict(zip(header, line.split("\t"), strict=True))]}
-    expected = {"tl-1": ("hold", "failed:needs_owner"), "tl-2": ("on_hold", "failed:main_moved"),
-                "tl-3": ("hold", "stuck:expired_admitted"), "tl-4": ("hold", "failed:test:failed"), "tl-5": ("start", "-")}
+    assert header == [
+        "task",
+        "backlog",
+        "step",
+        "attempt",
+        "slot",
+        "phase",
+        "entry",
+        "result",
+        "status",
+        "next",
+        "hold cause",
+        "last command",
+    ]
+    rows = {row["task"]: row for line in lines[1:] if line.startswith("tl-") for row in [dict(zip(header, line.split("\t"), strict=True))]}
+    expected = {
+        "tl-1": ("hold", "failed:needs_owner"),
+        "tl-2": ("on_hold", "failed:main_moved"),
+        "tl-3": ("hold", "stuck:expired_admitted"),
+        "tl-4": ("hold", "failed:test:failed"),
+        "tl-5": ("start", "-"),
+    }
     if stuck:
         expected = {key: value for key, value in expected.items() if key in ("tl-1", "tl-3", "tl-4")}
     assert {task: (row["next"], row["hold cause"]) for task, row in rows.items()} == expected
@@ -266,7 +338,9 @@ def test_list_shows_recorded_and_due_hold_causes_without_changing_stuck_membersh
 
 
 def test_show_without_a_backlog_still_refuses_a_missing_database_without_creating_state(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
     missing = tmp_path / "missing.db"

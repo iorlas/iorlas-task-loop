@@ -25,7 +25,12 @@ class RecoveryEntry:
         return intent
 
     def run(
-        self, intent: Intent, owner: Identity, clock: Callable[[], float], wait: Callable[[float], None], interval: float,
+        self,
+        intent: Intent,
+        owner: Identity,
+        clock: Callable[[], float],
+        wait: Callable[[float], None],
+        interval: float,
     ) -> ContinuationResult:
         result = self.continuation(intent.key, owner, intent=intent, custody=nullcontext())
         pending = result.pending

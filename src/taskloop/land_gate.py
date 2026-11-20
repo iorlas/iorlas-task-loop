@@ -68,8 +68,7 @@ def configuration(path: str, named: frozenset[str]) -> bool:
     `.task-loop.json`, `uv.lock`, ...), a `.toml`, `.ini` or `.cfg` file at any depth, any `conftest.py`, or a file a check's
     or `setup`'s argv names."""
     pure = PurePosixPath(path)
-    return (len(pure.parts) == 1 and pure.suffix not in DOCS) or pure.suffix in TOOL_SUFFIXES or pure.name == "conftest.py" \
-        or path in named
+    return (len(pure.parts) == 1 and pure.suffix not in DOCS) or pure.suffix in TOOL_SUFFIXES or pure.name == "conftest.py" or path in named
 
 
 def _named(profile: Profile, paths: frozenset[str]) -> frozenset[str]:
@@ -91,9 +90,12 @@ def _is_test(path: str) -> bool:
 def _noqa(source: bytes) -> int:
     """File-level `# ruff: noqa` comments (they switch rules off for the whole module)."""
     try:
-        return sum(1 for token in tokenize.tokenize(io.BytesIO(source).readline)
-                   if token.type == tokenize.COMMENT and token.string.lower().replace(" ", "").startswith("#ruff:noqa"))
-    except (tokenize.TokenError, SyntaxError):
+        return sum(
+            1
+            for token in tokenize.tokenize(io.BytesIO(source).readline)
+            if token.type == tokenize.COMMENT and token.string.lower().replace(" ", "").startswith("#ruff:noqa")
+        )
+    except tokenize.TokenError, SyntaxError:
         return 0
 
 
@@ -101,7 +103,7 @@ def _shape(source: bytes | None) -> tuple[int, int, int] | None:
     """(test functions, assert statements, skip/xfail/`ruff: noqa` markers) of one test module; None when it does not parse."""
     try:
         tree = ast.parse(source or b"")
-    except (SyntaxError, ValueError):
+    except SyntaxError, ValueError:
         return None
     tests = asserts = skips = 0
     for node in ast.walk(tree):
@@ -127,8 +129,11 @@ def _weakened(change: Change, before: bytes | None, after: bytes | None) -> Weak
 
 def _changed(at_o: Profile, at_s: Profile) -> tuple[Changed, ...]:
     before, after = {check.name: check for check in at_o.checks}, {check.name: check for check in at_s.checks}
-    return tuple(Changed(name, before.get(name), after.get(name)) for name in sorted(before.keys() | after.keys())
-                 if before.get(name) != after.get(name))
+    return tuple(
+        Changed(name, before.get(name), after.get(name))
+        for name in sorted(before.keys() | after.keys())
+        if before.get(name) != after.get(name)
+    )
 
 
 def gate_of(origin: Origin, files: ProfileFiles, o: str, s: str) -> Gate | Failed:
@@ -147,9 +152,13 @@ def gate_of(origin: Origin, files: ProfileFiles, o: str, s: str) -> Gate | Faile
         changes = origin.repo.worktree(origin.checkout).diff(o, s, cap=0).changes
         named = _named(at_s, frozenset(tree_s.files))
         flagged = (_weakened(each, tree_o.read(each.path), tree_s.read(each.path)) for each in changes if _is_test(each.path))
-        return Gate(changes, _changed(at_o, at_s), None if at_o.setup == at_s.setup else (at_o.setup, at_s.setup),
-                    None if at_o.required == at_s.required else (at_o.required, at_s.required),
-                    tuple(each.path for each in changes if configuration(each.path, named)),
-                    tuple(found for found in flagged if found is not None))
+        return Gate(
+            changes,
+            _changed(at_o, at_s),
+            None if at_o.setup == at_s.setup else (at_o.setup, at_s.setup),
+            None if at_o.required == at_s.required else (at_o.required, at_s.required),
+            tuple(each.path for each in changes if configuration(each.path, named)),
+            tuple(found for found in flagged if found is not None),
+        )
     except (GitUnavailable, MissingRevision) as error:
         return Failed("unavailable", "git", f"Git could not read the land's changes ({type(error).__name__}): rerun.")

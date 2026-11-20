@@ -75,27 +75,30 @@ def test_consumer_validates_all_pins_and_keeps_generation_provenance() -> None:
     assert result.source_commit == "a" * 40 and result.encode() == files[PATH]
 
 
-@pytest.mark.parametrize(("old", "new", "reason"), [
-    (b'"0.9.0"', b'"0.8.0"', "package identities"),
-    (b'"blueprint-v0.6.0"', b'"blueprint-v0.5.0"', "package identities"),
-    (b'"packages/stream-proc"', b'"packages/other"', "package identities"),
-    (b'"759b8027b3c84120e1a4d67d8cb97f6864810b09"', b'"759b8027b3c84120e1a4d67d8cb97f6864810b00"', "commit identities"),
-    (b'"0.15.0",0', b'"0.15.0",-1', "identity index"),
-    (b'"0.15.0",0', b'"0.15.0",true', "valid integer"),
-    (b'"stream-proc","0.9.0"', b'"any-agent","0.9.0"', "package identities"),
-    (b"0=off", b"0=on", "fact or references"),
-    (b'[3]],"usage"', b'[-1]],"usage"', "fact or references"),
-    (b'[3]],"usage"', b'[0]],"usage"', "fact attribution"),
-    (b'[3]],"usage"', b'[3,3]],"usage"', "fact or references"),
-    (b'[0,"src/any_agent/events.py"', b'[6,"src/any_agent/events.py"', "package index"),
-    (b'"src/any_agent/events.py"', b'"../any_agent/events.py"', "source path"),
-    (b'"src/any_agent/events.py",1,132', b'"src/any_agent/events.py",1,0', "range"),
-    (b"958a16997841b2e1217eebb1bc464b847cf1057ca07a35aca4416198c22d43a6", b"invalid", "hash"),
-    (b'"source_commit":', b'"source_commit":false,"source_commit":', "Duplicate"),
-    (b'"source_commit":', b'"extra":0,"source_commit":', "Extra inputs"),
-    (b'"timeout":[', b'"unknown":[', "Input should be"),
-    (b'{"commits":', b'{"commits":[],"commits":', "Duplicate"),
-])
+@pytest.mark.parametrize(
+    ("old", "new", "reason"),
+    [
+        (b'"0.9.0"', b'"0.8.0"', "package identities"),
+        (b'"blueprint-v0.6.0"', b'"blueprint-v0.5.0"', "package identities"),
+        (b'"packages/stream-proc"', b'"packages/other"', "package identities"),
+        (b'"759b8027b3c84120e1a4d67d8cb97f6864810b09"', b'"759b8027b3c84120e1a4d67d8cb97f6864810b00"', "commit identities"),
+        (b'"0.15.0",0', b'"0.15.0",-1', "identity index"),
+        (b'"0.15.0",0', b'"0.15.0",true', "valid integer"),
+        (b'"stream-proc","0.9.0"', b'"any-agent","0.9.0"', "package identities"),
+        (b"0=off", b"0=on", "fact or references"),
+        (b'[3]],"usage"', b'[-1]],"usage"', "fact or references"),
+        (b'[3]],"usage"', b'[0]],"usage"', "fact attribution"),
+        (b'[3]],"usage"', b'[3,3]],"usage"', "fact or references"),
+        (b'[0,"src/any_agent/events.py"', b'[6,"src/any_agent/events.py"', "package index"),
+        (b'"src/any_agent/events.py"', b'"../any_agent/events.py"', "source path"),
+        (b'"src/any_agent/events.py",1,132', b'"src/any_agent/events.py",1,0', "range"),
+        (b"958a16997841b2e1217eebb1bc464b847cf1057ca07a35aca4416198c22d43a6", b"invalid", "hash"),
+        (b'"source_commit":', b'"source_commit":false,"source_commit":', "Duplicate"),
+        (b'"source_commit":', b'"extra":0,"source_commit":', "Extra inputs"),
+        (b'"timeout":[', b'"unknown":[', "Input should be"),
+        (b'{"commits":', b'{"commits":[],"commits":', "Duplicate"),
+    ],
+)
 def test_consumer_rejects_altered_or_unsafe_artifacts(old: bytes, new: bytes, reason: str) -> None:
     files = shelf_files()
     identities = reconcile_manifests(SourceSnapshot("b" * 40, files))

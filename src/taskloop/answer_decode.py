@@ -36,11 +36,10 @@ def message(value: object, *, committing: bool) -> str | None:
         if value is not None:
             raise AnswerFailure(AnswerRule.MESSAGE, "message must be null unless requesting a commit")
         return None
-    if not (
-        isinstance(value, str) and 1 <= len(value) <= 500 and "\0" not in value and TRAILER.casefold() + ":" not in value.casefold()
-    ):
+    if not (isinstance(value, str) and 1 <= len(value) <= 500 and "\0" not in value and TRAILER.casefold() + ":" not in value.casefold()):
         raise AnswerFailure(
-            AnswerRule.MESSAGE, "A commit message must be a string of 1 to 500 characters, without NUL or Task-Loop-Attempt:",
+            AnswerRule.MESSAGE,
+            "A commit message must be a string of 1 to 500 characters, without NUL or Task-Loop-Attempt:",
         )
     return value
 

@@ -106,9 +106,14 @@ def test_start_on_a_done_implement_attempt_admits_checks_and_launches_them_with_
     assert rig.numbers() == [(1, "admitted")] and len(rig.launcher.calls) == 2
 
 
-@pytest.mark.parametrize(("conclusion", "released", "result"), [
-    ("passed", True, "passed"), ("passed", False, "passed"), ("failed", False, "failed:test:failed"),
-])
+@pytest.mark.parametrize(
+    ("conclusion", "released", "result"),
+    [
+        ("passed", True, "passed"),
+        ("passed", False, "passed"),
+        ("failed", False, "failed:test:failed"),
+    ],
+)
 def test_a_concluded_checks_attempt_is_answered_and_never_launched(rig: Rig, conclusion: str, released: bool, result: str) -> None:
     first = rig.start()
     rig.bench.concluded(conclusion, released=released)
@@ -147,8 +152,19 @@ def test_a_racing_winner_is_launched_with_the_checks_launcher(rig: Rig) -> None:
     def winner() -> None:
         with rig.bench.begin(rig.bench.con):
             rig.bench.con.execute("INSERT INTO reservation VALUES ('s0',?,7,'winner')", (rig.bench.repo.identity().key,))
-            insert(rig.bench.con, ChecksAdmitted(AttemptKey("winner", "w", 7), "implement", 1, "s0", rig.bench.done.d,
-                                                 rig.bench.done.target, (("check", "1" * 64),), 100.0))
+            insert(
+                rig.bench.con,
+                ChecksAdmitted(
+                    AttemptKey("winner", "w", 7),
+                    "implement",
+                    1,
+                    "s0",
+                    rig.bench.done.d,
+                    rig.bench.done.target,
+                    (("check", "1" * 64),),
+                    100.0,
+                ),
+            )
 
     rig.bench.racing = winner  # committed between the admission's reads and its write
     found = rig.start()
@@ -203,10 +219,14 @@ def test_the_abandon_goes_checks_first_then_returns_the_claim_through_the_implem
     assert found.checks == ReleasedTask("tasks", "tl-1", started.attempt_id, Released("s1", None, True, "kept", True))
 
 
-@pytest.mark.parametrize(("checks_result", "implement_result", "word", "implement_called"), [
-    (NotReleased("refused", "entry_running", "runs"), None, "refused:entry_running", False),
-    (None, NotReleased("unavailable", "changed", "Changed."), "unavailable:changed", True),
-], ids=["checks_held", "implement_failed"])
+@pytest.mark.parametrize(
+    ("checks_result", "implement_result", "word", "implement_called"),
+    [
+        (NotReleased("refused", "entry_running", "runs"), None, "refused:entry_running", False),
+        (None, NotReleased("unavailable", "changed", "Changed."), "unavailable:changed", True),
+    ],
+    ids=["checks_held", "implement_failed"],
+)
 def test_an_abandon_that_stops_half_way_says_so_and_its_rerun_finishes(
     rig: Rig, checks_result: NotReleased | None, implement_result: NotReleased | None, word: str, implement_called: bool
 ) -> None:
@@ -292,10 +312,16 @@ def test_the_round_s_relaunch_launches_the_snapshot_s_admitted_checks_attempt_wi
     assert len(rig.launcher.calls) == 2 and rig.bench.con.execute("SELECT refusals FROM checks_attempt").fetchone() == (0,)
 
 
-@pytest.mark.parametrize(("state", "word"), [
-    ("other", "refused:changed"), ("concluded", "refused:concluded"), ("released", "refused:released"),
-    ("abandoned", "refused:abandoned"), ("unreserved", "refused:stale_reservation"),
-])
+@pytest.mark.parametrize(
+    ("state", "word"),
+    [
+        ("other", "refused:changed"),
+        ("concluded", "refused:concluded"),
+        ("released", "refused:released"),
+        ("abandoned", "refused:abandoned"),
+        ("unreserved", "refused:stale_reservation"),
+    ],
+)
 def test_the_round_s_relaunch_is_fenced_on_the_checks_store_and_launches_nothing_else(rig: Rig, state: str, word: str) -> None:
     first = rig.start()
     assert isinstance(first, Started)

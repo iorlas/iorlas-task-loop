@@ -22,9 +22,14 @@ class AttemptReads(StoreConnection):
     def owns_entry(self, key: AttemptKey, identity: Identity) -> bool:
         """Whether this process is the registered entry of this exact attempt; no unrelated execution reads."""
         with self._connection() as con:
-            return con.execute("SELECT 1 FROM attempt WHERE attempt_id=? AND dispatch_token=? AND generation=? "
-                               "AND entry_pid=? AND entry_start=? AND entry_boot=?",
-                               (*astuple(key), identity.pid, identity.start, identity.boot)).fetchone() is not None
+            return (
+                con.execute(
+                    "SELECT 1 FROM attempt WHERE attempt_id=? AND dispatch_token=? AND generation=? "
+                    "AND entry_pid=? AND entry_start=? AND entry_boot=?",
+                    (*astuple(key), identity.pid, identity.start, identity.boot),
+                ).fetchone()
+                is not None
+            )
 
     def drain_processes(self) -> tuple[Owner, ...]:
         """Every recorded execution identity, including historical and already concluded work."""
@@ -104,8 +109,14 @@ class AttemptReads(StoreConnection):
             source += """ JOIN (SELECT adapter,backlog,task_id,max(seq) seq FROM attempt WHERE adapter='beads'
                 GROUP BY adapter,backlog,task_id) latest ON latest.adapter=p.adapter AND latest.backlog=p.backlog
                 AND latest.task_id=p.task_id AND latest.seq=p.seq"""
-        count = ("(SELECT count(*) FROM attempt n WHERE n.adapter=p.adapter AND n.backlog=p.backlog "
-                 "AND n.task_id=p.task_id AND n.step=p.step AND n.seq<=p.seq)") if latest else "NULL"
+        count = (
+            (
+                "(SELECT count(*) FROM attempt n WHERE n.adapter=p.adapter AND n.backlog=p.backlog "
+                "AND n.task_id=p.task_id AND n.step=p.step AND n.seq<=p.seq)"
+            )
+            if latest
+            else "NULL"
+        )
         with self._connection() as con:
             rows: list[tuple[object, ...]] = con.execute(
                 f"""SELECT p.attempt_id,p.dispatch_token,p.generation,p.backlog,p.task_id,p.slot,p.phase,p.entry_pid,p.entry_start,
@@ -119,7 +130,7 @@ class AttemptReads(StoreConnection):
                 FROM {source}
                 LEFT JOIN slot_release x ON x.attempt_id=p.attempt_id
                 LEFT JOIN published_branch b ON b.attempt_id=p.attempt_id
-                WHERE {' AND '.join(predicates)}
+                WHERE {" AND ".join(predicates)}
                 ORDER BY p.backlog,p.task_id,p.seq DESC""",
                 parameters,
             ).fetchall()
@@ -132,7 +143,9 @@ class AttemptReads(StoreConnection):
             row = con.execute(
                 """SELECT s.path FROM attempt p JOIN slot s ON s.repo_id=p.repo_id AND s.name=p.slot WHERE p.attempt_id=?1
                 UNION ALL SELECT s.path FROM checks_attempt c JOIN attempt p ON p.attempt_id=c.after_attempt_id
-                JOIN slot s ON s.repo_id=p.repo_id AND s.name=c.slot WHERE c.attempt_id=?1 LIMIT 1""", (attempt_id,)).fetchone()
+                JOIN slot s ON s.repo_id=p.repo_id AND s.name=c.slot WHERE c.attempt_id=?1 LIMIT 1""",
+                (attempt_id,),
+            ).fetchone()
         return None if row is None else as_text(row[0])
 
     def slot_use(self) -> attempt_reads.SlotUse:
@@ -172,8 +185,9 @@ class AttemptReads(StoreConnection):
     def input_ref(self, key: AttemptKey) -> FileRef:
         """Immutable input reference, including admitted attempts with no execution or registered entry."""
         with self._connection() as con:
-            row = con.execute("SELECT input_path,input_digest FROM attempt WHERE attempt_id=? AND dispatch_token=? AND generation=?",
-                              astuple(key)).fetchone()
+            row = con.execute(
+                "SELECT input_path,input_digest FROM attempt WHERE attempt_id=? AND dispatch_token=? AND generation=?", astuple(key)
+            ).fetchone()
         if row is None:
             raise StoreUnavailable("Attempt input reference unavailable")
         return FileRef(as_text(row[0]), as_text(row[1]))
@@ -186,7 +200,8 @@ class AttemptReads(StoreConnection):
                 "ON q.repo_id=p.repo_id AND q.adapter=p.adapter "
                 "AND q.backlog=p.backlog AND q.task_id=p.task_id AND q.tracker_root=p.tracker_root AND q.seq<p.seq "
                 "WHERE p.attempt_id=? AND p.dispatch_token=? AND p.generation=? "
-                "ORDER BY q.seq DESC LIMIT 1", astuple(key),
+                "ORDER BY q.seq DESC LIMIT 1",
+                astuple(key),
             ).fetchone()
         released = None if row is None else self.release_of(AttemptKey(as_text(row[0]), as_text(row[1]), as_int(row[2])))
         return released is not None and released.abandoned

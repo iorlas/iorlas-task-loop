@@ -13,22 +13,29 @@ TARGET = "Task-Loop-Merge-Target"
 
 
 def message(work: Work) -> str:
-    return (f"Merge current main into {work.task_id}\n\n{TRAILER}: {work.attempt_id}"
-            f"\n{SOURCE}: {work.source}\n{TARGET}: {work.target}")
+    return f"Merge current main into {work.task_id}\n\n{TRAILER}: {work.attempt_id}\n{SOURCE}: {work.source}\n{TARGET}: {work.target}"
 
 
 def completed(repo: Repo, head: str, work: Work) -> bool:
     """A completed action after a crash must have exactly the recorded parents and provenance."""
     first, second, third = (repo.tree(f"{head}^{n}") for n in (1, 2, 3))
     history = repo.history([head], limit=1)
-    return (first is not None and first.sha == work.source and second is not None and second.sha == work.target
-            and third is None and bool(history) and history[0].body.strip() == message(work).partition("\n\n")[2])
+    return (
+        first is not None
+        and first.sha == work.source
+        and second is not None
+        and second.sha == work.target
+        and third is None
+        and bool(history)
+        and history[0].body.strip() == message(work).partition("\n\n")[2]
+    )
 
 
 def attach(repo: Repo, slot: Worktree, work: Work, fence: Callable[[], None] = lambda: None) -> Terminal | None:
     """CAS then normal branch take; adopt either action after a crash, never overwrite another writer."""
-    if work.branch is None or any(info.path == work.slot and info.branch == work.branch and info.head == work.result
-                                  for info in repo.worktrees()):
+    if work.branch is None or any(
+        info.path == work.slot and info.branch == work.branch and info.head == work.result for info in repo.worktrees()
+    ):
         return None
     result = work.result or work.source
     ref = f"refs/heads/{work.branch}"
@@ -72,11 +79,12 @@ def supported(repo: Repo, work: Work) -> bool:
 
 def unsafe_name(path: str) -> bool:
     parts = path.split("/")
-    return (not path or path.startswith("/") or any(part in ("", ".", "..", ".beads") or dot_git(part) for part in parts))
+    return not path or path.startswith("/") or any(part in ("", ".", "..", ".beads") or dot_git(part) for part in parts)
 
 
-def accepted(repo: Repo, slot: Worktree, files: SlotFiles, work: Work, answer: Answer,
-             fence: Callable[[], None] = lambda: None) -> str | None:
+def accepted(
+    repo: Repo, slot: Worktree, files: SlotFiles, work: Work, answer: Answer, fence: Callable[[], None] = lambda: None
+) -> str | None:
     """Validate the agent's changes against the captured automatic merge, never against either side alone."""
     baseline = None if work.baseline is None else repo.tree(work.baseline)
     if baseline is None:

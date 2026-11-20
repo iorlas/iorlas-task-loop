@@ -45,7 +45,8 @@ def asks(factory: Factory, task_id: str, step: str) -> None:
     """The task's agent of `step` answers `needs_owner` and changes nothing."""
     plan = {"plan_path": None, "paths": []} if step == "plan" else {}
     factory.agents[task_id, step] = scripted(
-        factory.slot.repo, {"disposition": "needs_owner", **plan, "message": None, "explanation": ASKED}, {})
+        factory.slot.repo, {"disposition": "needs_owner", **plan, "message": None, "explanation": ASKED}, {}
+    )
 
 
 def ready(factory: Factory, task_id: str) -> None:
@@ -79,8 +80,12 @@ def test_a_missing_shelf_capability_is_reconstructed_from_evidence_and_held(fact
     before = factory.tip("tl-1")
     factory.agents["tl-1", "implement"] = scripted(
         factory.slot.repo,
-        {"disposition": "needs_owner", "message": None,
-         "explanation": {"package": "git-porcelain", "capability": "Observe a pending external action"}}, {},
+        {
+            "disposition": "needs_owner",
+            "message": None,
+            "explanation": {"package": "git-porcelain", "capability": "Observe a pending external action"},
+        },
+        {},
     )
     assert factory.round() == [("tl-1", "implement", "advance", "started")]
     assert factory.ran[-1] == "collected:needs_owner"
@@ -101,8 +106,9 @@ def test_a_failed_task_is_held_once_then_costs_no_tracker_call_or_line(factory: 
     text = factory.tracker.comments[0][1]
     assert text.startswith("taskloop hold: failed:needs_owner\nStep plan, attempt 1") and f"> {ASKED}" in text
     assert "returned its claim" in text and "restore the approval label `auto`" in text
-    assert [line.split(" ")[2:] for line in factory.lines if " hold " in line] == [["tl-1", "plan", "hold", "held", "failed:needs_owner",
-                                                                                     attempt]]
+    assert [line.split(" ")[2:] for line in factory.lines if " hold " in line] == [
+        ["tl-1", "plan", "hold", "held", "failed:needs_owner", attempt]
+    ]
     assert factory.next_words() == {"tl-1": ("plan", "on_hold")}
     lines, shows, reads = len(factory.lines), len(factory.tracker.shows), factory.tracker.ready_reads
     for _ in range(2):
@@ -169,10 +175,14 @@ def test_a_held_task_never_stops_another_task_or_ingestion_through_one_slot(fact
     assert factory.round() == [("tl-1", "plan", "start", "started")] and factory.last.stopped == "no_free_slot"
     assert factory.round() == [("tl-1", "plan", "hold", "held failed:needs_owner"), ("tl-2", "plan", "start", "started")]
     ready(factory, "tl-3")
-    assert factory.round() == [("tl-2", "plan", "commit", "committed release=released branch=published"),
-                               ("tl-3", "plan", "start", "started")]
-    assert factory.round() == [("tl-3", "plan", "commit", "committed release=released branch=published"),
-                               ("tl-2", "implement", "advance", "started")]  # claimed work before new work, as built
+    assert factory.round() == [
+        ("tl-2", "plan", "commit", "committed release=released branch=published"),
+        ("tl-3", "plan", "start", "started"),
+    ]
+    assert factory.round() == [
+        ("tl-3", "plan", "commit", "committed release=released branch=published"),
+        ("tl-2", "implement", "advance", "started"),
+    ]  # claimed work before new work, as built
     assert factory.next_words() == {"tl-1": ("plan", "on_hold"), "tl-2": ("implement", "commit"), "tl-3": ("plan", "advance")}
     assert factory.tracker.claims == ["tl-1", "tl-2", "tl-3"] and factory.tracker.holds == ["labels tl-1 auto", "comment tl-1"]
 
@@ -183,15 +193,18 @@ def test_the_round_s_label_is_stored_on_its_admissions_and_advances_and_none_on_
     assert factory.round(label="night") == [("tl-1", "plan", "start", "started")]  # tl-2 is not ready yet
     ready(factory, "tl-2")
     factory.by_hand("tl-2")
-    assert factory.round(label="night") == [("tl-1", "plan", "commit", "committed release=released branch=published"),
-                                            ("tl-2", "implement", "advance", "started")]
+    assert factory.round(label="night") == [
+        ("tl-1", "plan", "commit", "committed release=released branch=published"),
+        ("tl-2", "implement", "advance", "started"),
+    ]
     assert factory.round(label="night")[1] == ("tl-1", "implement", "advance", "started")
     assert labels(factory, "tl-1") == ["night", "night"] and labels(factory, "tl-2") == [None, None]
 
 
 @pytest.mark.parametrize("step", ["plan", "implement"])
 def test_show_of_a_hand_started_needs_owner_prints_the_agent_s_question_and_a_next_action_of_the_step(
-        factory: Factory, step: str, tmp_path: Path) -> None:
+    factory: Factory, step: str, tmp_path: Path
+) -> None:
     """tl-8bh9.14.66: nothing is held or commented for a hand-started step, so `tl attempt show` carries the explanation."""
     if step == "implement":
         factory.by_hand("tl-1")  # the plan; the next start advances to implement
@@ -309,17 +322,14 @@ def test_a_hold_of_a_clean_slot_saves_nothing(factory: Factory) -> None:
 
 @pytest.mark.parametrize("step", ["plan", "implement"])
 @pytest.mark.parametrize("disposition", ["incomplete", "needs_owner"])
-def test_unfinished_answers_hold_save_and_resume_the_whole_slot(
-    factory: Factory, step: str, disposition: str
-) -> None:
+def test_unfinished_answers_hold_save_and_resume_the_whole_slot(factory: Factory, step: str, disposition: str) -> None:
     if step == "implement":
         assert factory.round() == [("tl-1", "plan", "start", "started")]
         assert factory.round() == [("tl-1", "plan", "commit", "committed release=released branch=published")]
     plan = {"plan_path": None, "paths": ["README", "../unused"]} if step == "plan" else {}
     factory.agents["tl-1", step] = scripted(
         factory.slot.repo,
-        {"disposition": disposition, **plan, "message": None,
-         "explanation": "Work remains"},
+        {"disposition": disposition, **plan, "message": None, "explanation": "Work remains"},
         {"README": "partial edit\n", "unlisted.txt": "unfinished new file\n"},
     )
     action = "start" if step == "plan" else "advance"
@@ -350,7 +360,8 @@ def test_unfinished_answers_hold_save_and_resume_the_whole_slot(
     factory.tracker.answer("tl-1")
     factory.agents["tl-1", "plan"] = scripted(
         factory.slot.repo,
-        {"disposition": "unchanged", "plan_path": None, "paths": [], "message": None, "explanation": "Assess saved work"}, {},
+        {"disposition": "unchanged", "plan_path": None, "paths": [], "message": None, "explanation": "Assess saved work"},
+        {},
     )
     assert factory.round() == [("tl-1", "plan", "start", "started"), ("tl-1", "", "hold", "cleared")]
     resumed = factory.store.attempt_of("tasks", "tl-1")
@@ -412,6 +423,7 @@ def test_first_attempts_of_other_tasks_receive_no_earlier_facts(factory: Factory
     text = EvidenceFiles(factory.tmp).text(current[0], "input.txt")
     assert text is not None and BEGIN not in text and ASKED not in text
 
+
 def test_an_advance_refused_claim_lost_holds_a_round_taken_task_without_touching_another_actor_s_labels(factory: Factory) -> None:
     assert factory.round() == [("tl-1", "plan", "start", "started")]
     assert factory.round() == [("tl-1", "plan", "commit", "committed release=released branch=published")]
@@ -435,8 +447,13 @@ def test_the_person_s_answer_takes_the_task_again_at_plan_on_its_branch_and_held
     assert factory.round() == [("tl-1", "implement", "hold", "held failed:needs_owner")]
     assert factory.round() == [] and factory.tracker.beads["tl-1"].labels == ("held",)
     factory.tracker.answer("tl-1")
-    unchanged = {"disposition": "unchanged", "plan_path": "docs/design/tl-1/plan.md", "paths": [], "message": None,
-                 "explanation": "The plan still holds"}
+    unchanged = {
+        "disposition": "unchanged",
+        "plan_path": "docs/design/tl-1/plan.md",
+        "paths": [],
+        "message": None,
+        "explanation": "The plan still holds",
+    }
     factory.agents["tl-1", "plan"] = scripted(factory.slot.repo, unchanged, {})
     assert factory.round(frozenset()) == [("tl-1", "plan", "start", "started"), ("tl-1", "", "hold", "cleared")]
     assert factory.last.moves[-1].attempt_id == held and factory.tracker.beads["tl-1"].labels == ("auto",)
@@ -572,8 +589,9 @@ def test_a_hand_started_publication_refused_branch_moved_is_reported_never_held(
     assert isinstance(committed, CommittedTask) and factory.next_words() == {"tl-1": ("plan", "publish")}
     moved(factory)
     assert factory.round(frozenset()) == [("tl-1", "plan", "publish", "refused:branch_moved")]
-    assert factory.tracker.holds == [] and any(line.endswith(" publish refused:branch_moved " + factory.current("tl-1"))
-                                               for line in factory.lines)
+    assert factory.tracker.holds == [] and any(
+        line.endswith(" publish refused:branch_moved " + factory.current("tl-1")) for line in factory.lines
+    )
 
 
 def test_a_graceful_stop_skips_the_clear_and_the_next_round_does_it(factory: Factory) -> None:

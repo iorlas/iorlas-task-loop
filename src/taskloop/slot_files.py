@@ -14,7 +14,7 @@ class RealSlotFiles:
     def lstat(self, path: Path) -> FileStat | None:
         try:
             found = os.lstat(path)
-        except (OSError, ValueError):  # ValueError: an embedded NUL; fails closed like a missing file
+        except OSError, ValueError:  # ValueError: an embedded NUL; fails closed like a missing file
             return None
         mode = found.st_mode
         if stat.S_ISREG(mode):
@@ -27,7 +27,7 @@ class RealSlotFiles:
             return None
         try:
             descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
-        except (OSError, ValueError):
+        except OSError, ValueError:
             return None
         with os.fdopen(descriptor, "rb") as stream:
             data = stream.read(cap + 1)
@@ -36,5 +36,5 @@ class RealSlotFiles:
     def resolve(self, path: Path) -> Path | None:
         try:
             return path.resolve(strict=True)
-        except (OSError, RuntimeError, ValueError):
+        except OSError, RuntimeError, ValueError:
             return None

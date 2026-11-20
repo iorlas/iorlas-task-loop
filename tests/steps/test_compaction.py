@@ -16,7 +16,9 @@ surroundings = attempt_surroundings
 
 @pytest.mark.parametrize("limit", [None, 100000])
 def test_reopened_attempt_uses_its_captured_compaction_for_launch_and_retained_inputs(
-    tmp_path: Path, surroundings: AttemptSurroundings, limit: int | None,
+    tmp_path: Path,
+    surroundings: AttemptSurroundings,
+    limit: int | None,
 ) -> None:
     path = tmp_path / "factory.db"
     first = Store(SCHEMA).open_rw(path)

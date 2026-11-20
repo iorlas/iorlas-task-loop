@@ -70,8 +70,14 @@ class SetupProcess(Protocol):
     proves its tree."""
 
     def __call__(
-        self, argv: Sequence[str], *, registered: Callable[[OwnedProcess], None], cwd: str, env: Mapping[str, str],
-        timeout: float, line: Callable[[bytes], None],
+        self,
+        argv: Sequence[str],
+        *,
+        registered: Callable[[OwnedProcess], None],
+        cwd: str,
+        env: Mapping[str, str],
+        timeout: float,
+        line: Callable[[bytes], None],
     ) -> SetupEnded: ...
 
 
@@ -196,12 +202,19 @@ class Preparation:
         """Section 4's order; None when the agent may be dispatched. `launch`: the agent's executable and the credentials'
         scrubbed environment (setup gets it with the folders, the probe with the agent's additions)."""
         admission = record.admission
-        target = SetupFor(admission.key, Path(admission.slot_path), None, task_branch(admission.task.task_id),
-                          admission.deadline, admission.number == 1 or admission.source_checks_id is not None)
+        target = SetupFor(
+            admission.key,
+            Path(admission.slot_path),
+            None,
+            task_branch(admission.task.task_id),
+            admission.deadline,
+            admission.number == 1 or admission.source_checks_id is not None,
+        )
         return self.prepare_for(target, slot, renew, launch[1], probe=None if command is None else (command, launch[1]))
 
-    def prepare_for(self, target: SetupFor, slot: Prepared, renew: Renew, env: Mapping[str, str], *,
-                    probe: ProbeLaunch | None) -> AttemptResult | None:
+    def prepare_for(
+        self, target: SetupFor, slot: Prepared, renew: Renew, env: Mapping[str, str], *, probe: ProbeLaunch | None
+    ) -> AttemptResult | None:
         """Both paths: `env` is the scrubbed environment setup gets with the folders; `probe` the agent's Codex and
         environment for the sandbox probe, None for no probe (a checks slot)."""
         target.fence()
@@ -316,8 +329,7 @@ class Preparation:
             return _unavailable("log")  # the artifacts directory, not the slot's folders (`environment:files`)
         with closing(log):
             ports.store.start(key, run, head, digest, ports.clock())
-            return self._run(_Run(key, run, path, head, target.branch, target.deadline, env, log, target.fence),
-                             slot.gitdir, profile.setup)
+            return self._run(_Run(key, run, path, head, target.branch, target.deadline, env, log, target.fence), slot.gitdir, profile.setup)
 
     def _reset(self, path: Path, gitdir: Path, found: Folders, commit: str | None) -> AttemptResult | None:
         """A checks slot's tracked files and index back to exactly `commit` first (`git reset --hard`, so a check killed

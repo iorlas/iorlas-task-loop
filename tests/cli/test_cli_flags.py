@@ -19,8 +19,22 @@ from taskloop.round import NextRequest
 from taskloop.rounds import RoundsRequest
 from taskloop.slots import Adopted, SlotGit
 
-CHOICES = ["--backlog", "tasks", "--tracker-root", "/tracker", "--checkout", "/checkout", "--label", "approved",
-           "--model", "m", "--effort", "high", "--minutes", "30"]
+CHOICES = [
+    "--backlog",
+    "tasks",
+    "--tracker-root",
+    "/tracker",
+    "--checkout",
+    "/checkout",
+    "--label",
+    "approved",
+    "--model",
+    "m",
+    "--effort",
+    "high",
+    "--minutes",
+    "30",
+]
 
 
 @pytest.fixture(autouse=True)
@@ -94,8 +108,12 @@ class Dashboard:
 @pytest.mark.parametrize("port", [None, 0, 8123, "off"])
 @pytest.mark.parametrize("structured", [False, True])
 def test_dashboard_selection_lifetime_and_output(
-    port: int | str | None, structured: bool, execution: Execution, tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str],
+    port: int | str | None,
+    structured: bool,
+    execution: Execution,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     dashboard, db, artifacts = Dashboard(execution.events), tmp_path / "factory.db", tmp_path / "artifacts"
     monkeypatch.setattr(dash_composition, "serving", dashboard.serving)
@@ -103,16 +121,25 @@ def test_dashboard_selection_lifetime_and_output(
     flags = named + (["--json"] if structured else [])
     assert main(["rounds", "start", *CHOICES, "--db", str(db), "--artifacts", str(artifacts), *flags]) == 0
     number = int(port) if isinstance(port, int) else DASH_PORT
-    shown = None if port == "off" else DashRequest("tasks", "/tracker", "approved", ip_address("127.0.0.1"), number,
-                                                 db, artifacts, Path("/checkout"))
+    shown = (
+        None
+        if port == "off"
+        else DashRequest("tasks", "/tracker", "approved", ip_address("127.0.0.1"), number, db, artifacts, Path("/checkout"))
+    )
     assert dashboard.requests == [shown]
     assert execution.events == ["rounds entered", "dashboard entered", "rounds ran", "dashboard closed", "rounds closed"]
     output = capsys.readouterr()
     notice = "Dashboard: http://127.0.0.1:8123/ (read-only, unauthenticated)\n"
     if structured:
         assert [json.loads(line) for line in output.out.splitlines()] == [
-            {"status": "rounds", "backlog": "tasks", "every": 60, "log": str(artifacts / "rounds.log"),
-             "label": "approved", "max_running": 3},
+            {
+                "status": "rounds",
+                "backlog": "tasks",
+                "every": 60,
+                "log": str(artifacts / "rounds.log"),
+                "label": "approved",
+                "max_running": 3,
+            },
             {"status": "ended", "backlog": "tasks", "reason": "interrupted", "detail": None},
         ]
         assert output.err == ("" if shown is None else notice)
@@ -122,7 +149,9 @@ def test_dashboard_selection_lifetime_and_output(
 
 
 def test_dashboard_closes_when_rounds_are_interrupted(
-    execution: Execution, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str],
+    execution: Execution,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     dashboard = Dashboard(execution.events)
     execution.ending = KeyboardInterrupt()
@@ -136,14 +165,25 @@ def test_dashboard_closes_when_rounds_are_interrupted(
     assert execution.events[-3:] == ["rounds ran", "dashboard closed", "rounds closed"]
 
 
-@pytest.mark.parametrize(("host", "authority", "exposed"), [
-    ("127.0.0.2", "127.0.0.2", False), ("::1", "[::1]", False),
-    ("0.0.0.0", "0.0.0.0", True), ("192.0.2.4", "192.0.2.4", True), ("::", "[::]", True),
-])
+@pytest.mark.parametrize(
+    ("host", "authority", "exposed"),
+    [
+        ("127.0.0.2", "127.0.0.2", False),
+        ("::1", "[::1]", False),
+        ("0.0.0.0", "0.0.0.0", True),
+        ("192.0.2.4", "192.0.2.4", True),
+        ("::", "[::]", True),
+    ],
+)
 @pytest.mark.parametrize("structured", [False, True])
 def test_dashboard_address_selection_and_exposure_notice(
-    host: str, authority: str, exposed: bool, structured: bool, execution: Execution,
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str],
+    host: str,
+    authority: str,
+    exposed: bool,
+    structured: bool,
+    execution: Execution,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     dashboard = Dashboard(execution.events, (host, 8123))
     monkeypatch.setattr(dash_composition, "serving", dashboard.serving)
@@ -162,8 +202,9 @@ def test_dashboard_address_selection_and_exposure_notice(
         assert output.err == ""
 
 
-@pytest.mark.parametrize("host", ["localhost", "proxy.example", "http://127.0.0.1", "127.0.0.1:8123", "127.0.0.1/8",
-                                  "[::1]", "300.0.0.1", ""])
+@pytest.mark.parametrize(
+    "host", ["localhost", "proxy.example", "http://127.0.0.1", "127.0.0.1:8123", "127.0.0.1/8", "[::1]", "300.0.0.1", ""]
+)
 def test_invalid_dashboard_addresses_fail_before_execution(host: str, execution: Execution) -> None:
     with pytest.raises(SystemExit) as ended:
         main(["rounds", "start", *CHOICES, "--dash-host", host])
@@ -173,7 +214,10 @@ def test_invalid_dashboard_addresses_fail_before_execution(host: str, execution:
 
 @pytest.mark.parametrize("refused", [False, True])
 def test_dashboard_startup_warning_leaves_rounds_to_determine_exit(
-    refused: bool, execution: Execution, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str],
+    refused: bool,
+    execution: Execution,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     dashboard = Dashboard(execution.events, Failed("unavailable", "dashboard_port", "Port 8123 occupied"))
     if refused:
@@ -189,12 +233,22 @@ def test_dashboard_startup_warning_leaves_rounds_to_determine_exit(
         assert json.loads(output.err.splitlines()[1])["reason"] == "refused:database"
 
 
-@pytest.mark.parametrize(("configured", "explicit", "expected", "source"), [
-    (None, None, 1, "default"), (4, None, 4, "file"), (4, 2, 2, "flag"),
-])
+@pytest.mark.parametrize(
+    ("configured", "explicit", "expected", "source"),
+    [
+        (None, None, 1, "default"),
+        (4, None, 4, "file"),
+        (4, 2, 2, "flag"),
+    ],
+)
 def test_count_selects_effective_setting_and_reaches_adoption(
-    configured: int | None, explicit: int | None, expected: int, source: str, tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str],
+    configured: int | None,
+    explicit: int | None,
+    expected: int,
+    source: str,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     calls: list[int] = []
 
@@ -216,7 +270,10 @@ def test_count_selects_effective_setting_and_reaches_adoption(
 @pytest.mark.parametrize("command", [["config", "show"], ["slot", "adopt", "/checkout"]])
 @pytest.mark.parametrize("count", ["0", "-1", "two"])
 def test_invalid_count_refuses_before_adoption(
-    command: list[str], count: str, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str],
+    command: list[str],
+    count: str,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     def unexpected_adoption(*_arguments: object) -> Adoption:
         pytest.fail("invalid counts must not reach adoption")
@@ -236,7 +293,9 @@ def test_invalid_count_refuses_before_adoption(
 
 @pytest.mark.parametrize("operation", ["once", "start"])
 def test_removed_max_new_is_a_usage_error_before_execution_ports(
-    operation: str, execution: Execution, capsys: pytest.CaptureFixture[str],
+    operation: str,
+    execution: Execution,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     with pytest.raises(SystemExit) as ended:
         main(["rounds", operation, *CHOICES, "--max-new", "2"])
@@ -249,7 +308,11 @@ def test_removed_max_new_is_a_usage_error_before_execution_ports(
 @pytest.mark.parametrize("maximum", [None, 7])
 @pytest.mark.parametrize("retake", [False, True])
 def test_scheduling_choices_reach_each_commands_request(
-    operation: str, maximum: int | None, retake: bool, execution: Execution, capsys: pytest.CaptureFixture[str],
+    operation: str,
+    maximum: int | None,
+    retake: bool,
+    execution: Execution,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     flags = ([] if maximum is None else ["--max-running", str(maximum)]) + (["--retake-lapsed"] if retake else [])
     quiet = ["--no-dashboard"] if operation == "start" else []
@@ -280,7 +343,9 @@ def test_scheduling_choices_reach_each_commands_request(
 
 @pytest.mark.parametrize("retake", [False, True])
 def test_rounds_announces_recovery_only_when_selected(
-    retake: bool, execution: Execution, capsys: pytest.CaptureFixture[str],
+    retake: bool,
+    execution: Execution,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     assert main(["rounds", "start", "--no-dashboard", *CHOICES, *(["--retake-lapsed"] if retake else [])]) == 0
     assert ("(and its own lapsed claims)" in capsys.readouterr().out) == retake
@@ -299,7 +364,10 @@ def test_retake_help_keeps_the_recovery_limit(operation: str, capsys: pytest.Cap
 
 @pytest.mark.parametrize("operation", ["once", "start"])
 def test_round_commands_work_without_agent_flags_and_keep_a_configuration_snapshot(
-    operation: str, execution: Execution, tmp_path: Path, capsys: pytest.CaptureFixture[str],
+    operation: str,
+    execution: Execution,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     config = tmp_path / "config.toml"
     config.write_text('[agents.implement]\nmodel = "configured"\neffort = "low"\n')

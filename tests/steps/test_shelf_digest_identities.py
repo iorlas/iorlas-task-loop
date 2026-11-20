@@ -49,9 +49,15 @@ class Inputs:
     shelf: dict[str, dict[str, bytes]]
 
     def extract(self, *, manifest_only: bool = False) -> Identities | IdentityFailure | ReadFailure:
-        root = objects(self.path / "root", {SOURCE_COMMIT: {
-            "pyproject.toml": self.project.encode(), "uv.lock": self.lock.encode(),
-        }})
+        root = objects(
+            self.path / "root",
+            {
+                SOURCE_COMMIT: {
+                    "pyproject.toml": self.project.encode(),
+                    "uv.lock": self.lock.encode(),
+                }
+            },
+        )
         source = open_source(root, SOURCE_COMMIT)
         assert not isinstance(source, ReadFailure)
         if manifest_only:
@@ -74,11 +80,14 @@ def inputs(path: Path, *, version: str = "1.2.3", encoded: bool = True) -> Input
         records.append(f'[[package]]\nname = "{name}"\nversion = "{version}"\nsource = {{git = "{selector}#{COMMIT}"}}')
         metadata.append(f'{{name = "{name}", git = "{selector}"}}')
         manifests[f"{directory}/pyproject.toml"] = f'[project]\nname = "{name}"\nversion = "{version}"'.encode()
-    project = (f'[project]\nname = "task-loop"\nversion = "0.1.0"\ndependencies = [{dependencies}]\n'
-               '[tool.uv.sources]\n' + "\n".join(declarations))
-    root = ('[[package]]\nname = "task-loop"\nversion = "0.1.0"\nsource = {editable = "."}\n'
-            'dependencies = [' + ", ".join(f'{{name = "{name}"}}' for name in PACKAGES) + ']\n'
-            '[package.metadata]\nrequires-dist = [' + ", ".join(metadata) + "]")
+    project = f'[project]\nname = "task-loop"\nversion = "0.1.0"\ndependencies = [{dependencies}]\n[tool.uv.sources]\n' + "\n".join(
+        declarations
+    )
+    root = (
+        '[[package]]\nname = "task-loop"\nversion = "0.1.0"\nsource = {editable = "."}\n'
+        "dependencies = [" + ", ".join(f'{{name = "{name}"}}' for name in PACKAGES) + "]\n"
+        "[package.metadata]\nrequires-dist = [" + ", ".join(metadata) + "]"
+    )
     return Inputs(path, project, "\n".join([*records, root]), {COMMIT: manifests})
 
 
@@ -91,7 +100,10 @@ def test_complete_extraction_derives_values_and_orders_by_name(tmp_path: Path, v
     assert tuple(item.name for item in result.packages) == PACKAGES
     for item in result.packages:
         assert (item.version, item.repository_url, item.subdirectory, item.commit) == (
-            version, URL, f"packages/{item.name}", COMMIT,
+            version,
+            URL,
+            f"packages/{item.name}",
+            COMMIT,
         )
         assert item.requested_tag == f"{'any-agent' if item.name == 'stream-proc' else item.name}-v{version}"
 
@@ -103,7 +115,7 @@ def test_current_project_and_lock_pins_including_stream_procs_own_version(tmp_pa
     for record in tomllib.loads(lock)["package"]:
         if record["name"] in PACKAGES:
             commit = record["source"]["git"].split("#")[1]
-            files.setdefault(commit, {})[f'packages/{record["name"]}/pyproject.toml'] = (
+            files.setdefault(commit, {})[f"packages/{record['name']}/pyproject.toml"] = (
                 f'[project]\nname = "{record["name"]}"\nversion = "{record["version"]}"'.encode()
             )
     result = Inputs(tmp_path, project, lock, files).extract()
@@ -123,37 +135,44 @@ def test_manifest_reconciliation_requires_no_shelf_source(tmp_path: Path) -> Non
     assert isinstance(case.extract(manifest_only=True), IdentityFailure)
 
 
-@pytest.mark.parametrize(("field", "old", "new", "detail"), [
-    ("project", '"any-agent==1.2.3"', '"any-agent>=1.2.3"', "exact version"),
-    ("project", '"any-agent==1.2.3"', '"any-agent==1.2.3", "any-agent==1.2.3"', "observed 2"),
-    ("project", '"any-agent==1.2.3"', '"unrelated==1.2.3"', "observed 0"),
-    ("project", "any-agent =", "absent-agent =", "source names"),
-    ("project", 'tag = "any-agent-v1.2.3"', 'branch = "main"', "tag"),
-    ("project", 'subdirectory = "packages/any-agent"', 'subdirectory = "../any-agent"', "subdirectory"),
-    ("project", f'git = "{URL}"', 'git = "file:///tmp/shelf"', "repository URL"),
-    ("lock", 'name = "any-agent"\nversion = "1.2.3"', 'name = "any-agent"\nversion = "9.0.0"', "version"),
-    ("lock", 'name = "any-agent"\nversion', 'name = "absent-agent"\nversion', "observed 0"),
-    ("lock", f"#{COMMIT}", "#abc", "immutable commit"),
-    ("lock", f"#{COMMIT}", "", "immutable commit"),
-    ("lock", "tag=any-agent-v1.2.3", "branch=main", "expected one subdirectory and one tag"),
-    ("lock", "tag=any-agent-v1.2.3", "tag=any-agent-v1.2.3&tag=duplicate", "expected one subdirectory and one tag"),
-    ("lock", "tag=any-agent-v1.2.3", "tag=other", "source"),
-    ("lock", "tag=any-agent-v1.2.3", "tag=", "tag"),
-    ("lock", "subdirectory=packages%2Fany-agent", "subdirectory=packages%2Fother", "source"),
-    ("lock", "subdirectory=packages%2Fany-agent", "subdirectory=..%2Foutside", "subdirectory"),
-    ("lock", "subdirectory=packages%2Fany-agent", "subdirectory=%FF", "utf-8"),
-    ("lock", URL, "https://other.invalid/shelf.git", "source"),
-    ("lock", '{name = "any-agent"}', '{name = "absent-agent"}', "root dependency"),
-    ("lock", '{name = "any-agent"}', '{name = "any-agent", git = "wrong"}', "root dependency selectors"),
-    ("lock", '{name = "any-agent", git', '{name = "absent-agent", git', "requires-dist"),
-    ("lock", '{name = "any-agent", git', '{name = "any-agent", specifier = "==9.0.0", git', "specifier"),
-    ("lock", '[package.metadata]', '[package.unused]', "metadata"),
-    ("lock", 'name = "task-loop"', 'name = "absent-task-loop"', "task-loop package"),
-    ("lock", 'version = "0.1.0"', 'version = "0.2.0"', "task-loop version"),
-    ("lock", 'source = {editable = "."}', 'source = {editable = "elsewhere"}', "task-loop source"),
-])
+@pytest.mark.parametrize(
+    ("field", "old", "new", "detail"),
+    [
+        ("project", '"any-agent==1.2.3"', '"any-agent>=1.2.3"', "exact version"),
+        ("project", '"any-agent==1.2.3"', '"any-agent==1.2.3", "any-agent==1.2.3"', "observed 2"),
+        ("project", '"any-agent==1.2.3"', '"unrelated==1.2.3"', "observed 0"),
+        ("project", "any-agent =", "absent-agent =", "source names"),
+        ("project", 'tag = "any-agent-v1.2.3"', 'branch = "main"', "tag"),
+        ("project", 'subdirectory = "packages/any-agent"', 'subdirectory = "../any-agent"', "subdirectory"),
+        ("project", f'git = "{URL}"', 'git = "file:///tmp/shelf"', "repository URL"),
+        ("lock", 'name = "any-agent"\nversion = "1.2.3"', 'name = "any-agent"\nversion = "9.0.0"', "version"),
+        ("lock", 'name = "any-agent"\nversion', 'name = "absent-agent"\nversion', "observed 0"),
+        ("lock", f"#{COMMIT}", "#abc", "immutable commit"),
+        ("lock", f"#{COMMIT}", "", "immutable commit"),
+        ("lock", "tag=any-agent-v1.2.3", "branch=main", "expected one subdirectory and one tag"),
+        ("lock", "tag=any-agent-v1.2.3", "tag=any-agent-v1.2.3&tag=duplicate", "expected one subdirectory and one tag"),
+        ("lock", "tag=any-agent-v1.2.3", "tag=other", "source"),
+        ("lock", "tag=any-agent-v1.2.3", "tag=", "tag"),
+        ("lock", "subdirectory=packages%2Fany-agent", "subdirectory=packages%2Fother", "source"),
+        ("lock", "subdirectory=packages%2Fany-agent", "subdirectory=..%2Foutside", "subdirectory"),
+        ("lock", "subdirectory=packages%2Fany-agent", "subdirectory=%FF", "utf-8"),
+        ("lock", URL, "https://other.invalid/shelf.git", "source"),
+        ("lock", '{name = "any-agent"}', '{name = "absent-agent"}', "root dependency"),
+        ("lock", '{name = "any-agent"}', '{name = "any-agent", git = "wrong"}', "root dependency selectors"),
+        ("lock", '{name = "any-agent", git', '{name = "absent-agent", git', "requires-dist"),
+        ("lock", '{name = "any-agent", git', '{name = "any-agent", specifier = "==9.0.0", git', "specifier"),
+        ("lock", "[package.metadata]", "[package.unused]", "metadata"),
+        ("lock", 'name = "task-loop"', 'name = "absent-task-loop"', "task-loop package"),
+        ("lock", 'version = "0.1.0"', 'version = "0.2.0"', "task-loop version"),
+        ("lock", 'source = {editable = "."}', 'source = {editable = "elsewhere"}', "task-loop source"),
+    ],
+)
 def test_disagreements_are_explained_without_partial_identities(
-    tmp_path: Path, field: str, old: str, new: str, detail: str,
+    tmp_path: Path,
+    field: str,
+    old: str,
+    new: str,
+    detail: str,
 ) -> None:
     case = inputs(tmp_path)
     setattr(case, field, getattr(case, field).replace(old, new, 1))
@@ -181,9 +200,16 @@ def test_duplicate_locked_package_and_different_shared_commit(tmp_path: Path) ->
 @pytest.mark.parametrize("data", [b"[", b"\xff", b"project = 3", b"package = 'wrong'"])
 def test_invalid_documents_have_context(tmp_path: Path, path: str, data: bytes) -> None:
     case = inputs(tmp_path)
-    root = objects(tmp_path / "invalid", {SOURCE_COMMIT: {
-        "pyproject.toml": case.project.encode(), "uv.lock": case.lock.encode(), path: data,
-    }})
+    root = objects(
+        tmp_path / "invalid",
+        {
+            SOURCE_COMMIT: {
+                "pyproject.toml": case.project.encode(),
+                "uv.lock": case.lock.encode(),
+                path: data,
+            }
+        },
+    )
     source = open_source(root, SOURCE_COMMIT)
     assert not isinstance(source, ReadFailure)
     result = extract_identities(source, objects(tmp_path / "shelf", case.shelf))
@@ -197,7 +223,8 @@ def test_package_manifest_identity_disagrees(tmp_path: Path, field: str, observe
     case = inputs(tmp_path)
     path = "packages/any-agent/pyproject.toml"
     case.shelf[COMMIT][path] = '[project]\nname = "any-agent"\nversion = "1.2.3"\n'.replace(
-        f'{field} = "{"any-agent" if field == "name" else "1.2.3"}"', f'{field} = "{observed}"',
+        f'{field} = "{"any-agent" if field == "name" else "1.2.3"}"',
+        f'{field} = "{observed}"',
     ).encode()
     result = case.extract()
     assert isinstance(result, IdentityFailure)

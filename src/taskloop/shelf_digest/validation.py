@@ -23,7 +23,7 @@ def _verify(item: Evidence, identities: Identities, opener: SourceOpener) -> Non
     lines = data.splitlines(keepends=True)
     if not 1 <= item.start_line <= item.end_line <= len(lines):
         raise ValueError("Evidence range is outside its source")
-    if sha256(b"".join(lines[item.start_line - 1:item.end_line])).hexdigest() != item.sha256:
+    if sha256(b"".join(lines[item.start_line - 1 : item.end_line])).hexdigest() != item.sha256:
         raise ValueError("Evidence bytes have changed")
 
 

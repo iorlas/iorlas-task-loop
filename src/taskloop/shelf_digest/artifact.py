@@ -25,8 +25,9 @@ class DigestArtifact(BaseModel):
     facts: dict[FactName, tuple[str, tuple[int, ...]]]
 
     def encode(self, limit: int = TOKEN_LIMIT) -> bytes:
-        output = (json.dumps(self.model_dump(mode="json"), ensure_ascii=False, sort_keys=True,
-                             separators=(",", ":"), allow_nan=False) + "\n").encode("utf-8")
+        output = (
+            json.dumps(self.model_dump(mode="json"), ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False) + "\n"
+        ).encode("utf-8")
         if len(output) > limit:
             raise ValueError(f"Shelf digest exceeds conservative {limit}-token bound ({len(output)} UTF-8 bytes)")
         return output
@@ -49,8 +50,9 @@ def _identities(artifact: DigestArtifact, identities: Identities) -> None:
     if not _hash(artifact.source_commit, 40):
         raise ValueError("Invalid shelf digest source_commit")
     expected = identities.packages
-    if (artifact.repositories != tuple(sorted({p.repository_url for p in expected}))
-            or artifact.commits != tuple(sorted({p.commit for p in expected}))):
+    if artifact.repositories != tuple(sorted({p.repository_url for p in expected})) or artifact.commits != tuple(
+        sorted({p.commit for p in expected})
+    ):
         raise ValueError("Shelf digest repository/commit identities do not match pyproject.toml / uv.lock")
     expanded = []
     for name, version, repository, tag, directory, commit in artifact.packages:
@@ -65,15 +67,18 @@ def _facts(artifact: DigestArtifact) -> None:
     if set(artifact.facts) != set(FactName) or len(set(artifact.sources)) != len(artifact.sources):
         raise ValueError("Shelf digest has missing facts or duplicate sources")
     for package, path, start, end, checksum in artifact.sources:
-        if (not 0 <= package < len(artifact.packages) or not relative_path(path)
-                or start != 1 or end < start or not _hash(checksum, 64)):
+        if not 0 <= package < len(artifact.packages) or not relative_path(path) or start != 1 or end < start or not _hash(checksum, 64):
             raise ValueError("Invalid shelf digest source path, range, hash or package index")
     used: set[int] = set()
     for contract in CONTRACTS:
         text, references = artifact.facts[contract.name]
         expected = {(rule.package, f"src/{rule.package.replace('-', '_')}/{rule.module}.py") for rule in contract.rules}
-        if (text != contract.text or not references or tuple(sorted(set(references))) != references
-                or any(index < 0 or index >= len(artifact.sources) for index in references)):
+        if (
+            text != contract.text
+            or not references
+            or tuple(sorted(set(references))) != references
+            or any(index < 0 or index >= len(artifact.sources) for index in references)
+        ):
             raise ValueError(f"Invalid shelf digest fact or references: {contract.name}")
         observed = {(artifact.packages[artifact.sources[index][0]][0], artifact.sources[index][1]) for index in references}
         if observed != expected or len(references) != len(expected):

@@ -41,7 +41,10 @@ def cleanups(monkeypatch: pytest.MonkeyPatch) -> list[int]:
 
 @pytest.mark.parametrize("jump", [7200, -7200])
 def test_epoch_jumps_during_handoff_and_registration_preserve_allowance(
-    surroundings: AttemptSurroundings, monkeypatch: pytest.MonkeyPatch, cleanups: list[int], jump: float,
+    surroundings: AttemptSurroundings,
+    monkeypatch: pytest.MonkeyPatch,
+    cleanups: list[int],
+    jump: float,
 ) -> None:
     con, clock = database(surroundings), Clock()
     store, execution = AttemptStore(lambda: con), fake(refs=("session",))
@@ -71,7 +74,10 @@ def test_epoch_jumps_during_handoff_and_registration_preserve_allowance(
 
 @pytest.mark.parametrize("elapsed", [90, 91])
 def test_runtime_exhausted_during_handoff_never_disables_timeout(
-    surroundings: AttemptSurroundings, monkeypatch: pytest.MonkeyPatch, cleanups: list[int], elapsed: float,
+    surroundings: AttemptSurroundings,
+    monkeypatch: pytest.MonkeyPatch,
+    cleanups: list[int],
+    elapsed: float,
 ) -> None:
     con, clock = database(surroundings), Clock()
     store, execution = AttemptStore(lambda: con), fake()
@@ -91,7 +97,8 @@ def test_runtime_exhausted_during_handoff_never_disables_timeout(
 
 
 def test_runtime_exhausted_at_registration_refuses_before_session_or_capture(
-    surroundings: AttemptSurroundings, cleanups: list[int],
+    surroundings: AttemptSurroundings,
+    cleanups: list[int],
 ) -> None:
     con, clock = database(surroundings), Clock()
     execution = fake(refs=("session",))
@@ -111,7 +118,9 @@ def test_runtime_exhausted_at_registration_refuses_before_session_or_capture(
 
 @pytest.mark.parametrize("broken", [False, True])
 def test_runtime_timeout_after_registration_is_captured_and_collected_once(
-    surroundings: AttemptSurroundings, cleanups: list[int], broken: bool,
+    surroundings: AttemptSurroundings,
+    cleanups: list[int],
+    broken: bool,
 ) -> None:
     con, clock = database(surroundings), Clock()
     execution = FakeRun(RunOutcome(rc=-15, timed_out=True, worker=WORKER, summary=Summary(rc=-15)))
@@ -143,7 +152,10 @@ def test_runtime_timeout_after_registration_is_captured_and_collected_once(
 
 @pytest.mark.parametrize("broken", [False, True])
 def test_active_jumps_survive_lost_activity_and_clock_evidence_without_changing_runtime(
-    surroundings: AttemptSurroundings, monkeypatch: pytest.MonkeyPatch, cleanups: list[int], broken: bool,
+    surroundings: AttemptSurroundings,
+    monkeypatch: pytest.MonkeyPatch,
+    cleanups: list[int],
+    broken: bool,
 ) -> None:
     con, clock = database(surroundings), Clock()
     execution = fake(refs=("session",))
@@ -202,7 +214,9 @@ def test_active_jumps_survive_lost_activity_and_clock_evidence_without_changing_
 
 @pytest.mark.parametrize("difference", [7200, -7200])
 def test_an_eventless_failed_run_still_records_its_final_clock_jump(
-    surroundings: AttemptSurroundings, cleanups: list[int], difference: float,
+    surroundings: AttemptSurroundings,
+    cleanups: list[int],
+    difference: float,
 ) -> None:
     con, clock = database(surroundings), Clock()
 
@@ -225,7 +239,10 @@ def test_an_eventless_failed_run_still_records_its_final_clock_jump(
 
 @pytest.mark.parametrize("failure", ["write", "final_write", "regression", "nonfinite", "clock_exception"])
 def test_duration_evidence_failures_preserve_result_registration_and_cleanup(
-    surroundings: AttemptSurroundings, monkeypatch: pytest.MonkeyPatch, cleanups: list[int], failure: str,
+    surroundings: AttemptSurroundings,
+    monkeypatch: pytest.MonkeyPatch,
+    cleanups: list[int],
+    failure: str,
 ) -> None:
     con, clock = database(surroundings), Clock()
     execution = fake(refs=("session",))

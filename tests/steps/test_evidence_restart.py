@@ -73,20 +73,32 @@ def interrupted_commit(con: sqlite3.Connection) -> Generator[None]:
 
 
 def rows(con: sqlite3.Connection) -> Rows:
-    return tuple(tuple(con.execute(f"SELECT * FROM {table} ORDER BY rowid"))
-                 for table in ("attempt", "reservation", "slot", "task_content"))
+    return tuple(
+        tuple(con.execute(f"SELECT * FROM {table} ORDER BY rowid")) for table in ("attempt", "reservation", "slot", "task_content")
+    )
 
 
 def initial(con: sqlite3.Connection, files: EvidenceFiles, begin: Begin, bench: Repairing) -> AttemptAdmission:
     return AttemptAdmission(
-        lambda: con, begin, files, bench.tracker.inspect, bench.checkouts, bench.tracker.claim, bench.tracker.unclaim,
-        lambda: bench.now, lambda _path: True, bench.files, ids=NativeIds(), engine=ENGINE
+        lambda: con,
+        begin,
+        files,
+        bench.tracker.inspect,
+        bench.checkouts,
+        bench.tracker.claim,
+        bench.tracker.unclaim,
+        lambda: bench.now,
+        lambda _path: True,
+        bench.files,
+        ids=NativeIds(),
+        engine=ENGINE,
     )
 
 
 def request(bench: Repairing, task_id: str = "tl-1") -> AdmitRequest:
-    return AdmitRequest(task_id, "tasks", "/tracker", bench.slot.repo.path,
-                        StepSettings(plan=AgentSetting(model="m", effort="high")), 1000, "auto")
+    return AdmitRequest(
+        task_id, "tasks", "/tracker", bench.slot.repo.path, StepSettings(plan=AgentSetting(model="m", effort="high")), 1000, "auto"
+    )
 
 
 def protect(bench: Repairing) -> tuple[dict[Path, bytes], AttemptKey]:
@@ -135,8 +147,9 @@ def exercise(bench: Repairing, build: Build, *, inside: bool) -> None:
         assert con.execute("SELECT count(*) FROM attempt WHERE attempt_id=?", (files.key.attempt_id,)).fetchone() == (0,)
         original = tuple(con.execute("SELECT * FROM attempt WHERE attempt_id<>? ORDER BY rowid", (key.attempt_id,)))
         assert original == before[0]
-        assert con.execute("SELECT count(*) FROM reservation WHERE attempt_id=? AND generation=?",
-                           (key.attempt_id, key.reservation_generation)).fetchone() == (1,)
+        assert con.execute(
+            "SELECT count(*) FROM reservation WHERE attempt_id=? AND generation=?", (key.attempt_id, key.reservation_generation)
+        ).fetchone() == (1,)
         assert reserved is not None and reserved in rows(con)[1]
         committed = rows(con)
         retained[bench.tmp / committed_ref.path] = fresh.read(committed_ref).encode("utf-8")
@@ -184,8 +197,18 @@ def test_advance_reopens_without_losing_the_committed_plan(rig: Repairing, insid
     advanced = NextStepRequest(previous[0], rig.slot.repo.path, AgentSetting(model="m", effort="high"), 1000)
 
     def build(con: sqlite3.Connection, files: EvidenceFiles, begin: Begin) -> Call:
-        admission = NextAdmission(lambda: con, begin, files, rig.tracker.inspect, rig.checkouts, lambda: rig.now,
-                                  lambda _path: True, rig.files, ids=NativeIds(), engine=ENGINE)
+        admission = NextAdmission(
+            lambda: con,
+            begin,
+            files,
+            rig.tracker.inspect,
+            rig.checkouts,
+            lambda: rig.now,
+            lambda _path: True,
+            rig.files,
+            ids=NativeIds(),
+            engine=ENGINE,
+        )
         return lambda: admission.admit_next(advanced)
 
     exercise(rig, build, inside=inside)
@@ -197,9 +220,19 @@ def test_check_repair_reopens_with_a_fresh_key_and_keeps_failed_check_evidence(r
 
     def build(con: sqlite3.Connection, files: EvidenceFiles, begin: Begin) -> Call:
         admission = CheckRepeat(
-            CheckRepeatStore(lambda: con, begin), files, rig.tracker.inspect, rig.checkouts, rig.files, lambda _path: True,
-            lambda path: GitProfileFiles(path, rig.checkouts), Launcher(con), rig.observe,
-            rig.command, lambda: rig.now, ids=NativeIds(), engine=ENGINE
+            CheckRepeatStore(lambda: con, begin),
+            files,
+            rig.tracker.inspect,
+            rig.checkouts,
+            rig.files,
+            lambda _path: True,
+            lambda path: GitProfileFiles(path, rig.checkouts),
+            Launcher(con),
+            rig.observe,
+            rig.command,
+            lambda: rig.now,
+            ids=NativeIds(),
+            engine=ENGINE,
         )
         return lambda: admission.repair(rig.request(), previous, source)
 

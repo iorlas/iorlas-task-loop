@@ -66,7 +66,9 @@ def test_status_detects_snapshot_drift_outside_read_transactions(tmp_path: Path,
 @pytest.mark.parametrize("supplied", [False, True])
 @pytest.mark.parametrize("expired", [False, True])
 def test_observation_holds_custody_without_granting_or_renewing_authority(
-    tmp_path: Path, supplied: bool, expired: bool,
+    tmp_path: Path,
+    supplied: bool,
+    expired: bool,
 ) -> None:
     con = database(tmp_path / "factory.db")
     app = recovery(con)
@@ -105,7 +107,10 @@ def test_observation_holds_custody_without_granting_or_renewing_authority(
 @pytest.mark.parametrize(("change", "outcome"), CHANGES)
 @pytest.mark.parametrize("during_read", [False, True])
 def test_observation_races_return_explained_refusals_without_authorization(
-    tmp_path: Path, change: str, outcome: Outcome, during_read: bool,
+    tmp_path: Path,
+    change: str,
+    outcome: Outcome,
+    during_read: bool,
 ) -> None:
     con = database(tmp_path / "factory.db")
     app = recovery(con)

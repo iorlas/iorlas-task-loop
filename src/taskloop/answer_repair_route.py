@@ -21,14 +21,21 @@ class RepairReason(StrEnum):
 
 def repair_move(ports: StartPorts, backlog: str, minutes: int, view: AttemptView) -> Move | None:
     """Try repair before a round settles its terminal snapshot; current-attempt fences protect successors."""
-    if (view.next not in {"hold", "release", "done", "repeat"} or view.checks is not None
-            or view.hold is not None or view.release is not None or ports.answer_repair is None):
+    if (
+        view.next not in {"hold", "release", "done", "repeat"}
+        or view.checks is not None
+        or view.hold is not None
+        or view.release is not None
+        or ports.answer_repair is None
+    ):
         return None
     try:
         current = ports.reader.attempt_of(backlog, view.task_id)
-        result = (Failed("refused", "changed", "Another attempt is current since this round read the store.")
-                  if current is None or current[0].attempt_id != view.attempt_id else
-                  ports.answer_repair.route(backlog, view.task_id, current[0], minutes))
+        result = (
+            Failed("refused", "changed", "Another attempt is current since this round read the store.")
+            if current is None or current[0].attempt_id != view.attempt_id
+            else ports.answer_repair.route(backlog, view.task_id, current[0], minutes)
+        )
     except StoreUnavailable as error:
         result = Failed("unavailable", "store", str(error))
     if result is None or (isinstance(result, Failed) and result.kind == "not_applicable"):
@@ -68,9 +75,15 @@ class AnswerRepairRouting:
 
     def _route(self, backlog: str, task_id: str, previous: AttemptKey, minutes: int) -> Started | Failed | None:
         execution = self.reader.collect(previous)
-        if (execution is None or execution.answer.failure is None
-                or execution.facts.rc != 0 or execution.facts.timed_out or execution.facts.stop is not None
-                or execution.session_state != "complete" or execution.verdict is not None):
+        if (
+            execution is None
+            or execution.answer.failure is None
+            or execution.facts.rc != 0
+            or execution.facts.timed_out
+            or execution.facts.stop is not None
+            or execution.session_state != "complete"
+            or execution.verdict is not None
+        ):
             return None
         try:
             record = self.reader.load(previous)
@@ -86,7 +99,8 @@ class AnswerRepairRouting:
             return Failed("unavailable", RepairReason.ADMISSION, repair.explanation)
         if repair.outcome is RepairOutcome.REFUSED or repair.key is None:
             return self._current(backlog, task_id, previous) or Failed(
-                "not_applicable", result.reason, result.explanation + " " + repair.explanation)
+                "not_applicable", result.reason, result.explanation + " " + repair.explanation
+            )
         return self._launch(backlog, task_id, repair.key, minutes, existing=repair.outcome is RepairOutcome.EXISTING)
 
     def _launch(self, backlog: str, task_id: str, key: AttemptKey, minutes: int, *, existing: bool) -> Started | Failed:

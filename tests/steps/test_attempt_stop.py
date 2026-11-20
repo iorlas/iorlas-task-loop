@@ -36,7 +36,10 @@ surroundings = attempt_surroundings
 
 @pytest.mark.parametrize("timed_out,escalated,recorded", [(True, False, True), (True, True, True), (False, False, False)])
 def test_hold_cause_is_identical_in_tracker_cli_and_dashboard(
-    surroundings: AttemptSurroundings, timed_out: bool, escalated: bool, recorded: bool,
+    surroundings: AttemptSurroundings,
+    timed_out: bool,
+    escalated: bool,
+    recorded: bool,
 ) -> None:
     con = database(surroundings)
     con.execute("UPDATE attempt SET label='auto'")
@@ -52,15 +55,18 @@ def test_hold_cause_is_identical_in_tracker_cli_and_dashboard(
             intent = StopIntent(worker=WORKER, reason="timeout")
             hooks.before_stop(intent)
             assert not con.in_transaction
-            hooks.after_stop(intent, StopReport(term_sent=True, term_delivered=True,
-                                              kill_sent=escalated, kill_delivered=escalated))
+            hooks.after_stop(intent, StopReport(term_sent=True, term_delivered=True, kill_sent=escalated, kill_delivered=escalated))
         return result
 
     result = app(con, surroundings, execute).execute(KEY, ENTRY)
     assert result.reason == ("run:timeout" if timed_out else "run:killed")
     reader = AttemptStore(lambda: con)
-    cause = RunCause(reason=RunReason.TIMEOUT if timed_out else RunReason.KILLED, timed_out=timed_out, rc=rc,
-                     stop=StopStore(lambda: con).get(KEY.attempt_id))
+    cause = RunCause(
+        reason=RunReason.TIMEOUT if timed_out else RunReason.KILLED,
+        timed_out=timed_out,
+        rc=rc,
+        stop=StopStore(lambda: con).get(KEY.attempt_id),
+    )
     row = HoldStore(lambda: con).insert(HoldInsert(event=event(cause, KEY.attempt_id), now=20))
     agent = reader.attempts()[0]
     files = EvidenceFiles(surroundings.tmp)
@@ -82,7 +88,9 @@ def test_hold_cause_is_identical_in_tracker_cli_and_dashboard(
 
 @pytest.mark.parametrize("trigger", [1, 15])
 def test_entry_interruption_persists_cause_before_normal_capture_and_survives_restart(
-    admitted: Path, surroundings: AttemptSurroundings, trigger: int,
+    admitted: Path,
+    surroundings: AttemptSurroundings,
+    trigger: int,
 ) -> None:
     con = Store(SCHEMA).open_rw(admitted)
     assert con is not None
@@ -135,7 +143,10 @@ def test_entry_interruption_persists_cause_before_normal_capture_and_survives_re
 
 @pytest.mark.parametrize("alive,seen", [(True, "gone"), (False, "unknown"), (False, "gone")])
 def test_interrupted_intent_cannot_release_a_live_or_unknown_agent_and_recovery_never_relaunches(
-    admitted: Path, surroundings: AttemptSurroundings, alive: bool, seen: str,
+    admitted: Path,
+    surroundings: AttemptSurroundings,
+    alive: bool,
+    seen: str,
 ) -> None:
     con = Store(SCHEMA).open_rw(admitted)
     assert con is not None
@@ -168,7 +179,8 @@ def test_interrupted_intent_cannot_release_a_live_or_unknown_agent_and_recovery_
 
 
 def test_release_preserves_custody_of_a_recorded_survivor_after_the_leader_and_group_end(
-    surroundings: AttemptSurroundings, monkeypatch: pytest.MonkeyPatch,
+    surroundings: AttemptSurroundings,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     con = database(surroundings)
     con.execute("UPDATE attempt SET slot_head=?", (head(surroundings.slot),))
@@ -179,8 +191,9 @@ def test_release_preserves_custody_of_a_recorded_survivor_after_the_leader_and_g
         assert hooks is not None and hooks.before_stop is not None and hooks.after_stop is not None
         intent = StopIntent(worker=WORKER, reason="timeout")
         hooks.before_stop(intent)
-        hooks.after_stop(intent, StopReport(term_sent=True, term_delivered=True,
-                                          survivors=[ProcessSurvivor(pid=43, start="survivor-start")]))
+        hooks.after_stop(
+            intent, StopReport(term_sent=True, term_delivered=True, survivors=[ProcessSurvivor(pid=43, start="survivor-start")])
+        )
         return result
 
     assert app(con, surroundings, execute).execute(KEY, ENTRY).reason == "run:timeout"

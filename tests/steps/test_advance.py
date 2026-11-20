@@ -48,7 +48,6 @@ def test_rounds_plan_advance_and_implement_a_task_to_its_check_step_without_a_se
     assert ["round", "moves=1", "stopped=no_free_slot"] in words
 
 
-
 def test_two_done_tasks_and_one_slot_advance_oldest_release_first_and_new_work_waits(factory: Factory) -> None:
     factory.by_hand("tl-2")  # released first
     factory.by_hand("tl-1")
@@ -58,10 +57,15 @@ def test_two_done_tasks_and_one_slot_advance_oldest_release_first_and_new_work_w
     assert factory.round() == [("tl-2", "implement", "advance", "started")] and factory.last.stopped == "no_free_slot"
     assert factory.tracker.ready_reads == reads and factory.tracker.claims == ["tl-2", "tl-1"]  # no ready read, no claim
     assert factory.tracker.shows[shows:] == ["tl-2"]  # tl-1 found no free slot before any tracker read
-    assert factory.round() == [("tl-2", "implement", "commit", "committed release=released branch=published"),
-                               ("tl-1", "implement", "advance", "started")]
-    assert factory.round() == [("tl-1", "implement", "commit", "committed release=released branch=published"),
-                               ("tl-2", "implement", "skip", "no_required"), ("tl-3", "plan", "start", "started")]
+    assert factory.round() == [
+        ("tl-2", "implement", "commit", "committed release=released branch=published"),
+        ("tl-1", "implement", "advance", "started"),
+    ]
+    assert factory.round() == [
+        ("tl-1", "implement", "commit", "committed release=released branch=published"),
+        ("tl-2", "implement", "skip", "no_required"),
+        ("tl-3", "plan", "start", "started"),
+    ]
     assert factory.next_words() == {"tl-1": ("implement", "advance"), "tl-2": ("implement", "advance"), "tl-3": ("plan", "commit")}
 
 
@@ -142,8 +146,9 @@ def test_a_setup_failing_twice_after_the_advance_is_stuck_and_never_relaunched_a
     assert len(factory.lines) == written and len(factory.environment.process.calls) == 2
     assert factory.ran[-2:] == ["unavailable:environment:exit"] * 2  # no third entry: nothing relaunched
     assert factory.next_words() == {"tl-1": ("implement", "stuck:setup_failed")} and factory.current("tl-1") == implement
-    listed = list_attempts(StatusPorts(factory.store, lambda _entry: "gone", lambda: factory.now, lambda _key: None, lambda: "boot"),
-                           stuck=True)
+    listed = list_attempts(
+        StatusPorts(factory.store, lambda _entry: "gone", lambda: factory.now, lambda _key: None, lambda: "boot"), stuck=True
+    )
     assert isinstance(listed, Listed) and [each.next for each in listed.attempts] == ["stuck:setup_failed"]
 
 
@@ -156,8 +161,11 @@ def test_a_claimed_task_the_tracker_lost_is_skipped_and_the_next_advance_and_new
     factory.tracker.beads.pop("tl-1")
     factory.tracker.beads["tl-3"] = task("tl-3")
     scripts(factory, factory.slot, "tl-3")
-    assert factory.round() == [("tl-1", "plan", "skip", "task_missing"), ("tl-2", "implement", "advance", "started"),
-                               ("tl-3", "plan", "start", "started")]
+    assert factory.round() == [
+        ("tl-1", "plan", "skip", "task_missing"),
+        ("tl-2", "implement", "advance", "started"),
+        ("tl-3", "plan", "start", "started"),
+    ]
     assert factory.last.stopped == ""
     assert ("tl-1", "plan", "skip", "task_missing") in factory.round() and factory.last.stopped == ""
     assert factory.con.execute("SELECT count(*) FROM attempt WHERE task_id='tl-1' AND step='implement'").fetchone() == (0,)

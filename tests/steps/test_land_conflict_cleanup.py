@@ -46,7 +46,8 @@ def retained(c: ExecutionCase) -> Save:
     saved = completed or c.ports.store.saved(c.record.key)
     assert saved is not None
     assert c.con.execute("SELECT attempt_id,generation FROM reservation").fetchone() == (
-        None if completed else (c.record.key.attempt_id, c.record.key.reservation_generation))
+        None if completed else (c.record.key.attempt_id, c.record.key.reservation_generation)
+    )
     assert dict(c.ports.repo.branches("task/")) == {"task/tl-1": c.record.request.checked}
     tree = c.ports.repo.tree(saved.commit or "")
     assert tree is not None
@@ -118,8 +119,7 @@ def interrupt_store(c: ExecutionCase, patch: pytest.MonkeyPatch, boundary: str, 
         assert not c.con.in_transaction
         cleanup = updated.cleanup
         phases = {"intent": CleanupPhase.EXCLUDE, "ready": CleanupPhase.PARK, "complete": CleanupPhase.COMPLETE}
-        selected = cleanup is not None and cleanup.phase is phases.get(boundary) and (
-            previous is None or previous.cleanup != cleanup)
+        selected = cleanup is not None and cleanup.phase is phases.get(boundary) and (previous is None or previous.cleanup != cleanup)
         if selected and not after:
             raise KeyboardInterrupt
         value = save(self, key, previous, updated)
@@ -134,7 +134,11 @@ def interrupt_store(c: ExecutionCase, patch: pytest.MonkeyPatch, boundary: str, 
 @pytest.mark.parametrize("boundary", ["intent", "exclude", "ready", "park", "complete", "partial"])
 @pytest.mark.parametrize("after", [False, True])
 def test_cleanup_restart_preserves_saved_and_ignored_bytes(
-    execution_case: ExecutionCase, monkeypatch: pytest.MonkeyPatch, merging: bool, boundary: str, after: bool,
+    execution_case: ExecutionCase,
+    monkeypatch: pytest.MonkeyPatch,
+    merging: bool,
+    boundary: str,
+    after: bool,
 ) -> None:
     c = execution_case
     c.disposition = Disposition.OWNER
@@ -187,7 +191,10 @@ def test_dirty_tracked_cleanup_resumes_reset(execution_case: ExecutionCase, monk
 @pytest.mark.parametrize("changed", ["tracked", "untracked", "ignored", "new", "head", "branch", "ref", "live", "generation"])
 @pytest.mark.parametrize("after", [False, True])
 def test_foreign_changes_keep_cleanup_and_custody_pending(
-    execution_case: ExecutionCase, monkeypatch: pytest.MonkeyPatch, changed: str, after: bool,
+    execution_case: ExecutionCase,
+    monkeypatch: pytest.MonkeyPatch,
+    changed: str,
+    after: bool,
 ) -> None:
     c = execution_case
     c.disposition, c.edit = Disposition.OWNER, edit
@@ -267,8 +274,7 @@ def test_cleanup_transitions_freeze_expectations(execution_case: ExecutionCase) 
     assert isinstance(c.resume(), Terminal)
     saved = retained(c)
     assert saved.cleanup is not None
-    for cleanup in (None, saved.cleanup.model_copy(update={"phase": CleanupPhase.PARK}),
-                    saved.cleanup.model_copy(update={"ignored": {}})):
+    for cleanup in (None, saved.cleanup.model_copy(update={"phase": CleanupPhase.PARK}), saved.cleanup.model_copy(update={"ignored": {}})):
         with pytest.raises((StoreRefused, ValueError)):
             c.ports.store.save(c.record.key, saved, saved.model_copy(update={"cleanup": cleanup}))
 
@@ -291,7 +297,9 @@ def test_ignored_collision_prevents_destructive_cleanup(execution_case: Executio
     saved = c.ports.store.saved(c.record.key)
     assert saved is not None and saved.cleanup is None
     assert c.con.execute("SELECT attempt_id,generation FROM reservation").fetchone() == (
-        c.record.key.attempt_id, c.record.key.reservation_generation)
+        c.record.key.attempt_id,
+        c.record.key.reservation_generation,
+    )
     c.restart()
     assert isinstance(c.resume(), Unavailable) and c.calls == 1
     assert c.slot.read_file("README") == "ignored bytes at tracked path\n"

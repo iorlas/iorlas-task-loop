@@ -28,14 +28,18 @@ def capture(argv: list[str]) -> dict[str, object]:
             code = cli.main([*argv, "--json"])
         except SystemExit as error:
             raise AssertionError(f"CLI case rejected {argv}: {stderr.getvalue()}") from error
-    return {"argv": argv, "exit": code,
-            "stdout": [JSON.validate_json(line) for line in stdout.getvalue().splitlines()],
-            "stderr": [JSON.validate_json(line) for line in stderr.getvalue().splitlines()]}
+    return {
+        "argv": argv,
+        "exit": code,
+        "stdout": [JSON.validate_json(line) for line in stdout.getvalue().splitlines()],
+        "stderr": [JSON.validate_json(line) for line in stderr.getvalue().splitlines()],
+    }
 
 
 def raising(error: Exception) -> Callable[..., Never]:
     def fail(*_args: object, **_kwargs: object) -> Never:
         raise error
+
     return fail
 
 
@@ -66,8 +70,9 @@ def inspections(patch: pytest.MonkeyPatch) -> dict[str, object]:
         patch.setattr(cli, "inspect_tracker_task", lambda *_args, task=task: task)
         cases[f"task.dependencies.{len(dependencies)}"] = capture(argv)
     for linked in (False, True):
-        error = TaskInspectionError("not_found", "Task unavailable", reference=reference if linked else None,
-                                    backend_kind="missing" if linked else None)
+        error = TaskInspectionError(
+            "not_found", "Task unavailable", reference=reference if linked else None, backend_kind="missing" if linked else None
+        )
         patch.setattr(cli, "inspect_tracker_task", raising(error))
         cases[f"task.refused.{linked}"] = capture(argv)
     patch.setattr(cli, "GitViews", lambda _seconds: RepoViews(repo))

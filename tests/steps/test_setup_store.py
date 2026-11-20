@@ -25,16 +25,21 @@ def store(con: sqlite3.Connection) -> SetupStore:
 
 
 def add_owner(con: sqlite3.Connection, identity: str, started: float, *, backlog: str = "tasks", step: str = "implement") -> None:
-    con.execute("""INSERT INTO attempt
+    con.execute(
+        """INSERT INTO attempt
         (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,input_digest,
         schema_version,model,effort,access_policy,deadline,number,seq,slot_head,after_commit,engine_digest,workflow_digest,workflow_sha,
         admitted_at)
         SELECT ?,?,generation,?,adapter,?,?,tracker_root,repo_id,slot,input_path,input_digest,
         schema_version,model,effort,access_policy,deadline,number,seq,slot_head,?,engine_digest,workflow_digest,workflow_sha,
         admitted_at FROM attempt WHERE attempt_id='attempt'""",
-        (identity, f"token-{identity}", step, backlog, identity, B if step == "implement" else None))
-    con.execute("""INSERT INTO setup_run (attempt_id,run,dispatch_token,generation,commit_sha,digest,started_at)
-        VALUES (?,1,?,1,?,?,?)""", (identity, f"token-{identity}", B, DIGEST, started))
+        (identity, f"token-{identity}", step, backlog, identity, B if step == "implement" else None),
+    )
+    con.execute(
+        """INSERT INTO setup_run (attempt_id,run,dispatch_token,generation,commit_sha,digest,started_at)
+        VALUES (?,1,?,1,?,?,?)""",
+        (identity, f"token-{identity}", B, DIGEST, started),
+    )
 
 
 def test_samples_select_ten_latest_implement_owners_not_runs_or_inherited_environments(registered: sqlite3.Connection) -> None:
@@ -53,14 +58,18 @@ def test_samples_select_ten_latest_implement_owners_not_runs_or_inherited_enviro
     before = registered.total_changes
     rows = store(registered).samples("tasks")
     assert [(row.attempt_id, row.run) for row in rows] == [
-        ("owner-10", 1), ("owner-11", 2), *((f"owner-{index:02}", 1) for index in range(9, 1, -1))]
+        ("owner-10", 1),
+        ("owner-11", 2),
+        *((f"owner-{index:02}", 1) for index in range(9, 1, -1)),
+    ]
     assert rows[1].started_at == 10 and rows[1].ended_at is None and rows[1].conclusion is None
     assert all(row.task_id == row.attempt_id and row.repo_id for row in rows)
     assert registered.total_changes == before
 
 
 @pytest.mark.parametrize(
-    "key", [AttemptKey("attempt", "other", 1), AttemptKey("attempt", "dispatch", 2), AttemptKey("other", "dispatch", 1)],
+    "key",
+    [AttemptKey("attempt", "other", 1), AttemptKey("attempt", "dispatch", 2), AttemptKey("other", "dispatch", 1)],
     ids=["token", "generation", "attempt"],
 )
 def test_a_write_under_another_key_is_refused(registered: sqlite3.Connection, key: AttemptKey) -> None:
@@ -73,8 +82,11 @@ def test_an_unknown_owner_cannot_register_or_conclude_setup(registered: sqlite3.
     setup = store(registered)
     setup.start(KEY, 1, B, DIGEST, 10)
     foreign = AttemptKey("unowned-conflict", KEY.dispatch_token, KEY.reservation_generation)
-    for write in (lambda: setup.start(foreign, 1, B, DIGEST, 10), lambda: setup.registered(foreign, 1, 0, ME),
-                  lambda: setup.conclude(foreign, 1, CommandConclusion.PASSED, 0, 11)):
+    for write in (
+        lambda: setup.start(foreign, 1, B, DIGEST, 10),
+        lambda: setup.registered(foreign, 1, 0, ME),
+        lambda: setup.conclude(foreign, 1, CommandConclusion.PASSED, 0, 11),
+    ):
         with pytest.raises(StoreRefused, match="stale_reservation"):
             write()
     assert setup.latest(KEY) == SetupRow(1, B, DIGEST, 0, None, None, 10.0, None)
@@ -87,8 +99,11 @@ def test_every_write_needs_the_held_reservation_of_an_admitted_attempt(registere
     setup = store(registered)
     setup.start(KEY, 1, B, DIGEST, 10)
     registered.execute(change)
-    for write in (lambda: setup.registered(KEY, 1, 0, ME), lambda: setup.conclude(KEY, 1, CommandConclusion.PASSED, 0, 11),
-                  lambda: setup.start(KEY, 2, B, DIGEST, 12)):
+    for write in (
+        lambda: setup.registered(KEY, 1, 0, ME),
+        lambda: setup.conclude(KEY, 1, CommandConclusion.PASSED, 0, 11),
+        lambda: setup.start(KEY, 2, B, DIGEST, 12),
+    ):
         with pytest.raises(StoreRefused, match="stale_reservation"):
             write()
     assert registered.execute("SELECT run,pid,conclusion FROM setup_run").fetchall() == [(1, None, None)]
@@ -99,8 +114,12 @@ def test_a_concluded_run_is_never_rewritten_and_a_run_number_starts_once(registe
     setup.start(KEY, 1, B, DIGEST, 10)
     setup.registered(KEY, 1, 0, ME)
     setup.conclude(KEY, 1, CommandConclusion.FAILED, 3, 11)
-    for write in (lambda: setup.registered(KEY, 1, 1, ME), lambda: setup.conclude(KEY, 1, CommandConclusion.PASSED, 0, 12),
-                  lambda: setup.start(KEY, 1, B, DIGEST, 13), lambda: setup.conclude(KEY, 2, CommandConclusion.PASSED, 0, 12)):
+    for write in (
+        lambda: setup.registered(KEY, 1, 1, ME),
+        lambda: setup.conclude(KEY, 1, CommandConclusion.PASSED, 0, 12),
+        lambda: setup.start(KEY, 1, B, DIGEST, 13),
+        lambda: setup.conclude(KEY, 2, CommandConclusion.PASSED, 0, 12),
+    ):
         with pytest.raises(StoreRefused, match="setup_changed"):
             write()
     assert setup.latest(KEY) == SetupRow(1, B, DIGEST, 0, ME, CommandConclusion.FAILED, 10.0, 11.0)
@@ -108,9 +127,12 @@ def test_a_concluded_run_is_never_rewritten_and_a_run_number_starts_once(registe
 
 def test_latest_is_the_highest_run_whatever_the_clock_and_failures_count_only_the_setups_own(registered: sqlite3.Connection) -> None:
     setup = store(registered)
-    runs: tuple[tuple[int, CommandConclusion, float], ...] = ((1, CommandConclusion.FAILED, 50.0), (2,
-        CommandConclusion.INTERRUPTED, 40.0), (3, CommandConclusion.PASSED, 30.0),
-                                                       (4, CommandConclusion.LINGERING, 20.0))
+    runs: tuple[tuple[int, CommandConclusion, float], ...] = (
+        (1, CommandConclusion.FAILED, 50.0),
+        (2, CommandConclusion.INTERRUPTED, 40.0),
+        (3, CommandConclusion.PASSED, 30.0),
+        (4, CommandConclusion.LINGERING, 20.0),
+    )
     for run, conclusion, started in runs:
         setup.start(KEY, run, B, DIGEST, started)
         setup.conclude(KEY, run, conclusion, None, started + 1)
@@ -153,12 +175,21 @@ def test_only_the_identity_write_uses_the_registration_connection(registered: sq
     assert opened.count("registration") == 1
 
 
-@pytest.mark.parametrize(("conclusion", "held"), [(None, True), (CommandConclusion.LINGERING, True),
-    (CommandConclusion.TIMED_OUT, True), (CommandConclusion.FAILED, False),
-                                                  (CommandConclusion.PASSED, False), (CommandConclusion.DIRTY,
-                                                      False), (CommandConclusion.INTERRUPTED, False)])
+@pytest.mark.parametrize(
+    ("conclusion", "held"),
+    [
+        (None, True),
+        (CommandConclusion.LINGERING, True),
+        (CommandConclusion.TIMED_OUT, True),
+        (CommandConclusion.FAILED, False),
+        (CommandConclusion.PASSED, False),
+        (CommandConclusion.DIRTY, False),
+        (CommandConclusion.INTERRUPTED, False),
+    ],
+)
 def test_a_run_holds_the_slot_while_unfinished_or_concluded_with_a_group_maybe_left(
-    conclusion: CommandConclusion | None, held: bool,
+    conclusion: CommandConclusion | None,
+    held: bool,
 ) -> None:
     assert SetupRow(1, B, DIGEST, 0, ME, conclusion, 10.0, None).unsettled == (ME if held else None)
 
@@ -176,16 +207,25 @@ def test_a_checks_attempts_setup_runs_are_fenced_by_its_own_held_reservation(che
             setup.start(key, 3, X, DIGEST, 13)
 
 
-@pytest.mark.parametrize("change", [
-    "DELETE FROM reservation", "UPDATE reservation SET generation=2", "UPDATE reservation SET slot='s1'",
-    "UPDATE checks_attempt SET phase='concluded',conclusion='passed',concluded_at=5",
-], ids=["released", "generation", "slot", "concluded"])
+@pytest.mark.parametrize(
+    "change",
+    [
+        "DELETE FROM reservation",
+        "UPDATE reservation SET generation=2",
+        "UPDATE reservation SET slot='s1'",
+        "UPDATE checks_attempt SET phase='concluded',conclusion='passed',concluded_at=5",
+    ],
+    ids=["released", "generation", "slot", "concluded"],
+)
 def test_a_checks_attempts_setup_needs_its_held_reservation_while_admitted(checking: sqlite3.Connection, change: str) -> None:
     setup = store(checking)
     setup.start(CHECKS, 1, X, DIGEST, 10)
     checking.execute(change)
-    for write in (lambda: setup.registered(CHECKS, 1, 0, ME), lambda: setup.conclude(CHECKS, 1, CommandConclusion.PASSED, 0, 11),
-                  lambda: setup.start(CHECKS, 2, X, DIGEST, 12)):
+    for write in (
+        lambda: setup.registered(CHECKS, 1, 0, ME),
+        lambda: setup.conclude(CHECKS, 1, CommandConclusion.PASSED, 0, 11),
+        lambda: setup.start(CHECKS, 2, X, DIGEST, 12),
+    ):
         with pytest.raises(StoreRefused, match="stale_reservation"):
             write()
     assert checking.execute("SELECT run,pid,conclusion FROM setup_run").fetchall() == [(1, None, None)]
@@ -203,16 +243,26 @@ def test_a_land_candidates_setup_runs_are_fenced_by_its_own_held_reservation_whi
             setup.start(key, 2, SQUASH, DIGEST, 12)
 
 
-@pytest.mark.parametrize("change", [
-    "DELETE FROM reservation", "UPDATE reservation SET generation=2", "UPDATE reservation SET slot='s2'",
-    "UPDATE land_candidate SET validation='passed',validated_at=5", "UPDATE land_candidate SET superseded='moved',superseded_at=5",
-], ids=["released", "generation", "slot", "concluded", "superseded"])
+@pytest.mark.parametrize(
+    "change",
+    [
+        "DELETE FROM reservation",
+        "UPDATE reservation SET generation=2",
+        "UPDATE reservation SET slot='s2'",
+        "UPDATE land_candidate SET validation='passed',validated_at=5",
+        "UPDATE land_candidate SET superseded='moved',superseded_at=5",
+    ],
+    ids=["released", "generation", "slot", "concluded", "superseded"],
+)
 def test_a_land_candidates_setup_needs_its_held_reservation_while_pending(landing: sqlite3.Connection, change: str) -> None:
     setup = store(landing)
     setup.start(CANDIDATE, 1, SQUASH, DIGEST, 10)
     landing.execute(change)
-    for write in (lambda: setup.registered(CANDIDATE, 1, 0, ME), lambda: setup.conclude(CANDIDATE, 1, CommandConclusion.PASSED, 0, 11),
-                  lambda: setup.start(CANDIDATE, 2, SQUASH, DIGEST, 12)):
+    for write in (
+        lambda: setup.registered(CANDIDATE, 1, 0, ME),
+        lambda: setup.conclude(CANDIDATE, 1, CommandConclusion.PASSED, 0, 11),
+        lambda: setup.start(CANDIDATE, 2, SQUASH, DIGEST, 12),
+    ):
         with pytest.raises(StoreRefused, match="stale_reservation"):
             write()
     assert landing.execute("SELECT run,pid,conclusion FROM setup_run").fetchall() == [(1, None, None)]
@@ -220,7 +270,8 @@ def test_a_land_candidates_setup_needs_its_held_reservation_while_pending(landin
 
 @pytest.mark.parametrize("conclusion", list(CommandConclusion))
 def test_setup_uses_the_canonical_vocabulary_with_its_own_policy(
-    registered: sqlite3.Connection, conclusion: CommandConclusion,
+    registered: sqlite3.Connection,
+    conclusion: CommandConclusion,
 ) -> None:
     setup = store(registered)
     setup.start(KEY, 1, B, DIGEST, 10)
@@ -233,8 +284,9 @@ def test_setup_uses_the_canonical_vocabulary_with_its_own_policy(
         setup.conclude(KEY, 1, conclusion, None, 11)
         row = setup.latest(KEY)
         assert row is not None and row.conclusion is conclusion
-        assert setup.failures(KEY) == int(conclusion in {
-            CommandConclusion.FAILED, CommandConclusion.TIMED_OUT, CommandConclusion.LINGERING, CommandConclusion.DIRTY})
+        assert setup.failures(KEY) == int(
+            conclusion in {CommandConclusion.FAILED, CommandConclusion.TIMED_OUT, CommandConclusion.LINGERING, CommandConclusion.DIRTY}
+        )
 
 
 @pytest.mark.parametrize("value", ["undefined", "unknown", b"passed", 1])

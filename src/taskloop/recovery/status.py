@@ -17,13 +17,21 @@ from taskloop.recovery.store import RecoveryStore
 
 
 def reader(store: AttemptStore, clock: Callable[[], float]) -> Callable[[AttemptKey], Observations | Result]:
-    return Recovery(RecoveryStore(store.connect), NativeProcesses(),
-                    lambda _admission: Claim(state=ClaimState.UNKNOWN, explanation="Status has no claim authority."),
-                    lambda _admission: nullcontext(), clock, NativeIds()).status
+    return Recovery(
+        RecoveryStore(store.connect),
+        NativeProcesses(),
+        lambda _admission: Claim(state=ClaimState.UNKNOWN, explanation="Status has no claim authority."),
+        lambda _admission: nullcontext(),
+        clock,
+        NativeIds(),
+    ).status
 
 
 def process_gate(
-    store: AttemptStore, key: AttemptKey, read: Callable[[AttemptKey], Observations | Result], expired: bool,
+    store: AttemptStore,
+    key: AttemptKey,
+    read: Callable[[AttemptKey], Observations | Result],
+    expired: bool,
 ) -> Literal["unknown", "wait", "stuck:hung", "start"] | None:
     try:
         if HoldStore(store.connect, store.begin).of_attempts((key.attempt_id,)):

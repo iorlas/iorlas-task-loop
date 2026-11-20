@@ -10,10 +10,36 @@ from taskloop.attempt_export_store import ExportRow, ExportStore
 from taskloop.slot_list_store import SlotHold, SlotListStore
 
 COLUMNS = [
-    "task_id", "step", "number", "repeat_reason", "engine_digest", "workflow_digest", "workflow_sha", "harness",
-    "model", "effort", "compaction_token_limit", "input_digest", "admitted_at", "ended_at", "wall_seconds", "disposition",
-    "effect", "answer_kind", "rc", "timed_out", "turns", "t_in", "t_cached", "t_out",
-    "c_in", "c_cached", "c_out", "usage_incomplete", "latest_checks_conclusion", "latest_checks_reason",
+    "task_id",
+    "step",
+    "number",
+    "repeat_reason",
+    "engine_digest",
+    "workflow_digest",
+    "workflow_sha",
+    "harness",
+    "model",
+    "effort",
+    "compaction_token_limit",
+    "input_digest",
+    "admitted_at",
+    "ended_at",
+    "wall_seconds",
+    "disposition",
+    "effect",
+    "answer_kind",
+    "rc",
+    "timed_out",
+    "turns",
+    "t_in",
+    "t_cached",
+    "t_out",
+    "c_in",
+    "c_cached",
+    "c_out",
+    "usage_incomplete",
+    "latest_checks_conclusion",
+    "latest_checks_reason",
 ]
 
 
@@ -43,6 +69,5 @@ def test_the_slot_list_shows_a_held_slot_with_its_attempt_and_a_free_one(registe
     registered.execute("INSERT INTO slot (repo_id,name,path) VALUES (?,'s2','/slots/s2')", (repo,))
     found = slot_list.list_slots(SlotListStore(lambda: registered))
     assert isinstance(found, slot_list.SlotList)
-    assert [(row.name, row.state, row.attempt_id) for row in found.rows] == [
-        ("s1", SlotHold.HELD, "attempt"), ("s2", SlotHold.FREE, None)]
+    assert [(row.name, row.state, row.attempt_id) for row in found.rows] == [("s1", SlotHold.HELD, "attempt"), ("s2", SlotHold.FREE, None)]
     assert rows_render.records(found)[1]["attempt_id"] is None

@@ -32,12 +32,13 @@ from taskloop.attempt_types import (
     Uncommitted,
     WorkerGone,
 )
+from taskloop.commit_failure import commit_failure
 from taskloop.discussion import RefreshDiscussion, replace_block
 from taskloop.earlier_input import without
 from taskloop.evidence_files import EvidenceError, EvidenceFiles
 from taskloop.ids import Ids
 from taskloop.input_context import InputError
-from taskloop.operations import Clock, Failed, Launch, Started, commit_failure, deadline_after, launched
+from taskloop.operations import Clock, Failed, Launch, Started, deadline_after, launched
 from taskloop.slot_lock import SlotBusy, SlotLockUnavailable
 from taskloop.slot_release import ParkHold, entry_stopped, worker_stopped
 from taskloop.step import Step
@@ -166,8 +167,11 @@ class StepRepeat:
         alive = worker_stopped(self.gone, record.phase, record.worker)
         if alive is None:
             return record
-        return (commit_failure(CommitWaiting(CommitWaitingReason.WORKER_ALIVE))
-                if alive.reason == CommitWaitingReason.WORKER_ALIVE else Failed("unsettled", alive.reason))
+        return (
+            commit_failure(CommitWaiting(CommitWaitingReason.WORKER_ALIVE))
+            if alive.reason == CommitWaitingReason.WORKER_ALIVE
+            else Failed("unsettled", alive.reason)
+        )
 
     def _takeover(self, request: RepeatRequest, slot_path: str) -> Admitted | AdmitRefused | AdmitUnavailable | Failed:
         """`admit_repeat` under the slot's lock (a release parks only under it); released before the launch, since the
@@ -181,8 +185,13 @@ class StepRepeat:
             return Failed("unavailable", "lock")
 
     def _launch(
-        self, backlog: str, task_id: str, current: AttemptKey, admitted: Admitted | AdmitRefused | AdmitUnavailable | Failed,
-        number: int, minutes: int,
+        self,
+        backlog: str,
+        task_id: str,
+        current: AttemptKey,
+        admitted: Admitted | AdmitRefused | AdmitUnavailable | Failed,
+        number: int,
+        minutes: int,
     ) -> Started | Failed:
         """The same launcher as attempt 1. A concurrent start that took the step over first (`task_attempted`): its
         attempt is launched as existing."""

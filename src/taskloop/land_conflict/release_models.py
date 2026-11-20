@@ -24,16 +24,26 @@ class Release(Value):
     @model_validator(mode="after")
     def consistent(self) -> Self:
         if isinstance(self.result, Completed):
-            if (self.work.phase is not Phase.COMPLETE
-                    or (self.result.commit, self.result.source, self.result.target, self.result.explanation)
-                    != (self.work.result, self.work.source, self.work.target, self.work.explanation)):
+            if self.work.phase is not Phase.COMPLETE or (
+                self.result.commit,
+                self.result.source,
+                self.result.target,
+                self.result.explanation,
+            ) != (self.work.result, self.work.source, self.work.target, self.work.explanation):
                 raise ValueError("release requires the exact completed work and result")
-        elif (self.work.phase is not Phase.TERMINAL or self.result.reason != self.work.reason
-              or self.result.explanation != self.work.explanation):
+        elif (
+            self.work.phase is not Phase.TERMINAL
+            or self.result.reason != self.work.reason
+            or self.result.explanation != self.work.explanation
+        ):
             raise ValueError("release requires the exact terminal work and result")
         for checkout in (self.before, self.after):
             if (checkout.repo_id, checkout.root, checkout.path, checkout.gitdir) != (
-                    self.work.repo_id, self.work.root, self.work.slot, self.work.gitdir):
+                self.work.repo_id,
+                self.work.root,
+                self.work.slot,
+                self.work.gitdir,
+            ):
                 raise ValueError("release checkouts must retain the reserved work identity")
             if checkout.branch is not None or checkout.merging or checkout.merge_head is not None or checkout.index:
                 raise ValueError("release requires clean detached checkout expectations")

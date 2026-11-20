@@ -62,7 +62,7 @@ def _inspect(ports: Ports, generation: int, *, claims_only: bool) -> Result:
             seen = Seen.UNKNOWN
         unresolved.append(action)
         (uncertain if seen in {Seen.UNKNOWN, Seen.GONE} or action.state is ActionState.UNCERTAIN else active).append(caller)
-    for owner in (() if claims_only else ports.owners()):
+    for owner in () if claims_only else ports.owners():
         seen = ports.observe(owner)
         if seen is Seen.ALIVE:
             active.append(owner)

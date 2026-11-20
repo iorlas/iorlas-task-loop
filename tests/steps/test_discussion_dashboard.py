@@ -36,7 +36,9 @@ def test_prompt_beyond_64k_is_complete_saved_text(registered: sqlite3.Connection
 
 @pytest.mark.parametrize("damage", ["missing", "digest"])
 def test_missing_or_damaged_prompt_is_unavailable(
-    registered: sqlite3.Connection, tmp_path: Path, damage: str,
+    registered: sqlite3.Connection,
+    tmp_path: Path,
+    damage: str,
 ) -> None:
     if damage == "missing":
         registered.execute("UPDATE attempt SET input_path='missing.txt'")

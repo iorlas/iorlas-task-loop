@@ -55,15 +55,18 @@ def test_a_missing_backlog_or_binding_value_is_refused_by_name() -> None:
     assert resolve_label(partial, "other", "flag") == "flag"
 
 
-@pytest.mark.parametrize("text, reason, key", [
-    ('[backlogs.tasks]\ncheckout = "relative"\n', "relative_path", "backlogs.tasks.checkout"),
-    ('[backlogs.tasks]\ntracker_root = 3\n', "type", "backlogs.tasks.tracker_root"),
-    ('[backlogs.tasks]\nlabel = ""\n', "type", "backlogs.tasks.label"),
-    ('[backlogs.tasks]\nlabel = 1\n', "type", "backlogs.tasks.label"),
-    ('[backlogs.tasks]\nbranch = "x"\n', "unknown_key", "backlogs.tasks.branch"),
-    ('backlogs = "tasks"\n', "type", "backlogs"),
-    ('[backlogs]\ntasks = 1\n', "type", "backlogs.tasks"),
-])
+@pytest.mark.parametrize(
+    "text, reason, key",
+    [
+        ('[backlogs.tasks]\ncheckout = "relative"\n', "relative_path", "backlogs.tasks.checkout"),
+        ("[backlogs.tasks]\ntracker_root = 3\n", "type", "backlogs.tasks.tracker_root"),
+        ('[backlogs.tasks]\nlabel = ""\n', "type", "backlogs.tasks.label"),
+        ("[backlogs.tasks]\nlabel = 1\n", "type", "backlogs.tasks.label"),
+        ('[backlogs.tasks]\nbranch = "x"\n', "unknown_key", "backlogs.tasks.branch"),
+        ('backlogs = "tasks"\n', "type", "backlogs"),
+        ("[backlogs]\ntasks = 1\n", "type", "backlogs.tasks"),
+    ],
+)
 def test_a_bad_backlogs_table_is_refused(text: str, reason: str, key: str) -> None:
     refused = resolve(text, Flags(), HOME)
     assert isinstance(refused, ConfigRefused) and (refused.reason, refused.key) == (reason, key)
@@ -103,8 +106,9 @@ def test_a_round_with_only_the_config_binding_runs(monkeypatch: pytest.MonkeyPat
     monkeypatch.setattr(cli_step, "run_round", lambda _ports, request: requests.append(request) or Round("tasks", ()))
     assert main(["--config", str(config), "rounds", "once", "--model", "m", "--effort", "high", "--minutes", "30"]) == 0
     assert opened == ["/tracker"]
-    assert requests == [cli_step.NextRequest("tasks", "/tracker", Path("/checkout"), "auto", StepSettings(),
-                                             Overrides(model="m", effort="high"), 30)]
+    assert requests == [
+        cli_step.NextRequest("tasks", "/tracker", Path("/checkout"), "auto", StepSettings(), Overrides(model="m", effort="high"), 30)
+    ]
 
 
 @pytest.mark.parametrize("structured", [False, True])

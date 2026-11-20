@@ -127,10 +127,21 @@ def test_attempt_one_runs_the_setup_in_order_then_dispatches(entry: Entry, slot:
     entry.execute()
     found = folders(slot.path)
     assert env.events == [
-        "ensure .t/s1", "ensure s1/uv-cache", "ensure s1/uv-tools", "empty .t/s1", "probe",
-        "empty .env/s1", "ensure s1/uv-cache", "ensure s1/uv-tools",
-        "exec just install", "group 501", "exec just bootstrap", "group 502",
-        "empty .t/s1", "renew", "agent",
+        "ensure .t/s1",
+        "ensure s1/uv-cache",
+        "ensure s1/uv-tools",
+        "empty .t/s1",
+        "probe",
+        "empty .env/s1",
+        "ensure s1/uv-cache",
+        "ensure s1/uv-tools",
+        "exec just install",
+        "group 501",
+        "exec just bootstrap",
+        "group 502",
+        "empty .t/s1",
+        "renew",
+        "agent",
     ]
     assert seen == [[(1, None, None, 0, 501)]]  # the identity was committed before the command executed
     b = env.con.execute("SELECT base_commit FROM attempt").fetchone()[0]
@@ -140,7 +151,11 @@ def test_attempt_one_runs_the_setup_in_order_then_dispatches(entry: Entry, slot:
     call = env.process.calls[0]
     assert (call.cwd, call.timeout) == (str(slot.path), 90)
     assert {key: call.env[key] for key in ("HOME", "TMPDIR", "UV_CACHE_DIR", "UV_TOOL_DIR")} == {
-        "HOME": "/home/p", "TMPDIR": str(found.tmp), "UV_CACHE_DIR": str(found.cache), "UV_TOOL_DIR": str(found.tools)}
+        "HOME": "/home/p",
+        "TMPDIR": str(found.tmp),
+        "UV_CACHE_DIR": str(found.cache),
+        "UV_TOOL_DIR": str(found.tools),
+    }
     assert "UV_OFFLINE" not in call.env
     log = EvidenceFiles(tmp_path).setup_log(KEY, 1).read_text()
     assert log == "$ just install\ndone\nexit 0\n$ just bootstrap\ndone\nexit 0\n"
@@ -154,9 +169,18 @@ def test_full_access_prepares_the_same_folders_without_a_sandbox_probe(entry: En
     assert result.execution is not None and result.execution.answer.kind == "valid"
     assert env.probes == []
     assert env.events == [
-        "ensure .t/s1", "ensure s1/uv-cache", "ensure s1/uv-tools", "empty .t/s1",
-        "empty .env/s1", "ensure s1/uv-cache", "ensure s1/uv-tools",
-        "exec just bootstrap", "group 501", "empty .t/s1", "renew", "agent",
+        "ensure .t/s1",
+        "ensure s1/uv-cache",
+        "ensure s1/uv-tools",
+        "empty .t/s1",
+        "empty .env/s1",
+        "ensure s1/uv-cache",
+        "ensure s1/uv-tools",
+        "exec just bootstrap",
+        "group 501",
+        "empty .t/s1",
+        "renew",
+        "agent",
     ]
     found = folders(slot.path)
     argv = entry.specs[0].argv
@@ -195,7 +219,15 @@ def test_a_passed_run_is_reused_by_a_relaunch_of_the_still_admitted_attempt(entr
     entry.environment.events.clear()
     entry.execute()
     assert entry.environment.events == [
-        "ensure .t/s1", "ensure s1/uv-cache", "ensure s1/uv-tools", "empty .t/s1", "probe", "empty .t/s1", "renew", "agent"]
+        "ensure .t/s1",
+        "ensure s1/uv-cache",
+        "ensure s1/uv-tools",
+        "empty .t/s1",
+        "probe",
+        "empty .t/s1",
+        "renew",
+        "agent",
+    ]
     assert slot.read_file(".venv/kept") == "from setup" and rows(entry.environment.con) == [(1, "passed", 0, 0, 501)]
 
 
@@ -210,8 +242,11 @@ def test_a_passed_run_at_another_base_or_setup_runs_again(entry: Entry, commit: 
     con = entry.environment.con
     d = con.execute("SELECT slot_head FROM attempt").fetchone()[0]
     digest = setup_digest((("just", "bootstrap"),) if same_setup else (("just", "install"),))
-    con.execute("""INSERT INTO setup_run (attempt_id,run,dispatch_token,generation,commit_sha,digest,started_at,ended_at,conclusion,rc)
-                VALUES ('attempt',1,'dispatch',1,?,?,1,2,'passed',0)""", (commit or d, digest))
+    con.execute(
+        """INSERT INTO setup_run (attempt_id,run,dispatch_token,generation,commit_sha,digest,started_at,ended_at,conclusion,rc)
+                VALUES ('attempt',1,'dispatch',1,?,?,1,2,'passed',0)""",
+        (commit or d, digest),
+    )
     entry.execute()
     assert "exec just bootstrap" in entry.environment.events and rows(con)[-1] == (2, "passed", 0, 0, 501)
 
@@ -254,8 +289,11 @@ def test_an_uncertain_start_keeps_its_identity_and_is_reconciled_by_the_next_ent
 
 def test_an_unfinished_run_with_no_registered_command_is_interrupted_unobserved(entry: Entry) -> None:
     con = entry.environment.con
-    con.execute("INSERT INTO setup_run (attempt_id,run,dispatch_token,generation,commit_sha,digest,started_at) "
-                "VALUES ('attempt',1,'dispatch',1,?,?,1)", ("e" * 40, "f" * 64))
+    con.execute(
+        "INSERT INTO setup_run (attempt_id,run,dispatch_token,generation,commit_sha,digest,started_at) "
+        "VALUES ('attempt',1,'dispatch',1,?,?,1)",
+        ("e" * 40, "f" * 64),
+    )
     entry.execute()
     assert not any(event.startswith("seen") for event in entry.environment.events)
     assert [row[:2] for row in rows(con)] == [(1, "interrupted"), (2, "passed")]
@@ -384,8 +422,9 @@ def test_a_slot_moved_by_setup_is_a_failed_run(entry: Entry, slot: FakeWorktree)
     assert rows(entry.environment.con)[0][1] == "dirty"
 
 
-@pytest.mark.parametrize(("lingering", "conclusion", "reason"), [(False, "failed", "environment:exit"),
-                                                                    (True, "lingering", "environment:lingering")])
+@pytest.mark.parametrize(
+    ("lingering", "conclusion", "reason"), [(False, "failed", "environment:exit"), (True, "lingering", "environment:lingering")]
+)
 def test_a_supervision_failure_after_the_start_is_judged_by_its_group(entry: Entry, lingering: bool, conclusion: str, reason: str) -> None:
     """The command ran: its group is checked, never assumed empty."""
     entry.environment.process.script = [Command(supervision_error=True, lingering=lingering)]
@@ -416,7 +455,7 @@ def test_the_implement_agent_writes_its_folders_offline_and_the_probe_sees_what_
     assert shell == {"TMPDIR": str(found.tmp), "UV_CACHE_DIR": str(found.cache), "UV_TOOL_DIR": str(found.tools), "UV_OFFLINE": "1"}
     (probe,) = env.probes
     assert list(probe.exe[:2]) == ["/bin/codex", "sandbox"]
-    assert probe.exe[4:4 + len(access)] == tuple(access)
+    assert probe.exe[4 : 4 + len(access)] == tuple(access)
     assert (probe.env, probe.folders) == ({"HOME": "/home/p"}, found)
     assert "UV_OFFLINE" not in env.process.calls[0].env
 
@@ -434,8 +473,12 @@ def test_a_plan_attempt_launches_with_plans_access_and_no_added_environment(
     assert plan.environment.probes == []
 
 
-@pytest.mark.parametrize(("root", "reason"), [(Path("/" + "r" * 52), None), (Path("/" + "r" * 53), "environment:path_long")],
-                         ids=["64_bytes", "65_bytes"], indirect=["root"])
+@pytest.mark.parametrize(
+    ("root", "reason"),
+    [(Path("/" + "r" * 52), None), (Path("/" + "r" * 53), "environment:path_long")],
+    ids=["64_bytes", "65_bytes"],
+    indirect=["root"],
+)
 def test_a_tmpdir_over_64_bytes_is_refused_before_any_folder_is_made(entry: Entry, slot: FakeWorktree, reason: str | None) -> None:
     """A Unix socket path holds 107 bytes on Linux: 64 for TMPDIR leaves 43 for what a test appends."""
     assert len(str(folders(slot.path).tmp).encode()) == (64 if reason is None else 65)
@@ -446,8 +489,10 @@ def test_a_tmpdir_over_64_bytes_is_refused_before_any_folder_is_made(entry: Entr
         assert refused(entry, "refused", reason) == []
 
 
-@pytest.mark.parametrize("case", ["into_slot", "evidence_holds_one", "outside_slots", "into_each_other", "slots_in_db_folder",
-                                  "unreadable", "sibling_slot", "locks"])
+@pytest.mark.parametrize(
+    "case",
+    ["into_slot", "evidence_holds_one", "outside_slots", "into_each_other", "slots_in_db_folder", "unreadable", "sibling_slot", "locks"],
+)
 def test_a_root_that_overlaps_what_the_agent_must_not_write_is_refused(entry: Entry, slot: FakeWorktree, case: str) -> None:
     """Resolved, links followed: each root must be exactly where it belongs beside the slot (never another slot, `.locks/`
     or another root), and none may equal, hold or sit inside the slot, its Git directories, the person's checkout, the
@@ -495,8 +540,9 @@ class ChecksSlot:
         env, gitdir = self.environment, self.slot.repo.identity().common_dir / "worktrees" / self.slot.path.name
         env.events.clear()
         target = SetupFor(CHECKS, self.slot.path, self.x, None, 100.0, True)
-        return env.preparation().prepare_for(target, Prepared(self.x, gitdir, self.slot.repo.path), lambda: renewal,
-                                             {"HOME": "/home/p"}, probe=None)
+        return env.preparation().prepare_for(
+            target, Prepared(self.x, gitdir, self.slot.repo.path), lambda: renewal, {"HOME": "/home/p"}, probe=None
+        )
 
 
 @pytest.fixture
@@ -516,8 +562,16 @@ def test_a_checks_slot_is_reset_hard_to_x_without_a_probe_then_set_up_at_x(check
     env.process.script = [Command(effect=lambda: seen.append(tuple(slot.read_file(path) for path in left)))]
     assert checks_slot.prepare() is None
     assert seen == [("one", None, None)] and env.probes == []
-    assert env.events == [*ENSURED, "empty .t/s1", "empty .env/s1", "ensure s1/uv-cache", "ensure s1/uv-tools",
-                          "exec just bootstrap", "group 501", "empty .t/s1"]
+    assert env.events == [
+        *ENSURED,
+        "empty .t/s1",
+        "empty .env/s1",
+        "ensure s1/uv-cache",
+        "ensure s1/uv-tools",
+        "exec just bootstrap",
+        "group 501",
+        "empty .t/s1",
+    ]
     assert env.profiles.read == [checks_slot.x] and "UV_OFFLINE" not in env.process.calls[0].env
     stored = env.con.execute("SELECT attempt_id,run,commit_sha,conclusion FROM setup_run").fetchall()
     assert stored == [("checks", 1, checks_slot.x, "passed")]
@@ -588,11 +642,12 @@ def test_a_setup_stop_that_left_survivors_is_lingering_for_an_implement_slot_too
 
 @pytest.mark.parametrize("harness", [HarnessKind.CLAUDE, HarnessKind.OPENCODE])
 def test_non_codex_implement_keeps_shared_setup_without_a_codex_probe(entry: Entry, harness: HarnessKind, tmp_path: Path) -> None:
-    policy = (ClaudePolicy(settings_file=tmp_path / "captured.json", settings="{}")
-              if harness is HarnessKind.CLAUDE else OpenCodePolicy())
+    policy = ClaudePolicy(settings_file=tmp_path / "captured.json", settings="{}") if harness is HarnessKind.CLAUDE else OpenCodePolicy()
     chosen = AgentSetting(harness=harness, model="chosen", effort="medium", access=policy)
-    entry.environment.con.execute("UPDATE attempt SET harness=?,provider=?,model=?,effort=?,access_policy=?",
-                                  (chosen.harness, chosen.provider, chosen.model, chosen.effort, encode_policy(policy)))
+    entry.environment.con.execute(
+        "UPDATE attempt SET harness=?,provider=?,model=?,effort=?,access_policy=?",
+        (chosen.harness, chosen.provider, chosen.model, chosen.effort, encode_policy(policy)),
+    )
     result = entry.execute()
     assert result.execution is not None and result.execution.answer.kind == "valid"
     assert entry.environment.probes == [] and entry.environment.process.calls

@@ -27,7 +27,10 @@ def explanation(text: str) -> object:
 
 @pytest.mark.parametrize("length", [1499, 1500, 1501])
 def test_an_unsafe_repeat_receives_the_stored_answer_with_a_character_cap(
-    step: Step, slot: FakeWorktree, slot_files: FakeSlotFiles, length: int,
+    step: Step,
+    slot: FakeWorktree,
+    slot_files: FakeSlotFiles,
+    length: int,
 ) -> None:
     told = "é🦉" * (length // 2) + "é" * (length % 2)
     step.run(KEY, ENTRY, Agent(slot, {P: "# Plan\n"}, PLAN | {"explanation": told}))
@@ -41,7 +44,8 @@ def test_an_unsafe_repeat_receives_the_stored_answer_with_a_character_cap(
 
 
 def test_each_repeat_replaces_the_answer_and_preserves_the_admitted_input_and_fresh_launch(
-    step: Step, slot: FakeWorktree,
+    step: Step,
+    slot: FakeWorktree,
 ) -> None:
     first = Agent(slot, {P: "# Plan\n", STRAY: "leftover"}, PLAN | {"explanation": "Earlier discovery"})
     step.run(KEY, ENTRY, first)
@@ -69,7 +73,7 @@ def test_each_repeat_replaces_the_answer_and_preserves_the_admitted_input_and_fr
         assert len(launched.specs) == 1 and "resume" not in launched.specs[0].argv
         assert "earlier-native-session" not in " ".join(launched.specs[0].argv)
     launched = last.specs[0].stdin
-    assert text[text.index(BEGIN):] in launched and "Latest discovery" in launched
+    assert text[text.index(BEGIN) :] in launched and "Latest discovery" in launched
 
 
 def test_answer_data_cannot_close_factory_blocks_or_inject_new_lines(step: Step, slot: FakeWorktree) -> None:
@@ -80,12 +84,14 @@ def test_answer_data_cannot_close_factory_blocks_or_inject_new_lines(step: Step,
     assert explanation(text) == told and text.count(BEGIN) == text.count(END) == 1
     agent = Agent(slot, {}, UNCHANGED, removed=[STRAY])
     assert step.run(second, entry, agent) == "pending commit"
-    assert text[text.index(BEGIN):] in agent.specs[0].stdin
+    assert text[text.index(BEGIN) :] in agent.specs[0].stdin
 
 
 @pytest.mark.parametrize("invalid", [False, True])
 def test_a_missing_or_invalid_answer_is_unavailable_without_inventing_an_explanation(
-    step: Step, slot: FakeWorktree, invalid: bool,
+    step: Step,
+    slot: FakeWorktree,
+    invalid: bool,
 ) -> None:
     step.run(KEY, ENTRY, Agent(slot, {P: "# Plan\n", STRAY: "leftover"}, PLAN))
     failure = AnswerFailureData(rule=AnswerRule.SHAPE if invalid else AnswerRule.MISSING, explanation="No usable answer")
@@ -127,8 +133,9 @@ def test_a_racing_predecessor_revision_refuses_admission(step: Step, slot: FakeW
             step.con.execute("UPDATE attempt SET rev=rev+1 WHERE attempt_id='attempt'")
             return ref
 
-    chain = ChainAdmission(lambda: step.con, step.store.begin, Racing(step.tmp), lambda: 10,
-                           step.checkouts, step.files, ids=NativeIds(), engine=ENGINE)
+    chain = ChainAdmission(
+        lambda: step.con, step.store.begin, Racing(step.tmp), lambda: 10, step.checkouts, step.files, ids=NativeIds(), engine=ENGINE
+    )
     refused = chain.admit_repeat(RepeatRequest(KEY, "task text", 100, "uncommitted"))
     assert isinstance(refused, AdmitRefused) and refused.reason == "task_attempted"
     assert step.con.execute("SELECT count(*) FROM attempt").fetchone() == (1,)
@@ -151,5 +158,5 @@ def test_dispatch_keeps_the_admitted_facts_after_earlier_evidence_changes(step: 
     step.con.execute("UPDATE execution SET answer_path='no-longer-readable' WHERE attempt_id='attempt'")
     agent = Agent(slot, {}, UNCHANGED, removed=[STRAY])
     assert step.run(second, entry, agent) == "pending commit"
-    assert text[text.index(BEGIN):] in agent.specs[0].stdin
+    assert text[text.index(BEGIN) :] in agent.specs[0].stdin
     assert explanation(agent.specs[0].stdin) == PLAN["explanation"]

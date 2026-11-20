@@ -16,7 +16,10 @@ class ProfileFiles:
 
 @pytest.mark.parametrize("structured", [False, True])
 def test_profile_checkout_defaults_to_the_current_directory(
-    structured: bool, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str],
+    structured: bool,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     seen: list[Path] = []
 
@@ -36,12 +39,18 @@ def test_profile_checkout_defaults_to_the_current_directory(
         assert output.out.startswith("Profile: setup and checks at HEAD; required and target from main\n")
 
 
-@pytest.mark.parametrize(("argv", "required"), [
-    (["repo", "show"], "PATH"),
-    (["slot", "adopt"], "CHECKOUT"),
-])
+@pytest.mark.parametrize(
+    ("argv", "required"),
+    [
+        (["repo", "show"], "PATH"),
+        (["slot", "adopt"], "CHECKOUT"),
+    ],
+)
 def test_positional_checkouts_are_required_before_an_operation(
-    argv: list[str], required: str, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str],
+    argv: list[str],
+    required: str,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     monkeypatch.setattr("taskloop.cli.show_repo", lambda _arguments: pytest.fail("inspection started"))
     monkeypatch.setattr("taskloop.cli.cli_step.run", lambda _arguments: pytest.fail("operation started"))

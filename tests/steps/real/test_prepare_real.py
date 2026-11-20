@@ -79,8 +79,19 @@ def test_a_detached_slot_is_prepared_on_its_task_branch_and_the_plan_is_committe
     git(origin, "commit", "-q", "-am", "origin main moves on")
     m = git(origin, "rev-parse", "HEAD").strip()
     admission = AttemptAdmission(
-        lambda: factory, begin_immediate, EvidenceFiles(art), tasks, VIEWS.checkouts, claimed, claimed, lambda: 10, probe, RealSlotFiles()
-    , ids=NativeIds(), engine=ENGINE)
+        lambda: factory,
+        begin_immediate,
+        EvidenceFiles(art),
+        tasks,
+        VIEWS.checkouts,
+        claimed,
+        claimed,
+        lambda: 10,
+        probe,
+        RealSlotFiles(),
+        ids=NativeIds(),
+        engine=ENGINE,
+    )
     admitted = admission.admit(
         AdmitRequest(
             "tl-1",
@@ -105,8 +116,13 @@ def test_a_detached_slot_is_prepared_on_its_task_branch_and_the_plan_is_committe
         return FakeRun(outcome)(harness, spec, timeout, hooks)
 
     attempts = Attempts(
-        store, EvidenceFiles(art), AgentLaunch(lambda _harness: ("/bin/codex", {}), ids=NativeIds()), run,
-            lambda: 10, VIEWS.checkouts, files
+        store,
+        EvidenceFiles(art),
+        AgentLaunch(lambda _harness: ("/bin/codex", {}), ids=NativeIds()),
+        run,
+        lambda: 10,
+        VIEWS.checkouts,
+        files,
     )
     assert attempts.execute(admitted.key, ENTRY).reason == "commit"
     verdict = FactoryCommit(store, VIEWS.checkouts, files, lambda _worker: True, lambda: 20, hold, ids=NativeIds()).commit(admitted.key)

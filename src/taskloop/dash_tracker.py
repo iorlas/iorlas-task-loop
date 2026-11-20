@@ -73,10 +73,25 @@ class CachedTracker:
             if kept is None:
                 raise
             return kept[1]
-        found = None if facts is None else (
-            Fields(f"P{facts.priority}" if facts.priority is not None else "none", facts.labels, f"task/{facts.task_id}", facts.assignee,
-                   facts.created_at, facts.updated_at, facts.dependencies, facts.description, facts.acceptance, facts.design, facts.notes),
-            tuple(Comment(each.author, each.at, each.text) for each in comments),
+        found = (
+            None
+            if facts is None
+            else (
+                Fields(
+                    f"P{facts.priority}" if facts.priority is not None else "none",
+                    facts.labels,
+                    f"task/{facts.task_id}",
+                    facts.assignee,
+                    facts.created_at,
+                    facts.updated_at,
+                    facts.dependencies,
+                    facts.description,
+                    facts.acceptance,
+                    facts.design,
+                    facts.notes,
+                ),
+                tuple(Comment(each.author, each.at, each.text) for each in comments),
+            )
         )
         self._tasks[task_id] = (now, found)
         return found

@@ -50,7 +50,6 @@ class TaskEvent(Value):
             raise ValueError("A checks failure requires checks causality")
         if isinstance(self.cause, StuckCause) and (self.cause.reason is StuckReason.CHECKS_REFUSED) != checks:
             raise ValueError("The stuck reason must belong to the causal attempt's step")
-        if (isinstance(self.cause, (RunCause, StuckCause)) and self.cause.stop is not None
-                and self.cause.stop.attempt_id != self.cause_id):
+        if isinstance(self.cause, (RunCause, StuckCause)) and self.cause.stop is not None and self.cause.stop.attempt_id != self.cause_id:
             raise ValueError("The stop must identify the causal attempt")
         return self

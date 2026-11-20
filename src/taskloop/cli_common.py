@@ -33,8 +33,9 @@ FROM_CONFIG = "(default: the backlog's entry in the machine config)"  # the help
 
 
 def backlog(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("--backlog", metavar="KEY",
-                        help="The tracker backlog (key) the task belongs to (default: the machine config's backlog)")
+    parser.add_argument(
+        "--backlog", metavar="KEY", help="The tracker backlog (key) the task belongs to (default: the machine config's backlog)"
+    )
 
 
 def tracker_root(parser: argparse.ArgumentParser) -> None:

@@ -76,8 +76,17 @@ def connect(path: Path, *, initialize: bool = False) -> sqlite3.Connection:
 
 class RestartFactory(Factory):
     def __init__(
-        self, con: sqlite3.Connection, tmp: Path, slot: FakeWorktree, views: PinnedViews, files: SlotFiles,
-        tracker: Tracker, effects: Effects, patch: pytest.MonkeyPatch, *, adopted: bool = False,
+        self,
+        con: sqlite3.Connection,
+        tmp: Path,
+        slot: FakeWorktree,
+        views: PinnedViews,
+        files: SlotFiles,
+        tracker: Tracker,
+        effects: Effects,
+        patch: pytest.MonkeyPatch,
+        *,
+        adopted: bool = False,
     ) -> None:
         super().__init__(con, tmp, slot, views, files, tracker, adopted=adopted)
         self.effects, self.patch = effects, patch
@@ -85,9 +94,14 @@ class RestartFactory(Factory):
         capture = self.store.capture
 
         def captured(
-            admission: Admission, worker: Worker | None, facts: ExecutionFacts, evidence: Evidence,
-            session_state: Literal["complete", "pending", "conflict", "fault"], callback: Callback | None = None,
-            *, now: float,
+            admission: Admission,
+            worker: Worker | None,
+            facts: ExecutionFacts,
+            evidence: Evidence,
+            session_state: Literal["complete", "pending", "conflict", "fault"],
+            callback: Callback | None = None,
+            *,
+            now: float,
         ) -> Literal["accepted", "already_same", "conflict"]:
             result = capture(admission, worker, facts, evidence, session_state, callback, now=now)
             effects.after("capture")
@@ -111,8 +125,15 @@ class RestartFactory(Factory):
         return RunOutcome(rc=0, worker=worker, summary=Summary(text=json.dumps(answer), res={"ref": "saved-session"}))
 
     def attempts(self) -> Attempts:
-        return Attempts(self.store, EvidenceFiles(self.tmp), AgentLaunch(lambda _h: ("/bin/codex", {}), ids=NativeIds()),
-                        self.execute_agent, lambda: self.now, self.checkouts, self.files)
+        return Attempts(
+            self.store,
+            EvidenceFiles(self.tmp),
+            AgentLaunch(lambda _h: ("/bin/codex", {}), ids=NativeIds()),
+            self.execute_agent,
+            lambda: self.now,
+            self.checkouts,
+            self.files,
+        )
 
     def recovery(self) -> Recovery:
         def claim(admission: Admission) -> Claim:
@@ -133,16 +154,25 @@ class RestartFactory(Factory):
         authorized = RecoveryLaunch(recovery)(key, OWNER, self.now + minutes * 60)
         assert authorized.outcome is Outcome.AUTHORIZED and authorized.intent is not None
         result = Continuation(recovery, attempts, NativeContinuation(attempts, recovery.store))(
-            key, OWNER, intent=authorized.intent,
+            key,
+            OWNER,
+            intent=authorized.intent,
         )
         assert result.state is State.COMPLETED, result
         return Launched(key, (OWNER.pid, OWNER.start, OWNER.boot))
 
     def releaser(self) -> SlotRelease:
-        return replace(super().releaser(),
-                       observe=lambda entry: "matching" if self.effects.processes.states.get(entry[0]) is Seen.ALIVE
-                       else "unknown" if self.effects.processes.states.get(entry[0]) is Seen.UNKNOWN else "gone",
-                       setup_seen=lambda identity: self.effects.processes.states.get(identity.pid, Seen.GONE).value)
+        return replace(
+            super().releaser(),
+            observe=lambda entry: (
+                "matching"
+                if self.effects.processes.states.get(entry[0]) is Seen.ALIVE
+                else "unknown"
+                if self.effects.processes.states.get(entry[0]) is Seen.UNKNOWN
+                else "gone"
+            ),
+            setup_seen=lambda identity: self.effects.processes.states.get(identity.pid, Seen.GONE).value,
+        )
 
     def install_hooks(self) -> None:
         commit, release, publish = FactoryCommit.commit, SlotRelease.release, BranchPublish.publish
@@ -174,5 +204,14 @@ class RestartFactory(Factory):
 
     def reopen(self) -> RestartFactory:
         self.con.close()
-        return RestartFactory(connect(self.tmp / "factory.db"), self.tmp, self.slot, self.checkouts, self.files,
-                              self.tracker, self.effects, self.patch, adopted=True)
+        return RestartFactory(
+            connect(self.tmp / "factory.db"),
+            self.tmp,
+            self.slot,
+            self.checkouts,
+            self.files,
+            self.tracker,
+            self.effects,
+            self.patch,
+            adopted=True,
+        )

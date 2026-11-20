@@ -53,22 +53,36 @@ def test_initializers_cannot_reexport_private_modules() -> None:
 
 
 def test_new_nested_folders_protect_only_their_private_modules(tmp_path: Path) -> None:
-    project(tmp_path, {
-        "__init__.py": "", "flat.py": "", "feature/__init__.py": "", "feature/api.py": "",
-        "feature/private.py": "", "feature/child/__init__.py": "", "feature/child/api.py": "",
-        "feature/child/private.py": "", "feature/static/style.css": "", "static/app.js": "",
-    })
+    project(
+        tmp_path,
+        {
+            "__init__.py": "",
+            "flat.py": "",
+            "feature/__init__.py": "",
+            "feature/api.py": "",
+            "feature/private.py": "",
+            "feature/child/__init__.py": "",
+            "feature/child/api.py": "",
+            "feature/child/private.py": "",
+            "feature/static/style.css": "",
+            "static/app.js": "",
+        },
+    )
     text = generator.generate(tmp_path, "[importlinter]\nroot_package = taskloop\n")
     config = configuration(text)
     parent = "importlinter:contract:slice-taskloop.feature"
     child = "importlinter:contract:slice-taskloop.feature.child"
     assert values(config, parent, "protected_modules") == {"taskloop.feature.private"}
     assert values(config, parent, "allowed_importers") == {
-        "taskloop.feature", "taskloop.feature.api", "taskloop.feature.private",
+        "taskloop.feature",
+        "taskloop.feature.api",
+        "taskloop.feature.private",
     }
     assert values(config, child, "protected_modules") == {"taskloop.feature.child.private"}
     assert values(config, child, "allowed_importers") == {
-        "taskloop.feature.child", "taskloop.feature.child.api", "taskloop.feature.child.private",
+        "taskloop.feature.child",
+        "taskloop.feature.child.api",
+        "taskloop.feature.child.private",
     }
     assert not any("static" in name or name.endswith("slice-taskloop") for name in config.sections())
     for name in (parent, child):
@@ -97,9 +111,16 @@ def test_generation_preserves_reviewed_exceptions_and_unrelated_text(tmp_path: P
     assert text.startswith(before)
 
 
-@pytest.mark.parametrize("added", [
-    "shelf_request.py", "feature/__init__.py", "feature/new.py", "feature/api.py", "feature/child/private.py",
-])
+@pytest.mark.parametrize(
+    "added",
+    [
+        "shelf_request.py",
+        "feature/__init__.py",
+        "feature/new.py",
+        "feature/api.py",
+        "feature/child/private.py",
+    ],
+)
 def test_new_module_invalidates_committed_coverage(tmp_path: Path, added: str) -> None:
     project(tmp_path, {"__init__.py": "", "feature/private.py": ""})
     text = generator.generate(tmp_path, "[importlinter]\nroot_package = taskloop\n")
@@ -107,10 +128,16 @@ def test_new_module_invalidates_committed_coverage(tmp_path: Path, added: str) -
     assert generator.generate(tmp_path, text) != text
 
 
-@pytest.mark.parametrize("source", [
-    "from . import private as alias", "from .private import Thing", "import taskloop.feature.private as alias",
-    "from taskloop.feature import private", "from .api import Thing",
-])
+@pytest.mark.parametrize(
+    "source",
+    [
+        "from . import private as alias",
+        "from .private import Thing",
+        "import taskloop.feature.private as alias",
+        "from taskloop.feature import private",
+        "from .api import Thing",
+    ],
+)
 def test_initializer_bypass_is_rejected(tmp_path: Path, source: str) -> None:
     project(tmp_path, {"feature/__init__.py": source, "feature/private.py": "", "feature/api.py": ""})
     with pytest.raises(AssertionError):

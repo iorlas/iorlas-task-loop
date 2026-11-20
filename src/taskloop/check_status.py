@@ -17,8 +17,10 @@ from taskloop.setup_store import ProcessSeen
 type Route = Literal["advance", "launch", "rerun", "answer", "abandoned"]
 type ChecksNext = Literal["start", "wait", "release", "done", "unknown", "stuck:hung", "stuck:checks_refused"]
 REFUSED_STUCK: Final = 2  # counted relaunches in a row (section 6.1) after which rounds stop relaunching a checks attempt
-HALF_DONE: Final = ("The task's abandon is half done: its checks attempt is abandoned but the claim is still kept. "
-                    "The abandon must finish returning the claim before fresh admission.")
+HALF_DONE: Final = (
+    "The task's abandon is half done: its checks attempt is abandoned but the claim is still kept. "
+    "The abandon must finish returning the claim before fresh admission."
+)
 
 
 @dataclass(frozen=True)
@@ -90,9 +92,7 @@ def _relaunch(commands: ProcessSeen, expired: bool) -> ChecksNext:
     return ("stuck:hung" if expired else "wait") if commands == "alive" else "start"
 
 
-def commands_seen(
-    seen: Callable[[OwnedProcess], ProcessSeen], setup: OwnedProcess | None, results: tuple[ResultRow, ...]
-) -> ProcessSeen:
+def commands_seen(seen: Callable[[OwnedProcess], ProcessSeen], setup: OwnedProcess | None, results: tuple[ResultRow, ...]) -> ProcessSeen:
     """The setup run's unsettled command and every unsettled result's registered command, by the entry's own rule
     (`owned_processes.setup_seen`: another boot is gone): any alive is `alive`, else any unknown is `unknown`."""
     found = {seen(process) for process in (setup, *(row.process for row in results if row.unsettled)) if process is not None}

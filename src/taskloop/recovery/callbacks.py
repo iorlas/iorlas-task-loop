@@ -42,8 +42,12 @@ class Callbacks:
     def capture(self, pending: PendingExecution) -> CaptureResult:
         identity, result = pending.identity, pending.result
         worker = result.raw.worker
-        if (identity != self.identity or result.admission != self.admission or worker is None or
-                (worker.pid, worker.pgid, worker.start, worker.boot) !=
-                (identity.worker.pid, identity.worker.pgid, identity.worker.start, identity.worker.boot)):
+        if (
+            identity != self.identity
+            or result.admission != self.admission
+            or worker is None
+            or (worker.pid, worker.pgid, worker.start, worker.boot)
+            != (identity.worker.pid, identity.worker.pgid, identity.worker.start, identity.worker.boot)
+        ):
             return CaptureResult("conflict", "worker_mismatch")
         return self.app.capture(result, identity)

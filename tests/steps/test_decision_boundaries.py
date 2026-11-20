@@ -17,8 +17,13 @@ from taskloop.attempt_types import Checkouts, SlotFiles
 
 
 def test_normal_work_needs_no_skill_or_managed_hook_installation(
-    factory: sqlite3.Connection, repo: FakeRepo, root: Path, tmp_path: Path,
-    checkouts: Checkouts, slot_files: SlotFiles, monkeypatch: pytest.MonkeyPatch,
+    factory: sqlite3.Connection,
+    repo: FakeRepo,
+    root: Path,
+    tmp_path: Path,
+    checkouts: Checkouts,
+    slot_files: SlotFiles,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(os, "environ", {})
     slots(factory, repo, root, 1)

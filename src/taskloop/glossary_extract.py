@@ -20,7 +20,7 @@ def cells(line: str) -> tuple[str, ...]:
     while index < len(line):
         char = line[index]
         if char == "\\" and index + 1 < len(line):
-            part += line[index:index + 2]
+            part += line[index : index + 2]
             index += 2
             continue
         if char == "`":

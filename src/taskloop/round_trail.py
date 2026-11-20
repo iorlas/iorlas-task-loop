@@ -35,7 +35,7 @@ class Trail:
         self.wrote = True
         try:
             self.log(stamped(self.clock(), self.backlog, *words))
-        except (OSError, EvidenceError):
+        except OSError, EvidenceError:
             self.logged = False
             return
         self.written.add(key)

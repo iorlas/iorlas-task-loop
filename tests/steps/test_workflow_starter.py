@@ -12,7 +12,13 @@ from taskloop.workflow_render import feedback_opening, render
 from taskloop.workflow_starter import STARTER, Created, Exists, scaffold, starter_path
 
 TASK = TaskInspection(
-    TaskReference(TaskScope("tasks"), "tl-1"), "Add a widget", "It must do X.", "- X works", (), "in_progress", "taskloop",
+    TaskReference(TaskScope("tasks"), "tl-1"),
+    "Add a widget",
+    "It must do X.",
+    "- X works",
+    (),
+    "in_progress",
+    "taskloop",
 )
 CONTEXT = InputContext("a" * 40, ("make check",), "Glossary.\n", ())
 

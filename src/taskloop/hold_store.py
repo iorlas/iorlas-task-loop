@@ -50,11 +50,16 @@ SUPERSEDED: Final = f"EXISTS (SELECT 1 FROM attempt p WHERE p.attempt_id=task_ho
 # The rows that may have added `held` (labels NULL, `moved`, `absent`), not cleared, whose attempt is not current; with
 # whether the task's current attempt (its highest `seq`) has a hold of its own that may own `held` (labels NULL, `moved`
 # or `absent`; a `not_ours`, `closed` or `missing` one wrote no label, so the old `held` is still the factory's to remove).
-UNCLEARED: Final = COLUMNS + """,(SELECT EXISTS (SELECT 1 FROM task_hold g WHERE g.attempt_id=q.attempt_id
+UNCLEARED: Final = (
+    COLUMNS
+    + """,(SELECT EXISTS (SELECT 1 FROM task_hold g WHERE g.attempt_id=q.attempt_id
  AND (g.labels IS NULL OR g.labels IN ('moved','absent'))) FROM attempt q
- WHERE q.adapter=p.adapter AND q.backlog=p.backlog AND q.task_id=p.task_id ORDER BY q.seq DESC LIMIT 1)""" + JOINED + f"""
+ WHERE q.adapter=p.adapter AND q.backlog=p.backlog AND q.task_id=p.task_id ORDER BY q.seq DESC LIMIT 1)"""
+    + JOINED
+    + f"""
  WHERE p.backlog=? AND h.cleared_at IS NULL AND (h.labels IS NULL OR h.labels IN ('moved','absent')) AND {LATER}
  ORDER BY h.held_at,h.attempt_id"""
+)
 
 
 class HoldInsert(Value):
@@ -107,10 +112,18 @@ def _row(row: tuple[object, ...]) -> HoldRow:
         if event.attempt_id != as_text(row[0]):
             raise ValueError("Hold event does not identify its relational attempt")
         return HoldRow(
-            event=event, held_at=stored_real(row[2]), labels=stored_word(row[3], LABELS),
-            labelled_at=stored_nullable_real(row[4]), commenting_at=stored_nullable_real(row[5]),
-            commented_at=stored_nullable_real(row[6]), cleared_at=stored_nullable_real(row[7]), rev=as_int(row[8]),
-            backlog=as_text(row[9]), task_id=as_text(row[10]), tracker_root=as_text(row[11]), label=as_nullable_text(row[12]),
+            event=event,
+            held_at=stored_real(row[2]),
+            labels=stored_word(row[3], LABELS),
+            labelled_at=stored_nullable_real(row[4]),
+            commenting_at=stored_nullable_real(row[5]),
+            commented_at=stored_nullable_real(row[6]),
+            cleared_at=stored_nullable_real(row[7]),
+            rev=as_int(row[8]),
+            backlog=as_text(row[9]),
+            task_id=as_text(row[10]),
+            tracker_root=as_text(row[11]),
+            label=as_nullable_text(row[12]),
         )
     except ValueError as error:
         raise StoreUnavailable("Malformed stored hold event") from error
@@ -127,8 +140,12 @@ class HoldStore(StoreConnection):
     def latest(self, task: TaskReference) -> HoldRow | None:
         """Most recent recorded hold, including holds whose tracker label has been cleared."""
         with self._connection() as con:
-            found = con.execute(LOADED + """ WHERE p.adapter=? AND p.backlog=? AND p.task_id=?
-             ORDER BY h.held_at DESC,p.seq DESC LIMIT 1""", (task.scope.adapter, task.scope.backlog, task.task_id)).fetchone()
+            found = con.execute(
+                LOADED
+                + """ WHERE p.adapter=? AND p.backlog=? AND p.task_id=?
+             ORDER BY h.held_at DESC,p.seq DESC LIMIT 1""",
+                (task.scope.adapter, task.scope.backlog, task.task_id),
+            ).fetchone()
         return None if found is None else _row(found)
 
     def of_attempts(self, ids: tuple[str, ...]) -> dict[str, HoldRow]:
@@ -171,9 +188,13 @@ class HoldStore(StoreConnection):
     def current_hold(self, attempt_id: str) -> HoldRow | None:
         """The hold of the current attempt (highest `seq`) of `attempt_id`'s task, when that is another attempt."""
         with self._connection() as con:
-            found = con.execute(LOADED + """ WHERE h.attempt_id=(SELECT q.attempt_id FROM attempt q JOIN attempt a
+            found = con.execute(
+                LOADED
+                + """ WHERE h.attempt_id=(SELECT q.attempt_id FROM attempt q JOIN attempt a
              ON q.adapter=a.adapter AND q.backlog=a.backlog AND q.task_id=a.task_id WHERE a.attempt_id=?1 ORDER BY q.seq DESC
-             LIMIT 1) AND h.attempt_id<>?1""", (attempt_id,)).fetchone()
+             LIMIT 1) AND h.attempt_id<>?1""",
+                (attempt_id,),
+            ).fetchone()
         return None if found is None else _row(found)
 
     def insert(self, hold: HoldInsert) -> HoldRow:
@@ -186,8 +207,10 @@ class HoldStore(StoreConnection):
                 raise StoreRefused("unlabelled")
             if fenced is None or not fenced[1] or fenced[2]:
                 raise StoreRefused("changed")
-            con.execute(f"INSERT INTO task_hold ({HOLD}) VALUES ({marks(HOLD)})",
-                        (event.attempt_id, encode_event(event), hold.now, None, None, None, None, None, 0))
+            con.execute(
+                f"INSERT INTO task_hold ({HOLD}) VALUES ({marks(HOLD)})",
+                (event.attempt_id, encode_event(event), hold.now, None, None, None, None, None, 0),
+            )
             return self._read(con, event.attempt_id)
 
     def labelled(self, attempt_id: str, rev: int, labels: Labelled, now: float) -> HoldRow:
@@ -201,8 +224,15 @@ class HoldStore(StoreConnection):
         taken (another caller's live lease, a recorded comment, a word that writes none, a cleared hold, or `rev` moved):
         the caller posts nothing."""
         try:
-            return self._update(attempt_id, rev, "commenting_at=?", (now,), f"""labels IN {COMMENTED} AND commented_at IS NULL
-            AND cleared_at IS NULL AND (commenting_at IS NULL OR commenting_at<?)""", (now - COMMENT_LEASE,))
+            return self._update(
+                attempt_id,
+                rev,
+                "commenting_at=?",
+                (now,),
+                f"""labels IN {COMMENTED} AND commented_at IS NULL
+            AND cleared_at IS NULL AND (commenting_at IS NULL OR commenting_at<?)""",
+                (now - COMMENT_LEASE,),
+            )
         except StoreRefused:
             return None
 
@@ -213,8 +243,13 @@ class HoldStore(StoreConnection):
     def cleared(self, attempt_id: str, rev: int, now: float) -> HoldRow:
         """`held` is off the task, or owned by its new hold (7.3): only for a row `uncleared` lists (A not current). A row
         whose label step never finished becomes `superseded` in the same write, so `cleared_at` always has a word."""
-        return self._update(attempt_id, rev, "labels=coalesce(labels,'superseded'),labelled_at=coalesce(labelled_at,?),cleared_at=?",
-                            (now, now), f"cleared_at IS NULL AND (labels IS NULL OR labels IN ('moved','absent')) AND {SUPERSEDED}")
+        return self._update(
+            attempt_id,
+            rev,
+            "labels=coalesce(labels,'superseded'),labelled_at=coalesce(labelled_at,?),cleared_at=?",
+            (now, now),
+            f"cleared_at IS NULL AND (labels IS NULL OR labels IN ('moved','absent')) AND {SUPERSEDED}",
+        )
 
     def uncommenting(self, attempt_id: str, rev: int) -> None:
         """The lease given back after a failed comment call (no comment recorded), so the next round retries at once;
@@ -231,11 +266,13 @@ class HoldStore(StoreConnection):
             if con.execute("DELETE FROM task_hold WHERE attempt_id=? AND rev=? AND cleared_at IS NULL", (attempt_id, rev)).rowcount != 1:
                 raise StoreRefused("changed")
 
-    def _update(self, attempt_id: str, rev: int, sets: str, values: tuple[object, ...], phase: str,
-                bound: tuple[object, ...] = ()) -> HoldRow:
+    def _update(
+        self, attempt_id: str, rev: int, sets: str, values: tuple[object, ...], phase: str, bound: tuple[object, ...] = ()
+    ) -> HoldRow:
         with self._connection(write=True) as con:
-            changed = con.execute(f"UPDATE task_hold SET {sets},rev=rev+1 WHERE attempt_id=? AND rev=? AND {phase}",
-                                  (*values, attempt_id, rev, *bound)).rowcount
+            changed = con.execute(
+                f"UPDATE task_hold SET {sets},rev=rev+1 WHERE attempt_id=? AND rev=? AND {phase}", (*values, attempt_id, rev, *bound)
+            ).rowcount
             if changed != 1:
                 raise StoreRefused("changed")
             return self._read(con, attempt_id)

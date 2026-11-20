@@ -25,11 +25,22 @@ def read_discussion(task: TaskInspection, binding: TaskBinding, client: Discussi
         try:
             found = task if task_id == task.reference.task_id else inspect_task(binding, client, task_id)
             comments = task_comments(client, task_id)
-            sources.append(DiscussionSource(task_id=task_id, title=found.title, relationships=tuple(sorted(links[task_id])),
-                                            comments=tuple(DiscussionComment(
-                                                author=c.author, at=c.at, text=c.text,
-                                                generated=c.author == ACTOR and c.text.startswith("taskloop hold: "),
-                                            ) for c in comments)))
+            sources.append(
+                DiscussionSource(
+                    task_id=task_id,
+                    title=found.title,
+                    relationships=tuple(sorted(links[task_id])),
+                    comments=tuple(
+                        DiscussionComment(
+                            author=c.author,
+                            at=c.at,
+                            text=c.text,
+                            generated=c.author == ACTOR and c.text.startswith("taskloop hold: "),
+                        )
+                        for c in comments
+                    ),
+                )
+            )
         except TaskInspectionError as error:
             raise TaskInspectionError(error.kind, f"Discussion source {task_id}: {error}") from error
     return tuple(sources)

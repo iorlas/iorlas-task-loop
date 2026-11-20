@@ -68,14 +68,37 @@ def recovery_words(detail: str, path: Path, version: int) -> None:
 @pytest.mark.parametrize("version", [*VERSIONS, SCHEMA.version])
 @pytest.mark.parametrize("as_json", [False, True])
 def test_rounds_restart_reports_the_same_recovery_in_human_and_json_and_preserves_rows(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], version: int, as_json: bool,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    version: int,
+    as_json: bool,
 ) -> None:
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
     path = incompatible(tmp_path, version)
     before = path.read_bytes()
-    argv = ["rounds", "start", "--db", str(path), "--artifacts", str(tmp_path / "art"), "--backlog", "tasks",
-            "--tracker-root", "/tracker", "--checkout", "/checkout", "--label", "auto", "--model", "m", "--effort", "high",
-            "--minutes", "30"]
+    argv = [
+        "rounds",
+        "start",
+        "--db",
+        str(path),
+        "--artifacts",
+        str(tmp_path / "art"),
+        "--backlog",
+        "tasks",
+        "--tracker-root",
+        "/tracker",
+        "--checkout",
+        "/checkout",
+        "--label",
+        "auto",
+        "--model",
+        "m",
+        "--effort",
+        "high",
+        "--minutes",
+        "30",
+    ]
     for _ in range(2):
         assert main([*argv, *(["--json"] if as_json else [])]) == 1
         output = capsys.readouterr()
@@ -97,7 +120,9 @@ def test_rounds_restart_reports_the_same_recovery_in_human_and_json_and_preserve
 
 @pytest.mark.parametrize("version", [*VERSIONS, SCHEMA.version])
 def test_incompatible_rounds_reaches_no_lock_handler_or_round(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, version: int,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    version: int,
 ) -> None:
     path = incompatible(tmp_path, version)
 
@@ -155,7 +180,9 @@ class Handler:
 
 @pytest.mark.parametrize("retry", [False, True])
 def test_normal_rounds_restart_reconciles_claims_before_scheduling_without_retake(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, retry: bool,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    retry: bool,
 ) -> None:
     path = tmp_path / "factory.db"
     con = Store(SCHEMA).open_rw(path)

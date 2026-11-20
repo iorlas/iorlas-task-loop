@@ -101,8 +101,11 @@ def test_a_discarded_factory_leaves_in_progress_rows_with_an_expired_lease_that_
         return Bead(task_id, status="in_progress", assignee=assignee, labels=("auto",), lease_expires_at=lease)
 
     records = [
-        claimed("t-old", "2027-01-15T07:00:00Z"), claimed("t-live", "2027-01-15T09:00:00Z"), claimed("t-nolease"),
-        claimed("t-other", "2027-01-15T07:00:00Z", "someone"), Bead("t-open", status="open", labels=("auto",)),
+        claimed("t-old", "2027-01-15T07:00:00Z"),
+        claimed("t-live", "2027-01-15T09:00:00Z"),
+        claimed("t-nolease"),
+        claimed("t-other", "2027-01-15T07:00:00Z", "someone"),
+        Bead("t-open", status="open", labels=("auto",)),
     ]
     rows = ready_rows(ReadyTracker(records, ready=["t-open"]), "auto", NOW, retake=True)
     assert [row.task_id for row in rows] == ["t-open", "t-old"]
@@ -120,10 +123,14 @@ def test_ready_rows_keep_the_trackers_order_label_and_scheduling_fields() -> Non
     assert client.ready_reads == ["auto"] and client.reads == []
 
 
-@pytest.mark.parametrize("fault, kind", [
-    (BdError("malformed", "bd failed"), "malformed"), (BdError("timeout", "bd failed"), "tracker_unavailable"),
-    (BdError("other", "bd failed"), "tracker_unavailable"),
-])
+@pytest.mark.parametrize(
+    "fault, kind",
+    [
+        (BdError("malformed", "bd failed"), "malformed"),
+        (BdError("timeout", "bd failed"), "tracker_unavailable"),
+        (BdError("other", "bd failed"), "tracker_unavailable"),
+    ],
+)
 def test_a_failed_ready_read_raises_and_is_never_empty(fault: BdError, kind: str) -> None:
     client = ReadyTracker(ready_fault=fault)
     with pytest.raises(TaskInspectionError) as failure:

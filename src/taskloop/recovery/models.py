@@ -61,8 +61,7 @@ class Intent(Model):
 
     @model_validator(mode="after")
     def consistent(self) -> Intent:
-        if (self.execution is not None and self.execution.phase is Phase.REGISTERED
-                and self.execution.revision != self.attempt_revision + 1):
+        if self.execution is not None and self.execution.phase is Phase.REGISTERED and self.execution.revision != self.attempt_revision + 1:
             raise ValueError("Execution revision does not match worker registration")
         return self
 

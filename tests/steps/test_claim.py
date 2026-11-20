@@ -16,7 +16,8 @@ def test_exact_claim_spellings_round_trip(word: ClaimWord, text: str) -> None:
 
 
 @pytest.mark.parametrize(
-    "text", ["", "unknown", "Held", "LOST", "Unrenewed", "FAULT", " held", "held ", "lost\n", "\tfault"],
+    "text",
+    ["", "unknown", "Held", "LOST", "Unrenewed", "FAULT", " held", "held ", "lost\n", "\tfault"],
 )
 def test_invalid_claim_spellings_fail(text: str) -> None:
     with pytest.raises(ValueError):

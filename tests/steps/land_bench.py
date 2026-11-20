@@ -53,8 +53,11 @@ from taskloop.task import TaskBinding, TaskInspection, TaskScope
 from taskloop.tracker import inspect_task
 from taskloop.tracker_client import CloseAnswer
 
-PROFILE = {"setup": [["just", "bootstrap"]], "required": ["check", "test"], "checks": [
-    {"name": "check", "argv": ["just", "check"], "timeout": 600}, {"name": "test", "argv": ["just", "test"], "timeout": 600}]}
+PROFILE = {
+    "setup": [["just", "bootstrap"]],
+    "required": ["check", "test"],
+    "checks": [{"name": "check", "argv": ["just", "check"], "timeout": 600}, {"name": "test", "argv": ["just", "test"], "timeout": 600}],
+}
 REQUIRED = (("check", argv_digest(["just", "check"])), ("test", argv_digest(["just", "test"])))
 RUN = ["exec just bootstrap", "exec just check", "exec just test"]
 ME: EntryIdentity = (4242, "land-start", "boot")  # this land process's identity
@@ -150,8 +153,11 @@ class LandBench:
     tracker: list[tuple[str, str]] = field(default_factory=list)
     on_close: Callable[[], object] = lambda: None
     conflict_runs: list[Record] = field(default_factory=list)
-    conflict_result: Result = field(default_factory=lambda: Terminal(reason=Reason.OWNER,
-                                    explanation="The checked conflict is retained; review is required before delivery."))
+    conflict_result: Result = field(
+        default_factory=lambda: Terminal(
+            reason=Reason.OWNER, explanation="The checked conflict is retained; review is required before delivery."
+        )
+    )
 
     def __post_init__(self) -> None:
         self.views, self.files = PinnedViews(self.repo), FakeSlotFiles(self.repo)
@@ -200,21 +206,55 @@ class LandBench:
     def checking(self) -> Checking:
         env = self.environment
         block = Block(BlockPorts(env.process, env.process.lingering, lambda: self.now))
-        return Checking(CheckStore(lambda: self.con), SetupStore(lambda: self.con), EvidenceFiles(env.artifacts), self.views, self.files,
-                        env.profiles, env.preparation(), block, env.observe, lambda entry: self.seen.get(entry, "gone"),
-                        lambda _path: True, lambda: self.now, lambda: {"HOME": "/home/p"}, ids=NativeIds())
+        return Checking(
+            CheckStore(lambda: self.con),
+            SetupStore(lambda: self.con),
+            EvidenceFiles(env.artifacts),
+            self.views,
+            self.files,
+            env.profiles,
+            env.preparation(),
+            block,
+            env.observe,
+            lambda entry: self.seen.get(entry, "gone"),
+            lambda _path: True,
+            lambda: self.now,
+            lambda: {"HOME": "/home/p"},
+            ids=NativeIds(),
+        )
 
     def ports(self) -> LandPorts:
-        return LandPorts(self.checking(), self.lands, self.views, lambda path: GitProfileFiles(path, self.views), self.inspect,
-                         self.heartbeat_for, NoBeats, lambda: self.me, lambda _path: True, landing,
-                             self.environ, self.close, self.conflicts(), ids=NativeIds())
+        return LandPorts(
+            self.checking(),
+            self.lands,
+            self.views,
+            lambda path: GitProfileFiles(path, self.views),
+            self.inspect,
+            self.heartbeat_for,
+            NoBeats,
+            lambda: self.me,
+            lambda _path: True,
+            landing,
+            self.environ,
+            self.close,
+            self.conflicts(),
+            ids=NativeIds(),
+        )
 
     def conflicts(self) -> Handoff:
         store = ConflictStore(lambda: self.con)
 
         def admission(_repo: Repo) -> ConflictPorts:
-            return ConflictPorts(store, AttemptLoads(lambda: self.con), EvidenceFiles(self.root / "art"), self.repo,
-                                 SlotGit(self.views, self.files), lambda _path: True, lambda: self.now, NativeIds())
+            return ConflictPorts(
+                store,
+                AttemptLoads(lambda: self.con),
+                EvidenceFiles(self.root / "art"),
+                self.repo,
+                SlotGit(self.views, self.files),
+                lambda _path: True,
+                lambda: self.now,
+                NativeIds(),
+            )
 
         def execution(_repo: Repo, record: Record) -> Result:
             self.conflict_runs.append(record)
@@ -222,8 +262,9 @@ class LandBench:
 
         return Handoff(store, admission, execution)
 
-    def land(self, mode: str = "land", *, no_change: bool = False, minutes: int | None = 5, checkout: Path | None = None,
-             accept: bool = False) -> LandResult:
+    def land(
+        self, mode: str = "land", *, no_change: bool = False, minutes: int | None = 5, checkout: Path | None = None, accept: bool = False
+    ) -> LandResult:
         modes: dict[str, Literal["land", "summary", "withdraw"]] = {"withdraw": "withdraw", "summary": "summary"}
         request = LandRequest("tasks", "tl-1", checkout or self.repo.path, minutes, modes.get(mode, "land"), no_change, accept)
         return land(self.ports(), request)
@@ -250,25 +291,39 @@ class LandBench:
         return {path: (tree.read(path) or b"").decode() for path in tree.files}
 
 
-def executing(b: LandBench, *, interrupt: bool = False,
-              edit: Callable[[FakeWorktree], None] | None = None) -> tuple[LandPorts, list[ExecutionCase]]:
+def executing(
+    b: LandBench, *, interrupt: bool = False, edit: Callable[[FakeWorktree], None] | None = None
+) -> tuple[LandPorts, list[ExecutionCase]]:
     """Drive conflict execution and its durable release with the same Git, database and slot as land."""
     ports, cases = b.ports(), list[ExecutionCase]()
 
     def execution(repo: Repo, record: Record) -> Result:
         if not cases:
             work = b.checking()
-            dependencies = ExecutionPorts(ports.conflicts.store, MergeStore(lambda: b.con), repo,
-                b.views, b.views, b.files, work.files, AgentLaunch(lambda _h: ("/bin/codex", {}), ids=NativeIds()),
-                lambda *_args: pytest.fail("unwired agent"), lambda _worker: True, lambda: b.now,
-                work.preparation, lambda: ClaimWord.HELD, ("/bin/codex", {}), ("probe",))
-            case = ExecutionCase(b.root / "factory.db", b.con, record, dependencies, b.slot, b.environment,
-                                 interrupt=interrupt, edit=edit)
+            dependencies = ExecutionPorts(
+                ports.conflicts.store,
+                MergeStore(lambda: b.con),
+                repo,
+                b.views,
+                b.views,
+                b.files,
+                work.files,
+                AgentLaunch(lambda _h: ("/bin/codex", {}), ids=NativeIds()),
+                lambda *_args: pytest.fail("unwired agent"),
+                lambda _worker: True,
+                lambda: b.now,
+                work.preparation,
+                lambda: ClaimWord.HELD,
+                ("/bin/codex", {}),
+                ("probe",),
+            )
+            case = ExecutionCase(b.root / "factory.db", b.con, record, dependencies, b.slot, b.environment, interrupt=interrupt, edit=edit)
             case.ports = replace(case.ports, run=case.run, gone=lambda _worker: case.gone)
             cases.append(case)
         return cases[0].resume()
 
     return replace(ports, conflicts=replace(ports.conflicts, execution=execution)), cases
+
 
 def database(path: Path, repo_id: str, slot: Path, base: str, x: str, d: str) -> sqlite3.Connection:
     """`path`: tl-1's done implement attempt (B its base, X its commit, released `kept` from slot s0, published), its checks
@@ -276,8 +331,9 @@ def database(path: Path, repo_id: str, slot: Path, base: str, x: str, d: str) ->
     con = Store(SCHEMA).open_rw(path)
     assert con is not None
     with begin_immediate(con):
-        con.execute("INSERT INTO slot (repo_id,name,path,generation) VALUES (?,'s0','/elsewhere/s0',0),(?,'s1',?,1)",
-                    (repo_id, repo_id, str(slot)))
+        con.execute(
+            "INSERT INTO slot (repo_id,name,path,generation) VALUES (?,'s0','/elsewhere/s0',0),(?,'s1',?,1)", (repo_id, repo_id, str(slot))
+        )
         pin_workflow(con)
         con.execute(
             """INSERT INTO attempt (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,
@@ -288,8 +344,9 @@ def database(path: Path, repo_id: str, slot: Path, base: str, x: str, d: str) ->
             'digest',1,'m','e','{"harness":"codex","sandbox":"workspace-write"}',100,'captured',?,?,1,2,?,?,
         'abababababababababababababababababababababababababababababababab',
         (SELECT digest FROM workflow_file),
-        'eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',1.0)""", (repo_id,
-            base, x, d, base))
+        'eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',1.0)""",
+            (repo_id, base, x, d, base),
+        )
         for statement in DONE:
             con.execute(statement)
         con.execute("INSERT INTO slot_release VALUES ('implement','implement-token',1,?,4,'kept')", (d,))

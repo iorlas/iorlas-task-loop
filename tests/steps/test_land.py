@@ -102,7 +102,8 @@ def test_the_land_validates_in_the_one_free_slot_rounds_leave_it(b: LandBench) -
 
 @pytest.mark.parametrize("competition", ["none", "missing_checks", "candidate_number", "other_checks_landing"])
 def test_losing_the_last_free_slot_distinguishes_a_competing_land(
-    b: LandBench, competition: str,
+    b: LandBench,
+    competition: str,
 ) -> None:
     main = b.advance({"OTHER": "another task\n"})
     before: list[tuple[LandRow, ...]] = []
@@ -111,13 +112,33 @@ def test_losing_the_last_free_slot_distinguishes_a_competing_land(
         checks = CHECKS.attempt_id
         if competition == "other_checks_landing":
             checks = "other-checks"
-            check_store.insert(b.con, check_store.ChecksAdmitted(
-                AttemptKey(checks, "other-checks-token", 2), "implement", 2, "s1", b.d, b.x, REQUIRED, 300.0))
-            b.con.execute("""UPDATE checks_attempt SET phase='concluded',conclusion='passed',concluded_at=5,
-                released_at=6,parked=? WHERE attempt_id=?""", (b.d, checks))
+            check_store.insert(
+                b.con,
+                check_store.ChecksAdmitted(AttemptKey(checks, "other-checks-token", 2), "implement", 2, "s1", b.d, b.x, REQUIRED, 300.0),
+            )
+            b.con.execute(
+                """UPDATE checks_attempt SET phase='concluded',conclusion='passed',concluded_at=5,
+                released_at=6,parked=? WHERE attempt_id=?""",
+                (b.d, checks),
+            )
         if competition in {"candidate_number", "other_checks_landing"}:
-            land_store.insert(b.con, LandAdmitted(AttemptKey("competitor", "competitor-token", 0), checks, 1,
-                main, b.x, True, REQUIRED, None, None, None, "same_tree", b.now))
+            land_store.insert(
+                b.con,
+                LandAdmitted(
+                    AttemptKey("competitor", "competitor-token", 0),
+                    checks,
+                    1,
+                    main,
+                    b.x,
+                    True,
+                    REQUIRED,
+                    None,
+                    None,
+                    None,
+                    "same_tree",
+                    b.now,
+                ),
+            )
             if competition == "candidate_number":
                 assert b.lands.supersede(AttemptKey("competitor", "competitor-token", 0), "withdrawn", b.now)
         elif competition == "missing_checks":
@@ -128,8 +149,9 @@ def test_losing_the_last_free_slot_distinguishes_a_competing_land(
     b.racing = take_slot
     found = b.land()
     competing = competition in {"candidate_number", "other_checks_landing"}
-    assert found == (Failed("refused", "landing", f"{RACED} Nothing was recorded.") if competing else
-                     Failed("unavailable", "no_free_slot", NO_SLOT))
+    assert found == (
+        Failed("refused", "landing", f"{RACED} Nothing was recorded.") if competing else Failed("unavailable", "no_free_slot", NO_SLOT)
+    )
     assert len(before) == 1 and b.lands.for_task("tasks", "tl-1") == before[0]
     assert b.reservations() == [("s1", "occupant")]
     assert b.execs() == [] and b.repo.pushes == 0 and b.tracker == [] and b.origin_main() == main
@@ -192,8 +214,11 @@ REFUSALS: list[tuple[str, Callable[[LandBench], object], tuple[str, str]]] = [
     ("minutes", lambda b: None, ("refused", "choices")),
     ("push_barred", lambda b: b.environ.update(BAR), ("refused", "push_barred")),
     ("not_done", lambda b: b.con.execute("DELETE FROM published_branch"), ("refused", "not_done")),
-    ("not_checked", lambda b: b.con.execute("UPDATE checks_attempt SET conclusion='failed',reason='test:failed'"),
-     ("refused", "not_checked")),
+    (
+        "not_checked",
+        lambda b: b.con.execute("UPDATE checks_attempt SET conclusion='failed',reason='test:failed'"),
+        ("refused", "not_checked"),
+    ),
     ("unreleased", lambda b: b.con.execute("UPDATE checks_attempt SET released_at=NULL,parked=NULL"), ("refused", "not_checked")),
     ("abandoned", lambda b: b.con.execute("UPDATE checks_attempt SET abandoned=1"), ("refused", "not_checked")),
     ("offline", lambda b: setattr(b.remote, "offline", True), ("unavailable", "remote")),
@@ -203,8 +228,13 @@ REFUSALS: list[tuple[str, Callable[[LandBench], object], tuple[str, str]]] = [
     ("claim_lost", lambda b: setattr(b, "assignee", "someone"), ("refused", "claim_lost")),
     ("closed", lambda b: setattr(b, "status", "closed"), ("refused", "closed")),
     ("target_profile", lambda b: b.advance({".task-loop.json": "{"}), ("refused", "target_profile")),
-    ("target_branch", lambda b: _profile_at_main(b, {"target": "trunk", "required": ["check"], "checks": [
-        {"name": "check", "argv": ["just", "check"], "timeout": 60}]}), ("refused", "target")),
+    (
+        "target_branch",
+        lambda b: _profile_at_main(
+            b, {"target": "trunk", "required": ["check"], "checks": [{"name": "check", "argv": ["just", "check"], "timeout": 60}]}
+        ),
+        ("refused", "target"),
+    ),
     ("no_required", lambda b: _profile_at_main(b, {"required": [], "checks": []}), ("refused", "no_required")),
 ]
 
@@ -222,8 +252,7 @@ def _moved_branch(b: LandBench, *, push: bool) -> None:
 
 
 @pytest.mark.parametrize(("arrange", "word"), [(each[1], each[2]) for each in REFUSALS], ids=[each[0] for each in REFUSALS])
-def test_each_refusal_comes_before_anything_is_written(b: LandBench, arrange: Callable[[LandBench], object],
-                                                       word: tuple[str, str]) -> None:
+def test_each_refusal_comes_before_anything_is_written(b: LandBench, arrange: Callable[[LandBench], object], word: tuple[str, str]) -> None:
     arrange(b)
     main = b.remote.branches().get("main")
     found = b.land(minutes=0 if word == ("refused", "choices") else 5)

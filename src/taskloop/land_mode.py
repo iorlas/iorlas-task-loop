@@ -48,7 +48,7 @@ def known_mode(checkouts: Checkouts) -> Callable[[Path], LandMode | None]:
                 return None
             found = read_profile(GitProfileFiles(path, checkouts), commit)
             return found.land if isinstance(found, Profile) else None
-        except (GitUnavailable, NotARepo, OSError, RuntimeError):
+        except GitUnavailable, NotARepo, OSError, RuntimeError:
             return None
 
     return read
@@ -64,7 +64,7 @@ def known_slot_mode(checkouts: Checkouts, files: SlotFiles) -> Callable[[Path, s
         try:
             root = repository(checkouts, files, str(slot), repo_id)
             return None if isinstance(root, str) else policy(root)
-        except (GitUnavailable, NotARepo, OSError, RuntimeError):
+        except GitUnavailable, NotARepo, OSError, RuntimeError:
             return None
 
     return read

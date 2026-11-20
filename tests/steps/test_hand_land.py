@@ -79,15 +79,22 @@ def snapshot(reads: StatusPorts, b: LandBench) -> None:
 
 
 @pytest.mark.parametrize("label", [None, "auto"])
-@pytest.mark.parametrize(("policy", "state", "explanation"), [
-    ("auto", LandState.WAITING, "waits for the factory"),
-    ("manual", LandState.MANUAL, "waits for a person"),
-    (None, LandState.MANUAL, "waits for a person"),
-    ("invalid", LandState.UNKNOWN, "landing policy is unavailable"),
-    ("missing", LandState.UNKNOWN, "landing policy is unavailable"),
-])
+@pytest.mark.parametrize(
+    ("policy", "state", "explanation"),
+    [
+        ("auto", LandState.WAITING, "waits for the factory"),
+        ("manual", LandState.MANUAL, "waits for a person"),
+        (None, LandState.MANUAL, "waits for a person"),
+        ("invalid", LandState.UNKNOWN, "landing policy is unavailable"),
+        ("missing", LandState.UNKNOWN, "landing policy is unavailable"),
+    ],
+)
 def test_policy_and_label_matrix_lands_once_or_waits_with_matching_status(
-    b: LandBench, label: str | None, policy: str | None, state: LandState, explanation: str,
+    b: LandBench,
+    label: str | None,
+    policy: str | None,
+    state: LandState,
+    explanation: str,
 ) -> None:
     b.con.execute("UPDATE attempt SET label=?", (label,))
     profile = PROFILE | ({} if policy is None else {"land": policy})
@@ -161,10 +168,21 @@ def test_round_lands_checks_released_during_its_settle_phase(b: LandBench) -> No
     store = CheckStore(lambda: b.con)
     checks = store.of_attempt("implement")[-1]
     b.con.execute("UPDATE checks_attempt SET released_at=NULL,parked=NULL")
-    b.con.execute("INSERT INTO reservation (slot,repo_id,generation,attempt_id) VALUES ('s1',?,?,?)",
-                  (b.repo.identity().key, checks.key.reservation_generation, checks.key.attempt_id))
-    releaser = ChecksRelease(store, b.views, b.files, lambda _entry: "gone", custody, lambda: b.now,
-                             lambda _process: "gone", lambda _scratch: True, ids=NativeIds())
+    b.con.execute(
+        "INSERT INTO reservation (slot,repo_id,generation,attempt_id) VALUES ('s1',?,?,?)",
+        (b.repo.identity().key, checks.key.reservation_generation, checks.key.attempt_id),
+    )
+    releaser = ChecksRelease(
+        store,
+        b.views,
+        b.files,
+        lambda _entry: "gone",
+        custody,
+        lambda: b.now,
+        lambda _process: "gone",
+        lambda _scratch: True,
+        ids=NativeIds(),
+    )
     built = ports(b)
     built = replace(built, starting=replace(built.starting, checks=replace(built.starting.checks, release=releaser)))
     result = run(b, built)
@@ -178,12 +196,13 @@ def test_completed_delivery_frees_capacity_for_a_new_task_in_the_same_round(b: L
     factory = Factory(b.con, b.root / "art", b.slot, b.views, b.files, Tracker(task("tl-2")), adopted=True)
     scripts(factory, b.slot, "tl-2")
     built = replace(factory.ports(), landing=ports(b).landing)
-    request = NextRequest("tasks", "/tracker", b.repo.path, "auto", StepSettings(), Overrides(model="m", effort="high"),
-                          30, max_running=1)
+    request = NextRequest("tasks", "/tracker", b.repo.path, "auto", StepSettings(), Overrides(model="m", effort="high"), 30, max_running=1)
     result = run_round(built, request)
     assert isinstance(result, Round)
     assert [(move.task_id, move.action, move.word) for move in result.moves if move.action in ("land", "start")] == [
-        ("tl-1", "land", "pushed"), ("tl-2", "start", "started")]
+        ("tl-1", "land", "pushed"),
+        ("tl-2", "start", "started"),
+    ]
     assert b.repo.pushes == 1 and len(b.tracker) == 1
 
 

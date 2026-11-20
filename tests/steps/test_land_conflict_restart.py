@@ -59,7 +59,9 @@ def test_restart_adopts_each_completed_effect(execution_case: ExecutionCase, mon
 
 @pytest.mark.parametrize("dirty", [False, True])
 def test_start_adopts_only_clean_matching_completed_merge(
-    execution_case: ExecutionCase, monkeypatch: pytest.MonkeyPatch, dirty: bool,
+    execution_case: ExecutionCase,
+    monkeypatch: pytest.MonkeyPatch,
+    dirty: bool,
 ) -> None:
     c = execution_case
     completed_effect(c, monkeypatch)
@@ -132,7 +134,9 @@ def test_registered_worker_is_never_duplicated_on_restart(execution_case: Execut
 
 @pytest.mark.parametrize("after", [False, True])
 def test_interrupted_capture_preserves_evidence_or_consumes_the_execution(
-    execution_case: ExecutionCase, monkeypatch: pytest.MonkeyPatch, after: bool,
+    execution_case: ExecutionCase,
+    monkeypatch: pytest.MonkeyPatch,
+    after: bool,
 ) -> None:
     c = execution_case
     capture = EvidenceFiles.capture

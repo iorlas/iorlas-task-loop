@@ -69,6 +69,8 @@ PIN_SHA = "e" * 40
 def pin_workflow(con: sqlite3.Connection) -> None:
     """Store the workflow bytes that `PIN_DIGEST` names, which an attempt row's `workflow_digest` references."""
     con.execute("INSERT OR IGNORE INTO workflow_file VALUES (?,?)", (PIN_DIGEST, WORKFLOW_BYTES))
+
+
 CHECKS = AttemptKey("checks", "checks-token", 1)
 D, X, TARGET = "d" * 40, "c" * 40, "f" * 40
 REQUIRED = (("check", "1" * 64), ("test", "2" * 64))
@@ -78,9 +80,15 @@ ORIGIN, SQUASH = "0" * 40, "5" * 40
 
 
 # A profile at `main` requiring `check` and `test` and defining a third, non-required check.
-MAIN_PROFILE = {"setup": [["just", "bootstrap"]], "required": ["check", "test"], "checks": [
-    {"name": "check", "argv": ["just", "check"], "timeout": 600}, {"name": "test", "argv": ["just", "test"], "timeout": 600},
-    {"name": "slow", "argv": ["sleep", "1"], "timeout": 60}]}
+MAIN_PROFILE = {
+    "setup": [["just", "bootstrap"]],
+    "required": ["check", "test"],
+    "checks": [
+        {"name": "check", "argv": ["just", "check"], "timeout": 600},
+        {"name": "test", "argv": ["just", "test"], "timeout": 600},
+        {"name": "slow", "argv": ["sleep", "1"], "timeout": 60},
+    ],
+}
 
 
 def origin_main_at(slot: FakeWorktree) -> str:
@@ -332,8 +340,14 @@ class FakeSetupProcess:
     next_pid: int = 500
 
     def __call__(
-        self, argv: Sequence[str], *, registered: Callable[[OwnedProcess], None], cwd: str, env: Mapping[str, str],
-        timeout: float, line: Callable[[bytes], None],
+        self,
+        argv: Sequence[str],
+        *,
+        registered: Callable[[OwnedProcess], None],
+        cwd: str,
+        env: Mapping[str, str],
+        timeout: float,
+        line: Callable[[bytes], None],
     ) -> SetupEnded:
         command = self.script.pop(0) if self.script else Command()
         self.calls.append(SetupCall(tuple(argv), cwd, dict(env), timeout))
@@ -428,11 +442,24 @@ class Environment:
         return self.seen.get(process.pid, "gone")
 
     def preparation(self) -> Preparation:
-        return Preparation(EnvironmentPorts(
-            SetupStore(lambda: self.con), self.checkouts, self.profiles, self.files, self.process, self.observe,
-            self.process.lingering, EvidenceFiles(self.artifacts), self.clock, self.platform, self.safe_removal, self.probe,
-            self.protected, self.tmp_bytes,
-        ))
+        return Preparation(
+            EnvironmentPorts(
+                SetupStore(lambda: self.con),
+                self.checkouts,
+                self.profiles,
+                self.files,
+                self.process,
+                self.observe,
+                self.process.lingering,
+                EvidenceFiles(self.artifacts),
+                self.clock,
+                self.platform,
+                self.safe_removal,
+                self.probe,
+                self.protected,
+                self.tmp_bytes,
+            )
+        )
 
 
 @dataclass
@@ -470,8 +497,17 @@ class ChecksBench:
         return begin_immediate(con)
 
     def admission(self) -> ChecksAdmission:
-        return ChecksAdmission(lambda: self.con, self.begin, self.inspect, self.views, lambda: self.now, lambda _p: True, self.files,
-                               lambda path: GitProfileFiles(path, self.views), ids=NativeIds())
+        return ChecksAdmission(
+            lambda: self.con,
+            self.begin,
+            self.inspect,
+            self.views,
+            lambda: self.now,
+            lambda _p: True,
+            self.files,
+            lambda path: GitProfileFiles(path, self.views),
+            ids=NativeIds(),
+        )
 
     def admit(self, number: int = 1, checkout: Path | None = None) -> AdmitResult:
         return self.admission().admit_checks(ChecksRequest(self.done.implement, checkout or self.repo.path, 100.0, number))
@@ -503,8 +539,14 @@ class ChecksBench:
 class ReadyTracker(FakeTaskReadClient):
     """The shelf fake plus the in-progress list (`find`) a round reads after the ready set."""
 
-    def __init__(self, records: Iterable[Bead] = (), *, faults: Mapping[str, BdError] | None = None, ready: Iterable[str] = (),
-                 ready_fault: BdError | None = None) -> None:
+    def __init__(
+        self,
+        records: Iterable[Bead] = (),
+        *,
+        faults: Mapping[str, BdError] | None = None,
+        ready: Iterable[str] = (),
+        ready_fault: BdError | None = None,
+    ) -> None:
         self.records = list(records)
         super().__init__(self.records, faults=faults, ready=ready, ready_fault=ready_fault)
 

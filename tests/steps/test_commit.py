@@ -128,8 +128,13 @@ def attempts(con: sqlite3.Connection, tmp_path: Path, checkouts: Checkouts, file
 
 
 def captured(
-    con: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, files: FakeSlotFiles,
-    written: Files, answer: Mapping[str, object] = PLAN,
+    con: sqlite3.Connection,
+    tmp_path: Path,
+    slot: FakeWorktree,
+    checkouts: Checkouts,
+    files: FakeSlotFiles,
+    written: Files,
+    answer: Mapping[str, object] = PLAN,
 ) -> None:
     assert attempts(con, tmp_path, checkouts, files, agent(slot, written, answer)).execute(KEY, ENTRY).reason == "commit"
 
@@ -217,17 +222,32 @@ CASES: list[tuple[str, Files | None, Files, Mapping[str, object], After | None, 
     ("unchanged_with_a_stray_file", PLANNED, {NOTE: "n"}, UNCHANGED, None, None, "uncommitted:uncommitted", 0),
     ("plan_empty", None, {P: " \n\t"}, PLAN, None, None, "rejected:plan_empty", 1),
     ("plan_encoding", None, {P: b"\xff\xfe plan"}, PLAN, None, None, "rejected:plan_encoding", 1),
-    ("plan_at_file_cap", None, {P: PLAN_TEXT + "a" * ((1 << 20) - len(PLAN_TEXT.encode()))},
-     PLAN, None, None, "rejected:plan_size", 1),
+    ("plan_at_file_cap", None, {P: PLAN_TEXT + "a" * ((1 << 20) - len(PLAN_TEXT.encode()))}, PLAN, None, None, "rejected:plan_size", 1),
     ("plan_over_cap", None, {P: "a" * ((1 << 20) + 1)}, PLAN, None, None, "uncommitted:unsafe", 0),
     ("plan_missing", None, {NOTE: "n"}, PLAN | {"paths": [P, NOTE]}, None, None, "uncommitted:unsafe", 0),
     ("executable", None, PLANNED, PLAN, entry(P, FileStat("file", 7, True)), None, "uncommitted:unsafe", 0),
     ("unreadable_listed_file", None, PLANNED, PLAN, unreadable(P), None, "uncommitted:unsafe", 0),  # named, not unavailable:git forever
     # Assemble synthetic signatures at runtime so this test source itself remains safe to commit.
-    ("committed_private_key", None, {P: "# Plan\n-----BEGIN OPENSSH PRIVATE " + "KEY-----\nx\n"},
-     PLAN, None, None, "uncommitted:unsafe", 0),
-    ("committed_codex_login", None, {P: json.dumps({"access_" + "token": "a", "refresh_" + "token": "r"})},
-     PLAN, None, None, "uncommitted:unsafe", 0),
+    (
+        "committed_private_key",
+        None,
+        {P: "# Plan\n-----BEGIN OPENSSH PRIVATE " + "KEY-----\nx\n"},
+        PLAN,
+        None,
+        None,
+        "uncommitted:unsafe",
+        0,
+    ),
+    (
+        "committed_codex_login",
+        None,
+        {P: json.dumps({"access_" + "token": "a", "refresh_" + "token": "r"})},
+        PLAN,
+        None,
+        None,
+        "uncommitted:unsafe",
+        0,
+    ),
     ("symlinked_root", None, PLANNED, PLAN, entry(D.rstrip("/"), FileStat("link", 9, False)), None, "uncommitted:unsafe", 0),
     ("ignored", {".gitignore": "*.log\n"}, PLANNED | {D + "x.log": "x"}, PLAN, None, None, "uncommitted:ignored", 0),
     ("listed_path_ignored", {".gitignore": "*.md\n"}, PLANNED, PLAN, None, None, "uncommitted:ignored", 0),
@@ -374,8 +394,13 @@ def test_a_rewritten_slot_pointer_is_redirected_before_any_git_call(
 
 @pytest.mark.parametrize("target", ["slot_path", "gitdir_in_slot", "common_in_slot", "unresolvable"])
 def test_a_pointer_is_judged_as_git_resolves_it(
-    registered: sqlite3.Connection, slot: FakeWorktree, repo: FakeRepo, tmp_path: Path, checkouts: Checkouts,
-    slot_files: FakeSlotFiles, target: str,
+    registered: sqlite3.Connection,
+    slot: FakeWorktree,
+    repo: FakeRepo,
+    tmp_path: Path,
+    checkouts: Checkouts,
+    slot_files: FakeSlotFiles,
+    target: str,
 ) -> None:
     """An agent-controlled symlink in the slot, Git directory or common directory redirects before any Git read."""
     captured(registered, tmp_path, slot, checkouts, slot_files, PLANNED)
@@ -449,8 +474,13 @@ def one(base: str, paths: tuple[str, ...]) -> tuple[ChainLink, ...]:
 )
 @pytest.mark.parametrize("step", ["plan", "implement"])
 def test_judge_rules_the_commit_path_cannot_reach(
-    repo: FakeRepo, slot: FakeWorktree, changes: list[Files], paths: tuple[str, ...], cap: int,
-    expected: Rejected | None, step: str,
+    repo: FakeRepo,
+    slot: FakeWorktree,
+    changes: list[Files],
+    paths: tuple[str, ...],
+    cap: int,
+    expected: Rejected | None,
+    step: str,
 ) -> None:
     base = head(slot)
     for files in changes:
@@ -547,18 +577,28 @@ def test_refusals_and_unknowns_before_any_git_read(
         "UPDATE execution SET answer_kind='validation_pending',disposition=NULL,effect=NULL,commit_paths=NULL,commit_message=NULL"
     )
     assert factory_commit(registered, counted, slot_files).commit(KEY) == CommitWaiting(CommitWaitingReason.VALIDATION_PENDING)
-    assert FactoryCommit(AttemptStore(lambda: None), counted, slot_files, gone, lambda: 20, hold,
-        ids=NativeIds()).commit(KEY) == CommitWaiting(CommitWaitingReason.STORE)
+    assert FactoryCommit(AttemptStore(lambda: None), counted, slot_files, gone, lambda: 20, hold, ids=NativeIds()).commit(
+        KEY
+    ) == CommitWaiting(CommitWaitingReason.STORE)
     assert counted.opens == 0 and stored(registered) == []
 
 
-@pytest.mark.parametrize(("session_state", "expected"), [
-    ("pending", CommitWaiting(CommitWaitingReason.SESSION_PENDING)),
-    ("conflict", CommitRefused("session")), ("fault", CommitRefused("session_fault")),
-])
+@pytest.mark.parametrize(
+    ("session_state", "expected"),
+    [
+        ("pending", CommitWaiting(CommitWaitingReason.SESSION_PENDING)),
+        ("conflict", CommitRefused("session")),
+        ("fault", CommitRefused("session_fault")),
+    ],
+)
 def test_an_unfinished_session_state_is_never_committed(
-    registered: sqlite3.Connection, slot: FakeWorktree, tmp_path: Path, checkouts: Checkouts, slot_files: FakeSlotFiles,
-    session_state: str, expected: object,
+    registered: sqlite3.Connection,
+    slot: FakeWorktree,
+    tmp_path: Path,
+    checkouts: Checkouts,
+    slot_files: FakeSlotFiles,
+    session_state: str,
+    expected: object,
 ) -> None:
     captured(registered, tmp_path, slot, checkouts, slot_files, PLANNED)
     registered.execute("UPDATE execution SET session_state=?", (session_state,))
@@ -635,8 +675,14 @@ def test_the_writer_refuses_an_end_commit_or_verdict_without_its_preconditions(
 
 @pytest.mark.parametrize(("effect", "refused", "accepted"), [("commit", "B", "X"), ("keep", "", "B"), ("none", "BX", "")])
 def test_the_end_commit_and_verdict_fences_read_the_stored_effect(
-    registered: sqlite3.Connection, slot: FakeWorktree, tmp_path: Path, checkouts: Checkouts, slot_files: FakeSlotFiles,
-    effect: str, refused: str, accepted: str,
+    registered: sqlite3.Connection,
+    slot: FakeWorktree,
+    tmp_path: Path,
+    checkouts: Checkouts,
+    slot_files: FakeSlotFiles,
+    effect: str,
+    refused: str,
+    accepted: str,
 ) -> None:
     """The stored disposition stays `planned`; only the effect decides: `commit` ends at X != B, `keep` at B (or its own
     commit of saved work), `none` at neither and never gets a verdict."""
@@ -685,7 +731,11 @@ def flip(slot: FakeWorktree, files: FakeSlotFiles) -> None:
 
 
 def test_a_pointer_rewritten_after_the_slot_read_stops_before_stage(
-    registered: sqlite3.Connection, slot: FakeWorktree, tmp_path: Path, checkouts: Checkouts, slot_files: FakeSlotFiles,
+    registered: sqlite3.Connection,
+    slot: FakeWorktree,
+    tmp_path: Path,
+    checkouts: Checkouts,
+    slot_files: FakeSlotFiles,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Rewritten between the slot read and `stage` (here: during the pre-stage status read): nothing is staged."""
@@ -704,7 +754,11 @@ def test_a_pointer_rewritten_after_the_slot_read_stops_before_stage(
 
 
 def test_a_pointer_rewritten_during_stage_stops_before_record(
-    registered: sqlite3.Connection, slot: FakeWorktree, tmp_path: Path, checkouts: Checkouts, slot_files: FakeSlotFiles,
+    registered: sqlite3.Connection,
+    slot: FakeWorktree,
+    tmp_path: Path,
+    checkouts: Checkouts,
+    slot_files: FakeSlotFiles,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     base = head(slot)
@@ -721,7 +775,11 @@ def test_a_pointer_rewritten_during_stage_stops_before_record(
 
 
 def test_a_factory_commit_racing_another_adopts_its_commit_never_nothing_written(
-    registered: sqlite3.Connection, slot: FakeWorktree, tmp_path: Path, checkouts: Checkouts, slot_files: FakeSlotFiles,
+    registered: sqlite3.Connection,
+    slot: FakeWorktree,
+    tmp_path: Path,
+    checkouts: Checkouts,
+    slot_files: FakeSlotFiles,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """The other factory commit commits, records X and stores its verdict between this one's `stage` and `record`, so this

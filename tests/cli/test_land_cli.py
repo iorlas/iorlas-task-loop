@@ -36,9 +36,30 @@ BASE = ["tl-1", "--backlog", "tasks", "--checkout", "/checkout"]
 SOURCES = Path(__file__).resolve().parents[2] / "src" / "taskloop"
 type How = Literal["pushed", "already_pushed", "no_change", "delivered", "already_landed"]
 HOWS: tuple[How, ...] = ("pushed", "already_pushed", "no_change", "delivered", "already_landed")
-CANDIDATE = {"candidate_id", "number", "checks_attempt_id", "origin", "commit", "tree_same", "required", "slot", "slot_head", "deadline",
-             "validation", "reason", "validated_at", "released_at", "parked", "superseded", "delivery", "delivered_at", "remote_head",
-             "close", "closed_at", "land_process"}
+CANDIDATE = {
+    "candidate_id",
+    "number",
+    "checks_attempt_id",
+    "origin",
+    "commit",
+    "tree_same",
+    "required",
+    "slot",
+    "slot_head",
+    "deadline",
+    "validation",
+    "reason",
+    "validated_at",
+    "released_at",
+    "parked",
+    "superseded",
+    "delivery",
+    "delivered_at",
+    "remote_head",
+    "close",
+    "closed_at",
+    "land_process",
+}
 
 
 @pytest.fixture(autouse=True)
@@ -62,14 +83,26 @@ def run(argv: list[str], result: Result, capsys: pytest.CaptureFixture[str], mon
     return code, output.out, output.err
 
 
-@pytest.mark.parametrize(("argv", "mode", "minutes", "no_change", "accept"), [
-    (["run", *BASE, "--minutes", "20"], "land", 20, False, False), (["show", *BASE], "summary", None, False, False),
-    (["withdraw", *BASE], "withdraw", None, False, False), (["run", *BASE, "--no-change"], "land", None, True, False),
-    (["run", *BASE, "--accept-gate-changes"], "land", None, False, True),
-], ids=["run", "show", "withdraw", "no_change", "accept_gate_changes"])
+@pytest.mark.parametrize(
+    ("argv", "mode", "minutes", "no_change", "accept"),
+    [
+        (["run", *BASE, "--minutes", "20"], "land", 20, False, False),
+        (["show", *BASE], "summary", None, False, False),
+        (["withdraw", *BASE], "withdraw", None, False, False),
+        (["run", *BASE, "--no-change"], "land", None, True, False),
+        (["run", *BASE, "--accept-gate-changes"], "land", None, False, True),
+    ],
+    ids=["run", "show", "withdraw", "no_change", "accept_gate_changes"],
+)
 def test_the_subcommand_and_flags_become_one_land_request_for_the_one_operation(
-    argv: list[str], mode: Literal["land", "summary", "withdraw"], minutes: int | None, no_change: bool, accept: bool, tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str],
+    argv: list[str],
+    mode: Literal["land", "summary", "withdraw"],
+    minutes: int | None,
+    no_change: bool,
+    accept: bool,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     opened: list[tuple[Path, Path]] = []
     requests: list[LandRequest] = []
@@ -93,11 +126,19 @@ def test_the_subcommand_and_flags_become_one_land_request_for_the_one_operation(
     assert capsys.readouterr().err.startswith(f"tl land {argv[0]}: refused:choices\nstubbed\n")
 
 
-@pytest.mark.parametrize("argv", [
-    [*LAND, "--summary"], [*LAND, "--withdraw"], ["land", "show", *BASE, "--minutes", "20"], ["land", "withdraw", *BASE, "--no-change"],
-    ["land"], ["step", "land", *BASE], ["step", "release", *BASE[:3], "--abandon"],
-], ids=["summary_flag", "withdraw_flag", "show_minutes", "withdraw_no_change", "no_subcommand",
-    "step_land", "release_abandon"])
+@pytest.mark.parametrize(
+    "argv",
+    [
+        [*LAND, "--summary"],
+        [*LAND, "--withdraw"],
+        ["land", "show", *BASE, "--minutes", "20"],
+        ["land", "withdraw", *BASE, "--no-change"],
+        ["land"],
+        ["step", "land", *BASE],
+        ["step", "release", *BASE[:3], "--abandon"],
+    ],
+    ids=["summary_flag", "withdraw_flag", "show_minutes", "withdraw_no_change", "no_subcommand", "step_land", "release_abandon"],
+)
 def test_usage_errors_exit_2_before_any_operation(argv: list[str], monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(cli_composition, "open_land", lambda *_: pytest.fail("opened"))
     with pytest.raises(SystemExit) as ended:
@@ -130,7 +171,10 @@ def test_a_land_prints_what_it_did_the_close_and_the_tracker_line(
     assert out.splitlines() == [
         f"pushed: tl-1 (backlog tasks) on origin main; {HOW['pushed']}",
         f"Candidate 1 ({row.key.attempt_id}): S {row.commit} onto origin main at {b.base}; same tree as X, no checks",
-        f"Pushed: origin main at {row.commit}", "Closed: closed", NOT_SYNCED, "Next: bring your checkout up to date with origin's main.",
+        f"Pushed: origin main at {row.commit}",
+        "Closed: closed",
+        NOT_SYNCED,
+        "Next: bring your checkout up to date with origin's main.",
     ]
     code, out, _ = run([*LAND, "--json"], found, capsys, monkeypatch)
     data = json.loads(out)
@@ -178,11 +222,18 @@ def test_a_withdrawal_and_a_summary_exit_0_with_their_lines_and_keys(
     assert set(data) == {"status", "backlog", "task", "candidate"} and data["candidate"]["superseded"] == "withdrawn"
 
 
-@pytest.mark.parametrize(("failed", "code"), [
-    (Failed("refused", "conflict", "X does not merge"), 1), (Failed("refused", "claim_lost", "taken"), 1),
-    (Failed("unavailable", "checks:running", "a check runs"), 3), (Failed("unsettled", "check_running", "held"), 3),
-    (Failed("unavailable", "target_moved", "moved"), 3), (Failed("refused", "remote_rejected", "protected"), 1),
-], ids=["conflict", "claim_lost", "checks_running", "held", "target_moved", "remote_rejected"])
+@pytest.mark.parametrize(
+    ("failed", "code"),
+    [
+        (Failed("refused", "conflict", "X does not merge"), 1),
+        (Failed("refused", "claim_lost", "taken"), 1),
+        (Failed("unavailable", "checks:running", "a check runs"), 3),
+        (Failed("unsettled", "check_running", "held"), 3),
+        (Failed("unavailable", "target_moved", "moved"), 3),
+        (Failed("refused", "remote_rejected", "protected"), 1),
+    ],
+    ids=["conflict", "claim_lost", "checks_running", "held", "target_moved", "remote_rejected"],
+)
 def test_a_refusal_exits_1_an_unknown_3_on_stderr_with_the_land_s_guide_first(
     failed: Failed, code: int, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -212,7 +263,10 @@ def test_a_ctrl_c_during_a_land_is_one_interrupted_answer_exit_130_not_a_traceba
     assert main(argv) == 130
     output = capsys.readouterr()
     assert output.out == "" and output.err.splitlines() == [
-        f"tl land run: unavailable:{INTERRUPTED}", LAND_GUIDE[INTERRUPTED], LAND_GUIDE["unavailable"]]
+        f"tl land run: unavailable:{INTERRUPTED}",
+        LAND_GUIDE[INTERRUPTED],
+        LAND_GUIDE["unavailable"],
+    ]
     assert main([*argv, "--json"]) == 130
     assert json.loads(capsys.readouterr().err) == {"error": {"kind": "unavailable", "reason": INTERRUPTED, "message": None}}
 
@@ -261,8 +315,25 @@ LANDS = ("land", "land_check", "land_push", "land_close", "land_summary", "land_
 # (`StoreRefused`), the slot choice and the checkout (`AdmitRefused`/`AdmitUnavailable`), the profile at O, the
 # validation's relaunchable words, and the kinds. An agent attempt's release words (`worker_*`) and the checks
 # admission's `task_attempted` never reach it.
-PASSED = {"slot_redirected", "repo", "not_listed", "checkout", "deadline", "expired", "no_free_slot", "git", "store", "target",
-          "target_profile", "no_required", "checks", "environment", "refused", "unavailable", "unsettled"}
+PASSED = {
+    "slot_redirected",
+    "repo",
+    "not_listed",
+    "checkout",
+    "deadline",
+    "expired",
+    "no_free_slot",
+    "git",
+    "store",
+    "target",
+    "target_profile",
+    "no_required",
+    "checks",
+    "environment",
+    "refused",
+    "unavailable",
+    "unsettled",
+}
 AGENT_ONLY = {"worker_alive", "worker_unknown", "task_attempted"}
 
 
@@ -278,5 +349,23 @@ def test_every_word_the_land_answers_has_the_land_s_own_guide() -> None:
     words = _words()
     assert {"push_barred", "land_running", "slot_branch", "slot_unborn", "absent", "land_changed", "stale_reservation"} <= words
     assert sorted(words - LAND_GUIDE.keys()) == []
-    assert sorted(word for word in ("checks", "slot_busy", "claim_lost", "remote_rejected", "target", "no_required", "branch_moved",
-                                    "commit_missing", "remote", "changed", "no_free_slot") if LAND_GUIDE[word] == GUIDE.get(word)) == []
+    assert (
+        sorted(
+            word
+            for word in (
+                "checks",
+                "slot_busy",
+                "claim_lost",
+                "remote_rejected",
+                "target",
+                "no_required",
+                "branch_moved",
+                "commit_missing",
+                "remote",
+                "changed",
+                "no_free_slot",
+            )
+            if LAND_GUIDE[word] == GUIDE.get(word)
+        )
+        == []
+    )

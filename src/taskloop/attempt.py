@@ -181,8 +181,11 @@ class Attempts:
         harness, spec, credentials, probe = launch
         running = False
         try:
-            base = (self._prepared(record, renew, credentials, probe) if admission.repair is None else
-                    prepared_base(self.checkouts, self.slot_files, record, self.clock))
+            base = (
+                self._prepared(record, renew, credentials, probe)
+                if admission.repair is None
+                else prepared_base(self.checkouts, self.slot_files, record, self.clock)
+            )
             if isinstance(base, AttemptResult):
                 return base
             spec = self._context(admission, base, spec) if admission.repair is None else spec
@@ -211,8 +214,10 @@ class Attempts:
     def _context(self, admission: Admission, base: Prepared, spec: LaunchSpec) -> LaunchSpec | AttemptResult:
         try:
             path = Path(admission.slot_path)
+
             def pinned(root: Path, /, *, git_dir: Path | None = None) -> Repo:
                 return self.checkouts(root, git_dir=base.gitdir)
+
             context = read_context(GitProfileFiles(path, pinned), base.head)
             spec = replace(spec, stdin=refresh(spec.stdin, context))
             self.files.put_launched_input(admission.key, spec.stdin)
@@ -233,8 +238,11 @@ class Attempts:
             refused = validation.entry(record, original, self.discussion)
             if refused is not None:
                 return refused
-        base = (prepared_base(self.checkouts, self.slot_files, record, self.clock) if self.source_preparation is None else
-                self.source_preparation.prepare(record, renew, credentials, probe))
+        base = (
+            prepared_base(self.checkouts, self.slot_files, record, self.clock)
+            if self.source_preparation is None
+            else self.source_preparation.prepare(record, renew, credentials, probe)
+        )
         if isinstance(base, AttemptResult) or not kind(record.admission.step).environment:
             return base
         refused = validation.entry(record, base, self.discussion)
@@ -248,17 +256,23 @@ class Attempts:
         try:
             schema, out_file = self.files.prepare(admission.key, kind(admission.step).answer_schema)
             root = self.files.launch_root(admission.key)
-        except (EvidenceError, OSError):
+        except EvidenceError, OSError:
             return AttemptResult("unavailable", "files")
-        launch = self.agent.build(admission.setting, Path(admission.slot_path), kind(admission.step).environment,
-                                  root, schema, out_file, prompt, resume=None if admission.repair is None else admission.repair.session)
+        launch = self.agent.build(
+            admission.setting,
+            Path(admission.slot_path),
+            kind(admission.step).environment,
+            root,
+            schema,
+            out_file,
+            prompt,
+            resume=None if admission.repair is None else admission.repair.session,
+        )
         if isinstance(launch, LaunchFailure):
             return AttemptResult("unavailable", launch.reason, explanation=launch.explanation)
         return launch.harness, launch.spec, launch.credentials, launch.probe
 
-    def _run(
-        self, admission: Admission, harness: Harness, spec: LaunchSpec, runtime_clock: Callable[[], float]
-    ) -> AttemptResult:
+    def _run(self, admission: Admission, harness: Harness, spec: LaunchSpec, runtime_clock: Callable[[], float]) -> AttemptResult:
         remaining = admission.deadline - runtime_clock()
         if remaining <= 0:
             harness.cleanup()
@@ -276,14 +290,20 @@ class Attempts:
         self, admission: Admission, harness: Harness, spec: LaunchSpec, remaining: float, runtime_clock: Callable[[], float]
     ) -> tuple[RunOutcome, SessionInput] | AttemptResult:
         jumps = ClockJumps(
-            ClockContext.ACTIVE, self.clock, self.monotonic, lambda jump: self.files.append_clock_jump(admission.key, jump),
+            ClockContext.ACTIVE,
+            self.clock,
+            self.monotonic,
+            lambda jump: self.files.append_clock_jump(admission.key, jump),
         )
         latch = SessionLatch(self.store, admission)
         stops = AgentStops(StopStore(self.registration_store.connect, self.registration_store.begin), admission, self.clock)
         duration = self.files.observe_duration(admission.key, self.monotonic)
         hooks = WatchedHooks(
-            started=registration_hook(self.registration_store, admission, runtime_clock), ref=latch.observe, unattended=False,
-            before_stop=stops.before, after_stop=stops.after,
+            started=registration_hook(self.registration_store, admission, runtime_clock),
+            ref=latch.observe,
+            unattended=False,
+            before_stop=stops.before,
+            after_stop=stops.after,
             live=CommandSink(self.files, admission.key, self.clock, jumps.sample, duration),
         )
         try:
@@ -307,8 +327,11 @@ class Attempts:
         admission, evidence = pending.admission, pending.evidence
         if evidence is None:
             try:
-                evidence = (self.files.capture(admission.key, pending.raw) if callback is None
-                            else self.files.capture(admission.key, pending.raw, callback))
+                evidence = (
+                    self.files.capture(admission.key, pending.raw)
+                    if callback is None
+                    else self.files.capture(admission.key, pending.raw, callback)
+                )
             except EvidenceError:
                 return CaptureResult("unavailable", "evidence"), pending
             pending = replace(pending, evidence=evidence)

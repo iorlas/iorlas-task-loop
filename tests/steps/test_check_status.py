@@ -63,10 +63,21 @@ def status(done: Done, repo: FakeRepo, checkouts: PinnedViews, slot_files: FakeS
 
 def test_the_view_takes_the_latest_checks_attempt_s_fields_and_keeps_the_task_s(status: Status) -> None:
     view = status.view()
-    assert (view.step, view.attempt_id, view.slot, view.phase, view.entry, view.next) == ("check", status.key.attempt_id, "s1",
-                                                                                          "admitted", "none", "start")
+    assert (view.step, view.attempt_id, view.slot, view.phase, view.entry, view.next) == (
+        "check",
+        status.key.attempt_id,
+        "s1",
+        "admitted",
+        "none",
+        "start",
+    )
     assert (view.result, view.number, view.deadline_passed, view.entry_process, view.worker) == (
-        AttemptResult("pending", "admitted"), 1, False, None, None)
+        AttemptResult("pending", "admitted"),
+        1,
+        False,
+        None,
+        None,
+    )
     assert (view.leftovers, view.previous_attempt_id, view.repeat_reason, view.release) == ((), None, None, None)
     assert (view.backlog, view.task_id, view.seq, view.earlier) == ("tasks", "tl-1", 2, (("implement", "advanced"),))
     x = status.bench.done.x
@@ -110,23 +121,41 @@ def concluded(conclusion: str, released: bool = True, abandoned: bool = False) -
     return lambda s: s.bench.concluded(conclusion, released=released, abandoned=abandoned)
 
 
-@pytest.mark.parametrize(("arrange", "seen", "now", "expected"), [
-    (lambda s: None, "gone", 10, "start"),
-    (lambda s: None, "gone", 500, "start"),  # past the deadline the relaunched entry concludes `expired`
-    (registered, "matching", 10, "wait"),
-    (registered, "matching", 500, "stuck:hung"),
-    (registered, "unknown", 10, "unknown"),
-    (registered, "different_process", 10, "start"),
-    (refused(1), "gone", 10, "start"),
-    (refused(2), "gone", 10, "stuck:checks_refused"),
-    (concluded("failed", released=False), "gone", 10, "release"),
-    (lambda s: (registered(s), concluded("failed", released=False)(s)), "matching", 500, "wait"),  # releasing its slot
-    (concluded("passed"), "gone", 10, "land"),  # tl-8bh9.14.8: a pass goes on to the land
-    (concluded("failed"), "gone", 10, "done"),
-    (concluded("failed", abandoned=True), "gone", 10, "release"),
-    (lambda s: s.bench.con.execute("UPDATE checks_attempt SET required='[]'"), "gone", 10, "unknown"),  # an unreadable row
-], ids=["none", "none_expired", "running", "hung", "entry_unknown", "other_process", "refused_once", "refused_twice",
-        "concluded_held", "concluded_releasing", "passed", "failed", "abandoned", "store"])
+@pytest.mark.parametrize(
+    ("arrange", "seen", "now", "expected"),
+    [
+        (lambda s: None, "gone", 10, "start"),
+        (lambda s: None, "gone", 500, "start"),  # past the deadline the relaunched entry concludes `expired`
+        (registered, "matching", 10, "wait"),
+        (registered, "matching", 500, "stuck:hung"),
+        (registered, "unknown", 10, "unknown"),
+        (registered, "different_process", 10, "start"),
+        (refused(1), "gone", 10, "start"),
+        (refused(2), "gone", 10, "stuck:checks_refused"),
+        (concluded("failed", released=False), "gone", 10, "release"),
+        (lambda s: (registered(s), concluded("failed", released=False)(s)), "matching", 500, "wait"),  # releasing its slot
+        (concluded("passed"), "gone", 10, "land"),  # tl-8bh9.14.8: a pass goes on to the land
+        (concluded("failed"), "gone", 10, "done"),
+        (concluded("failed", abandoned=True), "gone", 10, "release"),
+        (lambda s: s.bench.con.execute("UPDATE checks_attempt SET required='[]'"), "gone", 10, "unknown"),  # an unreadable row
+    ],
+    ids=[
+        "none",
+        "none_expired",
+        "running",
+        "hung",
+        "entry_unknown",
+        "other_process",
+        "refused_once",
+        "refused_twice",
+        "concluded_held",
+        "concluded_releasing",
+        "passed",
+        "failed",
+        "abandoned",
+        "store",
+    ],
+)
 def test_the_next_table(status: Status, arrange: Callable[[Status], object], seen: Seen, now: float, expected: str) -> None:
     arrange(status)
     status.seen, status.now = seen, now

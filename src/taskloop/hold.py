@@ -75,8 +75,13 @@ class HoldMove:
 
 
 class Move(Protocol):
-    def __call__(self, word: Literal["held", "pending", "refused"], missing: Missing = "", refused: str = "", detail: str = "",
-                 ) -> HoldMove: ...
+    def __call__(
+        self,
+        word: Literal["held", "pending", "refused"],
+        missing: Missing = "",
+        refused: str = "",
+        detail: str = "",
+    ) -> HoldMove: ...
 
 
 @dataclass(frozen=True)

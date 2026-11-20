@@ -59,15 +59,24 @@ def trailers(text: str) -> list[str]:
 
 def test_the_message_names_the_title_the_branch_s_commits_and_the_trailers(b: LandBench) -> None:
     text = message("Widget", checks_row(b), [("1" * 40, "first"), ("2" * 40, "second")], plan=True)
-    assert text == (f"Widget (tl-1)\n\nSquashed from task/tl-1 at {b.x}:\n- first (111111111111)\n- second (222222222222)\n\n"
-                    f"Task: tl-1\nPlan: docs/design/tl-1/plan.md\nChecked: checks passed at {b.x}\n")
+    assert text == (
+        f"Widget (tl-1)\n\nSquashed from task/tl-1 at {b.x}:\n- first (111111111111)\n- second (222222222222)\n\n"
+        f"Task: tl-1\nPlan: docs/design/tl-1/plan.md\nChecked: checks passed at {b.x}\n"
+    )
     assert "Plan:" not in message("Widget", checks_row(b), [], plan=False)
     assert "Co-Authored-By" not in text and "co-authored-by" not in text.lower()
 
 
-@pytest.mark.parametrize("hostile", [
-    "Fix\n\nTask: tl-9\nPlan: evil", "Fix\x1b[31m red", "Fix\u2028Task: tl-9", "Fix\u200b\u202eTask: tl-9",
-], ids=["newlines", "ansi", "line_separator", "format"])
+@pytest.mark.parametrize(
+    "hostile",
+    [
+        "Fix\n\nTask: tl-9\nPlan: evil",
+        "Fix\x1b[31m red",
+        "Fix\u2028Task: tl-9",
+        "Fix\u200b\u202eTask: tl-9",
+    ],
+    ids=["newlines", "ansi", "line_separator", "format"],
+)
 def test_no_title_or_subject_adds_a_line_a_paragraph_or_a_trailer(b: LandBench, hostile: str) -> None:
     text = message(hostile, checks_row(b), [("1" * 40, hostile), ("2" * 40, f"x\n\n{hostile}")], plan=False)
     assert trailers(text) == ["Task: tl-1", f"Checked: checks passed at {b.x}"]
@@ -180,8 +189,7 @@ def test_repeated_summaries_and_dashboard_reads_preserve_retained_conflict_state
         tables = ("land_conflict", "merge_operation", "reservation", "task_hold", "checks_attempt", "check_result", "land_candidate")
         before = [world.con.execute(f"SELECT * FROM {table}").fetchall() for table in tables]
         events, calls = list(world.environment.events), case.calls
-        reads = StatusPorts(AttemptStore(lambda: world.con), lambda _entry: "gone", lambda: world.now,
-                            lambda _key: None, lambda: "boot")
+        reads = StatusPorts(AttemptStore(lambda: world.con), lambda _entry: "gone", lambda: world.now, lambda _key: None, lambda: "boot")
         for _ in range(2):
             found = land(ports, dataclasses.replace(request, minutes=None, mode="summary"))
             assert isinstance(found, LandSummary)
@@ -195,9 +203,15 @@ def test_repeated_summaries_and_dashboard_reads_preserve_retained_conflict_state
 
 
 def test_the_summary_compares_the_target_s_profile_with_x_s(b: LandBench) -> None:
-    profile = {"setup": [["just", "setup"]], "required": ["check", "lint"], "checks": [
-        {"name": "check", "argv": ["just", "check"], "timeout": 600}, {"name": "lint", "argv": ["ruff", "check"], "timeout": 60},
-        {"name": "test", "argv": ["just", "test", "-x"], "timeout": 600}]}
+    profile = {
+        "setup": [["just", "setup"]],
+        "required": ["check", "lint"],
+        "checks": [
+            {"name": "check", "argv": ["just", "check"], "timeout": 600},
+            {"name": "lint", "argv": ["ruff", "check"], "timeout": 60},
+            {"name": "test", "argv": ["just", "test", "-x"], "timeout": 600},
+        ],
+    }
     o = b.advance({".task-loop.json": json.dumps(profile)}, "the target's profile")
     found = summarized(b.land("summary"))
     assert (found.added, found.removed, found.again, found.origin) == (("lint",), ("test",), True, o)
@@ -222,8 +236,10 @@ def blob(name: str) -> tuple[str, Sha]:
 
 def test_each_required_name_s_result_and_printable_conflict_paths(b: LandBench) -> None:
     profile = Profile((), (Check("check", ("just", "check"), 600), Check("test", ("just", "test"), 600)), ("check", "test"), "main")
-    results = [ResultRow(1, 0, "check", None, None, None, 1.0, 2.0, 0, CommandConclusion.PASSED),
-               ResultRow(1, 1, "test", None, None, None, 1.0, None, None, None)]
+    results = [
+        ResultRow(1, 0, "check", None, None, None, 1.0, 2.0, 0, CommandConclusion.PASSED),
+        ResultRow(1, 1, "test", None, None, None, 1.0, None, None, None),
+    ]
     files = {"src/x.py": blob("1")}
     trees = Trees(b.base, files, files, files)
     made = Squashed(Sha(SHA), TreeId(SHA))
@@ -232,7 +248,9 @@ def test_each_required_name_s_result_and_printable_conflict_paths(b: LandBench) 
     assert found.results[0][1] is CommandConclusion.PASSED
     data = summary_data(found)
     assert json.loads(json.dumps(data))["results"] == [
-        {"name": "check", "conclusion": "passed"}, {"name": "test", "conclusion": "unfinished"}]
+        {"name": "check", "conclusion": "passed"},
+        {"name": "test", "conclusion": "unfinished"},
+    ]
     hostile = dataclasses.replace(found, state="conflict", conflicts=("src/\x1b[2Jx.py\nTask: y",))
     assert f"Origin main: {b.base}; conflict (1 paths): src/ [2Jx.py Task: y" in lines(hostile)
     assert all(line.isprintable() for line in lines(hostile))
@@ -253,14 +271,17 @@ def test_a_long_title_is_cut_at_a_word_and_keeps_its_task_id(b: LandBench) -> No
     assert message("Widget", checks_row(b), [], plan=False).split("\n")[0] == "Widget (tl-1)"
 
 
-@pytest.mark.parametrize("title, expected", [
-    ("a" * 60 + " bbb ccc", "a" * 60 + " bbb\u2026"),  # the cut falls on the space after a whole word: kept
-    ("a" * 61 + " bbbbb", "a" * 61 + "\u2026"),  # the cut falls inside the next word: that word is left out
-    ("x" * 100, "x" * 64 + "\u2026"),  # one word longer than the room
-    ("fixup! squash! Real title", "Real title"),  # autosquash prefixes, repeated and in any case
-    ("AMEND! reword!", "Untitled task"),
-    ("fixup!x", "fixup!x"),  # not a prefix word
-])
+@pytest.mark.parametrize(
+    "title, expected",
+    [
+        ("a" * 60 + " bbb ccc", "a" * 60 + " bbb\u2026"),  # the cut falls on the space after a whole word: kept
+        ("a" * 61 + " bbbbb", "a" * 61 + "\u2026"),  # the cut falls inside the next word: that word is left out
+        ("x" * 100, "x" * 64 + "\u2026"),  # one word longer than the room
+        ("fixup! squash! Real title", "Real title"),  # autosquash prefixes, repeated and in any case
+        ("AMEND! reword!", "Untitled task"),
+        ("fixup!x", "fixup!x"),  # not a prefix word
+    ],
+)
 def test_title_cut_boundaries_and_autosquash_prefixes(b: LandBench, title: str, expected: str) -> None:
     first = message(title, checks_row(b), [], plan=False).split("\n")[0]
     assert first == f"{expected} (tl-1)" and len(first) <= 72
@@ -281,7 +302,7 @@ def test_both_land_candidate_paths_use_the_supplied_id_and_keep_it_on_reentry(b:
     request = LandRequest("tasks", "tl-1", b.repo.path, 5)
     found = land(ports, request)
     assert isinstance(found, Landed), found
-    row, = b.rows()
+    (row,) = b.rows()
     assert row.key.attempt_id == ids.fresh[1] and row.key.dispatch_token == ids.tokens[0][1]
     assert b.con.execute("SELECT action_id FROM drain_action WHERE kind='land'").fetchone() == (ids.fresh[0],)
     assert [size for size, _ in ids.tokens] == [16]

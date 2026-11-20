@@ -75,18 +75,39 @@ def test_accepted_commit_remains_reachable_after_independent_base_release(execut
 @pytest.mark.parametrize("after", [False, True])
 @pytest.mark.parametrize("boundary", ["capture", "object", "ref", "saved", "exclude", "cleanup", "cleaned", "release", "released"])
 def test_accepted_save_cleanup_and_release_restart_at_every_write(
-    execution_case: ExecutionCase, monkeypatch: pytest.MonkeyPatch, boundary: str, after: bool,
+    execution_case: ExecutionCase,
+    monkeypatch: pytest.MonkeyPatch,
+    boundary: str,
+    after: bool,
 ) -> None:
     c = execution_case
     save, release = ConflictStore.save, ConflictStore.release
 
     def put(self: ConflictStore, key: AttemptKey, previous: Save | None, updated: Save) -> Save:
         assert not c.con.in_transaction
-        selected = ((updated.cleanup is None and updated.phase is {
-            "capture": SavePhase.CAPTURE, "object": SavePhase.OBJECT, "ref": SavePhase.REF, "saved": SavePhase.COMPLETE,
-        }.get(boundary)) or (updated.cleanup is not None and updated.release is None and updated.cleanup.phase is {
-            "exclude": CleanupPhase.EXCLUDE, "cleanup": CleanupPhase.PARK, "cleaned": CleanupPhase.COMPLETE,
-        }.get(boundary)) or (boundary == "release" and updated.release is not None))
+        selected = (
+            (
+                updated.cleanup is None
+                and updated.phase
+                is {
+                    "capture": SavePhase.CAPTURE,
+                    "object": SavePhase.OBJECT,
+                    "ref": SavePhase.REF,
+                    "saved": SavePhase.COMPLETE,
+                }.get(boundary)
+            )
+            or (
+                updated.cleanup is not None
+                and updated.release is None
+                and updated.cleanup.phase
+                is {
+                    "exclude": CleanupPhase.EXCLUDE,
+                    "cleanup": CleanupPhase.PARK,
+                    "cleaned": CleanupPhase.COMPLETE,
+                }.get(boundary)
+            )
+            or (boundary == "release" and updated.release is not None)
+        )
         if selected and not after:
             raise KeyboardInterrupt
         value = save(self, key, previous, updated)
@@ -139,7 +160,9 @@ def pending_release(c: ExecutionCase, patch: pytest.MonkeyPatch) -> Save:
 
 @pytest.mark.parametrize("after", [False, True])
 def test_accepted_ignored_protection_resumes_after_interruption(
-    execution_case: ExecutionCase, monkeypatch: pytest.MonkeyPatch, after: bool,
+    execution_case: ExecutionCase,
+    monkeypatch: pytest.MonkeyPatch,
+    after: bool,
 ) -> None:
     c = execution_case
     exclude = FakeWorktree.exclude
@@ -167,7 +190,9 @@ def test_accepted_ignored_protection_resumes_after_interruption(
 
 @pytest.mark.parametrize("after", [False, True])
 def test_accepted_parking_adopts_observed_effect(
-    execution_case: ExecutionCase, monkeypatch: pytest.MonkeyPatch, after: bool,
+    execution_case: ExecutionCase,
+    monkeypatch: pytest.MonkeyPatch,
+    after: bool,
 ) -> None:
     c = execution_case
     saved = pending_release(c, monkeypatch)
@@ -195,13 +220,15 @@ def test_accepted_parking_adopts_observed_effect(
 
 
 def test_accepted_release_transaction_rolls_back_and_preserves_other_custody(
-    execution_case: ExecutionCase, monkeypatch: pytest.MonkeyPatch,
+    execution_case: ExecutionCase,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     c = execution_case
     saved = pending_release(c, monkeypatch)
     c.con.execute("INSERT INTO slot(repo_id,name,path,generation) VALUES (?,'other','/other',7)", (c.record.request.repo_id,))
-    c.con.execute("INSERT INTO reservation(repo_id,slot,attempt_id,generation) VALUES (?,'other','other-attempt',7)",
-                  (c.record.request.repo_id,))
+    c.con.execute(
+        "INSERT INTO reservation(repo_id,slot,attempt_id,generation) VALUES (?,'other','other-attempt',7)", (c.record.request.repo_id,)
+    )
     c.con.execute("CREATE TEMP TRIGGER refuse_release BEFORE DELETE ON reservation BEGIN SELECT RAISE(ABORT,'stop'); END")
     result = c.resume()
     assert isinstance(result, Unavailable) and result.explanation
@@ -217,7 +244,9 @@ def test_accepted_release_transaction_rolls_back_and_preserves_other_custody(
 
 @pytest.mark.parametrize("changed", ["missing", "foreign", "worker", "ref", "files", "ignored", "repository"])
 def test_accepted_pending_release_refuses_changed_evidence(
-    execution_case: ExecutionCase, monkeypatch: pytest.MonkeyPatch, changed: str,
+    execution_case: ExecutionCase,
+    monkeypatch: pytest.MonkeyPatch,
+    changed: str,
 ) -> None:
     c = execution_case
     saved = pending_release(c, monkeypatch)
@@ -242,15 +271,18 @@ def test_accepted_pending_release_refuses_changed_evidence(
 
 
 def test_accepted_replay_after_slot_reuse_reads_only_completion(
-    execution_case: ExecutionCase, monkeypatch: pytest.MonkeyPatch,
+    execution_case: ExecutionCase,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     c = execution_case
     result = c.resume()
     assert isinstance(result, Completed)
     c.restart()
     c.con.execute("UPDATE slot SET generation=generation+1,path='/reused' WHERE name=?", (c.record.slot,))
-    c.con.execute("INSERT INTO reservation(repo_id,slot,attempt_id,generation) VALUES (?,?,?,?)",
-                  (c.record.request.repo_id, c.record.slot, "new-attempt", c.record.key.reservation_generation + 1))
+    c.con.execute(
+        "INSERT INTO reservation(repo_id,slot,attempt_id,generation) VALUES (?,?,?,?)",
+        (c.record.request.repo_id, c.record.slot, "new-attempt", c.record.key.reservation_generation + 1),
+    )
     c.slot.write_file("new-owner", "keep new bytes")
 
     def forbidden(*_args: object, **_kwargs: object) -> Never:
@@ -264,14 +296,18 @@ def test_accepted_replay_after_slot_reuse_reads_only_completion(
     c.ports = replace(c.ports, gone=forbidden, checkouts=forbidden, run=forbidden)
     assert c.resume() == result and c.slot.read_file("new-owner") == "keep new bytes"
     assert c.con.execute("SELECT attempt_id,generation FROM reservation").fetchone() == (
-        "new-attempt", c.record.key.reservation_generation + 1)
+        "new-attempt",
+        c.record.key.reservation_generation + 1,
+    )
     key = c.record.key
     assert c.ports.store.completed(AttemptKey(key.attempt_id, "forged", key.reservation_generation)) is None
 
 
 @pytest.mark.parametrize("field", ["commit", "source", "target", "explanation"])
 def test_accepted_release_requires_exact_completed_result(
-    execution_case: ExecutionCase, monkeypatch: pytest.MonkeyPatch, field: str,
+    execution_case: ExecutionCase,
+    monkeypatch: pytest.MonkeyPatch,
+    field: str,
 ) -> None:
     c = execution_case
     saved = pending_release(c, monkeypatch)
@@ -286,7 +322,8 @@ def test_accepted_release_requires_exact_completed_result(
 
 
 def test_accepted_cleanup_cannot_be_rebound_to_different_work(
-    execution_case: ExecutionCase, monkeypatch: pytest.MonkeyPatch,
+    execution_case: ExecutionCase,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     c = execution_case
     saved = pending_release(c, monkeypatch)

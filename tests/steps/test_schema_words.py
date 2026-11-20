@@ -77,7 +77,8 @@ def test_recovery_refuses_another_version_without_modifying_it(tmp_path: Path, d
 @pytest.mark.parametrize("direction", [*VERSIONS, "incomplete"])
 @pytest.mark.parametrize("command", list(COMMANDS))
 def test_another_schema_version_is_refused_schema_and_nothing_is_written(
-        tmp_path: Path, capsys: pytest.CaptureFixture[str], command: str, direction: str) -> None:
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], command: str, direction: str
+) -> None:
     folder = tmp_path / "state"
     folder.mkdir()
     version = VERSIONS.get(direction, SCHEMA.version)
@@ -97,7 +98,8 @@ def test_another_schema_version_is_refused_schema_and_nothing_is_written(
 
 @pytest.mark.parametrize("direction", [*VERSIONS, "incomplete"])
 def test_slot_adopt_refuses_another_schema_version_and_writes_nothing(
-        tmp_path: Path, slot: FakeWorktree, checkouts: PinnedViews, slot_files: FakeSlotFiles, direction: str) -> None:
+    tmp_path: Path, slot: FakeWorktree, checkouts: PinnedViews, slot_files: FakeSlotFiles, direction: str
+) -> None:
     folder, main_checkout = tmp_path / "state", slot.repo.path
     folder.mkdir()
     main_checkout.mkdir()

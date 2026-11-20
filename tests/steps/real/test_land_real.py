@@ -122,16 +122,57 @@ class Real:
     def ports(self) -> LandPorts:
         art, con = self.root / "art", self.con
         setup = SetupStore(lambda: con)
-        preparation = Preparation(EnvironmentPorts(
-            setup, VIEWS.checkouts, VIEWS.slot_profiles, RealEnvFiles(), setup_process, setup_seen, group_alive, EvidenceFiles(art),
-            time.time, sys.platform, shutil.rmtree.avoids_symlink_attacks, lambda *_probe: True, (art,), 4096))  # tmp_path is long
+        preparation = Preparation(
+            EnvironmentPorts(
+                setup,
+                VIEWS.checkouts,
+                VIEWS.slot_profiles,
+                RealEnvFiles(),
+                setup_process,
+                setup_seen,
+                group_alive,
+                EvidenceFiles(art),
+                time.time,
+                sys.platform,
+                shutil.rmtree.avoids_symlink_attacks,
+                lambda *_probe: True,
+                (art,),
+                4096,
+            )
+        )  # tmp_path is long
         environ = {"PATH": os.environ["PATH"], "HOME": str(self.root)}
-        work = Checking(CheckStore(lambda: con), setup, EvidenceFiles(art), VIEWS.checkouts, RealSlotFiles(),
-                        VIEWS.slot_profiles, preparation, Block(BlockPorts(setup_process, group_alive, time.time)), setup_seen, entry_seen,
-                        RealEnvFiles().empty_scratch, time.time, lambda: scrubbed(environ), ids=NativeIds())
-        return LandPorts(work, LandStore(lambda: con), VIEWS.remotes, lambda path: GitProfileFiles(path, VIEWS.remotes),
-                         self.tasks, heartbeat_for, NoBeats, this_process, lambda _path: True, landing,
-                             dict(os.environ), self.close, conflict_handoff(work, VIEWS, heartbeat_for), ids=NativeIds())
+        work = Checking(
+            CheckStore(lambda: con),
+            setup,
+            EvidenceFiles(art),
+            VIEWS.checkouts,
+            RealSlotFiles(),
+            VIEWS.slot_profiles,
+            preparation,
+            Block(BlockPorts(setup_process, group_alive, time.time)),
+            setup_seen,
+            entry_seen,
+            RealEnvFiles().empty_scratch,
+            time.time,
+            lambda: scrubbed(environ),
+            ids=NativeIds(),
+        )
+        return LandPorts(
+            work,
+            LandStore(lambda: con),
+            VIEWS.remotes,
+            lambda path: GitProfileFiles(path, VIEWS.remotes),
+            self.tasks,
+            heartbeat_for,
+            NoBeats,
+            this_process,
+            lambda _path: True,
+            landing,
+            dict(os.environ),
+            self.close,
+            conflict_handoff(work, VIEWS, heartbeat_for),
+            ids=NativeIds(),
+        )
 
     def tasks(self, task_id: str, backlog: str, root: str) -> TaskInspection:
         return inspect_task(TaskBinding(TaskScope(backlog), Path(root)), self.tracker, task_id)
@@ -173,11 +214,19 @@ def test_the_same_tree_lands_with_x_s_tree_and_no_slot(real: Real) -> None:
     assert real.rev(real.main, f"{s}^{{tree}}") == real.rev(real.main, f"{real.x}^{{tree}}") and s != real.x
     assert real.person() == before
     assert git(real.main, "log", "-1", "--format=%an <%ae> %cn <%ce>", s).strip() == (
-        "Person <person@example.invalid> Person <person@example.invalid>")
+        "Person <person@example.invalid> Person <person@example.invalid>"
+    )
     text = git(real.main, "log", "-1", "--format=%B", s)
     assert text.startswith(f"Widget (tl-1)\n\nSquashed from task/tl-1 at {real.x}:\n- the task's commit ({real.x[:12]})\n")
     assert git(real.main, "log", "-1", "--format=%(trailers:only,unfold)", s).split() == [
-        "Task:", "tl-1", "Checked:", "checks", "passed", "at", real.x]
+        "Task:",
+        "tl-1",
+        "Checked:",
+        "checks",
+        "passed",
+        "at",
+        real.x,
+    ]
     assert found.row.close == "closed" and real.closed == [("tl-1", f"Landed {s} on main (task/tl-1 at {real.x})")]
 
 

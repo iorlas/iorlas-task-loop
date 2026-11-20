@@ -144,8 +144,12 @@ def _refusal(result: object, s: str) -> Failed:
         return Failed("unavailable", "remote", f"`{REMOTE}` could not be reached (network or credentials): rerun.")
     if isinstance(result, HookRejected):
         return Failed("unavailable", "git", "A hook refused the push although hooks are off: rerun.")
-    return Failed("refused", "remote_rejected", f"`{REMOTE}` refused the push of S {s} to main by its own policy, not a race; "
-                  "nothing was pushed and the candidate stays validated.")
+    return Failed(
+        "refused",
+        "remote_rejected",
+        f"`{REMOTE}` refused the push of S {s} to main by its own policy, not a race; "
+        "nothing was pushed and the candidate stays validated.",
+    )
 
 
 def _started(lands: LandStore, clock: Callable[[], float], row: LandRow) -> Delivered | Failed | None:
@@ -211,8 +215,11 @@ def deliver(lands: LandStore, clock: Callable[[], float], origin: Origin, row: L
 
 def _moved(row: LandRow) -> Failed:
     """The fact only; `land_guide`'s `target_moved` says what the rerun does."""
-    return Failed("unavailable", "target_moved", f"origin's main moved off {row.origin} during this land (candidate {row.number}, "
-                  f"S {row.commit}); nothing was pushed.")
+    return Failed(
+        "unavailable",
+        "target_moved",
+        f"origin's main moved off {row.origin} during this land (candidate {row.number}, S {row.commit}); nothing was pushed.",
+    )
 
 
 def observed(lands: LandStore, clock: Callable[[], float], origin: Origin, row: LandRow) -> Delivered | Failed | Undelivered:

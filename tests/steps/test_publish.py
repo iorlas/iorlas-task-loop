@@ -92,7 +92,9 @@ def external_git(registered: sqlite3.Connection, monkeypatch: pytest.MonkeyPatch
 
 
 def test_push_guard_rejects_a_write_transaction_before_effects(
-    registered: sqlite3.Connection, repo: ScriptedPushRepo, remote: FakeRemote,
+    registered: sqlite3.Connection,
+    repo: ScriptedPushRepo,
+    remote: FakeRemote,
 ) -> None:
     worktree = repo.worktree(repo.path)
     effects: list[str] = []
@@ -128,8 +130,7 @@ class Observed:
 
 
 def agent(slot: FakeWorktree, files: dict[str, str], disposition: str = "planned") -> Callable[..., RunOutcome]:
-    answer = {"disposition": disposition, "plan_path": P, "paths": list(files), "message": "Plan" if files else None,
-              "explanation": "done"}
+    answer = {"disposition": disposition, "plan_path": P, "paths": list(files), "message": "Plan" if files else None, "explanation": "done"}
 
     def call(harness: Harness, spec: LaunchSpec, timeout: float, hooks: RunHooks | None) -> RunOutcome:
         for path, text in files.items():
@@ -149,8 +150,18 @@ def nowhere(*_args: object) -> AbstractContextManager[None]:
     return nothing()
 
 
-def run(con: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, files: SlotFiles,
-        written: dict[str, str], disposition: str = "planned", *, commit: bool = True, release: bool = True) -> str:
+def run(
+    con: sqlite3.Connection,
+    tmp_path: Path,
+    slot: FakeWorktree,
+    checkouts: Checkouts,
+    files: SlotFiles,
+    written: dict[str, str],
+    disposition: str = "planned",
+    *,
+    commit: bool = True,
+    release: bool = True,
+) -> str:
     """The registered attempt run once on `task/tl-1`, committed and released (settled): the branch tip."""
     store = AttemptStore(lambda: con)
     attempts = Attempts(
@@ -166,8 +177,19 @@ def run(con: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: 
     if commit:
         FactoryCommit(store, checkouts, files, lambda _w: True, lambda: 20, nowhere, ids=NativeIds()).commit(KEY)
     if release:
-        releaser = SlotRelease(store, checkouts, files, lambda _e: "gone", lambda _w: True, nowhere, lambda _r, _t: True, lambda: 30,
-                               lambda _setup: "gone", lambda _scratch: True, ids=NativeIds())
+        releaser = SlotRelease(
+            store,
+            checkouts,
+            files,
+            lambda _e: "gone",
+            lambda _w: True,
+            nowhere,
+            lambda _r, _t: True,
+            lambda: 30,
+            lambda _setup: "gone",
+            lambda _scratch: True,
+            ids=NativeIds(),
+        )
         assert isinstance(releaser.release(KEY, False), Released)
     return tip(slot.repo)
 
@@ -176,8 +198,9 @@ def tip(repo: FakeRepo, prefix: str = "refs/heads/task/") -> str:
     return next(ref.sha for ref in repo.refs([prefix]) if ref.name in (BRANCH, "refs/remotes/origin/task/tl-1"))
 
 
-def publisher(con: sqlite3.Connection, git: Checkouts, files: SlotFiles, store: AttemptStore | None = None,
-              timing: OperationTiming | None = None) -> BranchPublish:
+def publisher(
+    con: sqlite3.Connection, git: Checkouts, files: SlotFiles, store: AttemptStore | None = None, timing: OperationTiming | None = None
+) -> BranchPublish:
     return BranchPublish(store or AttemptStore(lambda: con), git, files, lambda: 40, ids=NativeIds(), timing=timing)
 
 
@@ -186,21 +209,31 @@ def rows(con: sqlite3.Connection) -> list[tuple[object, ...]]:
 
 
 def test_commit_binds_commit_evidence_and_suppresses_stored_verdict(
-    registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles,
+    registered: sqlite3.Connection,
+    tmp_path: Path,
+    slot: FakeWorktree,
+    checkouts: Checkouts,
+    slot_files: SlotFiles,
 ) -> None:
     run(registered, tmp_path, slot, checkouts, slot_files, {P: PLAN_TEXT}, commit=False, release=False)
     files = EvidenceFiles(tmp_path)
     timing = partial(files.observe_operation, clock=lambda: 10.0, wall=lambda: 100.0, ids=NativeIds())
-    factory_commit = FactoryCommit(AttemptStore(lambda: registered), checkouts, slot_files, lambda _w: True,
-                        lambda: 20, nowhere, ids=NativeIds(), timing=timing)
+    factory_commit = FactoryCommit(
+        AttemptStore(lambda: registered), checkouts, slot_files, lambda _w: True, lambda: 20, nowhere, ids=NativeIds(), timing=timing
+    )
     first = factory_commit.commit(KEY)
     assert factory_commit.commit(KEY) == first
-    sample, = files.operations(KEY)
+    (sample,) = files.operations(KEY)
     assert sample.kind is OperationKind.COMMIT and sample.state is OperationState.COMPLETED
 
 
 def test_a_committed_released_plan_is_pushed_from_the_checkout_and_recorded_once(
-    registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, repo: ScriptedPushRepo, remote: FakeRemote, checkouts: Checkouts,
+    registered: sqlite3.Connection,
+    tmp_path: Path,
+    slot: FakeWorktree,
+    repo: ScriptedPushRepo,
+    remote: FakeRemote,
+    checkouts: Checkouts,
     slot_files: SlotFiles,
 ) -> None:
     x = run(registered, tmp_path, slot, checkouts, slot_files, {P: PLAN_TEXT})
@@ -255,15 +288,26 @@ def branch_rewritten(con: sqlite3.Connection, slot: FakeWorktree, _repo: Scripte
 @pytest.mark.parametrize(
     ("change", "reason", "opened"),
     [
-        (abandoned, "abandoned", 0), (uncommitted, "not_committed", 0), (redirected, "repository", 0),
-        (other_repository, "repository", 1), (no_origin, "no_remote", 2), (branch_missing, "branch_moved", 2),
+        (abandoned, "abandoned", 0),
+        (uncommitted, "not_committed", 0),
+        (redirected, "repository", 0),
+        (other_repository, "repository", 1),
+        (no_origin, "no_remote", 2),
+        (branch_missing, "branch_moved", 2),
         (branch_rewritten, "branch_moved", 2),
     ],
     ids=["abandoned", "not_committed", "redirected", "other_repository", "no_origin", "branch_missing", "branch_rewritten"],
 )
 def test_each_precondition_refuses_before_any_push(
-    registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, repo: ScriptedPushRepo, remote: FakeRemote, checkouts: Checkouts,
-    slot_files: FakeSlotFiles, change: Callable[[sqlite3.Connection, FakeWorktree, ScriptedPushRepo, FakeSlotFiles], None], reason: str,
+    registered: sqlite3.Connection,
+    tmp_path: Path,
+    slot: FakeWorktree,
+    repo: ScriptedPushRepo,
+    remote: FakeRemote,
+    checkouts: Checkouts,
+    slot_files: FakeSlotFiles,
+    change: Callable[[sqlite3.Connection, FakeWorktree, ScriptedPushRepo, FakeSlotFiles], None],
+    reason: str,
     opened: int,
 ) -> None:
     run(registered, tmp_path, slot, checkouts, slot_files, {P: PLAN_TEXT})
@@ -284,14 +328,20 @@ def test_absent_rejected_and_not_yet_committed_are_refused(
 ) -> None:
     git = Observed(checkouts)
     assert publisher(registered, git, slot_files).publish(AttemptKey("nope", "x", 1)) == NotPublished(
-        "refused", "absent", "No such attempt. Nothing was pushed or recorded.")
+        "refused", "absent", "No such attempt. Nothing was pushed or recorded."
+    )
     run(registered, tmp_path, slot, checkouts, slot_files, {P: " \n"}, release=False)  # rejected: plan_empty
     found = publisher(registered, git, slot_files).publish(KEY)
     assert isinstance(found, NotPublished) and found.reason == "not_committed" and "plan_empty" in found.detail and git.opened == []
 
 
 def test_a_remote_ahead_that_contains_x_is_refused_and_never_recorded(
-    registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, repo: ScriptedPushRepo, remote: FakeRemote, checkouts: Checkouts,
+    registered: sqlite3.Connection,
+    tmp_path: Path,
+    slot: FakeWorktree,
+    repo: ScriptedPushRepo,
+    remote: FakeRemote,
+    checkouts: Checkouts,
     slot_files: SlotFiles,
 ) -> None:
     """`ls_remote` reads the fetch side, which a `pushurl` may make another repository: only `Pushed` is recorded."""
@@ -346,8 +396,15 @@ def unreadable(_con: sqlite3.Connection, repo: ScriptedPushRepo, remote: FakeRem
     ids=["tip_absent", "tip_behind_x", "ls_remote_fails", "ancestry_timeout"],
 )
 def test_a_rejected_push_that_is_not_a_refusal_is_rerun_able_and_records_nothing(
-    registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, repo: ScriptedPushRepo, remote: FakeRemote, checkouts: Checkouts,
-    slot_files: SlotFiles, arrange: Callable[[sqlite3.Connection, ScriptedPushRepo, FakeRemote], str], expected: tuple[str, str],
+    registered: sqlite3.Connection,
+    tmp_path: Path,
+    slot: FakeWorktree,
+    repo: ScriptedPushRepo,
+    remote: FakeRemote,
+    checkouts: Checkouts,
+    slot_files: SlotFiles,
+    arrange: Callable[[sqlite3.Connection, ScriptedPushRepo, FakeRemote], str],
+    expected: tuple[str, str],
 ) -> None:
     run(registered, tmp_path, slot, checkouts, slot_files, {P: PLAN_TEXT})
     before = arrange(registered, repo, remote)
@@ -358,7 +415,12 @@ def test_a_rejected_push_that_is_not_a_refusal_is_rerun_able_and_records_nothing
 
 
 def test_a_diverged_remote_is_refused_and_kept_and_an_unknown_tip_is_remote_moved(
-    registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, repo: ScriptedPushRepo, remote: FakeRemote, checkouts: Checkouts,
+    registered: sqlite3.Connection,
+    tmp_path: Path,
+    slot: FakeWorktree,
+    repo: ScriptedPushRepo,
+    remote: FakeRemote,
+    checkouts: Checkouts,
     slot_files: SlotFiles,
 ) -> None:
     run(registered, tmp_path, slot, checkouts, slot_files, {P: PLAN_TEXT})
@@ -383,8 +445,15 @@ def test_a_diverged_remote_is_refused_and_kept_and_an_unknown_tip_is_remote_move
     ids=["offline", "remote_rejected", "plain_rejected", "hook_rejected", "git_unavailable"],
 )
 def test_a_push_that_does_not_land_records_nothing_and_prints_no_git_output(
-    registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, repo: ScriptedPushRepo, remote: FakeRemote, checkouts: Checkouts,
-    slot_files: SlotFiles, answer: PushResult | GitUnavailable | None, expected: tuple[str, str],
+    registered: sqlite3.Connection,
+    tmp_path: Path,
+    slot: FakeWorktree,
+    repo: ScriptedPushRepo,
+    remote: FakeRemote,
+    checkouts: Checkouts,
+    slot_files: SlotFiles,
+    answer: PushResult | GitUnavailable | None,
+    expected: tuple[str, str],
 ) -> None:
     run(registered, tmp_path, slot, checkouts, slot_files, {P: PLAN_TEXT})
     remote.offline = answer is None
@@ -396,7 +465,12 @@ def test_a_push_that_does_not_land_records_nothing_and_prints_no_git_output(
 
 
 def test_an_abandon_committed_during_the_push_is_refused_and_records_nothing(
-    registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, repo: ScriptedPushRepo, remote: FakeRemote, checkouts: Checkouts,
+    registered: sqlite3.Connection,
+    tmp_path: Path,
+    slot: FakeWorktree,
+    repo: ScriptedPushRepo,
+    remote: FakeRemote,
+    checkouts: Checkouts,
     slot_files: FakeSlotFiles,
 ) -> None:
     x = run(registered, tmp_path, slot, checkouts, slot_files, {P: PLAN_TEXT})
@@ -407,7 +481,12 @@ def test_an_abandon_committed_during_the_push_is_refused_and_records_nothing(
 
 
 def test_a_changed_commit_during_the_push_records_nothing_and_can_be_retried(
-    registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, repo: ScriptedPushRepo, remote: FakeRemote, checkouts: Checkouts,
+    registered: sqlite3.Connection,
+    tmp_path: Path,
+    slot: FakeWorktree,
+    repo: ScriptedPushRepo,
+    remote: FakeRemote,
+    checkouts: Checkouts,
     slot_files: SlotFiles,
 ) -> None:
     x = run(registered, tmp_path, slot, checkouts, slot_files, {P: PLAN_TEXT})
@@ -421,8 +500,7 @@ def test_a_changed_commit_during_the_push_records_nothing_and_can_be_retried(
 
     app = BranchPublish(AttemptStore(lambda: registered), checkouts, slot_files, clock, ids=NativeIds())
     found = app.publish(KEY)
-    assert found == NotPublished("unavailable", "changed",
-                                 f"The attempt changed during the push: origin holds {x}; nothing was recorded.")
+    assert found == NotPublished("unavailable", "changed", f"The attempt changed during the push: origin holds {x}; nothing was recorded.")
     assert rows(registered) == [] and remote.branches()["task/tl-1"] == x and clock_calls == []
     repo.during = lambda: None
     registered.execute("UPDATE attempt SET end_commit=?", (x,))
@@ -453,8 +531,14 @@ def test_a_failed_record_is_unavailable_store_and_a_rerun_records_it(
 
 @pytest.mark.parametrize("broken_evidence", [False, True])
 def test_push_retry_retains_effect_duration_and_evidence_failure_does_not_repeat_push(
-    registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, repo: ScriptedPushRepo, checkouts: Checkouts,
-    slot_files: SlotFiles, monkeypatch: pytest.MonkeyPatch, broken_evidence: bool,
+    registered: sqlite3.Connection,
+    tmp_path: Path,
+    slot: FakeWorktree,
+    repo: ScriptedPushRepo,
+    checkouts: Checkouts,
+    slot_files: SlotFiles,
+    monkeypatch: pytest.MonkeyPatch,
+    broken_evidence: bool,
 ) -> None:
     x = run(registered, tmp_path, slot, checkouts, slot_files, {P: PLAN_TEXT})
     files, now, calls = EvidenceFiles(tmp_path), [0.0], []
@@ -503,7 +587,12 @@ def test_two_publishers_at_once_record_one_row(
 
 
 def test_a_ref_name_collision_on_origin_is_named_not_reported_as_the_remotes_policy(
-    registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, repo: ScriptedPushRepo, remote: FakeRemote, checkouts: Checkouts,
+    registered: sqlite3.Connection,
+    tmp_path: Path,
+    slot: FakeWorktree,
+    repo: ScriptedPushRepo,
+    remote: FakeRemote,
+    checkouts: Checkouts,
     slot_files: SlotFiles,
 ) -> None:
     run(registered, tmp_path, slot, checkouts, slot_files, {P: PLAN_TEXT})

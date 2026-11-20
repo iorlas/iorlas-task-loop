@@ -20,9 +20,11 @@ def started(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 def test_open_source_keeps_commit_identity_before_lazy_reads(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     repo = started(tmp_path, monkeypatch)
-    files = {"pyproject.toml": b'[project]\nname = "task-loop"\nversion = "0.1.0"',
-             "uv.lock": b'[[package]]\nname = "example"\nversion = "1.0.0"',
-             "packages/example/pyproject.toml": b'[project]\nname = "example"\nversion = "1.0.0"'}
+    files = {
+        "pyproject.toml": b'[project]\nname = "task-loop"\nversion = "0.1.0"',
+        "uv.lock": b'[[package]]\nname = "example"\nversion = "1.0.0"',
+        "packages/example/pyproject.toml": b'[project]\nname = "example"\nversion = "1.0.0"',
+    }
     for path, data in files.items():
         target = repo / path
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -66,7 +68,10 @@ def test_real_modes_missing_paths_and_missing_commits(tmp_path: Path, monkeypatc
     entries = source.entries()
     assert not isinstance(entries, ReadFailure)
     assert {item.path: item.mode for item in entries} == {
-        "regular": "100644", "executable": "100755", "link": "120000", "submodule": "160000",
+        "regular": "100644",
+        "executable": "100755",
+        "link": "120000",
+        "submodule": "160000",
     }
     for path, mode in [("link", "120000"), ("submodule", "160000")]:
         result = source.read(path)

@@ -47,7 +47,8 @@ def retained(c: ExecutionCase) -> Save:
     saved = completed or c.ports.store.saved(c.record.key)
     assert saved is not None and saved.abort is not None
     assert c.con.execute("SELECT attempt_id,generation FROM reservation").fetchone() == (
-        None if completed else (c.record.key.attempt_id, c.record.key.reservation_generation))
+        None if completed else (c.record.key.attempt_id, c.record.key.reservation_generation)
+    )
     assert dict(c.ports.repo.branches("task/")) == {"task/tl-1": c.record.request.checked}
     assert dict(c.ports.repo.branches("task-loop/conflicts/")) == {saved.ref.removeprefix("refs/heads/"): saved.commit}
     return saved
@@ -82,7 +83,10 @@ def interrupt(c: ExecutionCase, patch: pytest.MonkeyPatch, boundary: str) -> lis
 @pytest.mark.parametrize("boundary", ["before", "after", "complete"])
 @pytest.mark.parametrize("delete", [False, True])
 def test_abort_restart_retains_bytes_and_exact_custody(
-    execution_case: ExecutionCase, monkeypatch: pytest.MonkeyPatch, boundary: str, delete: bool,
+    execution_case: ExecutionCase,
+    monkeypatch: pytest.MonkeyPatch,
+    boundary: str,
+    delete: bool,
 ) -> None:
     c = execution_case
     c.disposition = Disposition.OWNER
@@ -176,13 +180,33 @@ def change_ownership(c: ExecutionCase, changed: str) -> None:
         c.gone = False
 
 
-@pytest.mark.parametrize("changed", [
-    "head", "branch", "merge", "index", "tracked", "untracked_bytes", "untracked_name", "ignored", "gitdir", "repo",
-    "token", "generation", "path", "worker", "live", "ref",
-])
+@pytest.mark.parametrize(
+    "changed",
+    [
+        "head",
+        "branch",
+        "merge",
+        "index",
+        "tracked",
+        "untracked_bytes",
+        "untracked_name",
+        "ignored",
+        "gitdir",
+        "repo",
+        "token",
+        "generation",
+        "path",
+        "worker",
+        "live",
+        "ref",
+    ],
+)
 @pytest.mark.parametrize("boundary", ["before", "after", "complete"])
 def test_changed_abort_expectations_are_never_adopted(
-    execution_case: ExecutionCase, monkeypatch: pytest.MonkeyPatch, changed: str, boundary: str,
+    execution_case: ExecutionCase,
+    monkeypatch: pytest.MonkeyPatch,
+    changed: str,
+    boundary: str,
 ) -> None:
     c = execution_case
     c.disposition, c.edit = Disposition.OWNER, edit
@@ -226,7 +250,9 @@ def test_abort_failure_leaves_pending_intent(execution_case: ExecutionCase, monk
 
 @pytest.mark.parametrize("boundary", ["capture", "update_ref"])
 def test_preservation_failure_prevents_abort(
-    execution_case: ExecutionCase, monkeypatch: pytest.MonkeyPatch, boundary: str,
+    execution_case: ExecutionCase,
+    monkeypatch: pytest.MonkeyPatch,
+    boundary: str,
 ) -> None:
     c = execution_case
     c.disposition = Disposition.OWNER

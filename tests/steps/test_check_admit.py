@@ -27,7 +27,11 @@ from taskloop.ids import NativeIds
 
 @pytest.fixture
 def bench(
-    done: Done, repo: FakeRepo, checkouts: PinnedViews, slot_files: FakeSlotFiles, monkeypatch: pytest.MonkeyPatch,
+    done: Done,
+    repo: FakeRepo,
+    checkouts: PinnedViews,
+    slot_files: FakeSlotFiles,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> Generator[ChecksBench]:
     found = ChecksBench(done, repo, checkouts, slot_files)
     guard_git(found.con, monkeypatch)
@@ -74,24 +78,43 @@ def missing_x(bench: ChecksBench) -> None:
     bench.con.execute("UPDATE published_branch SET commit_sha=?", (gone,))
 
 
-@pytest.mark.parametrize(("arrange", "word"), [
-    (lambda b: setattr(b, "now", 100), "expired"),
-    (lambda b: b.con.execute("UPDATE slot_release SET claim='unclaiming'"), "not_advanceable"),  # the abandon's flip went first
-    (lambda b: b.con.execute("UPDATE factory_commit SET verdict='rejected',reason='x'"), "not_advanceable"),
-    (lambda b: b.con.execute("DELETE FROM published_branch"), "not_advanceable"),
-    (lambda b: b.con.execute("UPDATE attempt SET step='plan',after_commit=NULL"), "not_advanceable"),  # an agent step follows
-    (lambda b: b.repo.delete_branch("task/tl-1", expected=Sha(b.done.x)), "branch_moved"),
-    (moved_branch, "branch_moved"),
-    (missing_x, "commit_missing"),
-    (lambda b: b.repo.rename_branch("main", "trunk"), "target"),
-    (lambda b: refused_profile(b, target="release"), "target"),
-    (lambda b: b.main(None), "target_profile"),
-    (lambda b: refused_profile(b, required=["check", "smoke"]), "target_profile"),
-    (lambda b: refused_profile(b, checks="many"), "target_profile"),
-    (lambda b: refused_profile(b, required=[]), "no_required"),
-    (lambda b: b.con.execute("INSERT INTO reservation VALUES ('s1',?,9,'another')", (b.repo.identity().key,)), "no_free_slot"),
-], ids=["expired", "unclaiming", "rejected", "unpublished", "plan", "branch_gone", "branch_moved", "commit_missing", "no_main",
-        "other_target", "no_profile", "required_undefined", "bad_profile", "no_required", "no_free_slot"])
+@pytest.mark.parametrize(
+    ("arrange", "word"),
+    [
+        (lambda b: setattr(b, "now", 100), "expired"),
+        (lambda b: b.con.execute("UPDATE slot_release SET claim='unclaiming'"), "not_advanceable"),  # the abandon's flip went first
+        (lambda b: b.con.execute("UPDATE factory_commit SET verdict='rejected',reason='x'"), "not_advanceable"),
+        (lambda b: b.con.execute("DELETE FROM published_branch"), "not_advanceable"),
+        (lambda b: b.con.execute("UPDATE attempt SET step='plan',after_commit=NULL"), "not_advanceable"),  # an agent step follows
+        (lambda b: b.repo.delete_branch("task/tl-1", expected=Sha(b.done.x)), "branch_moved"),
+        (moved_branch, "branch_moved"),
+        (missing_x, "commit_missing"),
+        (lambda b: b.repo.rename_branch("main", "trunk"), "target"),
+        (lambda b: refused_profile(b, target="release"), "target"),
+        (lambda b: b.main(None), "target_profile"),
+        (lambda b: refused_profile(b, required=["check", "smoke"]), "target_profile"),
+        (lambda b: refused_profile(b, checks="many"), "target_profile"),
+        (lambda b: refused_profile(b, required=[]), "no_required"),
+        (lambda b: b.con.execute("INSERT INTO reservation VALUES ('s1',?,9,'another')", (b.repo.identity().key,)), "no_free_slot"),
+    ],
+    ids=[
+        "expired",
+        "unclaiming",
+        "rejected",
+        "unpublished",
+        "plan",
+        "branch_gone",
+        "branch_moved",
+        "commit_missing",
+        "no_main",
+        "other_target",
+        "no_profile",
+        "required_undefined",
+        "bad_profile",
+        "no_required",
+        "no_free_slot",
+    ],
+)
 def test_each_refusal_before_the_tracker_read_writes_nothing(
     bench: ChecksBench, arrange: Callable[[ChecksBench], object], word: str
 ) -> None:
@@ -142,9 +165,14 @@ def test_a_failed_released_checks_attempt_is_re_run_as_number_2_and_the_first_is
     assert json.loads(str(rows[1][4])) == [["test", argv_digest(["just", "test"])]] and held == [("s1", again.key.attempt_id, 2)]
 
 
-@pytest.mark.parametrize(("conclusion", "abandoned", "word"), [
-    ("passed", False, "task_attempted"), ("failed", True, "not_advanceable"),
-], ids=["passed", "abandon_half_done"])
+@pytest.mark.parametrize(
+    ("conclusion", "abandoned", "word"),
+    [
+        ("passed", False, "task_attempted"),
+        ("failed", True, "not_advanceable"),
+    ],
+    ids=["passed", "abandon_half_done"],
+)
 def test_a_passed_or_abandoned_latest_attempt_is_never_re_run(bench: ChecksBench, conclusion: str, abandoned: bool, word: str) -> None:
     assert isinstance(bench.admit(), Admitted)
     bench.concluded(conclusion, abandoned=abandoned)
@@ -156,11 +184,15 @@ def test_a_passed_or_abandoned_latest_attempt_is_never_re_run(bench: ChecksBench
 CANDIDATE_COLUMNS = "candidate_id,dispatch_token,generation,checks_attempt_id,number,origin_commit,commit_sha,tree_same,required"
 
 
-@pytest.mark.parametrize(("change", "word"), [
-    ("validation='no_change',validated_at=3,delivery='no_change',delivered_at=3", "landed"),  # the close failed: task still open
-    ("validation='same_tree',validated_at=3", "landing"),
-    ("validation='same_tree',validated_at=3,superseded='withdrawn',superseded_at=4", None),
-], ids=["no_change_delivered", "pushable", "withdrawn"])
+@pytest.mark.parametrize(
+    ("change", "word"),
+    [
+        ("validation='no_change',validated_at=3,delivery='no_change',delivered_at=3", "landed"),  # the close failed: task still open
+        ("validation='same_tree',validated_at=3", "landing"),
+        ("validation='same_tree',validated_at=3,superseded='withdrawn',superseded_at=4", None),
+    ],
+    ids=["no_change_delivered", "pushable", "withdrawn"],
+)
 def test_a_re_run_is_refused_while_a_land_candidate_of_the_task_is_delivered_or_pushable(
     bench: ChecksBench, change: str, word: str | None
 ) -> None:
@@ -169,8 +201,11 @@ def test_a_re_run_is_refused_while_a_land_candidate_of_the_task_is_delivered_or_
     first = bench.admit()
     assert isinstance(first, Admitted)
     bench.concluded("failed")
-    bench.con.execute(f"""INSERT INTO land_candidate ({CANDIDATE_COLUMNS},slot,slot_head,deadline,admitted_at) VALUES
-    ('candidate','candidate-token',1,?,1,?,?,1,'[]','s9',?,300,2)""", (first.key.attempt_id, bench.done.target, bench.done.x, bench.done.d))
+    bench.con.execute(
+        f"""INSERT INTO land_candidate ({CANDIDATE_COLUMNS},slot,slot_head,deadline,admitted_at) VALUES
+    ('candidate','candidate-token',1,?,1,?,?,1,'[]','s9',?,300,2)""",
+        (first.key.attempt_id, bench.done.target, bench.done.x, bench.done.d),
+    )
     bench.con.execute(f"UPDATE land_candidate SET slot=NULL,slot_head=NULL,deadline=NULL,{change}")
     before = bench.stored()
     found = bench.admit(2)
@@ -200,9 +235,11 @@ def test_latest_number_keeps_earlier_land_facts_and_abandon_refusal_precedence(b
     bench.concluded("failed")
     assert isinstance(bench.admit(2), Admitted)
     bench.concluded("failed", abandoned=abandoned)
-    bench.con.execute(f"""INSERT INTO land_candidate ({CANDIDATE_COLUMNS},validation,validated_at,delivery,delivered_at,admitted_at)
+    bench.con.execute(
+        f"""INSERT INTO land_candidate ({CANDIDATE_COLUMNS},validation,validated_at,delivery,delivered_at,admitted_at)
     VALUES ('candidate','candidate-token',1,?,1,?,?,1,'[]','no_change',3,'no_change',3,2)""",
-                      (first.key.attempt_id, bench.done.target, bench.done.x))
+        (first.key.attempt_id, bench.done.target, bench.done.x),
+    )
     before = bench.stored()
     found = bench.admit(3)
     assert isinstance(found, AdmitRefused) and found.reason == ("not_advanceable" if abandoned else "landed")
@@ -214,8 +251,12 @@ def racer(bench: ChecksBench) -> None:
     repo_id = bench.repo.identity().key
     with begin_immediate(bench.con):
         bench.con.execute("INSERT INTO reservation VALUES ('s0',?,7,'winner')", (repo_id,))
-        insert(bench.con, ChecksAdmitted(AttemptKey("winner", "w", 7), "implement", 1, "s0", bench.done.d, bench.done.target,
-                                         (("check", "1" * 64),), 100.0))
+        insert(
+            bench.con,
+            ChecksAdmitted(
+                AttemptKey("winner", "w", 7), "implement", 1, "s0", bench.done.d, bench.done.target, (("check", "1" * 64),), 100.0
+            ),
+        )
 
 
 def concluded_racer(bench: ChecksBench) -> None:
@@ -224,12 +265,16 @@ def concluded_racer(bench: ChecksBench) -> None:
     bench.concluded("failed")
 
 
-@pytest.mark.parametrize(("arrange", "word"), [
-    (racer, "task_attempted"),
-    (concluded_racer, "task_attempted"),
-    (lambda b: b.con.execute("UPDATE slot_release SET claim='unclaiming'"), "not_advanceable"),  # the abandon's flip
-    (lambda b: b.con.execute("INSERT INTO reservation VALUES ('s1',?,9,'another')", (b.repo.identity().key,)), "no_free_slot"),
-], ids=["winner", "winner_failed", "abandon_flip", "slot_taken"])
+@pytest.mark.parametrize(
+    ("arrange", "word"),
+    [
+        (racer, "task_attempted"),
+        (concluded_racer, "task_attempted"),
+        (lambda b: b.con.execute("UPDATE slot_release SET claim='unclaiming'"), "not_advanceable"),  # the abandon's flip
+        (lambda b: b.con.execute("INSERT INTO reservation VALUES ('s1',?,9,'another')", (b.repo.identity().key,)), "no_free_slot"),
+    ],
+    ids=["winner", "winner_failed", "abandon_flip", "slot_taken"],
+)
 def test_a_commit_between_the_reads_and_the_write_is_seen_under_the_lock(
     bench: ChecksBench, arrange: Callable[[ChecksBench], object], word: str
 ) -> None:
@@ -242,8 +287,18 @@ def test_a_commit_between_the_reads_and_the_write_is_seen_under_the_lock(
 
 def test_the_agent_advance_refuses_the_check_step_before_any_tracker_read_or_input(bench: ChecksBench) -> None:
     """`admit_chain` admits only agent steps: after implement it is `not_advanceable` (never `kind("check")`)."""
-    advance = NextAdmission(lambda: bench.con, begin_immediate, EvidenceFiles(bench.done.path.parent), bench.inspect, bench.views,
-                            lambda: 10, lambda _p: True, bench.files, ids=NativeIds(), engine=ENGINE)
+    advance = NextAdmission(
+        lambda: bench.con,
+        begin_immediate,
+        EvidenceFiles(bench.done.path.parent),
+        bench.inspect,
+        bench.views,
+        lambda: 10,
+        lambda _p: True,
+        bench.files,
+        ids=NativeIds(),
+        engine=ENGINE,
+    )
     found = advance.admit_next(
         NextStepRequest(
             bench.done.implement,

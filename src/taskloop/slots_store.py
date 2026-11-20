@@ -41,9 +41,7 @@ class SlotsStore:
 
     def adopted(self, repo_id: str) -> dict[str, Path]:
         try:
-            rows: list[tuple[str, str]] = self._connection.execute(
-                "SELECT name,path FROM slot WHERE repo_id=?", (repo_id,)
-            ).fetchall()
+            rows: list[tuple[str, str]] = self._connection.execute("SELECT name,path FROM slot WHERE repo_id=?", (repo_id,)).fetchall()
         except sqlite3.Error as error:
             raise SlotsUnavailable("Slot rows unavailable") from error
         return {name: Path(path) for name, path in rows}

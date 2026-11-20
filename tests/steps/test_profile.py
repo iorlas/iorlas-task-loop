@@ -132,11 +132,40 @@ REFUSALS = [
     ("bad_value", encoded(required="check"), "required"),
     ("bad_value", encoded(target=""), "target"),
     ("bad_value", encoded(target=None), "target"),
-    *[("bad_value", encoded(target=odd), "target") for odd in (
-        "-x", "--upload-pack=y", "a..b", "a//b", "/a", "a/", "a.", "a.lock", "a/b.lock", "a/.b", ".a", "@", "a@{b", "a~1", "a^",
-        "a:b", "a?", "a*", "a[b", "a\\b", "a b", "a\nb", "a\x1bb", "a\x7f", "\ud800")],
-    *[("bad_value", encoded(checks=[check_with(name=odd)]), "checks[0].name") for odd in (
-        ".hidden", "-flag", "a/b", "a:b", "a\nb", "é", "a\ud800", "a b")],
+    *[
+        ("bad_value", encoded(target=odd), "target")
+        for odd in (
+            "-x",
+            "--upload-pack=y",
+            "a..b",
+            "a//b",
+            "/a",
+            "a/",
+            "a.",
+            "a.lock",
+            "a/b.lock",
+            "a/.b",
+            ".a",
+            "@",
+            "a@{b",
+            "a~1",
+            "a^",
+            "a:b",
+            "a?",
+            "a*",
+            "a[b",
+            "a\\b",
+            "a b",
+            "a\nb",
+            "a\x1bb",
+            "a\x7f",
+            "\ud800",
+        )
+    ],
+    *[
+        ("bad_value", encoded(checks=[check_with(name=odd)]), "checks[0].name")
+        for odd in (".hidden", "-flag", "a/b", "a:b", "a\nb", "é", "a\ud800", "a b")
+    ],
     ("bad_value", encoded(checks=[CHECK], required=["-check"]), "required[0]"),
     ("too_large", b" " * (64 * 1024 + 1), ""),
     ("too_large", encoded(checks=[check_with(name=f"c{index}") for index in range(33)]), "checks"),
@@ -149,8 +178,9 @@ REFUSALS = [
 ]
 
 
-@pytest.mark.parametrize("reason, data, key", REFUSALS, ids=[f"{reason}:{key or index}" for index, (reason, _d, key) in
-                                                            enumerate(REFUSALS)])
+@pytest.mark.parametrize(
+    "reason, data, key", REFUSALS, ids=[f"{reason}:{key or index}" for index, (reason, _d, key) in enumerate(REFUSALS)]
+)
 def test_each_refusal_has_its_fixed_word_and_key(reason: str, data: bytes, key: str) -> None:
     found = parse(data)
     assert isinstance(found, Refused)
@@ -186,8 +216,9 @@ MAIN = encoded(setup=[["main-setup"]], checks=[CHECK, TEST], required=["check", 
 
 
 def test_commands_come_from_the_commit_and_required_and_target_from_the_target_ref() -> None:
-    branch = encoded(setup=[["task-setup"]], checks=[check_with(argv=["edited"]), TEST, check_with(name="extra")],
-                     required=[], target="elsewhere")
+    branch = encoded(
+        setup=[["task-setup"]], checks=[check_with(argv=["edited"]), TEST, check_with(name="extra")], required=[], target="elsewhere"
+    )
     found = resolve(FakeProfileFiles({"X": branch, "main": MAIN}), "X", "main")
     assert found == Resolved(
         (("task-setup",),),
@@ -219,12 +250,15 @@ def test_the_targets_required_names_must_be_its_own_checks_first() -> None:
     assert (found.reason, found.side) == ("required_undefined", "target")
 
 
-@pytest.mark.parametrize("commits, side, reason", [
-    ({"X": MAIN}, "target", "no_commit"),
-    ({"X": MAIN, "main": None}, "target", "missing"),
-    ({"X": b"[]", "main": MAIN}, "commit", "not_object"),
-    ({"main": MAIN}, "commit", "no_commit"),
-])
+@pytest.mark.parametrize(
+    "commits, side, reason",
+    [
+        ({"X": MAIN}, "target", "no_commit"),
+        ({"X": MAIN, "main": None}, "target", "missing"),
+        ({"X": b"[]", "main": MAIN}, "commit", "not_object"),
+        ({"main": MAIN}, "commit", "no_commit"),
+    ],
+)
 def test_a_refusal_names_whose_profile_it_is(commits: dict[str, bytes | None], side: str, reason: str) -> None:
     found = resolve(FakeProfileFiles(commits), "X", "main")
     assert isinstance(found, Refused)
@@ -266,7 +300,8 @@ def test_a_symlink_or_submodule_profile_is_refused_not_unavailable() -> None:
 
     assert read_profile(Moded("160000"), "X") == Refused("not_a_file", detail=".task-loop.json at X is not a regular file (mode 160000)")
     assert resolve(Moded("120000"), "X", "main") == Refused(
-        "not_a_file", detail=".task-loop.json at X is not a regular file (mode 120000)", side="commit")
+        "not_a_file", detail=".task-loop.json at X is not a regular file (mode 120000)", side="commit"
+    )
 
 
 def test_the_adapter_reports_git_failure_as_unavailable(tmp_path: Path) -> None:

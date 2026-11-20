@@ -34,8 +34,14 @@ class Processes:
 
 
 def recovery(con: sqlite3.Connection, processes: Processes | None = None) -> Recovery:
-    return Recovery(RecoveryStore(lambda: con), processes or Processes(), lambda _admission: OWNED,
-                    lambda _admission: nullcontext(), lambda: 10, NativeIds())
+    return Recovery(
+        RecoveryStore(lambda: con),
+        processes or Processes(),
+        lambda _admission: OWNED,
+        lambda _admission: nullcontext(),
+        lambda: 10,
+        NativeIds(),
+    )
 
 
 @pytest.fixture
@@ -63,7 +69,10 @@ def test_standalone_and_already_held_custody_revalidate_without_reacquisition(co
 @pytest.mark.parametrize("state", [Seen.ALIVE, Seen.UNKNOWN])
 @pytest.mark.parametrize("renewal", [False, True])
 def test_live_or_unknown_entry_worker_and_previous_owner_block_authorization(
-    con: sqlite3.Connection, pid: int, state: Seen, renewal: bool,
+    con: sqlite3.Connection,
+    pid: int,
+    state: Seen,
+    renewal: bool,
 ) -> None:
     processes = Processes()
     app = recovery(con, processes)
@@ -103,7 +112,10 @@ def test_claim_eligibility_is_read_only_and_explanatory(con: sqlite3.Connection,
 @pytest.mark.parametrize(("exception", "outcome"), [(SlotBusy, Outcome.CUSTODY_BUSY), (SlotLockUnavailable, Outcome.UNAVAILABLE)])
 @pytest.mark.parametrize("renewal", [False, True])
 def test_unavailable_custody_has_no_authorization_or_claim_read(
-    con: sqlite3.Connection, exception: type[Exception], outcome: Outcome, renewal: bool,
+    con: sqlite3.Connection,
+    exception: type[Exception],
+    outcome: Outcome,
+    renewal: bool,
 ) -> None:
     app = recovery(con)
 
@@ -134,7 +146,9 @@ def test_unavailable_custody_has_no_authorization_or_claim_read(
     ],
 )
 def test_ineligible_or_incomplete_attempts_do_not_observe_processes(
-    con: sqlite3.Connection, change: str, expected: Outcome,
+    con: sqlite3.Connection,
+    change: str,
+    expected: Outcome,
 ) -> None:
     processes = Processes()
     con.execute(change)
@@ -161,8 +175,10 @@ def test_captured_execution_between_observation_and_commit_is_collected(con: sql
     admission = before.snapshot.attempt.admission
     files = FileRef("evidence", "digest")
     facts_input = ExecutionFacts(0, False, None, None, True, True, True, None, None, None, None, None, "saved")
-    assert AttemptStore(lambda: con).capture(admission, None, facts_input, Evidence(files, files, files, files), "complete",
-                                                  now=10.0) == "accepted"
+    assert (
+        AttemptStore(lambda: con).capture(admission, None, facts_input, Evidence(files, files, files, files), "complete", now=10.0)
+        == "accepted"
+    )
     result = app.store.authorize(before, OWNER, "intent", lambda: 10)
     assert result.outcome is Outcome.CAPTURED and result.explanation
     processes = Processes()
@@ -180,7 +196,7 @@ def test_expiration_during_observation_does_not_renew_allowance(con: sqlite3.Con
     assert result.outcome is Outcome.EXPIRED and result.explanation and facts(con) == before
 
 
-@pytest.mark.parametrize("data", ['{}', '{"generation":"bad"}', '[]'])
+@pytest.mark.parametrize("data", ["{}", '{"generation":"bad"}', "[]"])
 def test_malformed_durable_intent_is_unavailable_and_preserved(con: sqlite3.Connection, data: str) -> None:
     con.execute("INSERT INTO recovery_intent VALUES('attempt',?)", (data,))
     before = facts(con)
@@ -190,8 +206,9 @@ def test_malformed_durable_intent_is_unavailable_and_preserved(con: sqlite3.Conn
 
 
 def test_missing_database_is_unavailable() -> None:
-    app = Recovery(RecoveryStore(lambda: None), Processes(), lambda _admission: OWNED,
-                   lambda _admission: nullcontext(), lambda: 10, NativeIds())
+    app = Recovery(
+        RecoveryStore(lambda: None), Processes(), lambda _admission: OWNED, lambda _admission: nullcontext(), lambda: 10, NativeIds()
+    )
     assert app.authorize(KEY, OWNER).outcome is Outcome.UNAVAILABLE
 
 

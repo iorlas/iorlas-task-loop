@@ -43,7 +43,7 @@ def _lines(chunk: bytes, start: int) -> tuple[list[Activity], int]:
 def _record(line: bytes) -> Activity | None:
     try:
         return decode(line.decode("utf-8", "replace"))
-    except (ValueError, OverflowError):  # display-only data: a line that cannot be read is skipped
+    except ValueError, OverflowError:  # display-only data: a line that cannot be read is skipped
         return None
 
 
@@ -59,7 +59,7 @@ def _read(stream: BinaryIO, start: int, end: int) -> bytes:
 def _command_start(line: bytes) -> float | Literal["unreadable"] | None:
     try:
         record = decode(line.decode("utf-8"))
-    except (UnicodeError, ValueError, OverflowError, RecursionError):
+    except UnicodeError, ValueError, OverflowError, RecursionError:
         return "unreadable"
     if record is None:
         return "unreadable"

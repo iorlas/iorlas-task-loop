@@ -4,8 +4,9 @@ import sqlite3
 from pathlib import Path
 
 import pytest
+from dash_read_support import KEY, Tracker, reads_of
 from doubles import CHECKS, REQUIRED, TARGET, D
-from test_dash_read import KEY, Tracker, reads_of, restarted_at_plan, unsafe_repeat
+from test_dash_read_restarts import restarted_at_plan, unsafe_repeat
 
 from taskloop.attempt_types import AttemptKey
 from taskloop.check_store import ChecksAdmitted, insert
@@ -16,9 +17,15 @@ from taskloop.evidence_files import EvidenceFiles
 from taskloop.operation_evidence import OperationKind, OperationSample, OperationState
 
 
-def sample(identity: str = "attempt", operation: str = "a" * 32, *, started: float = 100.0,
-           kind: OperationKind = OperationKind.COMMIT, state: OperationState = OperationState.COMPLETED,
-           elapsed: float = 1.25) -> OperationSample:
+def sample(
+    identity: str = "attempt",
+    operation: str = "a" * 32,
+    *,
+    started: float = 100.0,
+    kind: OperationKind = OperationKind.COMMIT,
+    state: OperationState = OperationState.COMPLETED,
+    elapsed: float = 1.25,
+) -> OperationSample:
     return OperationSample(operation=operation, attempt=identity, kind=kind, started_at=started, elapsed=elapsed, state=state)
 
 
@@ -32,8 +39,15 @@ class ReadFiles(EvidenceFiles):
         return super().operations(key)
 
 
-def save(files: EvidenceFiles, key: AttemptKey, operation: str = "a" * 32, *, started: float = 100.0,
-         kind: OperationKind = OperationKind.COMMIT, state: OperationState = OperationState.COMPLETED) -> None:
+def save(
+    files: EvidenceFiles,
+    key: AttemptKey,
+    operation: str = "a" * 32,
+    *,
+    started: float = 100.0,
+    kind: OperationKind = OperationKind.COMMIT,
+    state: OperationState = OperationState.COMPLETED,
+) -> None:
     observed = sample(files.directory(key), operation, started=started, kind=kind, state=OperationState.ACTIVE, elapsed=0.0)
     files.write_operation(key, observed)
     if state is not OperationState.ACTIVE:
@@ -50,7 +64,7 @@ def detail(con: sqlite3.Connection, files: EvidenceFiles, now: float = 1000.0) -
 
 @pytest.mark.parametrize("state", list(OperationState))
 def test_saved_measurements_and_incomplete_evidence(state: OperationState) -> None:
-    found, = project((sample(state=state),), "plan", 2, past=True)
+    (found,) = project((sample(state=state),), "plan", 2, past=True)
     assert (found.step, found.n, found.past, found.state) == ("plan", 2, True, state)
     assert found.started_at == "1970-01-01T00:01:40.000+00:00"
     assert found.elapsed_ms == (None if state is OperationState.ACTIVE else 1250)
@@ -58,8 +72,12 @@ def test_saved_measurements_and_incomplete_evidence(state: OperationState) -> No
 
 
 def test_invalid_timestamps_omit_only_affected_samples_and_retries_sort_stably() -> None:
-    samples = (sample(operation="c" * 32), sample(operation="b" * 32, started=99.0),
-               sample(operation="a" * 32), sample(operation="d" * 32, started=1e100))
+    samples = (
+        sample(operation="c" * 32),
+        sample(operation="b" * 32, started=99.0),
+        sample(operation="a" * 32),
+        sample(operation="d" * 32, started=1e100),
+    )
     found = project(samples, "implement", 1, past=False)
     assert [each.operation for each in found] == ["b" * 32, "a" * 32, "c" * 32]
     assert project((), "plan", 1, past=False) == ()
@@ -83,7 +101,12 @@ def test_checks_and_factory_commit_keep_their_existing_owners_and_read_once(chec
     found = detail(checking, files)
     assert files.reads == [implement, CHECKS, second_checks, again]
     assert [(each.step, each.n, each.past) for each in found.operations] == [
-        ("implement", 1, False), ("implement", 1, False), ("checks", 1, False), ("checks", 2, False), ("implement", 2, False)]
+        ("implement", 1, False),
+        ("implement", 1, False),
+        ("checks", 1, False),
+        ("checks", 2, False),
+        ("implement", 2, False),
+    ]
     assert found.attempts == baseline.attempts and found.usage == baseline.usage and found.step_usage == baseline.step_usage
     assert found.operations == detail(checking, EvidenceFiles(tmp_path), 100000.0).operations
     checking.execute("INSERT INTO slot_release VALUES ('again','again-token',2,?,10,'not_held')", (D,))
@@ -103,4 +126,6 @@ def test_restart_numbering_and_missing_or_corrupt_observations(registered: sqlit
     broken.write_text("{invalid")
     found = detail(registered, files)
     assert [(each.step, each.n, each.past, each.state) for each in found.operations] == [
-        ("plan", 1, True, OperationState.COMPLETED), ("plan", 2, False, OperationState.UNCERTAIN)]
+        ("plan", 1, True, OperationState.COMPLETED),
+        ("plan", 2, False, OperationState.UNCERTAIN),
+    ]

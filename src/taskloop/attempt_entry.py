@@ -127,9 +127,7 @@ def database_exists(database: Path) -> bool:
     return True
 
 
-def _capture(
-    app: Attempts, result: AttemptResult, clock: Callable[[], float], wait: Callable[[float], None]
-) -> CaptureResult | None:
+def _capture(app: Attempts, result: AttemptResult, clock: Callable[[], float], wait: Callable[[float], None]) -> CaptureResult | None:
     """Retry an unfinished capture while it is unavailable (a busy factory.db) until the attempt's deadline."""
     pending, captured = result.pending, None
     if pending is None or result.status != "unavailable":  # a conflict is never retried
@@ -159,7 +157,9 @@ def shown(result: CommitResult) -> str:
 
 
 def _registered(
-    args: EntryArgs, attempts: Callable[[Path, Path], Attempts], inspect: Callable[[int], ProcessObservation],
+    args: EntryArgs,
+    attempts: Callable[[Path, Path], Attempts],
+    inspect: Callable[[int], ProcessObservation],
     continuation: Callable[[], Continuation] | None,
 ) -> _Registered | str:
     """The attempt this process is the registered entry of, with its tracker root; otherwise the refusal's log words."""
@@ -170,7 +170,7 @@ def _registered(
         seen = inspect(os.getpid())
         found = app.store.attempt_of(args.backlog, args.task_id)
         tracker = None if found is None else app.store.tracker_root(found[0])
-    except (sqlite3.Error, StoreUnavailable):
+    except sqlite3.Error, StoreUnavailable:
         return "unavailable store"
     if found is None or tracker is None:
         return "refused absent"
@@ -181,21 +181,27 @@ def _registered(
     recovery, intent = None, None
     if me != entry:
         recovery = None if continuation is None else RecoveryEntry(continuation())
-        registered = (Result(outcome=Outcome.CHANGED, explanation="This process is not the registered entry.")
-                      if recovery is None else recovery.registered(key, me))
+        registered = (
+            Result(outcome=Outcome.CHANGED, explanation="This process is not the registered entry.")
+            if recovery is None
+            else recovery.registered(key, me)
+        )
         if isinstance(registered, Result):
             return "refused identity" if recovery is None else f"refused {registered.outcome}: {registered.explanation}"
         intent = registered
     record = _record(app, key)
-    return record if isinstance(record, str) else _Registered(app, key, me, tracker, record.admission.slot_path,
-                                                            record.admission.deadline, recovery, intent)
+    return (
+        record
+        if isinstance(record, str)
+        else _Registered(app, key, me, tracker, record.admission.slot_path, record.admission.deadline, recovery, intent)
+    )
 
 
 def _record(app: Attempts, key: AttemptKey) -> AttemptRecord | str:
     """One fenced load (the held reservation) for the attempt's slot path, else the refusal's log words."""
     try:
         record = app.store.load(key)
-    except (sqlite3.Error, StoreUnavailable):
+    except sqlite3.Error, StoreUnavailable:
         return "unavailable store"
     except StoreRefused as error:
         return f"refused {error}"
@@ -220,8 +226,9 @@ def _step(
     the result read back is collected (terminal)."""
     app, key = found.app, found.key
     if found.recovery is not None and found.intent is not None:
-        continued = found.recovery.run(found.intent, Identity(pid=found.me[0], pgid=found.me[0], start=found.me[1], boot=found.me[2]),
-                                       clock, wait, RETRY_WAIT)
+        continued = found.recovery.run(
+            found.intent, Identity(pid=found.me[0], pgid=found.me[0], start=found.me[1], boot=found.me[2]), clock, wait, RETRY_WAIT
+        )
         if continued.completion is None:
             return f"{continued.state}: {continued.explanation}", False, False
         completion = continued.completion
@@ -236,8 +243,9 @@ def _step(
     if accepted:  # captured but maybe not finished (the store was busy again): finish it before factory commit writes anything
         resumed(lambda: app.collect(key), lambda: app.execute(key, found.me), clock, wait, found.deadline)
     timing = partial(app.files.observe_operation, clock=app.monotonic, wall=app.clock, ids=app.agent.ids)
-    committed = FactoryCommit(app.store, app.checkouts, app.slot_files, gone, app.clock, _held,
-                        ids=app.agent.ids, timing=timing).commit(key)
+    committed = FactoryCommit(app.store, app.checkouts, app.slot_files, gone, app.clock, _held, ids=app.agent.ids, timing=timing).commit(
+        key
+    )
     # newly stored facts or a stored verdict: read the terminal result back
     latest = app.collect(key) if accepted or isinstance(committed, (Committed, Rejected)) else result
     line = f"{latest.status} {latest.reason}"
@@ -250,7 +258,10 @@ def _step(
 
 
 def resumed(
-    read: Callable[[], AttemptResult], resume: Callable[[], AttemptResult], clock: Callable[[], float], wait: Callable[[float], None],
+    read: Callable[[], AttemptResult],
+    resume: Callable[[], AttemptResult],
+    clock: Callable[[], float],
+    wait: Callable[[float], None],
     deadline: float,
 ) -> AttemptResult:
     """The stored result while it is unfinished (`unavailable`, or an `UNFINISHED` reason: `commit` is the normal
@@ -279,13 +290,13 @@ def enter(
     continuation: Callable[[], Continuation] | None = None,
 ) -> int:
     """Run the attempt as its registered entry; the return code is display only. After the identity check the entry
-    takes its slot's custody lock (`slot_lock`, never waiting: `refused slot_busy`, or `refused lock`) and holds it
-    around everything else: preparation, the agent, the publish retries and factory commit, whose own hold is a no-op.
-    `gone` observes the worker before factory commit's Git write. The claim is renewed once before the agent (a lost
-    claim refuses: never re-claimed), then by a thread until the step ends (`stop` ends it); a later loss or fault is
-    only the log line's `claim=` word. A collected step then releases its own slot, settled (`unclaim` is the release's
-    port; a settled release never calls it). An accepted plan is then published once, after the lock is released and the
-keep-alive stopped, through `publishing` (the remote-capable Git views); the push never pins the slot."""
+        takes its slot's custody lock (`slot_lock`, never waiting: `refused slot_busy`, or `refused lock`) and holds it
+        around everything else: preparation, the agent, the publish retries and factory commit, whose own hold is a no-op.
+        `gone` observes the worker before factory commit's Git write. The claim is renewed once before the agent (a lost
+        claim refuses: never re-claimed), then by a thread until the step ends (`stop` ends it); a later loss or fault is
+        only the log line's `claim=` word. A collected step then releases its own slot, settled (`unclaim` is the release's
+        port; a settled release never calls it). An accepted plan is then published once, after the lock is released and the
+    keep-alive stopped, through `publishing` (the remote-capable Git views); the push never pins the slot."""
     found = _registered(args, attempts, inspect, continuation)
     if isinstance(found, str):
         log(found)
@@ -315,11 +326,12 @@ def _branch(found: _Registered, publishing: Checkouts) -> str:
     app = found.app
     try:
         timing = partial(app.files.observe_operation, clock=app.monotonic, wall=app.clock, ids=app.agent.ids)
-        return publish_word(BranchPublish(app.store, publishing, app.slot_files, app.clock,
-                                          ids=app.agent.ids, timing=timing).publish(found.key))
-    except (GitUnavailable, ValueError, OSError):
+        return publish_word(
+            BranchPublish(app.store, publishing, app.slot_files, app.clock, ids=app.agent.ids, timing=timing).publish(found.key)
+        )
+    except GitUnavailable, ValueError, OSError:
         return "unavailable:git"
-    except (sqlite3.Error, StoreUnavailable):
+    except sqlite3.Error, StoreUnavailable:
         return "unavailable:store"
 
 
@@ -344,8 +356,19 @@ def _claimed(
     line = f"{line} claim={encode_claim(alive.word())}"
     if collected:
         app = found.app
-        releaser = SlotRelease(app.store, app.checkouts, app.slot_files, entry_seen, gone, _unheld, unclaim, app.clock, setup_seen,
-                               RealEnvFiles().empty_scratch, ids=app.agent.ids)
+        releaser = SlotRelease(
+            app.store,
+            app.checkouts,
+            app.slot_files,
+            entry_seen,
+            gone,
+            _unheld,
+            unclaim,
+            app.clock,
+            setup_seen,
+            RealEnvFiles().empty_scratch,
+            ids=app.agent.ids,
+        )
         line += " release=" + release_word(releaser.release(found.key, False, found.me))
     return line, ok
 
@@ -363,9 +386,20 @@ def main(argv: Sequence[str] | None = None) -> int:
             log("refused usage")
             return 2
         claims, views = tracker_claims(), GitViews(args.read_seconds)
-        return enter(args, partial(open_attempts, views=views), inspect_process, time.time, time.sleep, log, worker_gone,
-                     claims.heartbeat_for, threading.Event(), claims.unclaim, views.remotes,
-                     partial(open_continuation, args.database, args.artifacts, views))
+        return enter(
+            args,
+            partial(open_attempts, views=views),
+            inspect_process,
+            time.time,
+            time.sleep,
+            log,
+            worker_gone,
+            claims.heartbeat_for,
+            threading.Event(),
+            claims.unclaim,
+            views.remotes,
+            partial(open_continuation, args.database, args.artifacts, views),
+        )
     except SystemExit as ended:  # `any_agent.supervisor` raises 128 + signal number from its SIGTERM/SIGHUP handler (1: parent gone)
         log("failed " + (TERMINATED if isinstance(ended.code, int) and ended.code > 128 else type(ended).__name__))
         return 1

@@ -18,7 +18,12 @@ PROBE_SECONDS: Final = 30.0
 
 
 def setup_process(
-    argv: Sequence[str], *, registered: Callable[[OwnedProcess], None], cwd: str, env: Mapping[str, str], timeout: float,
+    argv: Sequence[str],
+    *,
+    registered: Callable[[OwnedProcess], None],
+    cwd: str,
+    env: Mapping[str, str],
+    timeout: float,
     line: Callable[[bytes], None],
 ) -> SetupEnded:
     """One setup command through the shelf's registered start (its identity committed before it executes; stdin empty,
@@ -27,8 +32,7 @@ def setup_process(
         done = run_registered(argv, registered=registered, cwd=cwd, env=env, timeout=timeout, on_line=line)
     except RegisteredStartUncertainError as error:
         return SetupEnded(None, False, False, error.identity.pgid, uncertain=True)
-    return SetupEnded(done.returncode, done.timed_out is not None, done.exec_errno is not None, done.pgid,
-                      survivors=bool(done.survivors))
+    return SetupEnded(done.returncode, done.timed_out is not None, done.exec_errno is not None, done.pgid, survivors=bool(done.survivors))
 
 
 REMOVERS = (os.unlink, os.rmdir)  # an entry's own removal: a PermissionError there is its parent's mode
@@ -80,7 +84,7 @@ class RealEnvFiles:
     def resolve(self, path: Path) -> Path | None:
         try:
             return path.resolve()
-        except (OSError, RuntimeError, ValueError):
+        except OSError, RuntimeError, ValueError:
             return None
 
     def ensure(self, path: Path) -> bool:

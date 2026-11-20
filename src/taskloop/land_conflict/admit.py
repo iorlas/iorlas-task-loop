@@ -52,8 +52,15 @@ def admit(ports: Ports, request: Request) -> Result:
         if not slots:
             raise AdmissionRefused(Outcome.NO_SLOT)
         first = slots[0]
-        proposed = Record(key=AttemptKey(ports.ids.hex(), ports.ids.token(16), first.generation + 1), request=request,
-                          inputs=inputs, slot=first.name, slot_path=first.path, base=first.head, admitted_at=ports.clock())
+        proposed = Record(
+            key=AttemptKey(ports.ids.hex(), ports.ids.token(16), first.generation + 1),
+            request=request,
+            inputs=inputs,
+            slot=first.name,
+            slot_path=first.path,
+            base=first.head,
+            admitted_at=ports.clock(),
+        )
         record, created = ports.store.insert(proposed, slots)
         outcome = Outcome.ADMITTED if created else Outcome.RETAINED
         return Result(outcome=outcome, explanation=EXPLANATIONS[outcome], record=record)
@@ -66,11 +73,11 @@ def admit(ports: Ports, request: Request) -> Result:
                 found = ports.store.find(request)
             except AdmissionRefused as changed:
                 outcome, found = changed.outcome, None
-            except (StoreUnavailable, ValueError):
+            except StoreUnavailable, ValueError:
                 outcome = Outcome.UNAVAILABLE
                 found = None
             if found is not None:
                 return Result(outcome=Outcome.RETAINED, explanation=EXPLANATIONS[Outcome.RETAINED], record=found)
-    except (StoreUnavailable, GitUnavailable, ValueError):
+    except StoreUnavailable, GitUnavailable, ValueError:
         outcome = Outcome.UNAVAILABLE
     return Result(outcome=outcome, explanation=EXPLANATIONS[outcome])

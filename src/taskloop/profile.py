@@ -33,8 +33,16 @@ KEYS: Final = ("setup", "checks", "required", "target", "land")
 CHECK_KEYS: Final = ("name", "argv", "timeout")
 
 type Reason = Literal[
-    "missing", "no_commit", "not_json", "not_object", "unknown_key", "bad_value", "too_large", "duplicate_check",
-    "required_undefined", "not_a_file",
+    "missing",
+    "no_commit",
+    "not_json",
+    "not_object",
+    "unknown_key",
+    "bad_value",
+    "too_large",
+    "duplicate_check",
+    "required_undefined",
+    "not_a_file",
 ]
 type Side = Literal["commit", "target"]
 type Argv = tuple[str, ...]
@@ -171,8 +179,16 @@ def _branch(key: str, value: object) -> str:
     """A branch name by `git check-ref-format`'s rules, so it is never an option or a path trick."""
     text = _word(key, value, MAX_BRANCH)
     parts = text.split("/")
-    if (text[0] in "-/" or text[-1] in "/." or text == "@" or "@{" in text or ".." in text or "//" in text
-            or BRANCH_BAD & set(text) or any(each.startswith(".") or each.endswith(".lock") for each in parts)):
+    if (
+        text[0] in "-/"
+        or text[-1] in "/."
+        or text == "@"
+        or "@{" in text
+        or ".." in text
+        or "//" in text
+        or BRANCH_BAD & set(text)
+        or any(each.startswith(".") or each.endswith(".lock") for each in parts)
+    ):
         raise _refuse("bad_value", key, f"{key} is not a valid branch name")
     return text
 
@@ -215,8 +231,7 @@ def _check(key: str, value: object) -> Check:
     absent = [each for each in CHECK_KEYS if each not in value]
     if absent:
         raise _refuse("bad_value", f"{key}.{absent[0]}", f"{key} needs {', '.join(CHECK_KEYS)}")
-    return Check(_name(f"{key}.name", value["name"]), _argv(f"{key}.argv", value["argv"]),
-                 _timeout(f"{key}.timeout", value["timeout"]))
+    return Check(_name(f"{key}.name", value["name"]), _argv(f"{key}.argv", value["argv"]), _timeout(f"{key}.timeout", value["timeout"]))
 
 
 def _checks(value: object) -> tuple[Check, ...]:
@@ -255,8 +270,10 @@ def parse(data: bytes) -> Profile | Refused:
     """The profile's bytes, strictly validated; the first refusal stops. Absent keys take their defaults."""
     try:
         table = _table(data)
-        setup = DEFAULT_SETUP if "setup" not in table else tuple(
-            _argv(f"setup[{index}]", each) for index, each in enumerate(_items("setup", table["setup"], MAX_CHECKS))
+        setup = (
+            DEFAULT_SETUP
+            if "setup" not in table
+            else tuple(_argv(f"setup[{index}]", each) for index, each in enumerate(_items("setup", table["setup"], MAX_CHECKS)))
         )
         checks = _checks(table.get("checks", []))
         required = _required(table.get("required", []))

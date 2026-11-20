@@ -15,7 +15,9 @@ from taskloop.wip import Refused, SaveReason, Source, is_saved, park, save, save
 
 @pytest.mark.parametrize("merge", [False, True])
 def test_saved_work_in_new_ancestry_survives_ordinary_and_merge_commits(
-    repo: FakeRepo, slot: FakeWorktree, merge: bool,
+    repo: FakeRepo,
+    slot: FakeWorktree,
+    merge: bool,
 ) -> None:
     prepared = head(slot)
     slot.write_file("unfinished", "work")
@@ -69,7 +71,9 @@ def head(slot: FakeWorktree) -> str:
 
 
 def test_unresolved_working_files_and_both_sides_survive_preservation(
-    repo: FakeRepo, slot: FakeWorktree, log: HoldStore,
+    repo: FakeRepo,
+    slot: FakeWorktree,
+    log: HoldStore,
 ) -> None:
     source, x, o = conflict(repo, slot)
     markers = slot.read_file("README")
@@ -94,7 +98,9 @@ def test_unresolved_working_files_and_both_sides_survive_preservation(
 
 
 def test_a_finished_detached_merge_is_retained_in_preservation_ancestry(
-    repo: FakeRepo, slot: FakeWorktree, log: HoldStore,
+    repo: FakeRepo,
+    slot: FakeWorktree,
+    log: HoldStore,
 ) -> None:
     source, x, o = conflict(repo, slot)
     slot.write_file("README", "main's change\nthe task's change\n")
@@ -111,7 +117,9 @@ def test_a_finished_detached_merge_is_retained_in_preservation_ancestry(
 
 
 def test_a_deleted_conflicting_file_is_saved_with_both_original_versions_in_history(
-    repo: FakeRepo, slot: FakeWorktree, log: HoldStore,
+    repo: FakeRepo,
+    slot: FakeWorktree,
+    log: HoldStore,
 ) -> None:
     source, x, o = conflict(repo, slot)
     slot.remove_file("README")
@@ -126,7 +134,10 @@ def test_a_deleted_conflicting_file_is_saved_with_both_original_versions_in_hist
 
 
 def test_a_capture_failure_preserves_work_for_a_later_save(
-    repo: FakeRepo, slot: FakeWorktree, log: HoldStore, monkeypatch: pytest.MonkeyPatch,
+    repo: FakeRepo,
+    slot: FakeWorktree,
+    log: HoldStore,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     source, x, _ = conflict(repo, slot)
     markers = slot.read_file("README")
@@ -146,7 +157,10 @@ def test_a_capture_failure_preserves_work_for_a_later_save(
 
 
 def test_a_save_resumes_after_its_ref_write_without_a_duplicate_commit(
-    repo: FakeRepo, slot: FakeWorktree, log: HoldStore, monkeypatch: pytest.MonkeyPatch,
+    repo: FakeRepo,
+    slot: FakeWorktree,
+    log: HoldStore,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     source, x, _ = conflict(repo, slot)
     add = log.add
@@ -168,7 +182,10 @@ def test_a_save_resumes_after_its_ref_write_without_a_duplicate_commit(
 
 @pytest.mark.parametrize("missing", [True, False], ids=["missing_inputs", "changed_start"])
 def test_an_unaccounted_merge_remains_untouched_and_unsaved(
-    repo: FakeRepo, slot: FakeWorktree, log: HoldStore, missing: bool,
+    repo: FakeRepo,
+    slot: FakeWorktree,
+    log: HoldStore,
+    missing: bool,
 ) -> None:
     source, x, o = conflict(repo, slot)
     source = replace(source, merge=None if missing else (o, x))

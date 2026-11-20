@@ -65,8 +65,17 @@ class Bench:
         self.warned += 1
 
     def run(self, every: int = 60) -> Ended:
-        ports = RoundsPorts(self.round, self.slot_use, lambda: 1000 + self.now + self.wall_offset, lambda: self.now, self.wait, self.log,
-                       self.warn, lambda: self.stopped, 7)
+        ports = RoundsPorts(
+            self.round,
+            self.slot_use,
+            lambda: 1000 + self.now + self.wall_offset,
+            lambda: self.now,
+            self.wait,
+            self.log,
+            self.warn,
+            lambda: self.stopped,
+            7,
+        )
         return run_rounds(ports, RoundsRequest("tasks", every))
 
     def times(self) -> list[float]:
@@ -100,14 +109,18 @@ def added(t: float) -> SlotUse:
     return SlotUse(0, HELD if t < 4 else HELD | {("repo", "s2")})
 
 
-@pytest.mark.parametrize("use, second", [
-    (gone, 4),  # a reservation row of the baseline removed: the next round at once
-    (added, 60),  # a row added never wakes
-    (lambda _t: SlotUse(0, HELD), 60),  # unchanged
-    (lambda _t: SlotUse(1, frozenset()), 60),  # an idle baseline has nothing to lose
-    (lambda t: SlotUse(0, HELD) if t == 0 else None, 60),  # a failed read neither wakes nor fails
-    (lambda _t: None, 60),  # no baseline at all
-], ids=["gone", "added", "unchanged", "idle", "unreadable", "no_baseline"])
+@pytest.mark.parametrize(
+    "use, second",
+    [
+        (gone, 4),  # a reservation row of the baseline removed: the next round at once
+        (added, 60),  # a row added never wakes
+        (lambda _t: SlotUse(0, HELD), 60),  # unchanged
+        (lambda _t: SlotUse(1, frozenset()), 60),  # an idle baseline has nothing to lose
+        (lambda t: SlotUse(0, HELD) if t == 0 else None, 60),  # a failed read neither wakes nor fails
+        (lambda _t: None, 60),  # no baseline at all
+    ],
+    ids=["gone", "added", "unchanged", "idle", "unreadable", "no_baseline"],
+)
 def test_only_a_removed_reservation_row_wakes_the_next_round(use: Callable[[float], SlotUse | None], second: float) -> None:
     bench = Bench([CLEAN, CLEAN], use)
     bench.run()
@@ -149,8 +162,10 @@ def test_unknown_rounds_back_off_doubling_to_the_cap_and_a_clean_round_returns_t
     times = bench.times()
     assert [after - before for before, after in pairwise(times)] == [60, 120, 240, 300, 300, 60]
     assert [each for each in bench.words() if each.startswith("rounds wait")] == [
-        "rounds wait seconds=60 after=unavailable:tracker", "rounds wait seconds=120 after=unavailable:tracker",
-        "rounds wait seconds=240 after=unavailable:tracker", "rounds wait seconds=300 after=unavailable:tracker",
+        "rounds wait seconds=60 after=unavailable:tracker",
+        "rounds wait seconds=120 after=unavailable:tracker",
+        "rounds wait seconds=240 after=unavailable:tracker",
+        "rounds wait seconds=300 after=unavailable:tracker",
         "rounds wait seconds=60",
     ]
 
@@ -161,13 +176,17 @@ def test_a_longer_interval_is_its_own_cap() -> None:
     assert bench.times() == [0, 400, 800]
 
 
-@pytest.mark.parametrize("result, backoff", [
-    (Failed("unavailable", "store", "locked"), True),  # a whole-round unknown: backs off and goes on
-    (Round("tasks", (), "uncertain:launch"), True),
-    (Round("tasks", (), "refused:task"), False),  # about one task: written once, tried again next round
-    (Round("tasks", (), "uncommitted:staged"), False),
-    (Round("tasks", (Move("tl-1", "publish", "unavailable:remote", "a1"),)), False),  # a per-task word never backs off
-], ids=["store", "launch", "refused_task", "uncommitted", "publish"])
+@pytest.mark.parametrize(
+    "result, backoff",
+    [
+        (Failed("unavailable", "store", "locked"), True),  # a whole-round unknown: backs off and goes on
+        (Round("tasks", (), "uncertain:launch"), True),
+        (Round("tasks", (), "refused:task"), False),  # about one task: written once, tried again next round
+        (Round("tasks", (), "uncommitted:staged"), False),
+        (Round("tasks", (Move("tl-1", "publish", "unavailable:remote", "a1"),)), False),  # a per-task word never backs off
+    ],
+    ids=["store", "launch", "refused_task", "uncommitted", "publish"],
+)
 def test_what_backs_off_and_what_does_not(result: Round | Failed, backoff: bool) -> None:
     bench = Bench([result, result, CLEAN])
     ended = bench.run()
@@ -213,6 +232,7 @@ def test_an_abrupt_stop_writes_its_line_and_passes_through(where: str) -> None:
     if where == "wait":
         bench.raise_at = 5
     else:
+
         def interrupted() -> None:
             if len(bench.rounds) == 2:
                 raise KeyboardInterrupt
@@ -254,10 +274,17 @@ def test_an_unwritable_log_changes_nothing_but_warns_once_each_time_it_stops_bei
 REQUEST = NextRequest("tasks", "/tracker", Path("/checkout"), "auto", StepSettings(), Overrides(model="m", effort="high"), 30)
 
 
-@pytest.mark.parametrize("change, reason", [
-    ({"backlog": "a/b"}, "backlog"), ({"backlog": ""}, "backlog"), ({"backlog": "a b"}, "backlog"), ({"label": " "}, "label"),
-    ({"minutes": 0}, "choices"), ({"minutes": 7 * 24 * 60 + 1}, "choices"),
-])
+@pytest.mark.parametrize(
+    "change, reason",
+    [
+        ({"backlog": "a/b"}, "backlog"),
+        ({"backlog": ""}, "backlog"),
+        ({"backlog": "a b"}, "backlog"),
+        ({"label": " "}, "label"),
+        ({"minutes": 0}, "choices"),
+        ({"minutes": 7 * 24 * 60 + 1}, "choices"),
+    ],
+)
 def test_the_rounds_choices_are_checked_before_anything(change: dict[str, str | int], reason: str) -> None:
     fields = {"backlog": "tasks", "label": "auto", "model": "m", "effort": "high", "minutes": 30} | change
     request = NextRequest(
@@ -326,6 +353,7 @@ def test_idle_round_boundaries_record_jumps_without_a_wait_callback() -> None:
 
     bench.during = jump
     bench.run()
-    records = [ClockJump.model_validate_json(line.split(" rounds clock-jump ", 1)[1])
-               for line in bench.lines if " rounds clock-jump " in line]
+    records = [
+        ClockJump.model_validate_json(line.split(" rounds clock-jump ", 1)[1]) for line in bench.lines if " rounds clock-jump " in line
+    ]
     assert [record.difference for record in records] == [7200, -14400]

@@ -65,18 +65,22 @@ def tracker_facts(task_id: str, tracker_root: Path) -> TaskFacts | None:
 
 def tracker_recovery_claim(tracker_root: Path) -> Callable[[Admission], RecoveryClaim]:
     """Bind a read-only claim observation to the explicitly supplied tracker root."""
+
     def claim(admission: Admission) -> RecoveryClaim:
         try:
             root = _tracker_root(str(tracker_root))
             facts = tracker_facts(admission.task.task_id, root)
             if facts is None:
                 return RecoveryClaim(state=ClaimState.LOST, explanation="The task no longer exists in the bound tracker.")
-            if (facts.task_id != admission.task.task_id or not isinstance(facts.status, str) or not facts.status
-                    or (facts.assignee is not None and not isinstance(facts.assignee, str))):
+            if (
+                facts.task_id != admission.task.task_id
+                or not isinstance(facts.status, str)
+                or not facts.status
+                or (facts.assignee is not None and not isinstance(facts.assignee, str))
+            ):
                 raise ValueError("Malformed task facts")
         except (TaskInspectionError, ValueError, TypeError, AttributeError) as error:
-            return RecoveryClaim(state=ClaimState.UNKNOWN,
-                                 explanation=f"The bound task claim cannot be read ({type(error).__name__}).")
+            return RecoveryClaim(state=ClaimState.UNKNOWN, explanation=f"The bound task claim cannot be read ({type(error).__name__}).")
         if facts.status == "closed" or facts.assignee != ACTOR:
             return RecoveryClaim(state=ClaimState.LOST, explanation="The task is closed or its claim no longer belongs to the factory.")
         return RecoveryClaim(state=ClaimState.OWNED, explanation="The bound task is open and claimed by the factory.")

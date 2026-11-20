@@ -22,7 +22,11 @@ class Continuation:
         self.recovery, self.attempts, self.native = recovery, attempts, native
 
     def __call__(
-        self, key: AttemptKey, owner: Identity, *, custody: AbstractContextManager[None] | None = None,
+        self,
+        key: AttemptKey,
+        owner: Identity,
+        *,
+        custody: AbstractContextManager[None] | None = None,
         intent: Intent | None = None,
     ) -> ContinuationResult:
         if intent is not None and (intent.key != key or intent.owner != owner):
@@ -37,7 +41,7 @@ class Continuation:
             return refused(Result(outcome=Outcome.CUSTODY_BUSY, explanation="Another operation holds the slot's custody."))
         except StoreRefused:
             return refused(Result(outcome=Outcome.INELIGIBLE, explanation="The saved attempt no longer has a valid reservation."))
-        except (StoreUnavailable, SlotLockUnavailable):
+        except StoreUnavailable, SlotLockUnavailable:
             return ContinuationResult(state=State.UNAVAILABLE, explanation="Continuation storage or custody is unavailable.")
 
     def _continue(self, admission: Admission, owner: Identity, intent: Intent | None) -> ContinuationResult:
@@ -55,12 +59,14 @@ class Continuation:
         registered = current is not None and current.execution is not None and current.execution.phase is Phase.REGISTERED
         if intent is not None:
             if registered:
-                return refused(Result(outcome=Outcome.CHANGED,
-                                      explanation="The registered worker is gone; fresh authorization is required."))
+                return refused(
+                    Result(outcome=Outcome.CHANGED, explanation="The registered worker is gone; fresh authorization is required.")
+                )
             selected = current
         else:
-            authorized = self.recovery.authorize(admission.key, owner, token=self.recovery.ids.hex() if registered else None,
-                                                custody=nullcontext())
+            authorized = self.recovery.authorize(
+                admission.key, owner, token=self.recovery.ids.hex() if registered else None, custody=nullcontext()
+            )
             if authorized.outcome is not Outcome.AUTHORIZED:
                 return refused(authorized)
             selected = authorized.intent
@@ -88,21 +94,25 @@ class Continuation:
         return reconciled.snapshot
 
     def capture(
-        self, pending: PendingExecution, *, custody: AbstractContextManager[None] | None = None,
+        self,
+        pending: PendingExecution,
+        *,
+        custody: AbstractContextManager[None] | None = None,
     ) -> ContinuationResult:
         """A returned result can only retry capture; this path has no execution effect."""
         try:
             with self.recovery.custody(pending.result.admission) if custody is None else custody:
                 return self._capture(pending)
-        except (SlotBusy, SlotLockUnavailable, StoreUnavailable):
+        except SlotBusy, SlotLockUnavailable, StoreUnavailable:
             return ContinuationResult(state=State.PENDING_CAPTURE, explanation="Capture awaits storage or slot custody.", pending=pending)
 
     def _capture(self, pending: PendingExecution, intent: Intent | None = None) -> ContinuationResult:
         admission = pending.result.admission
         captured = Callbacks(self.attempts, admission, pending.identity).capture(pending)
         if captured.status == "unavailable":
-            return ContinuationResult(state=State.PENDING_CAPTURE, explanation="The returned execution awaits durable capture.",
-                                      intent=intent, pending=pending)
+            return ContinuationResult(
+                state=State.PENDING_CAPTURE, explanation="The returned execution awaits durable capture.", intent=intent, pending=pending
+            )
         if captured.status == "conflict":
             return refused(Result(outcome=Outcome.CONFLICT, explanation="The returned execution no longer owns capture authority."))
         return self._complete(admission)

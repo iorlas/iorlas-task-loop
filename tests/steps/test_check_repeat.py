@@ -105,8 +105,11 @@ def test_the_repair_opens_with_the_feedback_words_of_the_workflow_the_attempt_wa
 
 def repair_agent(rig: Repairing, *, change: bool = False) -> list[LaunchSpec]:
     specs: list[LaunchSpec] = []
-    answer = {"disposition": "implemented" if change else "unchanged",
-              "message": "Fix columns" if change else None, "explanation": "Ran checks"}
+    answer = {
+        "disposition": "implemented" if change else "unchanged",
+        "message": "Fix columns" if change else None,
+        "explanation": "Ran checks",
+    }
     agent = scripted(rig.slot.repo, answer, {"src/fix.py": "fixed = True\n", "src/omitted.py": "safe = True\n"} if change else {})
 
     def run(harness: Harness, spec: LaunchSpec, timeout: float, hooks: RunHooks | None) -> RunOutcome:
@@ -120,9 +123,11 @@ def repair_agent(rig: Repairing, *, change: bool = False) -> list[LaunchSpec]:
 @pytest.mark.parametrize("stale", [False, True])
 def test_failed_check_repair_validates_checked_digest_and_refreshes_once(rig: Repairing, stale: bool) -> None:
     inputs: list[str] = []
-    agent = scripted(rig.slot.repo, {"disposition": "implemented",
-                                   "message": "Update digest", "explanation": "Done"},
-                     {DIGEST_PATH: shelf_files("b" * 40, stale=stale)[DIGEST_PATH].decode()})
+    agent = scripted(
+        rig.slot.repo,
+        {"disposition": "implemented", "message": "Update digest", "explanation": "Done"},
+        {DIGEST_PATH: shelf_files("b" * 40, stale=stale)[DIGEST_PATH].decode()},
+    )
 
     def implement(harness: Harness, spec: LaunchSpec, timeout: float, hooks: RunHooks | None) -> RunOutcome:
         inputs.append(spec.stdin)
@@ -182,8 +187,9 @@ def test_start_dispatches_failed_check_output_at_x_and_fresh_checks_can_pass(rig
     assert code_map.splitlines().count("docs/design/tl-1/plan.md") == 1
     assert f"Source commit: {x}" in spec.stdin and "task: Work to accomplish." in spec.stdin
     assert "- just check\n- just test" in spec.stdin
-    assert (rig.tmp / EvidenceFiles(rig.tmp).directory(rig.store.attempts("tasks", "tl-1")[0].key) /
-            "launched-input.txt").read_text() == spec.stdin
+    assert (
+        rig.tmp / EvidenceFiles(rig.tmp).directory(rig.store.attempts("tasks", "tl-1")[0].key) / "launched-input.txt"
+    ).read_text() == spec.stdin
     assert "--resume" not in spec.argv and "changed-model" not in spec.argv
     row = rig.store.attempts("tasks", "tl-1")[0]
     assert (row.number, row.previous_attempt_id, row.source_checks_id) == (2, previous.attempt_id, source.attempt_id)
@@ -243,15 +249,19 @@ def test_restart_after_admission_uses_one_successor_and_the_captured_input(rig: 
 def test_ineligible_or_changed_sources_never_launch_an_implement_repeat(rig: Repairing, condition: str) -> None:
     previous, source = failed(rig)
     if condition == "held":
-        rig.con.execute("INSERT INTO task_hold (attempt_id,event,held_at) VALUES (?,?,?)",
-                        (previous.attempt_id, encode_event(event(ChecksCause(reason=ChecksReason.EXPIRED),
-                                                               previous.attempt_id, source.attempt_id)), rig.now))
+        rig.con.execute(
+            "INSERT INTO task_hold (attempt_id,event,held_at) VALUES (?,?,?)",
+            (
+                previous.attempt_id,
+                encode_event(event(ChecksCause(reason=ChecksReason.EXPIRED), previous.attempt_id, source.attempt_id)),
+                rig.now,
+            ),
+        )
     elif condition == "abandoned":
         rig.con.execute("UPDATE checks_attempt SET abandoned=1")
     elif condition == "old":
         rig.bodies = ["passed"]
-        assert isinstance(rig.starting().checks.admission.admit_checks(
-            ChecksRequest(previous, rig.slot.repo.path, 1000, 2)), Admitted)
+        assert isinstance(rig.starting().checks.admission.admit_checks(ChecksRequest(previous, rig.slot.repo.path, 1000, 2)), Admitted)
     elif condition == "cap":
         # The shared decision uses the implement number, regardless of the checks attempt's number.
         row = rig.checks.row(source)
@@ -309,8 +319,14 @@ def test_required_order_selects_one_failure_and_optional_failure_alone_does_not_
     assert isinstance(start(rig.starting(), rig.request()), Started)
     assert "Check: test\n" in specs[0].stdin and "Check: slow\n" not in specs[0].stdin
     # The same structured evidence with only an optional failure is ineligible.
-    results = tuple(replace(each, conclusion=CommandConclusion.FAILED if each.name == "slow" else CommandConclusion.PASSED,
-                            rc=1 if each.name == "slow" else 0) for each in rig.checks.results(source))
+    results = tuple(
+        replace(
+            each,
+            conclusion=CommandConclusion.FAILED if each.name == "slow" else CommandConclusion.PASSED,
+            rc=1 if each.name == "slow" else 0,
+        )
+        for each in rig.checks.results(source)
+    )
     assert decision(1, row, results) is CheckRepeatDecision.INELIGIBLE
     assert previous != rig.store.attempts("tasks", "tl-1")[0].key
 
@@ -371,8 +387,17 @@ def test_crash_before_or_after_admission_continues_without_spending_an_extra_att
     specs = repair_agent(rig)
     original = CheckRepeatStore.admit
 
-    def crash(self: CheckRepeatStore, previous: AttemptKey, evidence: FailedCheck, key: AttemptKey, ref: FileRef,
-              free: tuple[Free, ...], deadline: float, engine: str, admitted_at: float) -> Admitted | AdmitRefused:
+    def crash(
+        self: CheckRepeatStore,
+        previous: AttemptKey,
+        evidence: FailedCheck,
+        key: AttemptKey,
+        ref: FileRef,
+        free: tuple[Free, ...],
+        deadline: float,
+        engine: str,
+        admitted_at: float,
+    ) -> Admitted | AdmitRefused:
         if after:
             original(self, previous, evidence, key, ref, free, deadline, engine, admitted_at)
         raise RuntimeError("coordinator died")
@@ -392,8 +417,17 @@ def test_overlapping_starts_adopt_one_successor(rig: Repairing, monkeypatch: pyt
     original = CheckRepeatStore.admit
     winners: list[Started | Failed] = []
 
-    def competing(self: CheckRepeatStore, previous: AttemptKey, evidence: FailedCheck, key: AttemptKey, ref: FileRef,
-                  free: tuple[Free, ...], deadline: float, engine: str, admitted_at: float) -> Admitted | AdmitRefused:
+    def competing(
+        self: CheckRepeatStore,
+        previous: AttemptKey,
+        evidence: FailedCheck,
+        key: AttemptKey,
+        ref: FileRef,
+        free: tuple[Free, ...],
+        deadline: float,
+        engine: str,
+        admitted_at: float,
+    ) -> Admitted | AdmitRefused:
         monkeypatch.setattr(CheckRepeatStore, "admit", original)
         winners.append(start(rig.starting(), rig.request()))
         return original(self, previous, evidence, key, ref, free, deadline, engine, admitted_at)
@@ -408,9 +442,15 @@ def test_overlapping_starts_adopt_one_successor(rig: Repairing, monkeypatch: pyt
 def test_a_prior_path_repeat_consumes_the_same_budget(rig: Repairing) -> None:
     rig.round()  # plan
     rig.round()  # commit, release, publish
-    rig.agents["tl-1", "implement"] = scripted(rig.slot.repo, {
-        "disposition": "unchanged", "message": None, "explanation": "Work left for review",
-    }, {"src/x.py": "x = 1\n", "scratch.txt": "leftover"})
+    rig.agents["tl-1", "implement"] = scripted(
+        rig.slot.repo,
+        {
+            "disposition": "unchanged",
+            "message": None,
+            "explanation": "Work left for review",
+        },
+        {"src/x.py": "x = 1\n", "scratch.txt": "leftover"},
+    )
     rig.round()  # implement 1
     assert rig.store.attempts("tasks", "tl-1")[0].number == 1
     # Commit without the round immediately dispatching a repeat with the same dirty keep agent.
@@ -445,9 +485,15 @@ def test_a_prior_path_repeat_consumes_the_same_budget(rig: Repairing) -> None:
 def test_unsafe_feedback_names_a_nearby_git_file_from_the_slot(rig: Repairing, path: str) -> None:
     rig.round()
     rig.round()
-    rig.agents["tl-1", "implement"] = scripted(rig.slot.repo, {
-        "disposition": "implemented", "message": "Implement", "explanation": "ran checks",
-    }, {"src/x.py": "x = 1\n", path: "unsafe"})
+    rig.agents["tl-1", "implement"] = scripted(
+        rig.slot.repo,
+        {
+            "disposition": "implemented",
+            "message": "Implement",
+            "explanation": "ran checks",
+        },
+        {"src/x.py": "x = 1\n", path: "unsafe"},
+    )
     rig.round()
     row = rig.store.attempts("tasks", "tl-1")[0]
     found = rig.ports().factory_commit.commit(row.key)
@@ -473,9 +519,18 @@ def test_rounds_switch_harness_and_check_repair_keeps_the_captured_policy_after_
     policy.write_text('{"env":{"CAPTURED":"first"}}' if harness is HarnessKind.CLAUDE else '{"scratch":".kept"}')
     field = "settings_file" if harness is HarnessKind.CLAUDE else "sandbox_file"
     access = {"sandbox": "workspace-write"} if harness is HarnessKind.CODEX else {field: str(policy)}
-    settings, _sources = resolve_agents({"plan": {"model": "plan-model", "compaction_token_limit": 90000}, "implement": {
-        "harness": harness.value, "model": "chosen-model", "access": access,
-        "compaction_token_limit": 100000 if harness is HarnessKind.CODEX else None}}, rig.tmp)
+    settings, _sources = resolve_agents(
+        {
+            "plan": {"model": "plan-model", "compaction_token_limit": 90000},
+            "implement": {
+                "harness": harness.value,
+                "model": "chosen-model",
+                "access": access,
+                "compaction_token_limit": 100000 if harness is HarnessKind.CODEX else None,
+            },
+        },
+        rig.tmp,
+    )
     request = NextRequest("tasks", "/tracker", rig.slot.repo.path, "auto", settings, Overrides(), 30)
     for _turn in range(4):
         rig.now += 1
@@ -511,8 +566,13 @@ def test_rounds_switch_harness_and_check_repair_keeps_the_captured_policy_after_
 @pytest.mark.parametrize("conclusion", list(CommandConclusion))
 def test_failed_check_evidence_retains_the_canonical_enum_and_rejects_other_conclusions(conclusion: CommandConclusion) -> None:
     data = {
-        "source": AttemptKey("checks", "token", 1), "block": 1, "commit": "a" * 40,
-        "name": "test", "argv": ("just", "test"), "rc": 1, "result": conclusion,
+        "source": AttemptKey("checks", "token", 1),
+        "block": 1,
+        "commit": "a" * 40,
+        "name": "test",
+        "argv": ("just", "test"),
+        "rc": 1,
+        "result": conclusion,
         "output": {"availability": "empty"},
     }
     if conclusion is CommandConclusion.FAILED:

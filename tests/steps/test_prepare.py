@@ -110,22 +110,52 @@ def pushed(repo: FakeRepo, tmp_path: Path, *, own: bool = False) -> Sha:
 
 
 def execute(
-    con: sqlite3.Connection, tmp_path: Path, checkouts: Checkouts, files: SlotFiles, key: AttemptKey = KEY,
+    con: sqlite3.Connection,
+    tmp_path: Path,
+    checkouts: Checkouts,
+    files: SlotFiles,
+    key: AttemptKey = KEY,
 ) -> tuple[str, str, FakeRun]:
     agent = FakeRun(RunOutcome(rc=0, worker=WORKER, summary=Summary(text=json.dumps(PLAN), rc=0, stands=True)))
     store = AttemptStore(lambda: con)
     environment = Environment(con, checkouts, tmp_path, tmp_bytes=4096).preparation()  # an implement attempt's setup passes
-    result = Attempts(store, EvidenceFiles(tmp_path), AgentLaunch(lambda _harness: ("/bin/codex", {}),
-        ids=NativeIds()), agent, lambda: 10, checkouts, files,
-                      environment=environment).execute(key, ENTRY, lambda: ClaimWord.HELD)
+    result = Attempts(
+        store,
+        EvidenceFiles(tmp_path),
+        AgentLaunch(lambda _harness: ("/bin/codex", {}), ids=NativeIds()),
+        agent,
+        lambda: 10,
+        checkouts,
+        files,
+        environment=environment,
+    ).execute(key, ENTRY, lambda: ClaimWord.HELD)
     return result.status, result.reason, agent
 
 
 @pytest.mark.parametrize(
     ("task_id", "ok"),
-    [("tl-1", True), ("tl-8bh9.4.3.1.10", True), ("A_b-9", True), ("", False), ("a/b", False), ("a b", False),
-     ("a~1", False), ("a^", False), ("a:b", False), ("a?", False), ("a*", False), ("a[", False), ("a\\b", False),
-     ("a\n", False), (".a", False), ("-a", False), ("a..b", False), ("a.", False), ("a.lock", False), ("tl-é", False)],
+    [
+        ("tl-1", True),
+        ("tl-8bh9.4.3.1.10", True),
+        ("A_b-9", True),
+        ("", False),
+        ("a/b", False),
+        ("a b", False),
+        ("a~1", False),
+        ("a^", False),
+        ("a:b", False),
+        ("a?", False),
+        ("a*", False),
+        ("a[", False),
+        ("a\\b", False),
+        ("a\n", False),
+        (".a", False),
+        ("-a", False),
+        ("a..b", False),
+        ("a.", False),
+        ("a.lock", False),
+        ("tl-é", False),
+    ],
 )
 def test_the_name_rule_reads_no_git(repo: FakeRepo, monkeypatch: pytest.MonkeyPatch, task_id: str, ok: bool) -> None:
     assert named(task_id) is ok
@@ -143,8 +173,14 @@ def test_a_ref_that_collides_with_the_branch_is_branch_name(repo: FakeRepo, tmp_
 
 @pytest.mark.parametrize("where", ["absent", "local", "remote"])
 def test_attempt_one_takes_its_branch_and_starts_from_what_it_holds(
-    con: sqlite3.Connection, repo: FakeRepo, slot: FakeWorktree, tmp_path: Path, checkouts: Checkouts, slot_files: SlotFiles,
-    where: Literal["absent", "local", "remote"], remote: FakeRemote,
+    con: sqlite3.Connection,
+    repo: FakeRepo,
+    slot: FakeWorktree,
+    tmp_path: Path,
+    checkouts: Checkouts,
+    slot_files: SlotFiles,
+    where: Literal["absent", "local", "remote"],
+    remote: FakeRemote,
 ) -> None:
     """Origin main moved after the slot was parked at D. Absent: created at its fetched tip, never at D. An existing local
     branch that contains D is checked out as it is; a remote-tracking tip that contains D (and no local branch) is where
@@ -172,7 +208,11 @@ def test_new_and_existing_branches_need_no_local_main(
 
 
 def test_a_slot_already_on_its_branch_takes_nothing(
-    con: sqlite3.Connection, slot: FakeWorktree, tmp_path: Path, checkouts: Checkouts, slot_files: SlotFiles,
+    con: sqlite3.Connection,
+    slot: FakeWorktree,
+    tmp_path: Path,
+    checkouts: Checkouts,
+    slot_files: SlotFiles,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A crash after the branch was taken, before dispatch: the relaunched entry finds the slot on it, writes no Git."""
@@ -189,7 +229,12 @@ def test_a_slot_already_on_its_branch_takes_nothing(
 
 @pytest.mark.parametrize("where", ["local", "remote"])
 def test_a_tip_without_the_slots_commit_is_diverged_and_nothing_runs(
-    con: sqlite3.Connection, repo: FakeRepo, slot: FakeWorktree, tmp_path: Path, checkouts: Checkouts, slot_files: SlotFiles,
+    con: sqlite3.Connection,
+    repo: FakeRepo,
+    slot: FakeWorktree,
+    tmp_path: Path,
+    checkouts: Checkouts,
+    slot_files: SlotFiles,
     where: str,
 ) -> None:
     """The old factory's `task/<id>` from elsewhere: refused, never resumed or overwritten (the person renames it)."""
@@ -203,12 +248,26 @@ def test_a_tip_without_the_slots_commit_is_diverged_and_nothing_runs(
     assert con.execute("SELECT phase,rev,base_commit FROM attempt").fetchone() == ("admitted", 0, None)
 
 
-@pytest.mark.parametrize(("where", "contains"), [
-    ("local", True), ("remote", True), ("local", False), ("remote", False), ("gone", False), ("both", False),
-])
+@pytest.mark.parametrize(
+    ("where", "contains"),
+    [
+        ("local", True),
+        ("remote", True),
+        ("local", False),
+        ("remote", False),
+        ("gone", False),
+        ("both", False),
+    ],
+)
 def test_attempt_one_of_a_later_step_needs_the_previous_steps_commit_on_its_branch(
-    con: sqlite3.Connection, repo: FakeRepo, slot: FakeWorktree, tmp_path: Path, checkouts: Checkouts, slot_files: SlotFiles,
-    where: str, contains: bool,
+    con: sqlite3.Connection,
+    repo: FakeRepo,
+    slot: FakeWorktree,
+    tmp_path: Path,
+    checkouts: Checkouts,
+    slot_files: SlotFiles,
+    where: str,
+    contains: bool,
 ) -> None:
     """The tip the slot would take (local, else remote-tracking) must contain `after_commit`; someone reset the branch
     after the previous step, or its commit is gone: `branch_moved`, nothing taken, the slot still detached."""
@@ -226,7 +285,12 @@ def test_attempt_one_of_a_later_step_needs_the_previous_steps_commit_on_its_bran
 
 
 def test_an_unreadable_branch_is_unknown_never_absent(
-    con: sqlite3.Connection, repo: FakeRepo, slot: FakeWorktree, tmp_path: Path, checkouts: Checkouts, slot_files: SlotFiles,
+    con: sqlite3.Connection,
+    repo: FakeRepo,
+    slot: FakeWorktree,
+    tmp_path: Path,
+    checkouts: Checkouts,
+    slot_files: SlotFiles,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     def refs(_prefixes: Sequence[str]) -> tuple[()]:
@@ -248,7 +312,12 @@ def refused_untouched(con: sqlite3.Connection, tmp_path: Path, checkouts: Checko
 
 
 def test_a_pointer_rewritten_after_the_rule_is_redirected_before_the_take(
-    con: sqlite3.Connection, repo: FakeRepo, slot: FakeWorktree, tmp_path: Path, checkouts: Checkouts, slot_files: PointerFiles,
+    con: sqlite3.Connection,
+    repo: FakeRepo,
+    slot: FakeWorktree,
+    tmp_path: Path,
+    checkouts: Checkouts,
+    slot_files: PointerFiles,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     rule = prepare.branch_refusal
@@ -264,7 +333,11 @@ def test_a_pointer_rewritten_after_the_rule_is_redirected_before_the_take(
 
 
 def test_a_branch_checked_out_elsewhere_during_the_take_is_held(
-    con: sqlite3.Connection, slot: FakeWorktree, tmp_path: Path, checkouts: Checkouts, slot_files: SlotFiles,
+    con: sqlite3.Connection,
+    slot: FakeWorktree,
+    tmp_path: Path,
+    checkouts: Checkouts,
+    slot_files: SlotFiles,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(FakeWorktree, "take_branch", lambda *_args, **_options: BranchHeld(()))
@@ -273,8 +346,14 @@ def test_a_branch_checked_out_elsewhere_during_the_take_is_held(
 
 
 def test_a_branch_without_d_made_during_the_take_is_diverged_and_the_slot_parked_back(
-    con: sqlite3.Connection, repo: FakeRepo, remote: FakeRemote, slot: FakeWorktree, tmp_path: Path, checkouts: Checkouts,
-    slot_files: SlotFiles, monkeypatch: pytest.MonkeyPatch,
+    con: sqlite3.Connection,
+    repo: FakeRepo,
+    remote: FakeRemote,
+    slot: FakeWorktree,
+    tmp_path: Path,
+    checkouts: Checkouts,
+    slot_files: SlotFiles,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """`resume` checks an existing branch out as it is: one made after the rule ran is found without D after the take;
     the slot goes back to D, detached, so the next entry refuses it again instead of starting from that tip."""
@@ -295,7 +374,12 @@ def test_a_branch_without_d_made_during_the_take_is_diverged_and_the_slot_parked
 
 
 def test_a_branch_moved_off_the_previous_commit_during_the_take_is_parked_back(
-    con: sqlite3.Connection, repo: FakeRepo, slot: FakeWorktree, tmp_path: Path, checkouts: Checkouts, slot_files: SlotFiles,
+    con: sqlite3.Connection,
+    repo: FakeRepo,
+    slot: FakeWorktree,
+    tmp_path: Path,
+    checkouts: Checkouts,
+    slot_files: SlotFiles,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """The rule saw `task/<id>` holding X; someone reset it to D before the take: the slot goes back to D, detached."""
@@ -356,9 +440,20 @@ def admitted(factory: sqlite3.Connection, repo: FakeRepo, root: Path, tmp_path: 
         return inspect_task(TaskBinding(TaskScope(backlog), Path(tracker_root)), client, task)
 
     claims = Claims(tmp_path / "artifacts")
-    admission = AttemptAdmission(lambda: factory, begin_immediate, claims.files, tasks, PinnedViews(repo),
-                              claims.claim, claims.unclaim, lambda: 10, lambda _slot_path: True, FakeSlotFiles(repo),
-                               ids=NativeIds(), engine=ENGINE)
+    admission = AttemptAdmission(
+        lambda: factory,
+        begin_immediate,
+        claims.files,
+        tasks,
+        PinnedViews(repo),
+        claims.claim,
+        claims.unclaim,
+        lambda: 10,
+        lambda _slot_path: True,
+        FakeSlotFiles(repo),
+        ids=NativeIds(),
+        engine=ENGINE,
+    )
     return admission.admit(
         AdmitRequest(
             task_id,
@@ -380,7 +475,12 @@ def slots(factory: sqlite3.Connection, repo: FakeRepo, root: Path, count: int) -
 
 @pytest.mark.parametrize("eligible", [True, False], ids=["resume", "refuse"])
 def test_owned_remote_work_without_rows_survives_restart_and_reevaluation(
-    repo: FakeRepo, remote: FakeRemote, root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, eligible: bool,
+    repo: FakeRepo,
+    remote: FakeRemote,
+    root: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    eligible: bool,
 ) -> None:
     """A published task survives a crash before admission commits any rows. Reopening resumes its retained tip once,
     or refuses before claiming anything; neither path changes unrelated branches or deletes the published work."""
@@ -390,7 +490,7 @@ def test_owned_remote_work_without_rows_survives_restart_and_reevaluation(
     original = Store(SCHEMA).open_rw(path)
     assert original is not None
     try:
-        slot, = slots(original, repo, root, 1)
+        (slot,) = slots(original, repo, root, 1)
         tip = pushed(repo, tmp_path, own=True)
         leave(repo, tmp_path, "task/tl-2", extra=True, own=False)
         remote.advance("task/tl-3", {"user": "unrelated remote work"})
@@ -418,7 +518,8 @@ def test_owned_remote_work_without_rows_survives_restart_and_reevaluation(
             assert slot.branch() == BRANCH and head(repo, slot.path) == tip
             assert reopened.execute("SELECT base_commit FROM attempt").fetchall() == [(tip,)]
             assert reopened.execute("SELECT attempt_id,generation FROM reservation").fetchall() == [
-                (key.attempt_id, key.reservation_generation)]
+                (key.attempt_id, key.reservation_generation)
+            ]
             again, repeated = admitted(reopened, repo, root, tmp_path)
             assert isinstance(again, AdmitRefused) and again.reason == "task_attempted" and repeated.calls == []
             status, reason, agent = execute(reopened, tmp_path / "artifacts", PinnedViews(repo), FakeSlotFiles(repo), key)
@@ -504,9 +605,7 @@ def test_with_no_task_branch_a_slot_outside_mains_history_is_skipped_or_diverged
     assert claims.calls == []
 
 
-def test_admission_without_a_local_main_uses_origin(
-    factory: sqlite3.Connection, repo: FakeRepo, root: Path, tmp_path: Path
-) -> None:
+def test_admission_without_a_local_main_uses_origin(factory: sqlite3.Connection, repo: FakeRepo, root: Path, tmp_path: Path) -> None:
     slots(factory, repo, root, 1)
     repo.rename_branch("main", "trunk")
     result, claims = admitted(factory, repo, root, tmp_path)

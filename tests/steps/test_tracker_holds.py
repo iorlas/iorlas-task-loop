@@ -37,13 +37,17 @@ ADD = [*ACTOR, "label", "add", "tl-1", "held", "--json"]
 REMOVE = [*ACTOR, "label", "remove", "tl-1", "auto", "--json"]
 
 
-@pytest.mark.parametrize(("shown", "word", "assignee"), [
-    (show(), "moved", "taskloop"),
-    (show(labels=("auto", "other")), "moved", "taskloop"),
-    (show(labels=("other",)), "absent", "taskloop"),
-    (show("open", ""), "moved", ""),  # the claim lapsed or was reverted: fenced on no assignee (measured)
-    (show("open", "", ()), "absent", ""),
-], ids=["ours", "ours_two_labels", "ours_absent", "unassigned", "unassigned_absent"])
+@pytest.mark.parametrize(
+    ("shown", "word", "assignee"),
+    [
+        (show(), "moved", "taskloop"),
+        (show(labels=("auto", "other")), "moved", "taskloop"),
+        (show(labels=("other",)), "absent", "taskloop"),
+        (show("open", ""), "moved", ""),  # the claim lapsed or was reverted: fenced on no assignee (measured)
+        (show("open", "", ()), "absent", ""),
+    ],
+    ids=["ours", "ours_two_labels", "ours_absent", "unassigned", "unassigned_absent"],
+)
 def test_the_label_step_fences_on_the_assignee_read_then_adds_held_then_removes_the_stored_label(
     tmp_path: Path, shown: str, word: str, assignee: str
 ) -> None:
@@ -52,28 +56,37 @@ def test_the_label_step_fences_on_the_assignee_read_then_adds_held_then_removes_
     assert calls(script) == [SHOW, fence(assignee), ADD, REMOVE]
 
 
-@pytest.mark.parametrize(("reply", "word"), [
-    ((show(assignee="someone"), "", 0), "not_ours"),
-    ((show("open", "someone"), "", 0), "not_ours"),
-    ((show("closed"), "", 0), "closed"),  # closed while still assigned to the factory: bd would accept a label (5.4)
-    ((show("closed", ""), "", 0), "closed"),
-    (("", "Error: Issue tl-1 not found", 1), "missing"),
-], ids=["another_actor", "open_another_actor", "closed_ours", "closed", "missing"])
-def test_another_actor_s_closed_or_missing_task_is_read_and_written_nothing(
-    tmp_path: Path, reply: tuple[str, str, int], word: str
-) -> None:
+@pytest.mark.parametrize(
+    ("reply", "word"),
+    [
+        ((show(assignee="someone"), "", 0), "not_ours"),
+        ((show("open", "someone"), "", 0), "not_ours"),
+        ((show("closed"), "", 0), "closed"),  # closed while still assigned to the factory: bd would accept a label (5.4)
+        ((show("closed", ""), "", 0), "closed"),
+        (("", "Error: Issue tl-1 not found", 1), "missing"),
+    ],
+    ids=["another_actor", "open_another_actor", "closed_ours", "closed", "missing"],
+)
+def test_another_actor_s_closed_or_missing_task_is_read_and_written_nothing(tmp_path: Path, reply: tuple[str, str, int], word: str) -> None:
     script = Script().say(*reply)
     assert tracker_holds(script).labels(str(tmp_path), "tl-1", "auto") == HoldAnswer(word)
     assert calls(script) == [SHOW]
 
 
-@pytest.mark.parametrize(("replies", "expected", "written"), [
-    ([("", "", 13)], HoldAnswer("precondition"), [fence("taskloop")]),  # stale fence: nothing written, labels unset
-    ([("", "", 0), (DOWN, "", 1)], HoldAnswer("unavailable", "other"), [fence("taskloop"), ADD]),
-    ([("", "", 0), ("", "", 0), ("", "bd: no answer in 30.0s", 124)], HoldAnswer("unavailable", "timeout"),
-     [fence("taskloop"), ADD, REMOVE]),
-    ([("", "", 0), (DELETED, "", 1)], HoldAnswer("missing"), [fence("taskloop"), ADD]),
-], ids=["fence_stale", "add_failed", "remove_timed_out", "deleted_meanwhile"])
+@pytest.mark.parametrize(
+    ("replies", "expected", "written"),
+    [
+        ([("", "", 13)], HoldAnswer("precondition"), [fence("taskloop")]),  # stale fence: nothing written, labels unset
+        ([("", "", 0), (DOWN, "", 1)], HoldAnswer("unavailable", "other"), [fence("taskloop"), ADD]),
+        (
+            [("", "", 0), ("", "", 0), ("", "bd: no answer in 30.0s", 124)],
+            HoldAnswer("unavailable", "timeout"),
+            [fence("taskloop"), ADD, REMOVE],
+        ),
+        ([("", "", 0), (DELETED, "", 1)], HoldAnswer("missing"), [fence("taskloop"), ADD]),
+    ],
+    ids=["fence_stale", "add_failed", "remove_timed_out", "deleted_meanwhile"],
+)
 def test_a_failed_label_write_is_retried_by_the_next_round(
     tmp_path: Path, replies: list[tuple[str, str, int]], expected: HoldAnswer[str], written: list[list[str]]
 ) -> None:
@@ -118,8 +131,12 @@ def test_delivery_by_attempt_reads_back_even_after_a_lost_response(tmp_path: Pat
     assert holds.comment(str(tmp_path), "tl-1", "attempt-1", text) == HoldAnswer("done")
     assert holds.clear(str(tmp_path), "tl-1") == HoldAnswer("done")
     read = [*ACTOR, "comments", "tl-1", "--json"]
-    assert calls(script) == [read, [*ACTOR, "comments", "add", "tl-1", body, "--json"], read,
-                             [*ACTOR, "label", "remove", "tl-1", "held", "--json"]]
+    assert calls(script) == [
+        read,
+        [*ACTOR, "comments", "add", "tl-1", body, "--json"],
+        read,
+        [*ACTOR, "label", "remove", "tl-1", "held", "--json"],
+    ]
     assert 3 * BD_TIMEOUT_S < COMMENT_LEASE
 
 
@@ -139,14 +156,26 @@ def test_an_ambiguous_post_retries_by_attempt_despite_changed_saved_commits_and_
     script.say(json.dumps(posted)).say().say(json.dumps([*posted, {"author": "taskloop", "text": next_body}]))
     assert holds.comment(str(tmp_path), "tl-1", "attempt-2", retry_text) == HoldAnswer("done")
     read = [*ACTOR, "comments", "tl-1", "--json"]
-    assert calls(script) == [read, [*ACTOR, "comments", "add", "tl-1", body, "--json"], read, read,
-                            read, [*ACTOR, "comments", "add", "tl-1", next_body, "--json"], read]
+    assert calls(script) == [
+        read,
+        [*ACTOR, "comments", "add", "tl-1", body, "--json"],
+        read,
+        read,
+        read,
+        [*ACTOR, "comments", "add", "tl-1", next_body, "--json"],
+        read,
+    ]
 
 
-@pytest.mark.parametrize(("reply", "expected"), [
-    ((DOWN, "", 1), HoldAnswer("unavailable", "other")), (("", "bd: no answer in 30.0s", 124), HoldAnswer("unavailable", "timeout")),
-    ((DELETED, "", 1), HoldAnswer("missing")),
-], ids=["failed", "timeout", "deleted"])
+@pytest.mark.parametrize(
+    ("reply", "expected"),
+    [
+        ((DOWN, "", 1), HoldAnswer("unavailable", "other")),
+        (("", "bd: no answer in 30.0s", 124), HoldAnswer("unavailable", "timeout")),
+        ((DELETED, "", 1), HoldAnswer("missing")),
+    ],
+    ids=["failed", "timeout", "deleted"],
+)
 def test_a_failed_comment_or_clear_is_a_word(tmp_path: Path, reply: tuple[str, str, int], expected: HoldAnswer[str]) -> None:
     for write in ("comment", "clear"):
         script = Script().say(*reply)
@@ -165,27 +194,38 @@ def test_every_hold_call_is_capped_at_bd_timeout_at_the_resolved_root(tmp_path: 
 
     holds = tracker_holds(Script(), client=Recorded)
     root = str(tmp_path / "x" / "..")
-    assert holds.labels(root, "tl-1", "auto") == holds.comment(root, "tl-1", "attempt-1", "t") == holds.clear(root, "tl-1") == HoldAnswer(
-        "unavailable", "timeout")
+    assert (
+        holds.labels(root, "tl-1", "auto")
+        == holds.comment(root, "tl-1", "attempt-1", "t")
+        == holds.clear(root, "tl-1")
+        == HoldAnswer("unavailable", "timeout")
+    )
     # one try each (no lock retry): no call outlasts the comment lease
     assert built == [{"actor": "taskloop", "cwd": str(tmp_path.resolve()), "timeout": BD_TIMEOUT_S, "lock_retries": 0}] * 3
 
 
-@pytest.mark.parametrize(("reply", "back"), [
-    (("", "", 0), True),
-    (("", "", 13), False),  # the fence: another actor holds it (unchanged)
-    ((UNCLAIM_CLOSED, "", 1), False),
-    (("", "Error: cannot unclaim closed issue tl-1", 1), False),
-    ((DELETED, "", 1), False),
-], ids=["returned", "not_ours", "closed", "closed_stderr", "deleted"])
+@pytest.mark.parametrize(
+    ("reply", "back"),
+    [
+        (("", "", 0), True),
+        (("", "", 13), False),  # the fence: another actor holds it (unchanged)
+        ((UNCLAIM_CLOSED, "", 1), False),
+        (("", "Error: cannot unclaim closed issue tl-1", 1), False),
+        ((DELETED, "", 1), False),
+    ],
+    ids=["returned", "not_ours", "closed", "closed_stderr", "deleted"],
+)
 def test_the_unclaim_of_a_closed_or_deleted_task_is_not_held(tmp_path: Path, reply: tuple[str, str, int], back: bool) -> None:
     script = Script().say(*reply)
     assert tracker_claims(script).unclaim(str(tmp_path), "tl-1") is back
     assert calls(script) == [[*ACTOR, "unclaim", "tl-1", "--if-assignee", "taskloop", "--json"]]
 
 
-@pytest.mark.parametrize("reply", [(DOWN, "", 1), ("", "bd: no answer in 30.0s", 124), ('{"error": "cannot unclaim"}', "", 1)],
-                         ids=["failed", "timeout", "other_refusal"])
+@pytest.mark.parametrize(
+    "reply",
+    [(DOWN, "", 1), ("", "bd: no answer in 30.0s", 124), ('{"error": "cannot unclaim"}', "", 1)],
+    ids=["failed", "timeout", "other_refusal"],
+)
 def test_any_other_unclaim_failure_still_raises_and_stays_unclaiming(tmp_path: Path, reply: tuple[str, str, int]) -> None:
     with pytest.raises(BdError):
         tracker_claims(Script().say(*reply)).unclaim(str(tmp_path), "tl-1")

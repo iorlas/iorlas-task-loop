@@ -93,8 +93,14 @@ def tries(rows: tuple[AttemptRow, ...]) -> dict[str, int]:
 def _ask(view: AttemptView, column: Column, files: EvidenceFiles) -> tuple[bool, str | None]:
     cause = view.hold.reason if view.hold is not None else view.hold_due
     current = view.hold is None or view.hold.cause_id == view.attempt_id
-    if (column != "held" or not current or view.stop is not None or cause != f"failed:{NEEDS_OWNER}"
-            or view.result.status != "collected" or view.result.reason != NEEDS_OWNER):
+    if (
+        column != "held"
+        or not current
+        or view.stop is not None
+        or cause != f"failed:{NEEDS_OWNER}"
+        or view.result.status != "collected"
+        or view.result.reason != NEEDS_OWNER
+    ):
         return False, None
     try:
         answer = read_answer(files, view.result.execution, view.step, view.task_id)
@@ -104,8 +110,14 @@ def _ask(view: AttemptView, column: Column, files: EvidenceFiles) -> tuple[bool,
 
 
 def card_of(
-    view: AttemptView, row: AttemptRow | None, title: str, files: EvidenceFiles, now: float, number: int | None = None,
-    admission: Admission | None = None, duration: Duration | None = None,
+    view: AttemptView,
+    row: AttemptRow | None,
+    title: str,
+    files: EvidenceFiles,
+    now: float,
+    number: int | None = None,
+    admission: Admission | None = None,
+    duration: Duration | None = None,
 ) -> Card:
     found = task_status(view, admission)
     column = column_of(view, found)
@@ -127,13 +139,29 @@ def card_of(
     explanation = None
     if column == "held" and not ask:
         known = hold_cause(cause or "unknown", None if row is None else row.deadline, view.stop, rc)
-        explanation = stopped or (known.what if known is not None else
-                                  f"The factory held this task with recorded cause: {cause or 'unknown'}.")
+        explanation = stopped or (
+            known.what if known is not None else f"The factory held this task with recorded cause: {cause or 'unknown'}."
+        )
     cause = stopped or cause
-    return Card(view.task_id, title, column, shown, _repeat(view), iso(started), iso(activity),
-                slot, cause if column == "held" else None,
-                found.land if column == "land" else None, found.status.value, words(found), ask, question, explanation,
-                iso(_waiting_since(view, found.status)), duration)
+    return Card(
+        view.task_id,
+        title,
+        column,
+        shown,
+        _repeat(view),
+        iso(started),
+        iso(activity),
+        slot,
+        cause if column == "held" else None,
+        found.land if column == "land" else None,
+        found.status.value,
+        words(found),
+        ask,
+        question,
+        explanation,
+        iso(_waiting_since(view, found.status)),
+        duration,
+    )
 
 
 def duration_of(view: AttemptView, row: AttemptRow | None, reads: StatusPorts, files: EvidenceFiles) -> Duration | None:
@@ -155,8 +183,7 @@ def _waiting_since(view: AttemptView, status: Status) -> float | None:
 
 def queued_card(task_id: str, title: str, admission: Admission) -> Card:
     found = TaskStatus(Status.QUEUED, wait=admission.wait)
-    return Card(task_id, title, "waiting", 0, None, None, None, None, None,
-                status=found.status.value, status_note=words(found))
+    return Card(task_id, title, "waiting", 0, None, None, None, None, None, status=found.status.value, status_note=words(found))
 
 
 def build_board(ports: BoardPorts) -> Board | Failed:
@@ -177,9 +204,19 @@ def build_board(ports: BoardPorts) -> Board | Failed:
     admission = admission_of(ports.reads, frozenset(each.task_id for each in listed_ready), use)
     ready = tuple(each for each in listed_ready if each.task_id not in taken)
     titles = ports.tracker.titles(tuple(sorted(taken)))
-    cards = [card_of(view, rows.get(view.attempt_id), titles.get(view.task_id, view.task_id), ports.files, now,
-             numbers.get(view.attempt_id), admission, duration_of(view, rows.get(view.attempt_id), ports.reads, ports.files))
-             for view in listed.attempts]
+    cards = [
+        card_of(
+            view,
+            rows.get(view.attempt_id),
+            titles.get(view.task_id, view.task_id),
+            ports.files,
+            now,
+            numbers.get(view.attempt_id),
+            admission,
+            duration_of(view, rows.get(view.attempt_id), ports.reads, ports.files),
+        )
+        for view in listed.attempts
+    ]
     cards += [queued_card(each.task_id, each.title, admission) for each in ready]
     stamp = datetime.fromtimestamp(now, UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
     return Board(stamp, slots, tuple(cards), ports.tracker.notice())

@@ -30,15 +30,10 @@ from taskloop.attempt_result import CommittedStatus, collect, judged, succeeded
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import (
     AttemptKey,
-    CommitRefused,
     CommitResult,
     Committed,
-    CommitWaiting,
     EntryIdentity,
-    NotApplicable,
     Rejected,
-    Uncommitted,
-    waiting_reason,
 )
 from taskloop.captured_start import AnswerRepairing, start_captured
 from taskloop.check_admit import ChecksRequest
@@ -46,28 +41,23 @@ from taskloop.check_repeat.feedback import FeedbackReason
 from taskloop.check_repeat.status import CheckRepeatDecision, CheckRepeatTarget, repeat_target
 from taskloop.check_status import HALF_DONE, checks_result, latest, route
 from taskloop.check_store import ChecksRow, CheckStore
+from taskloop.commit_failure import UNCOMMITTED, WAITING, commit_failure
 from taskloop.hold_status import ANSWERED
 from taskloop.hold_store import HoldStore
 from taskloop.land_store import LandRow, LandStore
 from taskloop.launch import AlreadyRunning, Launched, LaunchRefused, LaunchResult, LaunchUnavailable, LaunchUncertain
 from taskloop.machine_config import ConfigRefused
 from taskloop.new_task import NewTask
-from taskloop.operation_failure import Failed, FailureKind
+from taskloop.operation_failure import Failed
 from taskloop.publish import BranchPublished, NotPublished, PublishResult, publish_word
 from taskloop.slot_release import AlreadyReleased, NotReleased, Released, ReleaseResult, release_word
 from taskloop.slots import Adopted, NotAdopted
-from taskloop.step_text import unsafe_details
 from taskloop.steps import CHECK, following
 
 type Clock = Callable[[], float]
-WAITING: Final[FailureKind] = "waiting"
-UNCOMMITTED: Final[FailureKind] = "uncommitted"
 UNKNOWN_KINDS: Final = ("unavailable", "uncertain", "unsettled", UNCOMMITTED, WAITING)  # re-running is safe: exit 3
 UNCLAIMING: Final = "Abandoned, but the tracker claim has not been returned. The abandon must finish before fresh admission."
 LATE: Final = "late_relaunch"  # the counted word of a round's relaunch of a checks attempt past its deadline
-COMMIT_KINDS: Final[dict[type[Rejected | NotApplicable | CommitRefused | Uncommitted | CommitWaiting], FailureKind]] = {
-    Rejected: "rejected", NotApplicable: "not_applicable", CommitRefused: "refused", Uncommitted: UNCOMMITTED, CommitWaiting: WAITING,
-}
 
 
 class Admit(Protocol):
@@ -326,8 +316,9 @@ def start(ports: StartPorts, request: StartRequest, *, advancing: str | None = N
 def _start(ports: StartPorts, request: StartRequest, advancing: str | None, rerun: bool) -> Started | Failed:
     try:
         found = _current(ports, request)
-        wanted = ((isinstance(found, _Advance) and found.previous.attempt_id == advancing and (found.number == 1 or rerun))
-                  or (isinstance(found, CheckRepeatTarget) and found.previous.attempt_id == advancing))
+        wanted = (isinstance(found, _Advance) and found.previous.attempt_id == advancing and (found.number == 1 or rerun)) or (
+            isinstance(found, CheckRepeatTarget) and found.previous.attempt_id == advancing
+        )
         if advancing is not None and not wanted:
             found = _not_advanced(found)
         if advancing is None and request.new.given and isinstance(found, (tuple, _Relaunch, _Advance, CheckRepeatTarget)):
@@ -335,8 +326,11 @@ def _start(ports: StartPorts, request: StartRequest, advancing: str | None, reru
         if isinstance(found, (Started, Failed)):
             return found
         if isinstance(found, CheckRepeatTarget):
-            return (Failed("unavailable", FeedbackReason.EVIDENCE, "Check-driven implement repeats are not wired.")
-                    if ports.check_repeat is None else ports.check_repeat.repair(request, found.previous, found.source))
+            return (
+                Failed("unavailable", FeedbackReason.EVIDENCE, "Check-driven implement repeats are not wired.")
+                if ports.check_repeat is None
+                else ports.check_repeat.repair(request, found.previous, found.source)
+            )
         if isinstance(found, (tuple, _Relaunch)):  # an existing attempt: launched as admitted
             target = (found[0] if isinstance(found, tuple) else found.key, True)
         else:
@@ -443,9 +437,13 @@ def relaunch_checks(ports: StartPorts, backlog: str, task_id: str, attempt_id: s
 
 def _not_advanced(found: _Found) -> Failed:
     """Why the round's advance of a done attempt does not run: the read's own refusal, its abandon, or another state."""
-    return (found if isinstance(found, Failed) else
-            Failed("refused", "abandoned", "The task's attempt was abandoned since this round read the store") if found is None else
-            Failed("refused", "changed", "The task's current attempt is no longer the done step this round read"))
+    return (
+        found
+        if isinstance(found, Failed)
+        else Failed("refused", "abandoned", "The task's attempt was abandoned since this round read the store")
+        if found is None
+        else Failed("refused", "changed", "The task's current attempt is no longer the done step this round read")
+    )
 
 
 def _admit(ports: StartPorts, request: StartRequest, advance: _Advance | None) -> tuple[AttemptKey, bool] | Failed:
@@ -455,11 +453,23 @@ def _admit(ports: StartPorts, request: StartRequest, advance: _Advance | None) -
     if advance is not None and checks:
         admitted = ports.checks.admission.admit_checks(ChecksRequest(advance.previous, request.checkout, deadline, advance.number))
     elif advance is None:
-        admitted = ports.admission.admit(AdmitRequest(request.task_id, request.backlog, request.tracker_root, request.checkout,
-                                                      request.settings, deadline, request.label, request.overrides, request.new))
+        admitted = ports.admission.admit(
+            AdmitRequest(
+                request.task_id,
+                request.backlog,
+                request.tracker_root,
+                request.checkout,
+                request.settings,
+                deadline,
+                request.label,
+                request.overrides,
+                request.new,
+            )
+        )
     else:
-        admitted = ports.advance.admit_next(NextStepRequest(advance.previous, request.checkout,
-                                                            request.settings.for_step(advance.step), deadline, request.overrides))
+        admitted = ports.advance.admit_next(
+            NextStepRequest(advance.previous, request.checkout, request.settings.for_step(advance.step), deadline, request.overrides)
+        )
     if isinstance(admitted, Admitted):
         return admitted.key, False
     if isinstance(admitted, AdmitUnavailable):
@@ -479,8 +489,11 @@ def launched(result: LaunchResult, backlog: str, task_id: str, key: AttemptKey, 
         case LaunchRefused(reason="dispatched"):
             return Started("already_dispatched", backlog, task_id, key.attempt_id, existing)
         case LaunchRefused() | LaunchUnavailable():
-            return Failed("refused" if isinstance(result, LaunchRefused) else "unavailable", result.reason,
-                          result.explanation if isinstance(result, LaunchRefused) else "")
+            return Failed(
+                "refused" if isinstance(result, LaunchRefused) else "unavailable",
+                result.reason,
+                result.explanation if isinstance(result, LaunchRefused) else "",
+            )
         case LaunchUncertain():
             return Failed("uncertain", "launch", "The registered entry may already run. Confirm its identity before another launch.")
 
@@ -569,14 +582,3 @@ def publish_task(reader: AttemptStore, publisher: Publish, backlog: str, task_id
     if isinstance(result, NotPublished):
         return Failed(result.kind, result.reason, result.detail)
     return PublishedTask(backlog, task_id, found[0].attempt_id, result)
-
-
-def commit_failure(result: Rejected | NotApplicable | CommitRefused | Uncommitted | CommitWaiting) -> Failed:
-    """Uncommitted files carry their listing (`bounded` where it was read) as the detail, as `tl attempt show` prints it."""
-    if isinstance(result, (Uncommitted, CommitRefused)):
-        details = ((unsafe_details(result),) if isinstance(result, Uncommitted) else
-                   ("Contradictory retained facts: inconsistent verdict or end commit.",) if result.reason == "inconsistent" else ())
-        return Failed(COMMIT_KINDS[type(result)], result.reason, "\n".join(filter(None, (*details, "\n".join(result.listing)))))
-    reason = (result.what if isinstance(result, NotApplicable) else
-              waiting_reason(result) if isinstance(result, CommitWaiting) else result.reason)
-    return Failed(COMMIT_KINDS[type(result)], reason)

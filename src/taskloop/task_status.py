@@ -80,11 +80,19 @@ def skipped(rule: str) -> TaskStatus:
 def waiting_for_land(view: AttemptView) -> bool:
     """Released passing checks, with no hold or abandon, may continue through the shared land operation."""
     checks = view.checks
-    return (view.next == "land" and checks is not None and checks.row.released_at is not None
-            and checks.row.conclusion == "passed" and not checks.row.abandoned
-            and view.hold is None and view.hold_due is None
-            and view.entry not in ("running", "unknown") and land_state(view.land) is not LandState.LANDING
-            and view.release is not None and not view.release.abandoned)
+    return (
+        view.next == "land"
+        and checks is not None
+        and checks.row.released_at is not None
+        and checks.row.conclusion == "passed"
+        and not checks.row.abandoned
+        and view.hold is None
+        and view.hold_due is None
+        and view.entry not in ("running", "unknown")
+        and land_state(view.land) is not LandState.LANDING
+        and view.release is not None
+        and not view.release.abandoned
+    )
 
 
 def restartable(view: AttemptView, admission: Admission | None) -> bool:
@@ -138,7 +146,8 @@ def words(found: TaskStatus) -> str:
     """The status in plain words, for a list row, a card and a round's skip line."""
     reason = "" if found.reason is None else f" ({found.reason})"
     waits: Mapping[Wait, str] = {
-        Wait.READY: "queued to start: the next round starts it", Wait.NO_FREE_SLOT: "queued to start: no free slot",
+        Wait.READY: "queued to start: the next round starts it",
+        Wait.NO_FREE_SLOT: "queued to start: no free slot",
         Wait.SLOT_FOR_LAND: "queued to start: the last free slot is kept for a land",
         Wait.MAX_RUNNING: "queued to start: the in-flight bound is reached",
         Wait.SKIPPED: f"queued to start: skipped by rule {found.skip}",
@@ -146,14 +155,20 @@ def words(found: TaskStatus) -> str:
     if found.status is Status.QUEUED and found.wait is not None:
         return waits[found.wait]
     fixed = {
-        Status.RUNNING: "running", Status.CHECKING: "checking", Status.SETTLING: "settling", Status.LANDED: "landed",
+        Status.RUNNING: "running",
+        Status.CHECKING: "checking",
+        Status.SETTLING: "settling",
+        Status.LANDED: "landed",
         Status.WAITING_FOR_LAND: {
             LandState.WAITING: "waiting for land: waits for the factory",
             LandState.MANUAL: "waiting for land: waits for a person; the profile says land: manual",
             LandState.UNKNOWN: "waiting for land: landing policy is unavailable",
             LandState.LANDING: "landing",
-        }[found.land or LandState.UNKNOWN], Status.LANDING: "landing", Status.FINISHED: "finished",
+        }[found.land or LandState.UNKNOWN],
+        Status.LANDING: "landing",
+        Status.FINISHED: "finished",
         Status.ABANDONED: "abandoned: a person gave the attempt up; a round restarts it once the task carries the approval label",
-        Status.HELD: f"held{reason}: waits for a person", Status.STUCK: f"needs a person{reason}",
+        Status.HELD: f"held{reason}: waits for a person",
+        Status.STUCK: f"needs a person{reason}",
     }
     return fixed[found.status]

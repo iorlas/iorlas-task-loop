@@ -131,10 +131,15 @@ def test_a_claim_taken_during_the_push_leaves_the_task_open_until_closed_by_hand
     assert b.repo.pushes == 1 and b.reason is None
 
 
-@pytest.mark.parametrize(("answer", "expected"), [
-    ("unavailable", ("unavailable", "tracker")), ("claim_lost", ("refused", "claim_lost")), ("missing", ("refused", "task")),
-    ("blocked", ("refused", "blocked")),
-])
+@pytest.mark.parametrize(
+    ("answer", "expected"),
+    [
+        ("unavailable", ("unavailable", "tracker")),
+        ("claim_lost", ("refused", "claim_lost")),
+        ("missing", ("refused", "task")),
+        ("blocked", ("refused", "blocked")),
+    ],
+)
 def test_a_refused_close_leaves_the_task_open_and_claimed_and_the_rerun_closes_it(
     b: LandBench, answer: Closed, expected: tuple[str, str]
 ) -> None:
@@ -214,17 +219,21 @@ CHILDREN = "cannot close tl-1: 1 open child issue(s); close children first or us
 BLOCKERS = "cannot close blocked issue: tl-1 is blocked by [tl-2] (use --force to override)"
 
 
-@pytest.mark.parametrize(("replies", "expected", "calls"), [
-    ([(show("closed"), "", 0)], "already_closed", 1),
-    ([(show(assignee="someone"), "", 0)], "claim_lost", 1),
-    ([("", "Error: Issue tl-1 not found", 1)], "missing", 1),
-    ([("", "bd: no answer in 30.0s", 124)], "unavailable", 1),
-    ([(SHOW, "", 0), ("", "", 13)], "claim_lost", 2),
-    ([(SHOW, "", 0), (DELETED, "", 1)], "missing", 2),
-    ([(SHOW, "", 0), ("", "", 0), ('{"error": "database is down"}', "", 1)], "unavailable", 3),
-    ([(SHOW, "", 0), ("", "", 0), ("", CHILDREN, 1)], "blocked", 3),
-    ([(SHOW, "", 0), ("", "", 0), ("", BLOCKERS, 1)], "blocked", 3),
-], ids=["closed", "other_assignee", "not_found", "timeout", "fence_refused", "deleted", "close_failed", "children", "blockers"])
+@pytest.mark.parametrize(
+    ("replies", "expected", "calls"),
+    [
+        ([(show("closed"), "", 0)], "already_closed", 1),
+        ([(show(assignee="someone"), "", 0)], "claim_lost", 1),
+        ([("", "Error: Issue tl-1 not found", 1)], "missing", 1),
+        ([("", "bd: no answer in 30.0s", 124)], "unavailable", 1),
+        ([(SHOW, "", 0), ("", "", 13)], "claim_lost", 2),
+        ([(SHOW, "", 0), (DELETED, "", 1)], "missing", 2),
+        ([(SHOW, "", 0), ("", "", 0), ('{"error": "database is down"}', "", 1)], "unavailable", 3),
+        ([(SHOW, "", 0), ("", "", 0), ("", CHILDREN, 1)], "blocked", 3),
+        ([(SHOW, "", 0), ("", "", 0), ("", BLOCKERS, 1)], "blocked", 3),
+    ],
+    ids=["closed", "other_assignee", "not_found", "timeout", "fence_refused", "deleted", "close_failed", "children", "blockers"],
+)
 def test_the_port_maps_bd_s_answers(tmp_path: Path, replies: list[tuple[str, str, int]], expected: str, calls: int) -> None:
     script = Script()
     for out, err, code in replies:
@@ -249,11 +258,15 @@ def test_the_port_s_bd_calls_are_capped_at_bd_timeout(tmp_path: Path) -> None:
     assert built == [{"actor": "taskloop", "cwd": str(tmp_path.resolve()), "timeout": BD_TIMEOUT_S}]
 
 
-@pytest.mark.parametrize(("holder", "advice"), [
-    ("", "it is unassigned (its claim lapsed): close it in the tracker by hand;"),
-    ("someone", "it is assigned to someone: close it in the tracker by hand, forced"),
-    (None, "another actor took it meanwhile: look at it in the tracker"),
-], ids=["unassigned", "another_actor", "fence"])
+@pytest.mark.parametrize(
+    ("holder", "advice"),
+    [
+        ("", "it is unassigned (its claim lapsed): close it in the tracker by hand;"),
+        ("someone", "it is assigned to someone: close it in the tracker by hand, forced"),
+        (None, "another actor took it meanwhile: look at it in the tracker"),
+    ],
+    ids=["unassigned", "another_actor", "fence"],
+)
 def test_a_lost_claim_names_the_close_by_hand_that_works(b: LandBench, holder: str | None, advice: str) -> None:
     b.closing = [CloseAnswer("claim_lost", holder)]
     found = b.land()

@@ -14,11 +14,6 @@ install:
 # Prepare a slot: the project environment with every pinned check tool (the factory's `setup`).
 bootstrap: install
 
-# This repo's own lint: ruff check only. `ruff format --check` has never run here and would rewrite most files at once, under
-# every other branch in flight, so the owner schedules that one commit; until then format is not a gate (see the PR).
-lint:
-    uv run ruff check .
-
 # The architecture contracts (.importlinter).
 rules:
     uv run --no-sync lint-imports --no-cache
