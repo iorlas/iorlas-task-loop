@@ -38,7 +38,7 @@ def test_noneditable_install_matches_current_source() -> None:
 
 
 # Every shared dependency is pinned at the one shelf snapshot tag, so all of them resolve to one shelf commit.
-SNAPSHOT = "blueprint-v0.4.0"
+SNAPSHOT = "blueprint-v0.5.0"
 SHARED = {"git-porcelain", "beads-client", "any-agent", "sqlite-store", "process-lock", "stream-proc"}
 # The gate kit (dev group): the packages the gate runs, and the ones they need that uv does not carry across a git source.
 KIT = {"blueprint", "any-gate", "any-gate-python", "any-lease", "atomic-io", "content-digest"}
