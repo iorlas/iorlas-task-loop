@@ -15,17 +15,15 @@ Version = Annotated[str, Field(strict=True, pattern=r"^\d+\.\d+\.\d+$")]
 
 class Tool(StrEnum):
     GIT = "git"
-    CODEX = "codex"
     PYTHON = "python"
     TAILWIND = "tailwind"
 
 
 class Prerequisites(BaseModel):
-    git_version: Version
+    git_min_version: Version
 
 
 class ManagedTools(BaseModel):
-    codex: Version = Field(alias="aqua:openai/codex")
     tailwind: Version = Field(alias="aqua:tailwindlabs/tailwindcss")
 
 
@@ -50,16 +48,18 @@ class Lock(BaseModel):
 
 
 BACKENDS = {
-    Tool.CODEX: "aqua:openai/codex",
     Tool.TAILWIND: "aqua:tailwindlabs/tailwindcss",
 }
 LOCK_BACKENDS = BACKENDS
 PATTERNS = {
     Tool.GIT: r"git version (\d+\.\d+\.\d+)",
-    Tool.CODEX: r"codex-cli (\d+\.\d+\.\d+)",
     Tool.PYTHON: r"Python (\d+\.\d+\.\d+)",
     Tool.TAILWIND: r"≈ tailwindcss v(\d+\.\d+\.\d+)",
 }
+
+
+def at_least(found: str, floor: str) -> bool:
+    return tuple(map(int, found.split("."))) >= tuple(map(int, floor.split(".")))
 
 
 def check(root: Path, probes: dict[Tool, str]) -> tuple[str, ...]:
@@ -67,8 +67,7 @@ def check(root: Path, probes: dict[Tool, str]) -> tuple[str, ...]:
     lock = Lock.model_validate(tomllib.loads((root / "mise.lock").read_text()))
     python = PythonPin(python=(root / ".python-version").read_text().strip()).python
     expected = {
-        Tool.GIT: config.vars.git_version,
-        Tool.CODEX: config.tools.codex,
+        Tool.GIT: config.vars.git_min_version,
         Tool.PYTHON: python,
         Tool.TAILWIND: config.tools.tailwind,
     }
@@ -78,8 +77,9 @@ def check(root: Path, probes: dict[Tool, str]) -> tuple[str, ...]:
         # Tailwind's documented help starts with its version, followed by usage.
         version_line = output.splitlines()[0] if tool == Tool.TAILWIND and output else output
         match = re.fullmatch(PATTERNS[tool], version_line)
-        if match is None or match[1] != pin or "probe failed" in output:
-            errors.append(f"{tool}: expected {pin}; executable reported {output!r}")
+        floor = tool == Tool.GIT
+        if match is None or "probe failed" in output or not (at_least(match[1], pin) if floor else match[1] == pin):
+            errors.append(f"{tool}: expected {'at least ' if floor else ''}{pin}; executable reported {output!r}")
         if tool in BACKENDS:
             backend = BACKENDS[tool]
             entries = lock.tools.get(backend, [])

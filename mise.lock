@@ -28,26 +28,6 @@ url = "https://github.com/gastownhall/beads/releases/download/v1.3.1/beads_1.3.1
 url_api = "https://api.github.com/repos/gastownhall/beads/releases/assets/602046126"
 provenance = "github-attestations"
 
-[[tools."aqua:openai/codex"]]
-version = "0.162.1"
-backend = "aqua:openai/codex"
-
-[tools."aqua:openai/codex"."platforms.linux-arm64"]
-checksum = "sha256:ed893c7b0eb337621590c433aa2ca90b7a7f66f189530bb23b1c52814c24b677"
-url = "https://github.com/openai/codex/releases/download/rust-v0.162.1/codex-aarch64-unknown-linux-musl.zst"
-
-[tools."aqua:openai/codex"."platforms.linux-x64"]
-checksum = "sha256:b6f2f01c7bf70e85306f47390b6f17b8ffdaf50135d48960a35dc456ff97e05b"
-url = "https://github.com/openai/codex/releases/download/rust-v0.162.1/codex-x86_64-unknown-linux-musl.zst"
-
-[tools."aqua:openai/codex"."platforms.macos-arm64"]
-checksum = "sha256:8b9a9ee96c7d765ae721771a845bc31db3dcdfc936933e62a1cfc5ad67bdf9d7"
-url = "https://github.com/openai/codex/releases/download/rust-v0.162.1/codex-aarch64-apple-darwin.zst"
-
-[tools."aqua:openai/codex"."platforms.macos-x64"]
-checksum = "sha256:23dfae3c3f3564022249f502e9bb7ecb4fdf179f80c61c842fd69e1a18ac9749"
-url = "https://github.com/openai/codex/releases/download/rust-v0.162.1/codex-x86_64-apple-darwin.zst"
-
 [[tools."aqua:tailwindlabs/tailwindcss"]]
 version = "4.1.11"
 backend = "aqua:tailwindlabs/tailwindcss"

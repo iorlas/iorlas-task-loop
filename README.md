@@ -182,7 +182,7 @@ For another origin name, replace the `task-loop` folder beneath the slots root t
 
 ### 1. Install and verify
 
-Install system Git at `vars.git_version` in [mise.toml](mise.toml), following the
+Install system Git at or above `vars.git_min_version` in [mise.toml](mise.toml), following the
 [Git Linux installation instructions](https://git-scm.com/book/en/v2/Getting-Started-Installing-Git).
 Set your Git author name/email and authenticate SSH or HTTPS with your Git host for fetches and pushes to `main`
 and `task/*`. Branch protection must permit the owner's manual delivery operation.
@@ -213,7 +213,7 @@ just check
 just test
 ```
 
-Mise supplies the declared Python, Codex, Tailwind, Beads (`bd`), uv, just, prek and check tools; no separate Node
+Mise supplies the declared Tailwind, Beads (`bd`), uv, just, prek and check tools; no separate Node
 installation is needed. The `tl` shell function runs the installed package in this checkout's `.venv` from any directory.
 The explicit mise environment keeps those tools on the factory's inherited PATH when it enters a slot. In a new shell,
 set `checkout`, enter it, reload that environment and define the function again, or configure
@@ -353,11 +353,11 @@ and document; [docs/glossary.md](docs/glossary.md) holds the vocabulary, the com
 The [decision records](docs/design/INDEX.md#decision-records) distinguish accepted decisions, later qualifications
 and their enforcing tests.
 
-Install system Git at the exact version in `mise.toml`'s `vars.git_version` first.
-That file is the authoritative source for supported Git, Codex, Python and Tailwind
-versions. Run `mise install` after trusting the repository configuration through normal
-mise setup, and activate mise in your shell. Mise installs the pinned Python and standalone
-Codex and Tailwind executables; Node is not required. `.python-version` selects that same
+Install system Git at or above `mise.toml`'s `vars.git_min_version` first (a floor, not an exact pin).
+That file is the authoritative source for the minimum Git and the exact Tailwind
+versions; Codex and Claude Code update themselves and are not pinned. Run `mise install` after trusting the repository configuration through normal
+mise setup, and activate mise in your shell. Mise installs the standalone
+Tailwind executable; Node is not required. `.python-version` selects that same
 Python for uv; the package's `>=3.15` compatibility range is separate from this development pin.
 The committed `mise.lock` records managed downloads.
 
