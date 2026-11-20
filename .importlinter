@@ -657,6 +657,7 @@ source_modules =
     taskloop.cli_common
     taskloop.cli_composition
     taskloop.cli_drain
+    taskloop.cli_init
     taskloop.cli_land
     taskloop.cli_step
     taskloop.cli_workflow
@@ -713,6 +714,7 @@ source_modules =
     taskloop.hold_text
     taskloop.ids
     taskloop.implement_step
+    taskloop.init_files
     taskloop.input_context
     taskloop.inspection_guide
     taskloop.interrupts

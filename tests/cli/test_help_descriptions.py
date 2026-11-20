@@ -9,7 +9,7 @@ COMMANDS = [
     ["task", "show"],
     ["profile", "show"],
     ["workflow", "show"],
-    ["workflow", "init"],
+    ["init"],
     ["drain"],
     ["version"],
     ["config", "show"],
