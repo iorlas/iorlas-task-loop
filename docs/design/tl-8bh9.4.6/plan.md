@@ -1,5 +1,7 @@
 # Adapter audit: purpose, ownership and workflow consequences
 
+Status: **design**. Accepted decisions and pending proposals are distinguished below; historical source observations are not a delivery receipt. Explicit holds remain in force except where superseded.
+
 Task: tl-8bh9.4.6. Source review 2026-11-09; implementation is separate work.
 All 38 current adapter modules were read by the review team, including their relevant consumers.
 Two cheaper-model scans covered Git/check and execution mechanisms; Astra read task/state adapters and

@@ -1,127 +1,337 @@
-// The step rail of the drawer: the task's steps top to bottom in the order they happened (plan, implement, checks, land), each with
-// its own try number, the idle time between two steps, and a repeat named as a repeat with its reason. A step and a try are two
-// things: "step 2 of 4" is where the task is, "try 2" is how often that step ran.
+// One row per step attempt, with its factory commit attached to its agent answer.
+// Past history is folded for display only; selection still uses the original (step, n).
+import { JUMP, LAND, STATE, STEPS, COMMIT, dot, el, elapsedSpan, fmtDur, isWaiting, since, stepInfo, tick, waitingNote } from "./ui.js";
+import { elapsedDuration } from "./duration.js";
+import { say, wordNode } from "./words.js";
+import { usageNode, usageText } from "./usage.js";
 
-import { JUMP, LAND, STATE, STEPS, VERIFY, dot, el, fmtDur, since, startedAt, stepInfo, tick } from "./ui.js";
-import { wordNode } from "./words.js";
-
-const GAP_MS = 5000; // idle time shorter than this is not shown
-const stepOf = stepInfo;
-
-// How long an attempt ran, or has been running; an attempt the stores gave no start or end shows a dash.
-export function lasted(a) {
-  if (a.step === VERIFY.id) return "—"; // the factory stores no start or end of a verification
-  if (!a.started_at) return "—";
-  if (a.ended_at) return fmtDur(Date.parse(a.ended_at) - Date.parse(a.started_at));
-  return a.state === "running" ? since(a.started_at) : "—";
-}
-
+const WORK_MS = 120000;
+const muted = "text-slate-500 dark:text-slate-400";
+const chosen = (a, selected) => a && selected.step === a.step && selected.n === a.n;
 const marker = (cls) => el("span", `absolute -left-[3px] top-[0.8rem] h-1.5 w-1.5 rounded-full border ${cls}`);
 
-// "Factory checked the answer of Implement try 1": the verification names the attempt above it (it always follows its own attempt),
-// so its number is the verified step's try, not its own task-wide one.
-export function verifyTitle(list, a) {
-  const of = list[list.indexOf(a) - 1];
-  return `Factory checked the answer of ${stepOf(of?.step ?? a.step).label}${of ? ` try ${of.n}` : ""}`;
+export function lasted(a) {
+  if (["plan", "implement"].includes(a.step)) {
+    const ms = a.duration ? elapsedDuration(a.duration.execution) : null;
+    return ms === null ? "Unknown duration" : fmtDur(ms);
+  }
+  if (a.step === COMMIT.id || !a.started_at) return "—";
+  const end = a.ended_at ? Date.parse(a.ended_at) : a.state === "running" ? Date.now() : NaN;
+  const ms = end - Date.parse(a.started_at);
+  return Number.isFinite(ms) && ms >= 0 ? (a.ended_at ? fmtDur(ms) : since(a.started_at)) : "—";
 }
 
-// The gap between two steps. Between a step and the next one the factory commits, publishes and starts the checks itself; only a gap
-// before a repeat or a restart can be waiting (for a slot), and it stays "idle".
-function idle(prev, next) {
+export function commitTitle(list, a) {
+  const of = list[list.indexOf(a) - 1];
+  return `Factory commit of ${stepInfo(of?.step ?? a.step).label}${of?.n > 1 ? ` attempt ${of.n}` : ""}`;
+}
+
+// Explicitly normalize the old presentation placeholder; it is not a recorded cause.
+export function changeReason(a) {
+  if (!a.reason || (a.after === "restart_at_plan" && a.reason === "restarted at plan")) return "Reason not recorded";
+  return say(a.reason);
+}
+
+function gapBetween(prev, next) {
   if (!prev?.ended_at || !next.started_at) return null;
   const ms = Date.parse(next.started_at) - Date.parse(prev.ended_at);
-  if (ms < GAP_MS) return null;
-  const work = !next.after;
-  const li = el("li", "relative py-1 pl-4 text-[11px] text-slate-400 dark:text-slate-500", work ? `⚙ factory work ${fmtDur(ms)} (commit, publish, start checks)` : `⏸ idle ${fmtDur(ms)}`);
-  li.title = `Time between the recorded end of the step above and the recorded start of this one; both are approximate.${work ? "" : " The factory was waiting, for a slot or its turn."}`;
-  return li;
+  return Number.isFinite(ms) && ms >= 0 ? ms : null;
 }
 
-// A repeat names the try it repeats (`repeat_of`, a try of the same step); a restart at plan names the step it follows in the chain.
-function jump(a, list, i, select) {
-  const j = JUMP[a.after];
-  const prev = a.after === "repeat" ? list.find((x) => x.step === a.step && x.n === a.repeat_of) : list.slice(0, i).findLast((x) => x.step !== VERIFY.id);
+function gapWords(ms) {
+  return ms === null ? "" : `Approximate elapsed gap: ${fmtDur(ms)} between recorded step times; `
+    + "not a measurement of individual factory operations.";
+}
+
+// The ordering contract puts factory commit immediately after its agent, with its own task-wide number.
+function project(list, operations) {
+  const groups = [];
+  let previous = null;
+  for (const a of list) {
+    if (a.step === COMMIT.id) {
+      const entry = groups.at(-1)?.at(-1);
+      if (entry && ["plan", "implement"].includes(entry.a.step) && !entry.factoryCommit) entry.factoryCommit = a;
+      continue;
+    }
+    if (!groups.length || a.after === "restart_at_plan") groups.push([]);
+    groups.at(-1).push({ a, factoryCommit: null, gap: gapBetween(previous, a),
+      operations: operations.filter((o) => o.step === a.step && o.n === a.n) });
+    previous = a;
+  }
+  return groups;
+}
+
+function verdict(a) {
+  if (["committed", "reused"].includes(a.summary)) return { mark: "✓", label: say(a.summary), failed: false, text: STATE.succeeded.text };
+  if (a.state === "running" && (!a.summary || ["pending", "registered"].includes(a.summary))) {
+    return { mark: "…", label: "Factory commit pending", failed: false, text: muted };
+  }
+  const missing = !a.summary || ["pending", "registered"].includes(a.summary);
+  const why = missing ? "factory commit outcome was not recorded" : say(a.summary);
+  const label = why.startsWith("Not committed:") ? why : `Not committed: ${why}`;
+  return { mark: "✗", label, failed: true, text: STATE.failed.text };
+}
+
+function commitButton(a, selected, select, agent) {
+  const v = verdict(a);
+  const selectedClass = chosen(a, selected) ? "bg-slate-100 dark:bg-slate-800"
+    : "hover:bg-slate-50 dark:hover:bg-slate-800/60";
+  const mark = el("button", `rounded px-2 py-1.5 text-left text-[11px] leading-snug ${v.text} ${selectedClass}`,
+    `${v.mark} ${v.label}`);
+  mark.type = "button";
+  const of = `${stepInfo(agent.step).label}${agent.n > 1 ? ` attempt ${agent.n}` : ""}`;
+  mark.title = `${of}: ${v.label}${a.summary ? ` (${a.summary})` : ""}`;
+  mark.setAttribute("aria-label", `Factory commit of ${of}: ${v.label}. Open Result`);
+  mark.setAttribute("aria-pressed", String(!!chosen(a, selected)));
+  if (chosen(a, selected)) mark.dataset.selected = "1";
+  mark.addEventListener("click", () => select(a.step, a.n));
+  return mark;
+}
+
+function restartTime(iso) {
+  if (!iso) return "";
+  const at = new Date(iso), today = new Date();
+  if (!Number.isFinite(at.getTime())) return "";
+  const sameDay = at.toDateString() === today.toDateString();
+  const options = { hour12: false, hour: "2-digit", minute: "2-digit", ...(sameDay ? {} : { month: "short", day: "numeric" }) };
+  return ` · ${at.toLocaleString([], options)}`;
+}
+
+function restart({ a, gap }, select) {
   const li = el("li", "relative pb-0.5 pl-4 pt-1.5");
-  const btn = el("button", `block w-full text-left text-[11px] leading-snug hover:underline ${j.text}`);
+  const btn = el("button", `block w-full text-left text-[11px] leading-snug hover:underline ${JUMP.restart_at_plan.text}`,
+    `Restarted at plan${restartTime(a.started_at)}${gap === null ? "" : ` · waited ${fmtDur(gap)}`}`);
   btn.type = "button";
-  const what = a.after === "repeat" ? `${j.glyph} ${j.label} of ${stepOf(prev?.step ?? a.step).label}${prev ? `, try ${prev.n}` : ""}` : `${j.glyph} ${j.label} after ${stepOf(prev?.step ?? a.step).label}${prev ? `, try ${prev.n}` : ""},${startedAt(a.started_at)}`;
-  btn.title = a.reason ? `${what}: ${a.reason}` : what; // the full story is one hover or one click away
-  btn.append(el("span", "font-medium", what));
-  if (a.reason) btn.append(el("span", "block line-clamp-2 text-slate-500 dark:text-slate-400", a.reason));
-  btn.addEventListener("click", () => select(a.step, a.n)); // selects the attempt that began after it
+  btn.title = `${changeReason(a)}${gap === null ? "" : ` · ${gapWords(gap)}`}`;
+  btn.addEventListener("click", () => select(a.step, a.n));
   li.append(btn);
-  if (a.led_by) li.append(causeLink(a, select));
   return li;
 }
 
-// A repeat of an agent attempt names what led to it: the failed verification, one click away.
+// Cause navigation remains in the selected attempt detail, never an extra rail row.
 export function causeLink(a, select) {
-  const btn = el("button", "block text-left text-[11px] underline decoration-dotted underline-offset-2 hover:decoration-solid", "because the factory's check of the answer failed →");
+  const btn = el("button", "block text-left text-[11px] underline decoration-dotted underline-offset-2 hover:decoration-solid",
+    "because factory commit has no successful verdict →");
   btn.type = "button";
-  btn.addEventListener("click", () => select(VERIFY.id, a.led_by));
+  btn.addEventListener("click", () => select(COMMIT.id, a.led_by));
   return btn;
 }
 
-function row(a, selected, select, list) {
-  const st = STATE[a.state];
-  const li = el("li", `relative pl-3 ${a.past ? "opacity-60" : ""}`); // past: a chain a person abandoned
-  const dotEl = dot(st.dot);
-  dotEl.classList.add("absolute", "-left-[3px]", "top-[0.95rem]");
-  const btn = el("button", `block w-full rounded px-2 py-1.5 text-left ${selected ? "bg-slate-100 dark:bg-slate-800" : "hover:bg-slate-50 dark:hover:bg-slate-800/60"}`);
-  btn.type = "button";
-  if (selected) btn.dataset.selected = "1";
-  const top = el("span", "flex items-baseline gap-2");
-  top.append(
-    el("span", `text-[13px] ${selected ? "font-semibold" : "font-medium"}`, a.step === VERIFY.id ? `${VERIFY.emoji} ${verifyTitle(list, a)}` : `${stepOf(a.step).emoji} ${stepOf(a.step).label}`),
-    ...(a.step === VERIFY.id ? [] : [el("span", "text-[11px] text-slate-500 dark:text-slate-400", a.past ? `try ${a.n}, past` : `try ${a.n}`)]),
-    el("span", "ml-auto text-[11px] tabular-nums text-slate-500 dark:text-slate-400", lasted(a)),
-  );
-  btn.append(top);
-  if (a.state === "failed" || a.step === VERIFY.id) btn.append(wordNode(el, a.summary, "mt-0.5 block truncate text-[11px] text-slate-500 dark:text-slate-400"));
-  btn.addEventListener("click", () => select(a.step, a.n));
-  li.append(dotEl, btn);
-  return li;
+export function causeWords(context) {
+  const cause = context.event.cause;
+  const words = (value) => String(value).replaceAll("_", " ");
+  if (cause.explanation) return cause.explanation;
+  if (cause.check) return `Check ${cause.check.name}: ${words(cause.check.conclusion)}`;
+  if (cause.leftovers) return `Repeats exhausted: ${words(say(cause.leftovers.reason))}`;
+  if (cause.reason) return words(say(`${cause.family}:${cause.reason}`));
+  return cause.setup ? `Setup: ${words(cause.setup)}` : cause.profile ? `Profile: ${words(cause.profile)}` : "Reason not recorded";
 }
 
-// The land is not an attempt of its own in the history yet: its row is the card's state (still to come, waiting for the person,
-// landing, landed), after the idle time since the checks ended while it waits.
-function landRow(t, last) {
-  const here = t.column === "land" || t.column === "landed";
-  const word = t.column === "landed" ? LAND.done : here ? LAND[t.land ?? "waiting"] : null;
-  const li = el("li", `relative py-1.5 pl-4 ${here ? "" : "text-slate-400 dark:text-slate-600"}`);
-  li.append(marker(t.column === "landed" ? "border-emerald-500 bg-emerald-500" : here ? "border-amber-500" : "border-slate-300 dark:border-slate-600"), el("span", `text-[13px] ${here ? "font-medium" : ""}`, `${STEPS.at(-1).emoji} ${STEPS.at(-1).label}`));
-  if (!word) return li.append(el("span", "ml-2 text-[11px]", "pending")), li;
-  li.append(el("span", `block text-[11px] ${word.text}`, word.row));
-  if (t.column === "land" && last?.ended_at) {
-    const idle = el("span", "block text-[11px] text-slate-400 dark:text-slate-500");
-    [idle.dataset.prefix, idle.dataset.suffix, idle.dataset.since] = ["⏸ idle ", " since the checks ended", last.ended_at];
-    tick(idle);
-    li.append(idle);
+function row({ a, factoryCommit, gap }, selected, select, stepUsage) {
+  const st = STATE[a.state];
+  const li = el("li", `relative pl-3 ${a.past ? "opacity-60" : ""}`);
+  if (!a.after) li.title = gapWords(gap);
+  const dotEl = dot(st.dot);
+  dotEl.classList.add("absolute", "-left-[3px]", "top-[0.95rem]");
+  const line = el("div", "flex min-w-0 flex-col items-stretch");
+  const selectedStyle = chosen(a, selected) ? "bg-slate-100 dark:bg-slate-800" : "hover:bg-slate-50 dark:hover:bg-slate-800/60";
+  const btn = el("button", `block min-w-0 flex-1 rounded px-2 py-1.5 text-left ${selectedStyle}`);
+  btn.type = "button";
+  if (chosen(a, selected)) btn.dataset.selected = "1";
+  const top = el("span", "flex flex-wrap items-baseline gap-1");
+  top.append(el("span", "text-[13px] font-medium", stepInfo(a.step).label));
+  if (a.n > 1) top.append(el("span", `text-[11px] ${muted}`, `attempt ${a.n}`));
+  if (a.after === "repeat") {
+    const label = a.step === "checks" ? "Re-run after restart" : "Repeat";
+    const tag = el("span", `text-[11px] ${JUMP.repeat.text}`, label);
+    tag.title = `${label} of ${stepInfo(a.step).label}${a.repeat_of ? ` attempt ${a.repeat_of}` : ""}: ${changeReason(a)}`
+      + (a.reason && a.step !== "checks" ? ` (${a.reason})` : "") + (gap === null ? "" : ` · ${gapWords(gap)}`);
+    top.append(tag);
+  }
+  top.append(["plan", "implement"].includes(a.step)
+    ? elapsedSpan(a.duration, `ml-auto text-[11px] tabular-nums ${muted}`)
+    : el("span", `ml-auto text-[11px] tabular-nums ${muted}`, lasted(a)));
+  btn.append(top);
+  btn.append(el("span", `block text-[11px] ${st.text}`, st.label));
+  const covered = factoryCommit && (a.summary === "commit" || a.summary === factoryCommit.summary);
+  if (a.state === "failed" && !covered) btn.append(wordNode(el, a.summary, `mt-0.5 block truncate text-[11px] ${muted}`));
+  btn.addEventListener("click", () => select(a.step, a.n));
+  line.append(btn);
+  if (a.context) {
+    const notice = el("button", `block px-2 pb-1 text-left text-[11px] truncate ${muted}`, `Held · ${causeWords(a.context)}`);
+    notice.title = causeWords(a.context);
+    notice.type = "button";
+    notice.dataset.taskEvent = a.context.event.cause_id;
+    notice.addEventListener("click", () => select(a.step, a.n));
+    line.append(notice);
+  }
+  li.append(dotEl, line);
+  if (a.usage) {
+    li.title = [li.title, usageText(a.usage), usageText(stepUsage, "Step total", true)].filter(Boolean).join(" · ");
+    const total = el("div", "px-2 pb-1");
+    total.append(usageNode(stepUsage, "Step total", true));
+    li.append(total);
+  }
+  if (factoryCommit) {
+    line.append(commitButton(factoryCommit, selected, select, a));
   }
   return li;
 }
 
-// Every step of the chain in order: what ran (with its tries and the idle time between), then what has not started (pending), the land last.
-export function rail(list, t, selected, select) {
-  const wrap = el("nav", "w-64 shrink-0 overflow-y-auto border-r border-slate-200 px-4 py-4 dark:border-slate-800");
+function summary(entries, n) {
+  const parts = [`History ${n}`];
+  for (const step of STEPS.slice(0, -1)) {
+    const tries = entries.filter(({ a }) => a.step === step.id);
+    if (!tries.length) continue;
+    const last = tries.at(-1);
+    const status = ({ a, factoryCommit }) => {
+      if (factoryCommit) return verdict(factoryCommit);
+      const failed = a.state === "failed", checked = step.id === "checks";
+      const mark = failed ? "✗" : checked && a.state === "succeeded" ? "✓" : "…";
+      const label = `${STATE[a.state].label}${!failed && !checked ? "; Factory commit pending" : ""}`;
+      return { mark, label, failed };
+    };
+    const earlierFailure = tries.slice(0, -1).some((entry) => status(entry).failed);
+    const lastStatus = status(last);
+    parts.push(`${step.label} ${lastStatus.mark} ${lastStatus.label}${earlierFailure ? " (earlier failure)" : ""}`);
+  }
+  for (const entry of entries) {
+    for (const operation of entry.operations.filter((o) => o.state !== "completed")) parts.push(operationWords(operation));
+  }
+  return parts.join(" · ");
+}
+
+const operationKinds = { commit: "Commit", publish: "Publish", "checks-start": "Start checks" };
+const operationStates = { completed: "Completed", failed: "Failed", uncertain: "Result unconfirmed", active: "Completion unrecorded" };
+
+function operationWords(operation) {
+  return `${operationKinds[operation.kind]} · ${operationStates[operation.state]}`;
+}
+
+function operationRow(operation) {
+  const li = el("li", `relative py-1 pl-4 text-[11px] ${muted}`, operationWords(operation));
+  li.dataset.operation = operation.operation;
+  const measured = operation.state !== "active" && Number.isFinite(operation.elapsed_ms) && operation.elapsed_ms >= 0;
+  li.append(el("span", "ml-2 tabular-nums", measured ? fmtDur(operation.elapsed_ms) : "Duration unavailable"));
+  li.title = `Recorded start: ${operation.started_at}`;
+  return li;
+}
+
+function groupRows(entries, selected, select, stepUsage, events) {
+  const ol = el("ol", "ml-1 border-l border-slate-200 dark:border-slate-700");
+  for (const entry of entries) {
+    if (entry.a.after === "restart_at_plan") ol.append(restart(entry, select));
+    if (!entry.a.after && entry.gap !== null && entry.gap >= WORK_MS) {
+      const work = el("li", "relative py-1 pl-4 text-[11px] text-slate-400 dark:text-slate-500", `Approximate gap · ${fmtDur(entry.gap)}`);
+      work.title = gapWords(entry.gap);
+      ol.append(work);
+    }
+    if (entry.a.step === "checks") entry.operations.forEach((o) => ol.append(operationRow(o)));
+    ol.append(row(entry, selected, select, stepUsage[entry.a.step]));
+    if (entry.a.step !== "checks") entry.operations.forEach((o) => ol.append(operationRow(o)));
+    if (entry.a.step === "checks") {
+      for (const event of events.filter((e) => e.checks_n === entry.a.n)) ol.append(landEvent(event, selected, select));
+    }
+  }
+  return ol;
+}
+
+function pastGroup(entries, n, selected, select, stepUsage, events) {
+  const key = `${entries[0].a.step}/${entries[0].a.n}`;
+  const details = el("details", "mb-2");
+  details.dataset.run = key;
+  const selectedKey = `${selected.step}/${selected.n}/${selected.landEvent ?? ""}`;
+  const containsSelection = entries.some(({ a, factoryCommit }) => chosen(a, selected) || chosen(factoryCommit, selected)
+    || events.some((event) => event.id === selected.landEvent && a.step === "checks" && event.checks_n === a.n));
+  // A newly selected result opens its group; redraws preserve the person's disclosure choice.
+  if (containsSelection && selected.railSelection !== selectedKey) selected.runs.set(key, true);
+  details.open = selected.runs.get(key) ?? false;
+  const heading = el("summary", `cursor-pointer text-[11px] ${muted}`, summary(entries, n));
+  heading.title = "Expand to inspect every attempt and factory commit result, including earlier failures";
+  details.append(heading, groupRows(entries, selected, select, stepUsage, events));
+  details.addEventListener("toggle", () => { if (details.isConnected) selected.runs.set(key, details.open); });
+  return details;
+}
+
+function landWait(wait) {
+  const note = el("div", `px-2 py-1 text-[11px] ${muted}`, wait.awaited);
+  const time = el("span", "block tabular-nums", "Wait duration unavailable");
+  const start = Date.parse(wait.started_at), end = Date.parse(wait.ended_at);
+  if (Number.isFinite(start) && wait.open && wait.ended_at == null && start <= Date.now()) {
+    time.dataset.since = wait.started_at;
+    time.dataset.prefix = "Waiting · ";
+    tick(time);
+  } else if (!wait.open && Number.isFinite(start) && Number.isFinite(end) && end >= start) {
+    time.textContent = `Waited · ${fmtDur(end - start)}`;
+  }
+  time.title = `${wait.started_at ?? "Start not recorded"} → ${wait.ended_at ?? (wait.open ? "ongoing" : "End not recorded")}`;
+  note.append(time);
+  return note;
+}
+
+function landEvent(event, selected, select) {
+  const li = el("li", "relative py-1.5 pl-4");
+  li.dataset.landEvent = event.id;
+  const label = { ready: "Land ready", tried: "Land tried", landed: "Landed" }[event.kind];
+  const on = selected.step === "land" && selected.landEvent === event.id;
+  const style = on ? "bg-slate-100 dark:bg-slate-800" : "hover:bg-slate-50 dark:hover:bg-slate-800/60";
+  const button = el("button", `w-full rounded px-2 py-1 text-left text-[13px] ${style}`,
+    `${label}${event.candidate_n == null ? "" : ` · candidate ${event.candidate_n}`}`);
+  button.type = "button";
+  button.setAttribute("aria-pressed", String(on));
+  if (on) button.dataset.selected = "1";
+  button.addEventListener("click", () => select("land", null, event.id));
+  const stamp = el("span", `block px-2 text-[11px] ${muted}`, event.at ?? "Time not recorded");
+  li.append(marker(event.kind === "landed" ? "border-emerald-500 bg-emerald-500" : "border-amber-500"), button, stamp,
+    el("span", `block px-2 text-[11px] ${muted}`, `${event.past ? "Historical · " : ""}${event.explanation}`));
+  if (event.retry_cause) li.append(el("span", `block px-2 text-[11px] ${muted}`,
+    `Retry cause: ${event.retry_cause.replaceAll("_", " ")}`));
+  for (const wait of event.waits) li.append(landWait(wait));
+  return li;
+}
+
+function landRow(t, selected, select, events) {
+  const here = t.column === "land" || t.column === "landed";
+  const word = t.column === "landed" ? LAND.done : here ? LAND[t.land ?? "unknown"] : null;
+  const li = el("li", `relative py-1.5 pl-4 ${here ? "" : "text-slate-400 dark:text-slate-600"}`);
+  const on = selected.step === "land";
+  const style = on ? "bg-slate-100 dark:bg-slate-800" : "hover:bg-slate-50 dark:hover:bg-slate-800/60";
+  const button = el("button", `w-full rounded px-2 py-1 text-left text-[13px] ${style} ${here ? "font-medium" : ""}`,
+    `${STEPS.at(-1).emoji} ${STEPS.at(-1).label}`);
+  button.type = "button";
+  button.setAttribute("aria-pressed", String(on));
+  if (on) button.dataset.selected = "1";
+  button.addEventListener("click", () => select("land"));
+  const color = t.column === "landed" ? "border-emerald-500 bg-emerald-500"
+    : here ? "border-amber-500" : "border-slate-300 dark:border-slate-600";
+  li.append(marker(color), button);
+  if (here && isWaiting(t) && !events.length) li.append(waitingNote(t));
+  else if (word) li.append(el("span", `block text-[11px] ${word.text}`, t.status_note ?? word.row));
+  else li.append(el("span", "ml-2 text-[11px]", "pending"));
+  return li;
+}
+
+export function rail(list, t, selected, select, stepUsage = {}, events = [], operations = []) {
+  selected.runs ??= new Map();
+  const wrap = el("nav", "min-w-0 w-64 max-w-full shrink-0 overflow-y-auto border-r border-slate-200 px-4 py-4 dark:border-slate-800");
   wrap.id = "rail";
   wrap.append(el("h3", "mb-3 text-[11px] font-semibold uppercase tracking-wider text-slate-500", "Steps"));
-  const ol = el("ol", "ml-1 border-l border-slate-200 dark:border-slate-700");
-  list.forEach((a, i) => {
-    const gap = a.step === VERIFY.id ? null : idle(list.slice(0, i).findLast((x) => x.step !== VERIFY.id), a); // a verification has no time of its own
-    if (gap) ol.append(gap);
-    if (a.after) ol.append(jump(a, list, i, select));
-    ol.append(row(a, selected.step === a.step && selected.n === a.n, select, list));
+  const groups = project(list, operations);
+  let current = null;
+  groups.forEach((entries, i) => {
+    if (entries.every(({ a }) => a.past)) wrap.append(pastGroup(entries, i + 1, selected, select, stepUsage, events));
+    else { current = groupRows(entries, selected, select, stepUsage, events); wrap.append(current); }
   });
-  if (t.column === "waiting") return wrap.append(ol), wrap; // no current chain: everything above is past, nothing is pending
-  const last = list.findLast((x) => x.step !== VERIFY.id);
-  const reached = STEPS.findIndex((x) => x.id === last?.step);
+  selected.railSelection = `${selected.step}/${selected.n}/${selected.landEvent ?? ""}`;
+  if (t.column === "waiting") return wrap;
+  if (!current) { current = el("ol", "ml-1 border-l border-slate-200 dark:border-slate-700"); wrap.append(current); }
+  const last = list.findLast((a) => a.step !== COMMIT.id && !a.past);
+  const reached = STEPS.findIndex((s) => s.id === last?.step);
   for (const s of STEPS.slice(reached + 1, -1)) {
     const li = el("li", "relative py-1.5 pl-4 text-[13px] text-slate-400 dark:text-slate-600");
     li.append(marker("border-slate-300 dark:border-slate-600"), `${s.emoji} ${s.label}`, el("span", "ml-2 text-[11px]", "pending"));
-    ol.append(li);
+    current.append(li);
   }
-  ol.append(landRow(t, last));
-  wrap.append(ol);
+  current.append(landRow(t, selected, select, events));
   return wrap;
 }

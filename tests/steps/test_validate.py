@@ -18,9 +18,11 @@ from sqlite_store import Store
 from taskloop.attempt_types import AttemptResult
 from taskloop.check_store import CheckStore
 from taskloop.checks import Block, BlockPorts
+from taskloop.claim import ClaimWord
 from taskloop.composition import Checking
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.factory_schema import SCHEMA
+from taskloop.ids import NativeIds
 from taskloop.land_store import LandStore
 from taskloop.setup_store import SetupStore
 from taskloop.validate import Ended, Target, Verdict, reconcile, validate
@@ -58,14 +60,14 @@ class Bench:
         block = Block(BlockPorts(env.process, env.process.lingering, lambda: self.now))
         return Checking(self.store, SetupStore(lambda: self.con), EvidenceFiles(env.artifacts), self.views, self.files, env.profiles,
                         env.preparation(), block, env.observe, lambda _entry: "gone", lambda _path: True, lambda: self.now,
-                        lambda: {"HOME": "/home/p"})
+                        lambda: {"HOME": "/home/p"}, ids=NativeIds())
 
     def target(self) -> Target:
         return Target(CANDIDATE, self.slot.repo.identity().key, str(self.slot.path), self.s, REQUIRED, 300.0, None,
                       lambda digest: self.lands.profiled(CANDIDATE, digest))
 
     def __call__(self) -> Ended:
-        return validate(self.checking(), self.target(), lambda: "held")
+        return validate(self.checking(), self.target(), lambda: ClaimWord.HELD)
 
     def results(self) -> list[tuple[object, ...]]:
         return self.con.execute("SELECT attempt_id,block,name,conclusion FROM check_result ORDER BY block,position").fetchall()

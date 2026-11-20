@@ -3,12 +3,16 @@ It never holds a dispatch token, a remote URL or Git output."""
 
 from pathlib import Path
 
+from taskloop.agents.config import display
+from taskloop.agents.stop_text import stop_text
+from taskloop.attempt_export import AttemptExport
 from taskloop.attempt_reads import PublishedRow, ReleaseRow
 from taskloop.attempt_result import succeeded
 from taskloop.attempt_status import AttemptView, Listed, Shown
 from taskloop.attempt_types import EntryIdentity
 from taskloop.check_status import ChecksView
 from taskloop.checks import differs
+from taskloop.command_conclusion import encode
 from taskloop.hold_store import HoldRow
 from taskloop.land import Landed
 from taskloop.land_data import land_data, view_data
@@ -17,23 +21,29 @@ from taskloop.land_summary import LandSummary
 from taskloop.machine_config import Loaded
 from taskloop.operations import (
     Adoption,
+    CommittedTask,
     Ended,
     Failed,
     PublishedTask,
     ReleasedTask,
     Round,
     Started,
-    VerifiedTask,
 )
 from taskloop.publish import publish_word
+from taskloop.rows_render import Rows, records
+from taskloop.setup_timing import SetupTimingReport
+from taskloop.slot_list import SlotList
 from taskloop.slot_release import Released, release_word
 from taskloop.slots import Adopted, NotAdopted, SlotView
-from taskloop.task_status import task_status
+from taskloop.task_status import task_status, words
 
 # every command result of the config, slot and step commands: rendered by `step_render.human`, shaped here, exit-coded by
 # `exit_codes`
-type StepResult = Started | Shown | Listed | VerifiedTask | ReleasedTask | PublishedTask | Adoption | Loaded | Round | Ended | Failed
-type Result = StepResult | Landed | Withdrawn | LandSummary
+type StepResult = (
+    Started | Shown | Listed | CommittedTask | ReleasedTask | PublishedTask | Adoption | Loaded | Round | Ended | Failed | SetupTimingReport
+)
+type Shaped = StepResult | Landed | Withdrawn | LandSummary
+type Result = Shaped | Rows
 
 
 def _entry_data(entry: EntryIdentity | None) -> dict[str, object] | None:
@@ -44,9 +54,11 @@ def _show_data(each: AttemptView) -> dict[str, object]:
     return {
         "backlog": each.backlog, "task": each.task_id, "step": each.step, "attempt_id": each.attempt_id, "slot": each.slot,
         "phase": each.phase,
-        "entry": each.entry, "result": {"status": each.result.status, "reason": each.result.reason},
+        "entry": each.entry, "result": {"status": each.result.status, "reason": each.result.reason,
+                                       **({"explanation": each.result.explanation} if each.result.explanation else {})},
         "succeeded": succeeded(each.result), "deadline_passed": each.deadline_passed, "next": each.next,
         "status": task_status(each).status.value,
+        "status_note": words(task_status(each)),
         "entry_process": _entry_data(each.entry_process),
         "worker": None if each.worker is None else {"pid": each.worker[0], "pgid": each.worker[1]},
         "leftovers": list(each.leftovers), "number": each.number, "previous_attempt_id": each.previous_attempt_id,
@@ -54,7 +66,9 @@ def _show_data(each: AttemptView) -> dict[str, object]:
         "last_entry": each.last_entry, "seq": each.seq, "release": _release_data(each.release),
         "published": _published_data(each.published), "checks": _checks_data(each.checks), "land": view_data(each.land),
         "label": each.label, "hold": _hold_data(each.hold), "hold_due": each.hold_due,
-        "last_command": each.last_command,
+        "last_command": each.last_command, "source_checks_id": each.source_checks_id,
+        "agent_stop": None if each.stop is None else each.stop.model_dump(mode="json", exclude={"dispatch_token"}),
+        "stop_cause": stop_text(each.stop, None if each.result.execution is None else each.result.execution.facts.rc),
     }
 
 
@@ -68,12 +82,12 @@ def _hold_data(row: HoldRow | None) -> dict[str, object] | None:
 
 def _checks_data(checks: ChecksView | None) -> dict[str, object] | None:
     """A checks attempt's own facts (tl-8bh9.14.6 section 9): X, the target and the required names, the profile digest,
-    the counted refusals and its latest block's results (`log`: `tl step show` only)."""
+    the counted refusals and its latest block's results (`log`: `tl attempt show` only)."""
     if checks is None:
         return None
     row, required = checks.row, dict(checks.row.required)
     logs = checks.logs or (None,) * len(checks.results)
-    results = [{"name": each.name, "required": each.name in required, "conclusion": each.conclusion, "rc": each.rc,
+    results = [{"name": each.name, "required": each.name in required, "conclusion": encode(each.conclusion), "rc": each.rc,
                 "block": each.block, "started_at": each.started_at, "ended_at": each.ended_at,
                 "argv_differs": differs(row.required, each), "log": None if log is None else str(log)}
                for each, log in zip(checks.results, logs, strict=True)]
@@ -93,10 +107,10 @@ def _published_data(published: PublishedRow | None) -> dict[str, object] | None:
     return {"commit": published.commit, "remote_head": published.remote_head, "published_at": published.published_at}
 
 
-def _released_data(result: VerifiedTask | ReleasedTask | PublishedTask) -> dict[str, object]:
+def _released_data(result: CommittedTask | ReleasedTask | PublishedTask) -> dict[str, object]:
     if isinstance(result, PublishedTask):
         return _publish_data(result)
-    if isinstance(result, VerifiedTask):
+    if isinstance(result, CommittedTask):
         return {"status": result.status, "backlog": result.backlog, "task": result.task_id, "attempt_id": result.attempt_id,
                 "release": result.release, "published": result.published}
     found = result.result
@@ -125,11 +139,16 @@ def _slot_data(each: SlotView | Adopted | NotAdopted) -> dict[str, object]:
             return {"name": each.name, "adopted": False, "reason": each.reason, "path": None if each.path is None else str(each.path)}
 
 
-def as_data(result: Result, *, admission: bool = False) -> dict[str, object]:
-    """`_step_data`'s shapes, and `tl step land`'s answers (`land_data`)."""
+def as_data(result: Shaped, *, admission: bool = False) -> dict[str, object]:
+    """`_step_data`'s shapes, and `tl land run`'s answers (`land_data`)."""
     if isinstance(result, Landed | Withdrawn | LandSummary):
         return land_data(result)
     return _step_data(result, admission=admission)
+
+
+def as_json(result: Result, *, admission: bool = False) -> dict[str, object] | list[dict[str, object]]:
+    """What `--json` prints: `as_data`'s object, or a JSON array of row objects for the export and the slot list."""
+    return records(result) if isinstance(result, AttemptExport | SlotList) else as_data(result, admission=admission)
 
 
 def _step_data(result: StepResult, *, admission: bool) -> dict[str, object]:
@@ -149,27 +168,33 @@ def _step_data(result: StepResult, *, admission: bool) -> dict[str, object]:
                     "existing": result.existing, "entry_process": _entry_data(result.entry), "number": result.number,
                     "result": result.result or None}
         case Shown():
-            setup = None if result.setup is None else {"run": result.setup.row.run, "conclusion": result.setup.row.conclusion,
+            setup = None if result.setup is None else {"run": result.setup.row.run, "conclusion": encode(result.setup.row.conclusion),
                                                         "commit": result.setup.row.commit, "log": str(result.setup.log),
-                                                        "attempt_id": result.setup.attempt_id}
-            return _show_data(result.view) | {"directory": str(result.directory), "entry_log": str(result.entry_log), "setup": setup,
+                                                        "attempt_id": result.setup.attempt_id,
+                                                        "started_at": result.setup.row.started_at,
+                                                        "ended_at": result.setup.row.ended_at,
+                                                        "duration_seconds": result.setup.row.duration_seconds}
+            return _show_data(result.view) | {"directory": str(result.directory), "entry_log": str(result.entry_log),
+                                                   "events_path": str(result.events_path), "setup": setup,
                                                    "failed_checks": _checks_data(result.failed)}
-        case Listed() | Round() | Ended():
+        case Listed() | Round() | Ended() | SetupTimingReport():
             return _rows_data(result)
-        case VerifiedTask() | ReleasedTask() | PublishedTask():
+        case CommittedTask() | ReleasedTask() | PublishedTask():
             return _released_data(result)
         case Adoption() | Loaded():
             return _setup_data(result)
 
 
 def rounds_data(backlog: str, every: int, log: str, label: str, max_running: int) -> dict[str, object]:
-    """`tl step rounds`'s start, printed before the first round; its end is `as_data(Ended)`."""
+    """`tl rounds start`'s start, printed before the first round; its end is `as_data(Ended)`."""
     return {"status": "rounds", "backlog": backlog, "every": every, "log": log, "label": label, "max_running": max_running}
 
 
-def _rows_data(result: Listed | Round | Ended) -> dict[str, object]:
-    """`tl step list`: every current attempt; `tl step next`: each move in the order performed and `stopped`, the word that
-    ended admission early, or null; `tl step rounds`: why the rounds ended."""
+def _rows_data(result: Listed | Round | Ended | SetupTimingReport) -> dict[str, object]:
+    """`tl attempt list`: every current attempt; `tl rounds once`: each move in the order performed and `stopped`, the word that
+    ended admission early, or null; `tl rounds start`: why the rounds ended."""
+    if isinstance(result, SetupTimingReport):
+        return result.model_dump(mode="json")
     if isinstance(result, Listed):
         return {"attempts": [_show_data(each) for each in result.attempts]}
     if isinstance(result, Ended):
@@ -182,8 +207,9 @@ def _rows_data(result: Listed | Round | Ended) -> dict[str, object]:
 def _setup_data(result: Adoption | Loaded) -> dict[str, object]:
     if isinstance(result, Adoption):
         return {"slots": [_slot_data(each) for each in result.slots]}
-    settings = {
+    settings: dict[str, object] = {
         key: {"value": str(each.value) if isinstance(each.value, Path) else each.value, "source": each.source}
         for key, each in result.settings.pairs()
     }
+    settings.update(display(result.settings.agents, result.settings.agent_sources))
     return {"file": {"path": str(result.path), "exists": result.exists}, "settings": settings}

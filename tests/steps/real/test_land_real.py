@@ -24,13 +24,16 @@ from taskloop.agent_credentials import scrubbed
 from taskloop.attempt_types import DEFAULT_GIT_READ_SECONDS
 from taskloop.check_store import CheckStore
 from taskloop.checks import Block, BlockPorts, argv_digest
+from taskloop.claim import ClaimWord
 from taskloop.claim_lease import Beat, Heartbeat
 from taskloop.composition import Checking
 from taskloop.environment import EnvironmentPorts, Preparation
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.git_views import GitProfileFiles, GitViews
+from taskloop.ids import NativeIds
 from taskloop.land import Landed, LandRequest, LandResult, land
 from taskloop.land_check import LandPorts
+from taskloop.land_conflict.composition import conflict_handoff
 from taskloop.land_store import LandStore
 from taskloop.operations import Failed
 from taskloop.owned_processes import entry_seen, setup_seen, this_process
@@ -57,7 +60,7 @@ class Tracker:
 
 def heartbeat_for(_root: str, _task: str) -> Heartbeat:
     def beat() -> Beat:
-        return "held"
+        return ClaimWord.HELD
 
     return beat
 
@@ -125,9 +128,10 @@ class Real:
         environ = {"PATH": os.environ["PATH"], "HOME": str(self.root)}
         work = Checking(CheckStore(lambda: con), setup, EvidenceFiles(art), VIEWS.checkouts, RealSlotFiles(),
                         VIEWS.slot_profiles, preparation, Block(BlockPorts(setup_process, group_alive, time.time)), setup_seen, entry_seen,
-                        RealEnvFiles().empty_scratch, time.time, lambda: scrubbed(environ))
+                        RealEnvFiles().empty_scratch, time.time, lambda: scrubbed(environ), ids=NativeIds())
         return LandPorts(work, LandStore(lambda: con), VIEWS.remotes, lambda path: GitProfileFiles(path, VIEWS.remotes),
-                         self.tasks, heartbeat_for, NoBeats, this_process, lambda _path: True, landing, dict(os.environ), self.close)
+                         self.tasks, heartbeat_for, NoBeats, this_process, lambda _path: True, landing,
+                             dict(os.environ), self.close, conflict_handoff(work, VIEWS, heartbeat_for), ids=NativeIds())
 
     def tasks(self, task_id: str, backlog: str, root: str) -> TaskInspection:
         return inspect_task(TaskBinding(TaskScope(backlog), Path(root)), self.tracker, task_id)

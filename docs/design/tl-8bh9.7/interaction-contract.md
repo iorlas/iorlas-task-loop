@@ -1,5 +1,7 @@
 # Owner controls and evidence: one walkthrough
 
+Status: **design**. Accepted decisions and pending proposals are distinguished below; historical source observations are not a delivery receipt. Explicit holds remain in force except where superseded.
+
 Task: tl-8bh9.7, existing .7.1-.7.5 plus EVIDENCE-READERS .7.6. Review with Astra, 2026-11-09.
 This applies agreed typed ownership, portable asks and lifecycle rules. The owner reopened the manual control surface
 on 2026-11-09, then accepted initial Pause/Continue through hold/unhold and deferral of immediate Stop.

@@ -1,0 +1,22 @@
+{
+  "prepared_commit": "ea06b229f3c7761ec7769a1bc12a907c3bd4df36",
+  "cited_paths": [
+    "src/taskloop/attempt_types.py",
+    "src/taskloop/agents/settings.py",
+    "src/taskloop/steps.py",
+    "src/taskloop/resume_plan.py",
+    "src/taskloop/earlier_attempt.py",
+    "src/taskloop/attempt_loads.py",
+    "src/taskloop/attempt_store.py",
+    "src/taskloop/agents/config.py",
+    "src/taskloop/admit.py",
+    "src/taskloop/operations.py",
+    "src/taskloop/earlier_input.py",
+    "src/taskloop/attempt_reads.py",
+    "src/taskloop/harness_choice.py",
+    "tests/steps/test_steps.py",
+    "tests/steps/test_agent_settings.py",
+    "tests/steps/test_attempt_loads.py",
+    "tests/steps/test_earlier_input.py"
+  ]
+}

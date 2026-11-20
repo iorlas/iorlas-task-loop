@@ -13,13 +13,28 @@ import pytest
 from git_porcelain import GitUnavailable
 from git_porcelain.history import Identity
 from git_porcelain.testing import apply_hermetic_env, git
+from plan_fixtures import PLAN_TEXT
 
-from taskloop.attempt_types import DEFAULT_GIT_READ_SECONDS, Admission, AnswerState, AttemptKey, ChainLink, FileRef, Rejected, Unsettled
-from taskloop.factory_commit import Committed, clean_at, settle
+from taskloop import factory_commit
+from taskloop.agents.settings import AgentSetting
+from taskloop.attempt_types import (
+    DEFAULT_GIT_READ_SECONDS,
+    Admission,
+    AnswerState,
+    AttemptKey,
+    ChainLink,
+    CommitRefused,
+    Committed,
+    FileRef,
+    Rejected,
+    Uncommitted,
+)
+from taskloop.factory_commit import clean_at, settle
 from taskloop.git_views import GitViews
 from taskloop.repo import RepoId
 from taskloop.slot_files import RealSlotFiles
 from taskloop.slot_state import pointer
+from taskloop.step import Step
 from taskloop.steps import IMPLEMENT
 from taskloop.task import TaskReference, TaskScope
 from taskloop.verdict import judge
@@ -31,7 +46,7 @@ HOOKS = ("pre-commit", "commit-msg", "prepare-commit-msg", "post-commit", "post-
 ANSWER = AnswerState("valid", "planned", "commit", (P,), "Plan tl-1")
 
 
-def quiet() -> Unsettled | None:
+def quiet() -> None:
     """The worker is gone and the attempt holds its reservation (these tests run no agent)."""
     return None
 
@@ -66,7 +81,7 @@ def repository(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, *relative: str) 
 def admission(main: Path, slot: Path) -> Admission:
     key = VIEWS.checkouts(main).identity().key
     task = TaskReference(TaskScope("tasks"), "tl-1")
-    choices = ("m", "e", "s", 100, (1, "", ""), 1, "plan")
+    choices = (AgentSetting(model="m", effort="e"), 100, (1, "", ""), 1, Step.PLAN)
     return Admission(AttemptKey("attempt", "dispatch", 1), task, RepoId(key), "s1", str(slot), FileRef("i", "d"), *choices)
 
 
@@ -76,10 +91,10 @@ def test_the_factory_commit_runs_no_hook_carries_the_trailer_and_leaves_the_slot
     main, slot, markers = repository(tmp_path.resolve(), monkeypatch)
     base = git(slot, "rev-parse", "HEAD").strip()
     (slot / "docs/design/tl-1").mkdir(parents=True)
-    (slot / P).write_text("# Plan\n")
+    (slot / P).write_text(PLAN_TEXT)
     attempt = admission(main, slot)
     made = settle(VIEWS.checkouts, RealSlotFiles(), attempt, base, ANSWER, quiet)
-    assert isinstance(made, Committed) and made.sha != base
+    assert isinstance(made, factory_commit.Committed) and made.sha != base
     assert clean_at(VIEWS.checkouts, RealSlotFiles(), attempt, made.sha) == main
     assert list(markers.iterdir()) == []  # neither --no-verify's two nor the four it leaves running
     assert git(slot, "log", "-1", "--format=%B").strip() == "Plan tl-1\n\nTask-Loop-Attempt: attempt"
@@ -92,7 +107,7 @@ def test_a_symlinked_listed_path_is_unsafe_and_nothing_is_staged(tmp_path: Path,
     base = git(slot, "rev-parse", "HEAD").strip()
     (slot / "docs/design/tl-1").mkdir(parents=True)
     (slot / P).symlink_to(main / "README")
-    assert settle(VIEWS.checkouts, RealSlotFiles(), admission(main, slot), base, ANSWER, quiet) == Unsettled("unsafe", (P,))
+    assert settle(VIEWS.checkouts, RealSlotFiles(), admission(main, slot), base, ANSWER, quiet) == Uncommitted("unsafe", (P,))
     assert list(markers.iterdir()) == []
     assert git(slot, "rev-parse", "HEAD").strip() == base and git(slot, "diff", "--cached", "--name-only").strip() == ""
 
@@ -110,7 +125,7 @@ def redirect(slot: Path, target: Path) -> None:
 
 def plan(slot: Path) -> None:
     (slot / "docs/design/tl-1").mkdir(parents=True)
-    (slot / P).write_text("# Plan\n")
+    (slot / P).write_text(PLAN_TEXT)
 
 
 def test_a_symlink_indirected_pointer_to_the_persons_git_directory_is_redirected(
@@ -121,7 +136,7 @@ def test_a_symlink_indirected_pointer_to_the_persons_git_directory_is_redirected
     attempt = admission(main, slot)
     plan(slot)
     redirect(slot, main / ".git")  # Git would commit the slot's files onto the person's `main`
-    assert settle(VIEWS.checkouts, RealSlotFiles(), attempt, base, ANSWER, quiet) == Unsettled("redirected")
+    assert settle(VIEWS.checkouts, RealSlotFiles(), attempt, base, ANSWER, quiet) == CommitRefused("redirected")
     assert git(main, "rev-parse", "main").strip() == branch and list(markers.iterdir()) == []
 
 
@@ -138,7 +153,7 @@ def test_a_fake_git_directory_in_the_slot_whose_filter_would_run_is_redirected(
         config.write(f"[filter \"x\"]\n\tclean = sh -c 'touch {markers / 'filter'}; cat'\n")
     (fake / "info/attributes").write_text("* filter=x\n")
     redirect(slot, fake)
-    assert settle(VIEWS.checkouts, RealSlotFiles(), attempt, base, ANSWER, quiet) == Unsettled("redirected")
+    assert settle(VIEWS.checkouts, RealSlotFiles(), attempt, base, ANSWER, quiet) == CommitRefused("redirected")
     assert list(markers.iterdir()) == [] and git(main, "rev-parse", "main").strip() == branch
     assert git(slot, "--git-dir", str(main / ".git/worktrees/s1"), "rev-parse", "HEAD").strip() == base
 
@@ -175,7 +190,7 @@ def test_a_pointer_swapped_after_the_check_before_the_stage_does_not_change_the_
     git(tmp_path, "config", "--file", str(fake / "config"), "filter.x.clean", f"touch '{markers / 'filter'}' && cat")
     (fake / "info/attributes").write_text("* filter=x\n")
     files = SwappedAfter(slot, fake, check=2)
-    assert settle(VIEWS.checkouts, files, attempt, base, ANSWER, quiet) == Unsettled("redirected")
+    assert settle(VIEWS.checkouts, files, attempt, base, ANSWER, quiet) == CommitRefused("redirected")
     assert files.seen == 2 and list(markers.iterdir()) == []  # the third check fails before its back-pointer read
     verified = ("--git-dir", str(main / ".git/worktrees/s1"), "--work-tree", str(slot))
     assert git(slot, *verified, "diff", "--cached", "--name-only").strip() == P
@@ -187,7 +202,8 @@ def test_a_relative_paths_worktree_is_accepted(tmp_path: Path, monkeypatch: pyte
     base = git(slot, "rev-parse", "HEAD").strip()
     plan(slot)
     made = settle(VIEWS.checkouts, RealSlotFiles(), admission(main, slot), base, ANSWER, quiet)
-    assert isinstance(made, Committed) and git(slot, "rev-parse", "HEAD").strip() == made.sha and list(markers.iterdir()) == []
+    assert isinstance(made, factory_commit.Committed) and git(slot, "rev-parse", "HEAD").strip() == made.sha
+    assert list(markers.iterdir()) == []
 
 
 @pytest.mark.parametrize("extra", [False, True], ids=["one_trailer_commit", "two_commits"])
@@ -204,7 +220,7 @@ def test_a_crash_leftover_is_adopted_through_real_history_only_as_one_trailer_co
     git(slot, *hookless, "commit", "-q", "-m", "Plan tl-1\n\nTask-Loop-Attempt: attempt")
     head = git(slot, "rev-parse", "HEAD").strip()
     found = settle(VIEWS.checkouts, RealSlotFiles(), admission(main, slot), base, ANSWER, quiet)
-    assert found == (Unsettled("head_moved") if extra else Committed(head))
+    assert found == (CommitRefused("head_moved") if extra else factory_commit.Committed(head))
 
 
 def test_a_slot_whose_git_file_is_gone_never_reaches_an_enclosing_repository(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -222,7 +238,7 @@ def test_a_slot_whose_git_file_is_gone_never_reaches_an_enclosing_repository(tmp
     plan(slot)
     attempt = admission(main, slot)
     (slot / ".git").unlink()
-    assert settle(VIEWS.checkouts, RealSlotFiles(), attempt, base, ANSWER, quiet) == Unsettled("redirected")
+    assert settle(VIEWS.checkouts, RealSlotFiles(), attempt, base, ANSWER, quiet) == CommitRefused("redirected")
     view = VIEWS.checkouts(slot).worktree(slot)  # what a Git call after a passed check would meet
     with pytest.raises(GitUnavailable):
         view.stage([P])
@@ -242,7 +258,7 @@ def test_a_pointer_through_an_agent_made_symlink_is_redirected_even_to_the_right
     plan(slot)
     (slot / "glink").symlink_to(main / ".git/worktrees/s1")
     (slot / ".git").write_text("gitdir: glink\n")
-    assert settle(VIEWS.checkouts, RealSlotFiles(), attempt, base, ANSWER, quiet) == Unsettled("redirected")
+    assert settle(VIEWS.checkouts, RealSlotFiles(), attempt, base, ANSWER, quiet) == CommitRefused("redirected")
     assert list(markers.iterdir()) == []
 
 
@@ -262,7 +278,7 @@ def implementing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path,
     (slot / ".gitignore").write_text(".venv/\n")
     git(slot, "add", ".gitignore")
     git(slot, "commit", "-q", "--no-verify", "-m", "ignore the venv")
-    return main, slot, replace(admission(main, slot), step="implement"), git(slot, "rev-parse", "HEAD").strip()
+    return main, slot, replace(admission(main, slot), step=Step.IMPLEMENT), git(slot, "rev-parse", "HEAD").strip()
 
 
 def test_an_implement_commit_deletes_and_adds_anywhere_and_an_ignored_venv_does_not_block(
@@ -274,16 +290,18 @@ def test_an_implement_commit_deletes_and_adds_anywhere_and_an_ignored_venv_does_
     (slot / "README").unlink()
     (slot / "src").mkdir()
     (slot / "src/a.py").write_text("A = 1\n")
-    answer = AnswerState("valid", "implemented", "commit", ("README", "src/a.py"), "Implement")
+    answer = AnswerState("valid", "implemented", "commit", ("src/a.py",), "Implement")
     made = settle(VIEWS.checkouts, RealSlotFiles(), attempt, base, answer, quiet)
-    assert isinstance(made, Committed) and git(slot, "rev-parse", "HEAD^").strip() == base
+    assert isinstance(made, factory_commit.Committed) and git(slot, "rev-parse", "HEAD^").strip() == base
     assert git(slot, "show", "--format=", "--name-status", "HEAD").split() == ["D", "README", "A", "src/a.py"]
     assert clean_at(VIEWS.checkouts, RealSlotFiles(), attempt, made.sha) == main
+    link = ChainLink(1, base, made.sha, "commit", answer.paths, FileRef("i", "d"))
+    assert isinstance(judge(VIEWS.checkouts(main), main, made.sha, IMPLEMENT, IMPLEMENT.rules("tl-1"), (link,)), Committed)
 
 
-@pytest.mark.parametrize(("paths", "unsafe"), [(("gone.py",), ("gone.py", ".gitignore", "src/a.py")), (("src/a.py",), (".gitignore",))]
+@pytest.mark.parametrize(("paths", "unsafe"), [(("gone.py",), (".gitignore", "src/a.py")), (("src/a.py",), (".gitignore",))]
 )
-def test_an_absent_path_never_in_b_and_a_changed_gitignore_are_unsafe(
+def test_a_changed_gitignore_is_unsafe_regardless_of_answer_paths(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, paths: tuple[str, ...], unsafe: tuple[str, ...]
 ) -> None:
     _main, slot, attempt, base = implementing(tmp_path, monkeypatch)
@@ -292,7 +310,7 @@ def test_an_absent_path_never_in_b_and_a_changed_gitignore_are_unsafe(
     (slot / ".gitignore").write_text(".venv/\nsrc/b.py\n")
     answer = AnswerState("valid", "implemented", "commit", paths, "Implement")
     found = settle(VIEWS.checkouts, RealSlotFiles(), attempt, base, answer, quiet)
-    assert found == Unsettled("unsafe", unsafe)  # the leftovers beside the first are named too
+    assert found == Uncommitted("unsafe", unsafe)  # the leftovers beside the first are named too
     assert git(slot, "rev-parse", "HEAD").strip() == base and git(slot, "diff", "--cached", "--name-only").strip() == ""
 
 
@@ -309,7 +327,7 @@ def typed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, Path, 
     git(slot, "update-index", "--add", "--cacheinfo", f"160000,{head},sub")
     (slot / "sub").mkdir()
     git(slot, "commit", "-q", "--no-verify", "-m", "typed entries")
-    return main, slot, replace(admission(main, slot), step="implement"), git(slot, "rev-parse", "HEAD").strip()
+    return main, slot, replace(admission(main, slot), step=Step.IMPLEMENT), git(slot, "rev-parse", "HEAD").strip()
 
 
 def plain(slot: Path, path: str) -> None:
@@ -331,7 +349,8 @@ def test_a_typed_entry_of_b_replaced_by_a_plain_file_is_unsafe(tmp_path: Path, m
     plain(slot, path)
     answer = AnswerState("valid", "implemented", "commit", (path,), "Implement")
     made = settle(VIEWS.checkouts, RealSlotFiles(), attempt, base, answer, quiet)
-    assert isinstance(made, Unsettled) and made.reason == "unsafe" and made.listing[0] == path  # its folder is named beside it
+    assert isinstance(made, Uncommitted) and made.reason == "unsafe" and path in made.listing
+    assert any(each.path == path and each.explanation for each in made.explanations)
     assert git(slot, "rev-parse", "HEAD").strip() == base and git(slot, "diff", "--cached", "--name-only").strip() == ""
 
 

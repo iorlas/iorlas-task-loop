@@ -1,0 +1,199 @@
+"""Commit, check clean, then judge: the one operation that settles a stored valid answer of effect `commit` or `keep`.
+
+The entry (once, after the run), `tl step commit` and a repeating `tl step start` run the same operation; running it
+again finishes a crash at any step. A stored verdict is returned with no Git read; slot state and every unknown store
+nothing. The commit through the verdict runs under the slot's custody lock (`hold`); a stored verdict, a refusal, the
+leftovers and the staged read take none. Right before each factory Git write the attempt must still hold the
+reservation: a factory commit of an attempt that a repeat took over is `superseded`, never a commit on the next attempt's slot.
+"""
+
+from collections.abc import Callable
+from contextlib import AbstractContextManager
+from pathlib import Path
+
+from git_porcelain import GitUnavailable
+
+from taskloop.attempt_reads import StoreRefused, StoreUnavailable
+from taskloop.attempt_result import committing, end_word
+from taskloop.attempt_store import AttemptStore
+from taskloop.attempt_types import (
+    Admission,
+    AttemptKey,
+    AttemptRecord,
+    Checkouts,
+    CommitRefused,
+    CommitResult,
+    CommitWaiting,
+    CommitWaitingReason,
+    NotApplicable,
+    Rejected,
+    SlotFiles,
+    StoredExecution,
+    Uncommitted,
+    Unreadable,
+    Verdict,
+    WorkerGone,
+)
+from taskloop.drain.actions import Fenced, Unobservable, operation
+from taskloop.drain.models import ActionKind, Reason
+from taskloop.factory_commit import NotSettled, clean_at, leftovers, settle
+from taskloop.ids import Ids
+from taskloop.operation_evidence import OperationTiming
+from taskloop.slot_lock import ReadOnly, SlotBusy, SlotLockUnavailable
+from taskloop.slot_state import SlotState, bounded, observe_slot, staged
+from taskloop.steps import kind
+from taskloop.verdict import judge
+
+type CommitHold = Callable[[Admission], AbstractContextManager[None]]
+LOCK_WORDS: dict[type[Exception], CommitWaitingReason] = {
+    SlotBusy: CommitWaitingReason.SLOT_BUSY,
+    SlotLockUnavailable: CommitWaitingReason.LOCK,
+}  # busy/unopenable custody waits; read-only wiring refuses writes
+
+
+def applicable(stored: StoredExecution | None) -> StoredExecution | CommitResult:
+    """The stored execution when a verdict is still to be made; otherwise what `commit` returns, with no Git read."""
+    if stored is None:
+        return CommitRefused("not_captured")
+    if stored.answer.kind == "validation_pending":
+        return CommitWaiting(CommitWaitingReason.VALIDATION_PENDING)
+    if stored.verdict is not None:
+        return stored.verdict
+    if not committing(stored):
+        return NotApplicable(end_word(stored))
+    if stored.session_state != "complete":  # the verdict's writer requires a complete session state too
+        return (CommitRefused("session" if stored.session_state == "conflict" else "session_fault")
+                if stored.session_state in ("conflict", "fault") else CommitWaiting(CommitWaitingReason.SESSION_PENDING))
+    return stored
+
+
+class FactoryCommit:
+    """Git evidence for a stored valid `planned` or `unchanged` answer: the factory's commit of the listed paths, the
+    clean tree at it, then one verdict over immutable facts, stored once and then returned with no Git read."""
+
+    def __init__(
+        self, store: AttemptStore, checkouts: Checkouts, files: SlotFiles, gone: WorkerGone,
+        clock: Callable[[], float], hold: CommitHold, *, ids: Ids, timing: OperationTiming | None = None,
+    ) -> None:
+        """`gone` observes the registered worker before the factory writes Git in its slot (`worker_alive` otherwise).
+        `hold` is the slot's custody around the commit through the verdict: the entry already holds it (a no-op here),
+        `tl step commit` and a repeat take it (`slot_lock.hold`), a read-only factory commit refuses it (`slot_lock.refused`).
+        A held slot is `waiting:slot_busy`, an unopenable lock file `waiting:lock`, a write asked of a read-only
+        factory commit `refused:read_only`."""
+        self.ids = ids
+        self.timing = timing
+        self.store, self.checkouts, self.files, self.gone, self.clock, self.hold = store, checkouts, files, gone, clock, hold
+
+    def commit(self, key: AttemptKey) -> CommitResult:
+        try:
+            with operation(self.store, ActionKind.FINALIZE, ids=self.ids, subject=key.attempt_id,
+                           existing=lambda owner: self.store.owns_entry(key, owner)):
+                return self._committed(key)
+        except Fenced:
+            return CommitRefused(Reason.DRAINING)
+        except Unobservable:
+            return CommitWaiting(CommitWaitingReason.OBSERVE)
+        except StoreUnavailable:
+            return CommitWaiting(CommitWaitingReason.STORE)
+
+    def _committed(self, key: AttemptKey) -> CommitResult:
+        try:
+            return self._commit(key)
+        except StoreUnavailable:
+            return CommitWaiting(CommitWaitingReason.STORE)
+        except StoreRefused as error:
+            return CommitRefused(str(error))
+        except NotSettled as error:
+            reason, _, diagnostic = error.reason.partition(":")
+            return CommitWaiting(CommitWaitingReason(reason), diagnostic or None)
+        except (SlotBusy, SlotLockUnavailable, ReadOnly) as error:
+            return CommitRefused("read_only") if isinstance(error, ReadOnly) else CommitWaiting(LOCK_WORDS[type(error)])
+        except (GitUnavailable, Unreadable) as error:
+            return CommitWaiting(CommitWaitingReason.GIT, type(error).__name__)
+
+    def _commit(self, key: AttemptKey) -> CommitResult:
+        """A stored verdict or a refusal takes no lock; otherwise everything is read again under the slot's lock, so the
+        commit through the verdict never acts on a record read before it."""
+        found = self._ready(key)
+        if not isinstance(found, tuple):
+            return found
+        with self.hold(found[0].admission):
+            again = self._ready(key)
+            return again if not isinstance(again, tuple) else self._settle(*again)
+
+    def _ready(self, key: AttemptKey) -> tuple[AttemptRecord, str, StoredExecution] | CommitResult:
+        stored = applicable(self.store.collect(key))
+        if not isinstance(stored, StoredExecution):
+            return stored
+        record = self.store.load(key)
+        if record is None or record.base_commit is None:
+            return CommitRefused("absent" if record is None else "no_base")
+        return record, record.base_commit, stored
+
+    def leftovers(self, key: AttemptKey) -> Uncommitted | CommitRefused | None:
+        """Read-only: the leftovers a factory commit would report for a step still to settle, read now; None when there is
+        nothing to report or it cannot be read (the person runs `tl step commit` for the reason)."""
+        try:
+            stored = applicable(self.store.collect(key))
+            record = self.store.load(key)
+            if not isinstance(stored, StoredExecution) or record is None or record.base_commit is None:
+                return None
+            admission = record.admission
+            return leftovers(self.checkouts, self.files, admission, record.base_commit, stored.answer, record.end_commit)
+        except (StoreUnavailable, StoreRefused, NotSettled, GitUnavailable, Unreadable):
+            return None
+
+    def staged(self, key: AttemptKey) -> tuple[str, ...] | None:
+        """Read-only: the paths staged in the attempt's slot now (`bounded`); None when unknown. A repeat refuses a staged
+        index before it takes the step over: the next attempt's dispatch would refuse it anyway, after spending a number."""
+        try:
+            record = self.store.load(key)
+            if record is None:
+                return None
+            admission = record.admission
+            state = observe_slot(self.checkouts, self.files, admission.slot_path, admission.repo_id)
+            if not isinstance(state, SlotState):  # redirected, another repository or not listed: unknown, no read on the slot
+                return None
+            path = Path(admission.slot_path)  # read on the view pinned to the Git directory the full check verified
+            return bounded(staged(self.checkouts(path, git_dir=state.gitdir), path))
+        except (StoreUnavailable, StoreRefused, GitUnavailable):
+            return None
+
+    def _quiet(self, record: AttemptRecord) -> CommitWaiting | CommitRefused | None:
+        """Asked right before each factory Git write: this attempt still holds the reservation (a fresh fenced load, else
+        `superseded`) and its registered worker is gone (a captured attempt always has one; none counts as alive)."""
+        try:
+            held = self.store.load(record.admission.key)
+        except StoreRefused:
+            held = None
+        if held is None or held.admission != record.admission:
+            return CommitRefused("superseded")
+        worker = record.worker
+        return None if worker is not None and self.gone(worker) else CommitWaiting(CommitWaitingReason.WORKER_ALIVE)
+
+    def _settle(self, record: AttemptRecord, base: str, stored: StoredExecution) -> CommitResult:
+        """Outside any transaction: X (stored, adopted or made), then the clean tree at X, then the verdict over the
+        step's chain."""
+        admission, answer, commit = record.admission, stored.answer, record.end_commit
+        if commit is None:
+            settled = settle(self.checkouts, self.files, admission, base, answer, lambda: self._quiet(record), self.timing)
+            if isinstance(settled, (Uncommitted, CommitRefused, CommitWaiting)):
+                return settled
+            if isinstance(settled, Rejected):  # nothing_written: no commit to bind
+                return self._kept(record, base, None, settled)
+            commit = settled.sha if answer.effect == "keep" else self.store.end_commit(admission, settled.sha)
+            if commit != settled.sha:
+                return CommitRefused("inconsistent")
+        root = clean_at(self.checkouts, self.files, admission, commit)
+        if isinstance(root, (Uncommitted, CommitRefused)):
+            return root
+        if record.end_commit is None and answer.effect == "keep" and self.store.end_commit(admission, commit) != commit:
+            return CommitRefused("inconsistent")
+        step = kind(admission.step)
+        found = judge(self.checkouts(root), root, commit, step, step.rules(admission.task.task_id), self.store.chain(admission.key))
+        return self._kept(record, base, commit, found)
+
+    def _kept(self, record: AttemptRecord, base: str, commit: str | None, found: Verdict) -> Verdict | CommitRefused:
+        kept = self.store.verdict(record.admission, base, commit, found, self.clock())
+        return found if kept == found else CommitRefused("inconsistent")  # same inputs, same rules: a defect
+

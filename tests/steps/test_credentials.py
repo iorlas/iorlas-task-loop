@@ -11,7 +11,7 @@ from stream_proc import OwnedProcess, ProcessObservation
 
 from taskloop import owned_processes
 from taskloop.agent_credentials import codex_machine_credentials, scrubbed
-from taskloop.attempt import CredentialsUnavailable
+from taskloop.agents.launch import CredentialsUnavailable
 from taskloop.attempt_types import DEFAULT_GIT_READ_SECONDS
 from taskloop.git_views import GitViews, hardened
 from taskloop.owned_processes import worker_gone
@@ -85,7 +85,7 @@ def test_codex_home_names_the_login_folder_and_a_relative_exe_becomes_absolute()
     ("environ", "machine", "reason"),
     [
         ({"HOME": "/home/me"}, Machine(), "path"),
-        (BASE, Machine(codex=None), "codex"),
+        (BASE, Machine(codex=None), "executable"),
         ({"PATH": "/usr/bin"}, Machine(), "home"),
         (BASE, Machine(logins=()), "auth"),
         ({**BASE, "CODEX_HOME": "/keyring-only"}, Machine(), "auth"),  # a keyring login has no auth.json: unsupported in v1

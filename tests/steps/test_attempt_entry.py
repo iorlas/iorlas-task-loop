@@ -1,5 +1,5 @@
 """The entry process body on a real factory.db file, its own real process identity, the owning agent fake, the fake slot and
-the fake clone's `origin` (the publication after a verified step)."""
+the fake clone's `origin` (the publication after a step accepted by factory commit)."""
 
 import dataclasses
 import json
@@ -15,17 +15,23 @@ from any_agent.procs import Worker
 from any_agent.testing import FakeRun
 from git_porcelain import Repo
 from git_porcelain.testing import FakeRepo, FakeWorktree
+from plan_fixtures import PLAN_TEXT
 from sqlite_store import Store
 from stream_proc import ProcessObservation, inspect_process
 
+from taskloop.agents.launch import AgentLaunch
 from taskloop.attempt import AttemptResult, Attempts
 from taskloop.attempt_entry import RESUMES, EntryArgs, arguments, enter, main, renewal, resumed
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import AttemptKey, Checkouts, EntryIdentity, Evidence, SlotFiles
+from taskloop.claim import ClaimWord
 from taskloop.claim_lease import Beat, Heartbeat, KeepAlive
 from taskloop.evidence_files import EvidenceError, EvidenceFiles
 from taskloop.factory_schema import SCHEMA
 from taskloop.git_views import GitViews
+from taskloop.harness_choice import HarnessKind
+from taskloop.ids import NativeIds
+from taskloop.recovery.execution_models import Callback
 from taskloop.slot_lock import SlotBusy, acquire, lock_path
 
 KEY = AttemptKey("attempt", "dispatch", 1)
@@ -47,11 +53,11 @@ class FlakyFiles(EvidenceFiles):
         super().__init__(root)
         self.failures, self.captures = failures, 0
 
-    def capture(self, key: AttemptKey, raw: RunOutcome) -> Evidence:
+    def capture(self, key: AttemptKey, raw: RunOutcome, execution: Callback | None = None) -> Evidence:
         self.captures += 1
         if self.captures <= self.failures:
             raise EvidenceError("Cannot capture artifact")
-        return super().capture(key, raw)
+        return super().capture(key, raw, execution)
 
 
 class Stop:
@@ -86,7 +92,7 @@ class Entry:
         rc: int = 0,
         text: str = "",
         written: tuple[FakeWorktree, dict[str, str], list[str]] | None = None,
-        beats: tuple[Beat | Exception, ...] = ("held",),
+        beats: tuple[Beat | Exception, ...] = (ClaimWord.HELD,),
         rounds: int = 0,
     ) -> None:
         self.db, self.now, self.wait_to, self.git, self.written = db, 10.0, wait_to, checkouts, written
@@ -102,7 +108,8 @@ class Entry:
             assert AttemptStore(lambda: con, store.begin_immediate).register_entry(KEY, entry, 10) == "accepted"
             con.close()
         self.files = FlakyFiles(db.parent, failures)
-        summary = Summary(text=text or json.dumps(PLAN), rc=rc, stands=True, vendor="request failed SECRET=credential" if rc else "")
+        summary = Summary(text=text or json.dumps(PLAN), rc=rc, stands=True, vendor="request failed SECRET=credential" if rc else "",
+                          res={"tokens": {"in": 8, "cached": 2, "out": 3}, "requests": 1})
         self.outcome = RunOutcome(rc=rc, worker=WORKER, summary=summary, out="agent says SECRET=credential")
         self.run = FakeRun(self.outcome)
         self.credential_calls = 0
@@ -112,7 +119,7 @@ class Entry:
         self.observed: list[Worker] = []
         self.unclaimed: list[tuple[str, str]] = []
 
-    def credentials(self) -> tuple[str, dict[str, str]]:
+    def credentials(self, _harness: HarnessKind) -> tuple[str, dict[str, str]]:
         self.credential_calls += 1
         return "/bin/codex", {"SECRET": "credential"}
 
@@ -138,7 +145,8 @@ class Entry:
         self.opened.append((database, artifacts))
         store = Store(SCHEMA)
         connect = AttemptStore(lambda: store.shared_rw(database), store.begin_immediate)
-        return Attempts(connect, self.files, self.credentials, self.execution, self.clock, self.checkouts, self.slot_files)
+        return Attempts(connect, self.files, AgentLaunch(self.credentials, ids=NativeIds()), self.execution,
+            self.clock, self.checkouts, self.slot_files)
 
     def clock(self) -> float:
         return self.now
@@ -177,40 +185,42 @@ NOTE = "docs/design/tl-1/note.md"
 @pytest.mark.parametrize(
     ("files", "line", "code", "opens"),
     [
-        ({P: "# Plan\n"}, "collected verified verify=verified claim=held release=released branch=published", 0, 16),
-        ({P: " \n"}, "collected rejected:plan_empty verify=rejected:plan_empty claim=held release=released", 1, 16),
-        ({P: "# Plan\n", NOTE: "n"}, "pending verification verify=unsettled:uncommitted claim=held", 1, 13),
-        ({}, "pending verification verify=unsettled:unsafe claim=held", 1, 9),
+            ({P: PLAN_TEXT}, "collected committed commit=committed claim=held release=released branch=published", 0, 17),
+            ({P: " \n"}, "collected rejected:plan_empty commit=rejected:plan_empty claim=held release=released", 1, 17),
+        ({P: PLAN_TEXT, NOTE: "n"}, "pending commit commit=uncommitted:uncommitted claim=held", 1, 13),
+        ({}, "pending commit commit=uncommitted:unsafe claim=held", 1, 9),
     ],
-    ids=["verified", "rejected", "uncommitted", "unsafe"],
+    ids=["committed", "rejected", "uncommitted", "unsafe"],
 )
-def test_the_registered_entry_executes_verifies_once_and_exits_0_only_when_verified(
+def test_the_registered_entry_executes_commits_once_and_exits_0_only_when_committed(
     admitted: Path, checkouts: Checkouts, slot_files: SlotFiles, slot: FakeWorktree, files: dict[str, str], line: str, code: int, opens: int
 ) -> None:
     entry = Entry(admitted, checkouts, slot_files, me(), written=(slot, files, [P]))
     assert entry() == code
     assert entry.lines == [line] and len(entry.run.calls) == 1 and entry.credential_calls == 1
     assert entry.opened == [(admitted, admitted.parent)]
-    # six Git opens before dispatch (the slot read: root, slot; the branch rule: root; take_branch: slot; the slot read
-    # again: root, slot); the one verification: four to commit (the staged set read before the
+    # Five context reads (profile, glossary, paths, digest and manifest) plus six Git opens before dispatch (slot: root, slot;
+    # branch rule: root;
+    # take_branch: slot; slot read again: root, slot); the one factory commit: four to commit (the staged set read before the
     # record), two for the clean check, one
     # to judge or list; a collected step's release: the slot read (root, slot) and the park (slot). The worker is observed
     # right before each Git write (stage, record), never when the paths are unsafe, and once more by the release's stop proof
     collected = line.startswith("collected")
-    assert entry.waits == [] and entry.git_opens == opens and entry.observed == [WORKER] * (0 if files == {} else 3 if collected else 2)
+    assert entry.waits == [] and entry.git_opens == opens + 5 and entry.observed == [WORKER] * (0 if files == {} else 3 if collected else 2)
     assert (slot.branch(), entry.unclaimed) == (None if collected else "task/tl-1", [])  # parked at D; the claim kept
-    assert (entry.remote_opens > 0) == (code == 0)  # only a verified plan is published; its Git views are the publication's
+    assert (entry.remote_opens > 0) == (code == 0)  # publish only after factory commit; these are publication views
 
 
-INCOMPLETE = "collected incomplete verify=not_applicable claim=held release=released"
+INCOMPLETE = "collected incomplete commit=not_applicable claim=held release=released"
 
 
 @pytest.mark.parametrize(
     ("rc", "text", "line"),
     [
-        (1, "", "collected run:vendor_blip verify=not_applicable claim=held release=released"),
-        (1, json.dumps(PLAN), "collected run:vendor_blip verify=not_applicable claim=held release=released"),
-        (0, "not json", "collected answer:json_invalid verify=not_applicable claim=held release=released"),
+        (1, "", "collected run:vendor_blip commit=not_applicable claim=held release=released"),
+        (1, json.dumps(PLAN), "collected run:vendor_blip commit=not_applicable claim=held release=released"),
+        (0, "not json", "collected answer:json_invalid: json: Answer must be one complete strict JSON value: "
+         "Expecting value: line 1 column 1 (char 0) commit=not_applicable claim=held release=released"),
         (0, json.dumps(PLAN | {"disposition": "incomplete", "plan_path": None, "paths": [], "message": None}), INCOMPLETE),
     ],
     ids=["failed_run_no_answer", "failed_run_valid_answer", "clean_run_bad_answer", "incomplete"],
@@ -252,11 +262,11 @@ def test_an_absent_task_or_a_missing_database_runs_nothing(
 @pytest.mark.parametrize(
     ("failures", "wait_to", "line", "waits", "captures"),
     [
-        (1, 10, "unavailable evidence publish=accepted then=collected:verified verify=verified claim=held release=released "
+        (1, 10, "unavailable evidence publish=accepted then=collected:committed commit=committed claim=held release=released "
          "branch=published", 1, 2),
-        (4, 10, "unavailable evidence publish=accepted then=collected:verified verify=verified claim=held release=released "
+        (4, 10, "unavailable evidence publish=accepted then=collected:committed commit=committed claim=held release=released "
          "branch=published", 4, 5),
-        (9, 100, "unavailable evidence verify=refused:not_captured claim=held", 1, 1),
+        (9, 100, "unavailable evidence commit=refused:not_captured claim=held", 1, 1),
     ],
     ids=["second_try_captures", "retries_until_it_captures", "never_past_the_deadline"],
 )
@@ -271,7 +281,7 @@ def test_capture_is_retried_only_while_unavailable_and_the_agent_never_again(
     waits: int,
     captures: int,
 ) -> None:
-    entry = Entry(admitted, checkouts, slot_files, me(), failures, wait_to, written=(slot, {P: "# Plan\n"}, [P]))
+    entry = Entry(admitted, checkouts, slot_files, me(), failures, wait_to, written=(slot, {P: PLAN_TEXT}, [P]))
     assert entry() == (0 if failures < 9 and wait_to < 100 else 1)
     assert entry.lines == [line] and len(entry.waits) == waits and entry.files.captures == captures
     assert len(entry.run.calls) == 1
@@ -281,7 +291,8 @@ def test_capture_is_retried_only_while_unavailable_and_the_agent_never_again(
 def test_a_claim_found_lost_before_the_agent_refuses_and_runs_nothing(
     admitted: Path, checkouts: Checkouts, slot_files: SlotFiles, slot: FakeWorktree
 ) -> None:
-    entry = Entry(admitted, checkouts, slot_files, me(), written=(slot, {P: "# Plan\n"}, [P]), beats=("lost", "held"), rounds=3)
+    entry = Entry(admitted, checkouts, slot_files, me(), written=(slot, {P: PLAN_TEXT}, [P]),
+                  beats=(ClaimWord.LOST, ClaimWord.HELD), rounds=3)
     assert entry() == 1
     assert entry.lines == ["refused claim_lost"] and entry.renewed == [("/tracker", "tl-1")]
     assert entry.run.calls == [] and entry.credential_calls == 0 and entry.git_opens == 0 and entry.stop.waits == 0
@@ -292,9 +303,9 @@ def test_a_held_or_unlockable_slot_refuses_the_entry_before_anything_is_read_or_
     admitted: Path, checkouts: Checkouts, slot_files: SlotFiles, slot: FakeWorktree,
     occupy: Callable[[Path], AbstractContextManager[None]], held: bool,
 ) -> None:
-    """Held by another entry or verify: `refused slot_busy`. A lock file that cannot be made (here `.locks` is a file):
+    """Held by another entry or commit: `refused slot_busy`. A lock file that cannot be made (here `.locks` is a file):
     `refused lock`."""
-    entry = Entry(admitted, checkouts, slot_files, me(), written=(slot, {P: "# Plan\n"}, [P]))
+    entry = Entry(admitted, checkouts, slot_files, me(), written=(slot, {P: PLAN_TEXT}, [P]))
     path = lock_path(str(slot.path))
     if not held:
         path.parent.parent.mkdir(parents=True, exist_ok=True)
@@ -308,9 +319,9 @@ def test_a_held_or_unlockable_slot_refuses_the_entry_before_anything_is_read_or_
 def test_the_entry_holds_the_slot_while_it_runs_and_frees_it_when_it_ends_or_raises(
     admitted: Path, checkouts: Checkouts, slot_files: SlotFiles, slot: FakeWorktree
 ) -> None:
-    """The verify and the release inside the entry run under the lock the entry holds (their holds are no-ops)."""
+    """The commit and the release inside the entry run under the lock the entry holds (their holds are no-ops)."""
     seen: list[bool] = []
-    entry = Entry(admitted, checkouts, slot_files, me(), written=(slot, {P: "# Plan\n"}, [P]))
+    entry = Entry(admitted, checkouts, slot_files, me(), written=(slot, {P: PLAN_TEXT}, [P]))
     gone, heartbeat_for = entry.gone, entry.heartbeat_for
 
     def broken(tracker_root: str, task_id: str) -> Heartbeat:
@@ -319,30 +330,30 @@ def test_the_entry_holds_the_slot_while_it_runs_and_frees_it_when_it_ends_or_rai
     entry.heartbeat_for = broken
     with pytest.raises(RuntimeError):
         entry()
-    acquire(str(slot.path), "after", "verify").release()
+    acquire(str(slot.path), "after", "commit").release()
     entry.heartbeat_for = heartbeat_for
 
     def observed(worker: Worker) -> bool:
         with pytest.raises(SlotBusy):
-            acquire(str(slot.path), "other", "verify")
+            acquire(str(slot.path), "other", "commit")
         seen.append(True)
         return gone(worker)
 
     entry.gone = observed
-    assert entry() == 0 and entry.lines == ["collected verified verify=verified claim=held release=released branch=published"]
+    assert entry() == 0 and entry.lines == ["collected committed commit=committed claim=held release=released branch=published"]
     assert seen == [True] * 3
-    acquire(str(slot.path), "after", "verify").release()
+    acquire(str(slot.path), "after", "commit").release()
 
 
-def test_a_verified_plan_is_published_after_the_lock_is_released_and_the_keep_alive_stopped(
+def test_a_committed_plan_is_published_after_the_lock_is_released_and_the_keep_alive_stopped(
     admitted: Path, checkouts: Checkouts, slot_files: SlotFiles, slot: FakeWorktree
 ) -> None:
-    """Another entry, verify or release may take the slot while the push runs: the publication pins no slot."""
-    entry = Entry(admitted, checkouts, slot_files, me(), written=(slot, {P: "# Plan\n"}, [P]))
+    """Another entry, commit or release may take the slot while the push runs: the publication pins no slot."""
+    entry = Entry(admitted, checkouts, slot_files, me(), written=(slot, {P: PLAN_TEXT}, [P]))
     seen: list[int] = []
 
     def free() -> None:
-        acquire(str(slot.path), "other", "verify").release()
+        acquire(str(slot.path), "other", "commit").release()
         seen.append(entry.stop.set_calls)
 
     entry.pushing = free
@@ -351,36 +362,36 @@ def test_a_verified_plan_is_published_after_the_lock_is_released_and_the_keep_al
     assert slot.repo.ls_remote("origin", ["refs/heads/task/tl-1"])[0].oid == x
 
 
-def test_a_publication_that_raises_keeps_the_log_line_and_the_verified_exit_0(
+def test_a_publication_that_raises_keeps_the_log_line_and_the_committed_exit_0(
     admitted: Path, checkouts: Checkouts, slot_files: SlotFiles, slot: FakeWorktree
 ) -> None:
-    entry = Entry(admitted, checkouts, slot_files, me(), written=(slot, {P: "# Plan\n"}, [P]))
+    entry = Entry(admitted, checkouts, slot_files, me(), written=(slot, {P: PLAN_TEXT}, [P]))
 
     def broken() -> None:
         raise OSError("cannot open the checkout")
 
     entry.pushing = broken
     assert entry() == 0
-    assert entry.lines == ["collected verified verify=verified claim=held release=released branch=unavailable:git"]
+    assert entry.lines == ["collected committed commit=committed claim=held release=released branch=unavailable:git"]
 
 
-def test_an_unreachable_origin_is_only_the_branch_word_and_the_verified_plan_still_exits_0(
+def test_an_unreachable_origin_is_only_the_branch_word_and_the_committed_plan_still_exits_0(
     admitted: Path, checkouts: Checkouts, slot_files: SlotFiles, slot: FakeWorktree, repo: FakeRepo
 ) -> None:
-    entry = Entry(admitted, checkouts, slot_files, me(), written=(slot, {P: "# Plan\n"}, [P]))
+    entry = Entry(admitted, checkouts, slot_files, me(), written=(slot, {P: PLAN_TEXT}, [P]))
     repo.set_remote_url("origin", "https://example.invalid/moved.git")
     assert entry() == 0
-    assert entry.lines == ["collected verified verify=verified claim=held release=released branch=unavailable:remote"]
+    assert entry.lines == ["collected committed commit=committed claim=held release=released branch=unavailable:remote"]
 
 
 @pytest.mark.parametrize(
     ("beats", "rounds", "word", "renewals"),
     [
-        (("held", "lost"), 3, "lost", 2),
-        (("held", TypeError("bug")), 3, "fault", 2),
+        ((ClaimWord.HELD, ClaimWord.LOST), 3, "lost", 2),
+        ((ClaimWord.HELD, TypeError("bug")), 3, "fault", 2),
         ((TypeError("bug"),), 3, "fault", 1),
-        (("unrenewed",), 2, "unrenewed", 3),
-        (("unrenewed", "held"), 2, "held", 3),
+        ((ClaimWord.UNRENEWED,), 2, "unrenewed", 3),
+        ((ClaimWord.UNRENEWED, ClaimWord.HELD), 2, "held", 3),
     ],
     ids=["lost_mid_run", "fault_mid_run", "fault_before_the_agent", "never_renewed", "renewed_after_a_failure"],
 )
@@ -388,9 +399,9 @@ def test_a_claim_lost_or_faulted_while_the_step_runs_is_only_recorded(
     admitted: Path, checkouts: Checkouts, slot_files: SlotFiles, slot: FakeWorktree,
     beats: tuple[Beat | Exception, ...], rounds: int, word: str, renewals: int,
 ) -> None:
-    entry = Entry(admitted, checkouts, slot_files, me(), written=(slot, {P: "# Plan\n"}, [P]), beats=beats, rounds=rounds)
-    assert entry() == 0  # the step completes, publishes and verifies; nothing is released or re-claimed
-    assert entry.lines == [f"collected verified verify=verified claim={word} release=released branch=published"]
+    entry = Entry(admitted, checkouts, slot_files, me(), written=(slot, {P: PLAN_TEXT}, [P]), beats=beats, rounds=rounds)
+    assert entry() == 0  # the step completes, publishes and commits; nothing is released or re-claimed
+    assert entry.lines == [f"collected committed commit=committed claim={word} release=released branch=published"]
     assert len(entry.run.calls) == 1
     assert entry.renewed == [("/tracker", "tl-1")] * renewals and entry.stop.set_calls == 1
 
@@ -399,9 +410,9 @@ def test_a_failed_run_that_left_files_keeps_its_slot_held_and_the_claim(
     admitted: Path, checkouts: Checkouts, slot_files: SlotFiles, slot: FakeWorktree
 ) -> None:
     """Release never resets work: the run's leftovers keep the slot reserved (`Next: release` once the person tidies)."""
-    entry = Entry(admitted, checkouts, slot_files, me(), rc=1, written=(slot, {P: "# Plan\n"}, [P]))
+    entry = Entry(admitted, checkouts, slot_files, me(), rc=1, written=(slot, {P: PLAN_TEXT}, [P]))
     assert entry() == 1
-    assert entry.lines == ["collected run:vendor_blip verify=not_applicable claim=held release=held:slot_dirty"]
+    assert entry.lines == ["collected run:vendor_blip commit=not_applicable claim=held release=held:slot_dirty"]
     con = Store(SCHEMA).open_ro(admitted)
     assert con is not None
     assert con.execute("SELECT attempt_id FROM reservation").fetchall() == [("attempt",)]
@@ -436,7 +447,7 @@ def test_main_builds_the_git_views_with_the_argv_seconds(monkeypatch: pytest.Mon
     seen: list[tuple[Callable[..., object], object]] = []
     monkeypatch.setattr("taskloop.attempt_entry.tracker_located", lambda: None)
     monkeypatch.setattr("taskloop.attempt_entry.tracker_claims", Claims)
-    monkeypatch.setattr("taskloop.attempt_entry.enter", lambda _args, opened, *rest: seen.append((opened, rest[-1])) or 0)
+    monkeypatch.setattr("taskloop.attempt_entry.enter", lambda _args, opened, *rest: seen.append((opened, rest[-2])) or 0)
     assert main(["/db", "/a", "45", "tasks", "tl-1"]) == 0
     opened, remotes = seen[0]
     assert isinstance(opened, partial) and opened.keywords == {"views": GitViews(45)}
@@ -470,15 +481,18 @@ def test_main_names_only_a_signal_exit_terminated(capfd: pytest.CaptureFixture[s
 
 
 @pytest.mark.parametrize(
-    ("beats", "expected"), [(("held",), "held"), (("lost",), "lost"), (("unrenewed",), "unrenewed"), (("held", "lost"), "lost")]
+    ("beats", "expected"), [((ClaimWord.HELD,), ClaimWord.HELD), ((ClaimWord.LOST,), ClaimWord.LOST),
+                            ((ClaimWord.UNRENEWED,), ClaimWord.UNRENEWED), ((ClaimWord.HELD, ClaimWord.LOST), ClaimWord.LOST)]
 )
-def test_the_renewal_after_setup_renews_once_more_and_answers_the_keep_alives_word(beats: tuple[Beat, ...], expected: str) -> None:
+def test_the_renewal_after_setup_renews_once_more_and_answers_the_keep_alives_word(
+    beats: tuple[Beat, ...], expected: ClaimWord,
+) -> None:
     """An implement step's setup may take minutes: the entry renews the claim once more before dispatch (`lost` refuses)."""
     script = list(beats)
     alive = KeepAlive(lambda: script.pop(0), Stop(0), lambda: 10)
     renew = renewal(alive)
     found = [renew() for _ in beats][-1]
-    assert found == expected and script == []
+    assert found is expected and script == []
 
 
 class Resuming:
@@ -495,7 +509,7 @@ class Resuming:
 
 
 PENDING = AttemptResult("pending", "session_pending")
-COLLECTED = AttemptResult("collected", "verified")
+COLLECTED = AttemptResult("collected", "committed")
 
 
 def test_a_captured_step_whose_store_write_is_busy_is_finished_not_left_pending() -> None:
@@ -510,7 +524,7 @@ def test_resuming_a_pending_result_is_bounded_by_a_cap_and_the_deadline(now: flo
     assert resumed(lambda: PENDING, stuck.resume, lambda: now, stuck.wait, 100.0) == PENDING and stuck.waits == waits
 
 
-def test_the_normal_wait_for_verification_is_not_resumed() -> None:
-    waiting = Resuming(AttemptResult("pending", "verification"))
-    assert resumed(waiting.resume, waiting.resume, lambda: 10.0, waiting.wait, 100.0).reason == "verification"
+def test_the_normal_wait_for_commit_is_not_resumed() -> None:
+    waiting = Resuming(AttemptResult("pending", "commit"))
+    assert resumed(waiting.resume, waiting.resume, lambda: 10.0, waiting.wait, 100.0).reason == "commit"
     assert waiting.waits == 0

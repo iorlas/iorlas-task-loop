@@ -17,6 +17,7 @@ from taskloop.attempt_status import AttemptView, Listed, Shown, StatusPorts, lis
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import AttemptKey, EntryIdentity, Seen
 from taskloop.check_release import ChecksRelease
+from taskloop.ids import NativeIds
 from taskloop.land import Landed
 from taskloop.land_close import NOT_SYNCED
 from taskloop.land_guide import CANDIDATE_RELEASE, LAND_GUIDE, LAND_NEXT
@@ -52,7 +53,7 @@ def view(b: LandBench) -> AttemptView:
 
 
 def lines(b: LandBench, alive: set[EntryIdentity] | None = None) -> list[str]:
-    return human("tl step show", shown(b, alive), b.root / "factory.db")
+    return human("tl attempt show", shown(b, alive), b.root / "factory.db")
 
 
 def land_lines(found: list[str]) -> list[str]:
@@ -203,7 +204,8 @@ def release(b: LandBench, abandon: bool, implement: Implement, alive: set[EntryI
     def seen(entry: EntryIdentity) -> Seen:
         return "matching" if entry in (alive or set()) else "gone"
 
-    checks = ChecksRelease(work.store, work.checkouts, work.slot_files, seen, b.ports().custody, work.clock, work.seen, work.scratch)
+    checks = ChecksRelease(work.store, work.checkouts, work.slot_files, seen, b.ports().custody, work.clock,
+        work.seen, work.scratch, ids=NativeIds())
     ports = HalfWay(checks) if halfway else checks
     return release_task(AttemptStore(lambda: b.con), implement, ports, "tasks", "tl-1", abandon=abandon)
 
@@ -295,7 +297,7 @@ def test_the_abandon_of_a_pushable_or_delivered_candidate_is_refused_and_nothing
     assert isinstance(found, Failed) and found.word == f"refused:{word}" and implement.calls == [] and b.rows() == before
     assert LAND_GUIDE[word] in human("tl step release", found, None)
     closed = "nothing is left to abandon or finish" in found.detail  # worded from the stored close
-    assert closed is (word == "landed") and (word != "landed" or "rerun `tl step land`" not in found.detail)
+    assert closed is (word == "landed") and (word != "landed" or "land the task again" not in found.detail)
     assert b.con.execute("SELECT abandoned FROM checks_attempt").fetchone() == (0,)
 
 

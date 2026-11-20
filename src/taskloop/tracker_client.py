@@ -12,9 +12,15 @@ from typing import Literal
 from beads_client import Bd, BdError, Runner
 
 from taskloop.admit import Claim, Unclaim
+from taskloop.attempt_types import Admission
+from taskloop.claim import ClaimWord
 from taskloop.claim_lease import BD_TIMEOUT_S, Beat, Heartbeat, HeartbeatFor
+from taskloop.discussion import DiscussionSource
+from taskloop.recovery.models import Claim as RecoveryClaim
+from taskloop.recovery.models import ClaimState
 from taskloop.task import ReadyTitle, TaskBinding, TaskComment, TaskFacts, TaskInspection, TaskInspectionError, TaskScope
 from taskloop.tracker import ACTOR, HELD, ReadyRows, gone, inspect_task, ready_titles, task_comments, task_facts, task_titles
+from taskloop.tracker_discussion import read_discussion
 
 
 def _tracker_root(tracker_root: str) -> Path:
@@ -37,6 +43,11 @@ def inspect_tracker_task(task_id: str, backlog: str, tracker_root: str) -> TaskI
     return inspect_task(TaskBinding(scope, root), Bd(ACTOR, cwd=str(root)), task_id)
 
 
+def tracker_discussion(task: TaskInspection, tracker_root: str) -> tuple[DiscussionSource, ...]:
+    root = _tracker_root(tracker_root)
+    return read_discussion(task, TaskBinding(task.reference.scope, root), Bd(ACTOR, cwd=str(root)))
+
+
 def tracker_reads(tracker_root: str) -> ReadyRows:
     """The scheduling round's tracker reads (ready set, parents) at the same root rule as `inspect_tracker_task`; raises
     TaskInspectionError(`invalid_binding`) for an unusable root. Only reads are reachable through the returned port."""
@@ -50,6 +61,27 @@ def _reader(tracker_root: Path) -> Bd:
 def tracker_facts(task_id: str, tracker_root: Path) -> TaskFacts | None:
     """The task's facts (`Bd.show`); None when the tracker says it does not exist; a failed read raises TaskInspectionError."""
     return task_facts(_reader(tracker_root), task_id)
+
+
+def tracker_recovery_claim(tracker_root: Path) -> Callable[[Admission], RecoveryClaim]:
+    """Bind a read-only claim observation to the explicitly supplied tracker root."""
+    def claim(admission: Admission) -> RecoveryClaim:
+        try:
+            root = _tracker_root(str(tracker_root))
+            facts = tracker_facts(admission.task.task_id, root)
+            if facts is None:
+                return RecoveryClaim(state=ClaimState.LOST, explanation="The task no longer exists in the bound tracker.")
+            if (facts.task_id != admission.task.task_id or not isinstance(facts.status, str) or not facts.status
+                    or (facts.assignee is not None and not isinstance(facts.assignee, str))):
+                raise ValueError("Malformed task facts")
+        except (TaskInspectionError, ValueError, TypeError, AttributeError) as error:
+            return RecoveryClaim(state=ClaimState.UNKNOWN,
+                                 explanation=f"The bound task claim cannot be read ({type(error).__name__}).")
+        if facts.status == "closed" or facts.assignee != ACTOR:
+            return RecoveryClaim(state=ClaimState.LOST, explanation="The task is closed or its claim no longer belongs to the factory.")
+        return RecoveryClaim(state=ClaimState.OWNED, explanation="The bound task is open and claimed by the factory.")
+
+    return claim
 
 
 def tracker_comments(task_id: str, tracker_root: Path) -> tuple[TaskComment, ...]:
@@ -120,7 +152,7 @@ def tracker_located(environ: MutableMapping[str, str] = os.environ) -> None:
 
 def beat_of(error: BdError) -> Beat:
     """A failed heartbeat: `lost` when bd says the claim is gone (taken, reverted, closed, or the bead deleted)."""
-    return "lost" if error.kind in LOST or (error.kind == "other" and gone(error.text)) else "unrenewed"
+    return ClaimWord.LOST if error.kind in LOST or (error.kind == "other" and gone(error.text)) else ClaimWord.UNRENEWED
 
 
 def _closed(bd: Bd, task_id: str, reason: str) -> CloseAnswer:
@@ -184,7 +216,7 @@ def tracker_claims(run: Runner | None = None, client: type[Bd] = Bd) -> TrackerC
                 renewing.heartbeat(task_id)
             except BdError as error:
                 return beat_of(error)
-            return "held"
+            return ClaimWord.HELD
 
         return beat
 
@@ -211,16 +243,15 @@ class HoldAnswer[W: str]:
     detail: str = ""
 
 
-type Labels = Callable[[str, str, str], HoldAnswer[LabelStep]]  # (tracker root, task id, the stored approval label)
-type Comment = Callable[[str, str, str], HoldAnswer[HoldWrite]]  # (tracker root, task id, text)
+type Labels = Callable[[str, str, str | None], HoldAnswer[LabelStep]]  # (tracker root, task id, the stored approval label)
+type Comment = Callable[[str, str, str, str], HoldAnswer[HoldWrite]]  # (tracker root, task id, attempt id, text)
 type Clear = Callable[[str, str], HoldAnswer[HoldWrite]]  # (tracker root, task id)
 
 
 @dataclass(frozen=True)
 class TrackerHolds:
-    """A hold's tracker writes, each bound per tracker root and each bd call one try capped at BD_TIMEOUT_S (no lock
-    retry, so no call outlasts `hold_store.COMMENT_LEASE`): the label step, the one comment, and the removal of `held`
-    once the task is taken again."""
+    """A hold's tracker writes, bound per tracker root. Each bd call is capped at BD_TIMEOUT_S with no lock retry.
+    The keyed comment takes at most three calls (90 s), within `hold_store.COMMENT_LEASE` (120 s)."""
 
     labels: Labels
     comment: Comment
@@ -235,11 +266,11 @@ def _hold_failed[W: str](error: BdError, stale: W) -> HoldAnswer[W | Literal["mi
     return HoldAnswer("unavailable", error.kind)
 
 
-def _labelled(bd: Bd, task_id: str, label: str) -> HoldAnswer[LabelStep]:
+def _labelled(bd: Bd, task_id: str, label: str | None) -> HoldAnswer[LabelStep]:
     """One read (`Bd.show`): missing, closed or another actor's task is written nothing; else, fenced on the assignee
     just read (the factory's own, or none), `held` added and then the approval label removed (both idempotent). A label
     bd would read as a flag is `bad_label` before any call."""
-    if not label or label.startswith("-"):
+    if label is not None and (not label or label.startswith("-")):
         return HoldAnswer("bad_label")
     try:
         found = bd.show(task_id)
@@ -250,32 +281,33 @@ def _labelled(bd: Bd, task_id: str, label: str) -> HoldAnswer[LabelStep]:
         if found.assignee not in (ACTOR, ""):
             return HoldAnswer("not_ours")
         bd.add_label(task_id, HELD, if_assignee=found.assignee)
-        bd.remove_label(task_id, label)
+        if label is not None:
+            bd.remove_label(task_id, label)
     except BdError as error:
         return _hold_failed(error, "precondition")
     return HoldAnswer("moved" if label in found.labels else "absent", found.assignee)  # detail: the assignee read
 
 
 def tracker_holds(run: Runner | None = None, client: type[Bd] = Bd) -> TrackerHolds:
-    """`TrackerHolds` over `Bd` as this actor at the resolved tracker root, each call one try capped at BD_TIMEOUT_S (a
-    hung bd is `unavailable`; no lock retry, as the heartbeat: a refused write is retried by the next round, and one
-    call stays within `hold_store.COMMENT_LEASE`); `client` is the seam a test checks the construction through."""
+    """`TrackerHolds` over `Bd` as this actor at the resolved tracker root. A failed write is retried next round;
+    comments match by attempt ID even if retry text changes, also after ambiguous delivery. The read/write/read fits
+    within `hold_store.COMMENT_LEASE`; `client` is the seam a test checks the construction through."""
 
     def bd(tracker_root: str) -> Bd:
         return client(ACTOR, cwd=str(Path(tracker_root).expanduser().resolve()), run=run, timeout=BD_TIMEOUT_S, lock_retries=0)
 
-    def labels(tracker_root: str, task_id: str, label: str) -> HoldAnswer[LabelStep]:
+    def labels(tracker_root: str, task_id: str, label: str | None) -> HoldAnswer[LabelStep]:
         return _labelled(bd(tracker_root), task_id, label)
 
-    def written(call: Callable[[], None]) -> HoldAnswer[HoldWrite]:
+    def written(call: Callable[[], object]) -> HoldAnswer[HoldWrite]:
         try:
             call()
         except BdError as error:
             return _hold_failed(error, "unavailable")
         return HoldAnswer("done")
 
-    def comment(tracker_root: str, task_id: str, text: str) -> HoldAnswer[HoldWrite]:
-        return written(lambda: bd(tracker_root).comment(task_id, text))
+    def comment(tracker_root: str, task_id: str, attempt_id: str, text: str) -> HoldAnswer[HoldWrite]:
+        return written(lambda: bd(tracker_root).comment_once(task_id, text, key=attempt_id))
 
     def clear(tracker_root: str, task_id: str) -> HoldAnswer[HoldWrite]:
         return written(lambda: bd(tracker_root).remove_label(task_id, HELD))

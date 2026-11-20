@@ -1,17 +1,14 @@
-"""Slot preparation: the task branch rule and the one writer that puts a slot on its task branch.
+"""Read-only branch admission and selection of a retained source under slot custody.
 
-`branch_refusal` is the one branch rule (a pure name check, then read-only Git: local refs, the worktree listing and
-ancestry), used by admission before anything is held and again by the entry right before it creates the branch.
-`base` is the entry's preparation and base read for an `admitted` attempt, under the slot's custody lock: attempt 1 on a
-clean detached slot takes `task/<task-id>` (`take_branch(mode="resume")`, the only factory call of it, and `park` back
-to D when a branch made after the rule turns out not to contain D); attempt 1 of a later step first requires that
-branch to contain the previous step's published X (`after_commit`, else `branch_moved`); B is then the
-HEAD on that branch. An existing branch (local, else origin's remote-tracking one) is resumed as it is; a new one starts
-at the target's tip, the person's local `main` (`MAIN`, tl-8bh9.14.23), never at the slot's own commit D, which stays
-only the release's park point. No fetch: only local refs, including the local remote-tracking ones, are read. Every refusal is one
-fixed word and leaves the attempt `admitted`; `GitUnavailable` (a missing revision or a failed read included) is
-`unavailable:git`, never "absent", except that a missing `after_commit` is `branch_moved` (the branch lost it).
-`detach_at` is a checks slot's preparation: X taken detached (`park`), never a branch.
+Each detached D must belong to the selected source or origin's known main history. Existing task work is selected
+local-first, otherwise remote-tracking; a new branch starts at fetched origin main. D only chooses eligibility;
+admission records fetched origin main as the release park point. Branch ownership and previous published X remain fenced. A take must match
+the selected source exactly, including when D belongs to main rather than the task branch.
+
+`merge.prepare.SourcePreparation` continues clean preparation before ordinary setup/dispatch: fetch origin's main,
+merge it into the retained source, reconcile pending actions and attach the accepted result. That completed HEAD is B;
+repeat leftovers bypass this merge. Admission refreshes origin main; `branch_refusal` only observes it. Missing revisions and
+failed reads stay unavailable; a missing previous X is `branch_moved`. `detach_at` prepares checks slots at X detached.
 """
 
 import re
@@ -23,11 +20,13 @@ from typing import Final, Literal
 from git_porcelain import BranchHeld, GitUnavailable, MissingRevision, Repo
 
 from taskloop.attempt_types import TRAILER, AttemptRecord, AttemptResult, Checkouts, SlotFiles
+from taskloop.git_views import PUSH_TIMEOUT
 from taskloop.slot_state import SlotState, observe_slot, pointer, staged
 from taskloop.slots import SlotView, unusable_text
 
 type BranchRefusal = Literal["branch_name", "branch_held", "branch_diverged", "branch_unpublished", "target"]
-MAIN: Final = "refs/heads/main"  # the target (O1: the person's local `main`): a new task branch starts at its tip, checks read it
+MAIN: Final = "refs/heads/main"  # the person's local branch, retained for checks and foreign-work protection
+ORIGIN_MAIN: Final = "refs/remotes/origin/main"
 HEADS: Final = "refs/heads/task"
 REMOTES: Final = "refs/remotes/origin/task"
 NAME: Final = re.compile(r"[A-Za-z0-9._-]+")
@@ -40,9 +39,9 @@ def task_branch(task_id: str) -> str:
 
 @dataclass(frozen=True)
 class Branch:
-    """The task branch as read now: the given heads (D) that its start contains, the local and local remote-tracking tips
+    """The task branch as read now: the given heads (D) below its selected start or origin's known main, the task tips
     (None when absent), and `start`, the commit the slot takes: the local tip, else the remote-tracking one, else (a new
-    branch) `main`'s tip."""
+    branch) origin main's tip."""
 
     passing: tuple[str, ...]
     local: str | None
@@ -79,8 +78,8 @@ def _foreign_unpublished(repo: Repo, local: str, seen: Sequence[str]) -> bool:
 
 
 HELD_SLOT = (
-    "task/{task} is checked out in a slot ({slots}; the round log reports it `unusable`): run `git switch --detach` there "
-    "(commit or stash what it holds first, nothing is deleted for you), then `tl slot adopt` if it is not adopted."
+    "task/{task} is checked out in a slot ({slots}; the round log reports it `unusable`): detach it from the branch "
+    "there (commit or stash what it holds first, nothing is deleted for you), then adopt the slot again if it is not adopted."
 )
 HELD_MAIN = "task/{task} is checked out in your main checkout ({path}): switch it off the branch yourself, then start again."
 HELD_OTHER = "task/{task} is checked out in {path}, which is not a slot: switch it off the branch yourself, then start again."
@@ -106,51 +105,69 @@ def held_refusal(repo: Repo, task_id: str, free: tuple[SlotView, ...]) -> tuple[
 
 
 def branch_refusal(repo: Repo, task_id: str, heads: Sequence[str]) -> BranchRefusal | Branch:
-    """The one branch rule, in order: the name (no Git), one refs read (`branch_name` on a conflict), the worktree
-    listing (`branch_held` when any worktree is on the branch), then history: each given head D passes when the local
-    tip and the local remote-tracking tip, where present, both contain it, or, with neither, when `main`'s tip (where a
-    new branch starts) contains it (`branch_diverged` when none does; `target` when a new branch has no `main`). An existing local
-    branch with commits beyond its remote-tracking tip (else beyond `main`) is `branch_unpublished`: a publish would push them."""
+    """Name, ref collisions, checked-out ownership, then ancestry and unpublished-work protection. D may be below the
+    selected source or known origin main. Ordinary forks merge during execution; unrelated histories refuse. Missing
+    main knowledge is `target` when the selected source cannot establish eligibility. A stale non-selected task ref
+    does not constrain D. Main's known commits and factory-owned work are not foreign unpublished task commits."""
     if not named(task_id):
         return "branch_name"
-    found = {entry.name: entry.sha for entry in repo.refs([HEADS, REMOTES, MAIN])}
+    found = {entry.name: entry.sha for entry in repo.refs([HEADS, REMOTES, MAIN, ORIGIN_MAIN])}
     if _clash(tuple(found), task_id):
         return "branch_name"
     if any(info.branch == task_branch(task_id) for info in repo.worktrees()):
         return "branch_held"
     local, remote = found.get(f"{HEADS}/{task_id}"), found.get(f"{REMOTES}/{task_id}")
-    target = found.get(MAIN)
+    target = found.get(ORIGIN_MAIN)
     tips = tuple(tip for tip in (local, remote) if tip is not None) or ((target,) if target is not None else ())
     if not tips:
         return "target"
-    passing = tuple(head for head in heads if all(repo.is_ancestor(head, tip) for tip in tips))
-    if heads and not passing:
-        return "branch_diverged"
-    unpublished = local is not None and _foreign_unpublished(repo, local, [tip for tip in (remote, target) if tip is not None])
-    return "branch_unpublished" if unpublished else Branch(passing, local, remote, tips[0])
+    start = tips[0]
+    origin = found.get(ORIGIN_MAIN)
+    passing = tuple(head for head in heads if repo.is_ancestor(head, start) or (origin is not None and repo.is_ancestor(head, origin)))
+    if (heads and not passing) or not _related(repo, start, origin):
+        return "target" if origin is None else "branch_diverged"
+    unpublished = local is not None and _foreign_unpublished(repo, local,
+        [tip for tip in (remote, found.get(MAIN), origin) if tip is not None])
+    return "branch_unpublished" if unpublished else Branch(passing, local, remote, start)
+
+
+def _related(repo: Repo, start: str, origin: str | None) -> bool:
+    if origin is None:
+        return True
+    repo.is_ancestor(start, start)  # missing required revisions remain unavailable, not unrelated history
+    repo.is_ancestor(origin, origin)
+    return repo.merge_base(start, origin) is not None
 
 
 DIVERGED: Final = (
-    "Where task/{task} would start does not contain any free slot's commit. With no task/{task}, it starts at your local "
-    "main: the slots sit at commits outside main's history; detach the free slots at a commit of main (`git -C <slot> "
-    "checkout --detach main`). An existing task/{task} is resumed as it is: a local branch: rename it (`git branch -m task/{task} "
-    "old/task/{task}`) or delete it. Only origin's remote-tracking ref: delete the branch on origin (`git push origin "
-    "--delete task/{task}`), or drop the local ref (`git update-ref -d refs/remotes/origin/task/{task}`) and do not fetch "
-    "it again."
+    "The selected task/{task} history is unrelated to origin's known main, or no free slot's commit belongs to either history. "
+    "The task's work is retained; preparation is refused until a slot with a valid base is available. "
+    "A new task starts at fetched origin main. Main advancing beyond an existing task branch does not require a restart."
 )
 
 
 UNPUBLISHED: Final = (
-    "The local task/{task} has commits that are not on origin (`git log --oneline main..task/{task}` or `git log "
-    "--oneline origin/task/{task}..task/{task}` lists them) and a publish would push them: rename the branch (`git branch -m "
-    "task/{task} old/task/{task}`) or delete it, or push it by hand, then start again."
+    "The local task/{task} has commits that are not on origin (compare it with main and with origin/task/{task} to list "
+    "them) and a publish would push them: rename the branch to old/task/{task}, or push it by hand, then start again."
 )
 
 
 DETAILS: Final = {
     "branch_diverged": DIVERGED,
     "branch_unpublished": UNPUBLISHED,
-    "target": f"The checkout has no local branch `{MAIN}` to start task/{{task}} from"}
+    "target": f"The checkout lacks the required origin remote-tracking ref: `{ORIGIN_MAIN}`."}
+
+
+def refreshed_sources(repo: Repo, task_id: str, paths: Sequence[Path]) -> tuple[dict[Path, str | None], BranchRefusal | Branch, str | None]:
+    """Refresh only origin main, then observe source eligibility and the release destination outside a transaction."""
+    fetched = repo.fetch("origin", refspecs=[f"+refs/heads/main:{ORIGIN_MAIN}"], timeout=PUSH_TIMEOUT)
+    if not fetched.ok:
+        raise GitUnavailable(f"Origin main could not be refreshed: {fetched.output}")
+    park_commit = next((entry.sha for entry in repo.refs([ORIGIN_MAIN]) if entry.name == ORIGIN_MAIN), None)
+    heads: dict[Path, str | None] = {info.path: info.head for info in repo.worktrees()}
+    found = ("target" if park_commit is None else
+             branch_refusal(repo, task_id, tuple(head for path in paths if (head := heads.get(path)) is not None)))
+    return heads, found, park_commit
 
 
 def _refused(reason: str) -> AttemptResult:
@@ -171,7 +188,7 @@ def _observed(checkouts: Checkouts, files: SlotFiles, record: AttemptRecord) -> 
 def _take(checkouts: Checkouts, files: SlotFiles, record: AttemptRecord, state: SlotState) -> AttemptResult | None:
     """Attempt 1 on a clean detached slot at D: the branch rule again, the pointer again, then `take_branch` on the slot's
     own view. An existing local branch is checked out as it is; a new one starts at the remote-tracking tip when that
-    exists, else at `main`'s tip (either contains D). None once the slot is on its branch."""
+    exists, else at origin main's tip. D may belong only to origin main. None once the slot is on its branch."""
     admission, head = record.admission, state.head or ""
     task_id = admission.task.task_id
     repo = checkouts(state.root)
@@ -179,7 +196,7 @@ def _take(checkouts: Checkouts, files: SlotFiles, record: AttemptRecord, state: 
     if isinstance(found, str):
         return _refused(found)
     after = admission.after_commit
-    if after is not None and lacks(repo, after, found.start):
+    if after is not None and (lacks(repo, after, found.start) or (admission.source_checks_id is not None and found.start != after)):
         return _refused("branch_moved")
     named = pointer(files, Path(admission.slot_path))
     if named is None or named.root != state.root or named.gitdir != state.gitdir:
@@ -189,18 +206,19 @@ def _take(checkouts: Checkouts, files: SlotFiles, record: AttemptRecord, state: 
     taken = worktree.take_branch(task_branch(task_id), found.start, mode="resume")
     if isinstance(taken, BranchHeld):
         return _refused("branch_held")
-    diverged = not repo.is_ancestor(head, taken.head)
-    moved = after is not None and lacks(repo, after, taken.head)
+    changed = taken.head != found.start
+    diverged = changed and repo.merge_base(found.start, taken.head) is None
+    moved = (changed and not diverged) or (after is not None and (lacks(repo, after, taken.head)
+                                         or (admission.source_checks_id is not None and taken.head != after)))
     if not diverged and not moved:
         return None
-    # a branch made or moved between the rule and the take was checked out as it is, without D or without the previous
-    # step's X: back to D, detached, so the next entry refuses it again instead of starting from that tip
+    # A source substituted between the rule and take never dispatches, even when D is safely on main.
     worktree.park(head)
-    return _refused("branch_diverged" if diverged else "branch_moved")
+    return _refused("branch_moved" if moved else "branch_diverged")
 
 
 def lacks(repo: Repo, after: str, tip: str) -> bool:
-    """The tip the slot would take (the local branch, else the remote-tracking one, else `main`'s) does not contain the previous
+    """The tip the slot would take (local task branch, else remote-tracking task branch, else origin main) lacks the previous
     step's published X, or X is gone from the repository: someone reset or deleted the branch after that step."""
     try:
         return not repo.is_ancestor(after, tip)
@@ -212,7 +230,8 @@ def _prepared(checkouts: Checkouts, files: SlotFiles, record: AttemptRecord) -> 
     """The slot after preparation: already on a branch, or a repeat's slot, is read as it is (no Git write); a detached
     slot of attempt 1 must be clean, then takes its branch and is read again."""
     state = _observed(checkouts, files, record)
-    if isinstance(state, AttemptResult) or state.branch is not None or record.start is not None:
+    inherited = record.admission.repair is not None or (record.start is not None and record.admission.source_checks_id is None)
+    if isinstance(state, AttemptResult) or state.branch is not None or inherited:
         return state
     if state.dirty:
         return _refused("slot_dirty")
@@ -226,6 +245,11 @@ def _state_refusal(checkouts: Checkouts, record: AttemptRecord, state: SlotState
     (its leftovers are its feedback, but the factory's commit records the whole index)."""
     if state.branch is None:
         return _refused("slot_detached")
+    if record.admission.source_checks_id is not None and record.base_commit is None:
+        if state.head != record.admission.after_commit:
+            return _refused("branch_moved")
+        if state.dirty:
+            return _refused("slot_dirty")
     problem = state.problem(task_branch(record.admission.task.task_id), record.start)
     after = record.admission.after_commit
     if record.start is None and problem is None and after is not None and lacks(checkouts(state.root), after, state.head or ""):
@@ -298,10 +322,14 @@ def base(checkouts: Checkouts, files: SlotFiles, record: AttemptRecord, clock: C
     try:
         state = _prepared(checkouts, files, record)
         if isinstance(state, SlotState):
-            state = _state_refusal(checkouts, record, state) or state
+            if record.admission.repair is None:
+                state = _state_refusal(checkouts, record, state) or state
+            elif state.branch != task_branch(record.admission.task.task_id):
+                state = _refused("slot_branch")
     except GitUnavailable:
         return AttemptResult("unavailable", "git")
     if isinstance(state, AttemptResult) or state.head is None:
         return state if isinstance(state, AttemptResult) else _refused("slot_unborn")
     # a Git read is bounded (`git_read_seconds`), not by the attempt deadline: that is checked again right before the dispatch write
-    return _refused("expired") if clock() >= deadline else Prepared(state.head, state.gitdir, state.root)
+    head = state.head if record.admission.repair is None else record.admission.repair.base_commit
+    return _refused("expired") if clock() >= deadline else Prepared(head, state.gitdir, state.root)

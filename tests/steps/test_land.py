@@ -7,12 +7,18 @@ from collections.abc import Callable
 from pathlib import Path
 
 import pytest
-from doubles import Command
+from doubles import CHECKS, REQUIRED, Command
 from git_porcelain import Transient
 from land_bench import BAR, ME, RUN, LandBench, bench
 
+from taskloop import check_store, land_store
+from taskloop.admit_store import reserve
+from taskloop.attempt_types import AttemptKey
 from taskloop.land import Landed, LandResult
+from taskloop.land_check import NO_SLOT, RACED
+from taskloop.land_store import LandAdmitted, LandRow
 from taskloop.operations import Failed
+from taskloop.repo import RepoId
 
 
 @pytest.fixture
@@ -94,6 +100,41 @@ def test_the_land_validates_in_the_one_free_slot_rounds_leave_it(b: LandBench) -
     assert isinstance(found, Landed) and found.row.slot == "s1" and b.reservations() == []
 
 
+@pytest.mark.parametrize("competition", ["none", "missing_checks", "candidate_number", "other_checks_landing"])
+def test_losing_the_last_free_slot_distinguishes_a_competing_land(
+    b: LandBench, competition: str,
+) -> None:
+    main = b.advance({"OTHER": "another task\n"})
+    before: list[tuple[LandRow, ...]] = []
+
+    def take_slot() -> None:
+        checks = CHECKS.attempt_id
+        if competition == "other_checks_landing":
+            checks = "other-checks"
+            check_store.insert(b.con, check_store.ChecksAdmitted(
+                AttemptKey(checks, "other-checks-token", 2), "implement", 2, "s1", b.d, b.x, REQUIRED, 300.0))
+            b.con.execute("""UPDATE checks_attempt SET phase='concluded',conclusion='passed',concluded_at=5,
+                released_at=6,parked=? WHERE attempt_id=?""", (b.d, checks))
+        if competition in {"candidate_number", "other_checks_landing"}:
+            land_store.insert(b.con, LandAdmitted(AttemptKey("competitor", "competitor-token", 0), checks, 1,
+                main, b.x, True, REQUIRED, None, None, None, "same_tree", b.now))
+            if competition == "candidate_number":
+                assert b.lands.supersede(AttemptKey("competitor", "competitor-token", 0), "withdrawn", b.now)
+        elif competition == "missing_checks":
+            b.con.execute("DELETE FROM checks_attempt WHERE attempt_id=?", (checks,))
+        reserve(b.con, RepoId(b.repo.identity().key), "s1", AttemptKey("occupant", "occupant-token", 2))
+        before.append(b.lands.for_task("tasks", "tl-1"))
+
+    b.racing = take_slot
+    found = b.land()
+    competing = competition in {"candidate_number", "other_checks_landing"}
+    assert found == (Failed("refused", "landing", f"{RACED} Nothing was recorded.") if competing else
+                     Failed("unavailable", "no_free_slot", NO_SLOT))
+    assert len(before) == 1 and b.lands.for_task("tasks", "tl-1") == before[0]
+    assert b.reservations() == [("s1", "occupant")]
+    assert b.execs() == [] and b.repo.pushes == 0 and b.tracker == [] and b.origin_main() == main
+
+
 def test_a_failed_validation_pushes_nothing_and_leaves_its_slot_released(b: LandBench) -> None:
     main = b.advance({"OTHER": "y\n"})
     b.environment.process.script = [Command(), Command(), Command(rc=1)]
@@ -106,21 +147,23 @@ def test_a_failed_validation_pushes_nothing_and_leaves_its_slot_released(b: Land
 def test_an_artifacts_directory_that_cannot_be_written_is_unavailable_log_naming_it_and_the_rerun_lands(b: LandBench) -> None:
     """tl-8bh9.14.41: not a failed setup: no branch advice, the directory named, a rerun after the fix pushes."""
     b.advance({"OTHER": "another task\n"})
-    blocked = b.root / "art" / "attempts"
+    blocked = b.root / "unwritable" / "attempts"
+    b.environment.artifacts = blocked.parent
     blocked.parent.mkdir(parents=True, exist_ok=True)
     blocked.write_text("a file where the folder belongs")
     found = b.land()
-    assert isinstance(found, Failed) and (found.kind, found.reason) == ("unavailable", "log") and str(b.root / "art") in found.detail
+    assert isinstance(found, Failed) and (found.kind, found.reason) == ("unavailable", "log") and str(blocked.parent) in found.detail
     assert b.repo.pushes == 0 and b.execs() == []
     blocked.unlink()
     assert isinstance(b.land(), Landed)
 
 
-def test_a_conflict_is_refused_with_its_paths_and_nothing_recorded(b: LandBench) -> None:
+def test_a_conflict_hands_off_checked_work_and_stops_before_delivery(b: LandBench) -> None:
     main = b.advance({"src/x.py": "X = 2\n"})
     found = b.land()
-    assert failed(found) == ("refused", "conflict") and isinstance(found, Failed) and "src/x.py" in found.detail
-    nothing_changed(b, main)
+    assert failed(found) == ("refused", "conflict") and isinstance(found, Failed) and "retained" in found.detail
+    assert len(b.conflict_runs) == 1 and b.reservations() == [("s1", b.conflict_runs[0].key.attempt_id)]
+    assert b.rows() == () and b.repo.pushes == 0 and b.origin_main() == main and b.execs() == []
 
 
 def test_main_already_holding_x_s_changes_is_no_change_until_accepted(b: LandBench) -> None:

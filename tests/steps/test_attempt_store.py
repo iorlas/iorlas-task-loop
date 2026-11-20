@@ -6,28 +6,37 @@ import threading
 from pathlib import Path
 
 import pytest
+from doubles import ENGINE, pin_workflow
 from sqlite_store import Store
+from test_attempt import ENTRY, AttemptSurroundings, Flaky, database, fake, owner
+from test_attempt import KEY as BENCH_KEY
+from test_attempt import surroundings as attempt_surroundings
 
 from taskloop.attempt_reads import StoreUnavailable
-from taskloop.attempt_store import AttemptStore
+from taskloop.attempt_store import REGISTRATION_BUSY_MS, AttemptStore, configure_registration
 from taskloop.attempt_types import AttemptKey, EntryIdentity, Replaced
 from taskloop.factory_schema import SCHEMA
 
 KEY = AttemptKey("attempt", "dispatch", 1)
 FIRST = (7, "entry-start", "boot")
 SECOND = (8, "later-start", "boot")
+surroundings = attempt_surroundings
 
 
 def seed(con: sqlite3.Connection) -> sqlite3.Connection:
     """An admitted, unregistered attempt (entry_* NULL) and its held reservation, as admission writes them."""
     con.execute("INSERT INTO slot (repo_id,name,path) VALUES ('repo','slot','/slots/repo/slot')")
     con.execute("INSERT INTO reservation VALUES ('slot','repo',1,'attempt')")
+    pin_workflow(con)
     con.execute(
         """INSERT INTO attempt
         (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,input_digest,
-         schema_version,model,effort,sandbox,deadline,number,seq,slot_head)
+         schema_version,model,effort,access_policy,deadline,number,seq,slot_head,engine_digest,workflow_digest,workflow_sha,admitted_at)
         VALUES ('attempt','dispatch',1,'plan','beads','tasks','tl-1','/tracker','repo','slot','input.txt','0',1,'chosen','high',
-        'workspace-write',100,1,1,'dddddddddddddddddddddddddddddddddddddddd')"""
+        '{"harness":"codex","sandbox":"workspace-write"}',100,1,1,'dddddddddddddddddddddddddddddddddddddddd',
+        'abababababababababababababababababababababababababababababababab',
+        (SELECT digest FROM workflow_file),
+        'eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',1.0)"""
     )
     return con
 
@@ -39,6 +48,40 @@ def con(factory: sqlite3.Connection) -> sqlite3.Connection:
 
 def entry(con: sqlite3.Connection) -> tuple[object, ...]:
     return con.execute("SELECT entry_pid,entry_start,entry_boot,rev FROM attempt").fetchone()
+
+
+def test_registration_configuration_is_connection_local_and_preserves_transaction(
+    con: sqlite3.Connection, tmp_path: Path,
+) -> None:
+    ordinary = Store(SCHEMA).open_rw(tmp_path / "ordinary.db")
+    assert ordinary is not None
+    try:
+        con.execute("BEGIN IMMEDIATE")
+        configure_registration(con)
+        assert con.in_transaction
+        assert con.execute("PRAGMA busy_timeout").fetchone() == (REGISTRATION_BUSY_MS,)
+        assert ordinary.execute("PRAGMA busy_timeout").fetchone() == (5000,)
+        con.rollback()
+    finally:
+        ordinary.close()
+
+
+def test_registration_configuration_propagates_sqlite_errors(con: sqlite3.Connection) -> None:
+    con.close()
+    with pytest.raises(sqlite3.Error):
+        configure_registration(con)
+
+
+def test_missing_status_results_and_required_input(con: sqlite3.Connection) -> None:
+    store = AttemptStore(lambda: con)
+    missing = AttemptKey("missing", "missing", 1)
+    assert store.state(missing) is None
+    assert store.tracker_root(missing) is None
+    assert store.release_of(missing) is None
+    assert store.attempt_of("tasks", "missing") is None
+    assert store.release_of(KEY) is None
+    with pytest.raises(StoreUnavailable, match="Attempt input reference unavailable"):
+        store.input_ref(missing)
 
 
 def test_first_registration_wins_and_a_second_is_a_conflict(con: sqlite3.Connection) -> None:
@@ -202,3 +245,23 @@ def test_a_renewal_never_shortens_a_live_deadline(con: sqlite3.Connection) -> No
     assert store.register_entry(KEY, FIRST, 10) == "accepted"
     assert store.register_entry(KEY, REBOOTED, 20, Replaced(FIRST, "gone"), renewed=50) == "accepted"  # before the deadline 100
     assert (entry(con), deadline(con)) == ((*REBOOTED, 2), 100)
+
+
+def test_capture_stores_the_given_end_time_and_keeps_the_admission_facts(surroundings: AttemptSurroundings) -> None:
+    con = database(surroundings)
+    attempts = owner(Flaky(con), surroundings, fake(), clock=lambda: 42.5)
+    assert attempts.execute(BENCH_KEY, ENTRY).execution is not None
+    assert con.execute("SELECT phase,ended_at,admitted_at,engine_digest FROM attempt").fetchone() == ("captured", 42.5, 1.0, ENGINE)
+
+
+def test_an_attempt_that_is_not_captured_cannot_have_an_end_time(con: sqlite3.Connection) -> None:
+    with pytest.raises(sqlite3.IntegrityError, match="ended_at IS NULL OR phase='captured'"):
+        con.execute("UPDATE attempt SET ended_at=5.0")
+    assert con.execute("SELECT phase,ended_at FROM attempt").fetchone() == ("admitted", None)
+
+
+@pytest.mark.parametrize("digest", ["", "ab" * 31, "AB" * 32, "xy" * 32, "ab" * 33])
+def test_the_engine_digest_must_be_64_lowercase_hex_characters(con: sqlite3.Connection, digest: str) -> None:
+    with pytest.raises(sqlite3.IntegrityError, match="CHECK constraint failed"):
+        con.execute("UPDATE attempt SET engine_digest=?", (digest,))
+    assert con.execute("SELECT engine_digest FROM attempt").fetchone() == (ENGINE,)

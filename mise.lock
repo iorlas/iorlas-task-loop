@@ -28,6 +28,48 @@ url = "https://github.com/gastownhall/beads/releases/download/v1.3.1/beads_1.3.1
 url_api = "https://api.github.com/repos/gastownhall/beads/releases/assets/602046126"
 provenance = "github-attestations"
 
+[[tools."aqua:openai/codex"]]
+version = "0.162.1"
+backend = "aqua:openai/codex"
+
+[tools."aqua:openai/codex"."platforms.linux-arm64"]
+checksum = "sha256:ed893c7b0eb337621590c433aa2ca90b7a7f66f189530bb23b1c52814c24b677"
+url = "https://github.com/openai/codex/releases/download/rust-v0.162.1/codex-aarch64-unknown-linux-musl.zst"
+
+[tools."aqua:openai/codex"."platforms.linux-x64"]
+checksum = "sha256:b6f2f01c7bf70e85306f47390b6f17b8ffdaf50135d48960a35dc456ff97e05b"
+url = "https://github.com/openai/codex/releases/download/rust-v0.162.1/codex-x86_64-unknown-linux-musl.zst"
+
+[tools."aqua:openai/codex"."platforms.macos-arm64"]
+checksum = "sha256:8b9a9ee96c7d765ae721771a845bc31db3dcdfc936933e62a1cfc5ad67bdf9d7"
+url = "https://github.com/openai/codex/releases/download/rust-v0.162.1/codex-aarch64-apple-darwin.zst"
+
+[tools."aqua:openai/codex"."platforms.macos-x64"]
+checksum = "sha256:23dfae3c3f3564022249f502e9bb7ecb4fdf179f80c61c842fd69e1a18ac9749"
+url = "https://github.com/openai/codex/releases/download/rust-v0.162.1/codex-x86_64-apple-darwin.zst"
+
+[[tools."aqua:tailwindlabs/tailwindcss"]]
+version = "4.1.11"
+backend = "aqua:tailwindlabs/tailwindcss"
+
+[tools."aqua:tailwindlabs/tailwindcss"."platforms.linux-arm64"]
+checksum = "sha256:bbb75c8802861546925bba34bb1e53deca6ab9f33ab95a40e0ca7f10380ab744"
+url = "https://github.com/tailwindlabs/tailwindcss/releases/download/v4.1.11/tailwindcss-linux-arm64-musl"
+
+[tools."aqua:tailwindlabs/tailwindcss"."platforms.linux-x64"]
+checksum = "sha256:0fb5f1a24dc5237914b9a4375fa0e7520a99da28aa62c36a00c42c34b3df1146"
+url = "https://github.com/tailwindlabs/tailwindcss/releases/download/v4.1.11/tailwindcss-linux-x64-musl"
+
+[tools."aqua:tailwindlabs/tailwindcss"."platforms.macos-arm64"]
+checksum = "sha256:f5984b9c005c3e67841c33906c7a7c92e85e405f61e029e9bb62e880dd662e79"
+url = "https://github.com/tailwindlabs/tailwindcss/releases/download/v4.1.11/tailwindcss-macos-arm64"
+url_api = "https://api.github.com/repos/tailwindlabs/tailwindcss/releases/assets/267473171"
+
+[tools."aqua:tailwindlabs/tailwindcss"."platforms.macos-x64"]
+checksum = "sha256:76e27326506d10d50e65b751795f0537f9304ecb100abe835ec138c41774f38c"
+url = "https://github.com/tailwindlabs/tailwindcss/releases/download/v4.1.11/tailwindcss-macos-x64"
+url_api = "https://api.github.com/repos/tailwindlabs/tailwindcss/releases/assets/267473170"
+
 [[tools.gitleaks]]
 version = "8.30.1"
 backend = "aqua:gitleaks/gitleaks"
@@ -96,6 +138,30 @@ provenance = "github-attestations"
 checksum = "sha256:0ef3ec3dd4429a5d9e2ebe1b65b37319b5611be3d688a86813aa3004761c4db3"
 url = "https://github.com/j178/prek/releases/download/v0.3.6/prek-x86_64-apple-darwin.tar.gz"
 url_api = "https://api.github.com/repos/j178/prek/releases/assets/374826299"
+provenance = "github-attestations"
+
+[[tools.python]]
+version = "3.15.0"
+backend = "core:python"
+
+[tools.python."platforms.linux-arm64"]
+checksum = "sha256:341f9984c0206fef013761fa6adc5b26f28fcf333dd9bc9ff64f23b6fdf9b58b"
+url = "https://github.com/astral-sh/python-build-standalone/releases/download/20261020/cpython-3.15.0+20261020-aarch64-unknown-linux-gnu-install_only_stripped.tar.gz"
+provenance = "github-attestations"
+
+[tools.python."platforms.linux-x64"]
+checksum = "sha256:d8982167b0b96b660a688f2b8f1e47e49d7c50da17029a07d3ac5fd418514c63"
+url = "https://github.com/astral-sh/python-build-standalone/releases/download/20261020/cpython-3.15.0+20261020-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz"
+provenance = "github-attestations"
+
+[tools.python."platforms.macos-arm64"]
+checksum = "sha256:80af02b62e3675f653e79fd9560f90f7ab8ced848cd4a5a81ee7e3d6c8dc2a10"
+url = "https://github.com/astral-sh/python-build-standalone/releases/download/20261020/cpython-3.15.0+20261020-aarch64-apple-darwin-install_only_stripped.tar.gz"
+provenance = "github-attestations"
+
+[tools.python."platforms.macos-x64"]
+checksum = "sha256:cb833e879255122ed1ac191f671297b64ac6e7c1927b37e909d2eae34c331402"
+url = "https://github.com/astral-sh/python-build-standalone/releases/download/20261020/cpython-3.15.0+20261020-x86_64-apple-darwin-install_only_stripped.tar.gz"
 provenance = "github-attestations"
 
 [[tools.uv]]

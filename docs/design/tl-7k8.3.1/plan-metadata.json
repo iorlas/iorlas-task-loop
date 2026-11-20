@@ -1,0 +1,27 @@
+{
+  "prepared_commit": "b8f6ebfc055ad2941677d02d6753edb404f19c2d",
+  "cited_paths": [
+    "src/taskloop/factory_schema.py",
+    "src/taskloop/factory_store.py",
+    "src/taskloop/land_store.py",
+    "src/taskloop/land_check.py",
+    "src/taskloop/check_release.py",
+    "src/taskloop/land_push.py",
+    "src/taskloop/land_close.py",
+    "src/taskloop/land.py",
+    "src/taskloop/land_data.py",
+    "src/taskloop/dash_land.py",
+    "src/taskloop/drain/reconcile.py",
+    "src/taskloop/land_conflict/store.py",
+    "src/taskloop/land_conflict/composition.py",
+    "src/taskloop/land_render.py",
+    "tests/steps/test_factory_schema.py",
+    "tests/steps/test_schema_words.py",
+    "tests/rules/test_sqlite_contracts.py",
+    "tests/steps/test_land_store.py",
+    "tests/steps/land_bench.py",
+    "tests/steps/test_land_resume.py",
+    "tests/steps/test_land_push.py",
+    "tests/steps/test_land_close.py"
+  ]
+}

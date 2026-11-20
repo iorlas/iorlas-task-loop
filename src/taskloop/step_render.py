@@ -3,9 +3,15 @@ here decides, reads or writes; `result_data.as_data` is the one JSON shape."""
 
 from pathlib import Path
 
+from taskloop import rows_render
+from taskloop.agents.config import display
+from taskloop.attempt_export import AttemptExport
 from taskloop.attempt_status import Listed, Shown
 from taskloop.attempt_types import ATTEMPTS
+from taskloop.command_conclusion import encode
+from taskloop.drain.models import Reason
 from taskloop.hold_guide import hold_guide, pending_guide
+from taskloop.inspection_guide import CONFIG, SLOT
 from taskloop.land import Landed
 from taskloop.land_guide import CANDIDATE_RELEASE, LAND_GUIDE
 from taskloop.land_push import Withdrawn
@@ -15,6 +21,7 @@ from taskloop.machine_config import Loaded
 from taskloop.operations import (
     UNCLAIMING,
     Adoption,
+    CommittedTask,
     Ended,
     Failed,
     Move,
@@ -22,24 +29,27 @@ from taskloop.operations import (
     ReleasedTask,
     Round,
     Started,
-    VerifiedTask,
 )
 from taskloop.printable import block
 from taskloop.publish import is_published, publish_word
 from taskloop.result_data import Result, StepResult
-from taskloop.show_render import last_command, show_lines
+from taskloop.round_guide import automatic_guide
+from taskloop.setup_timing import SetupTimingReport
+from taskloop.show_render import last_command, setup_times, show_lines
+from taskloop.slot_list import SlotList
 from taskloop.slot_release import Released, is_released, release_word
 from taskloop.slots import Adopted
-from taskloop.step_guide import GUIDE, HELD, NEEDS_OWNER, PUBLISH, STEP_ONLY, discard, guide
+from taskloop.step_guide import GUIDE, HELD, NEEDS_OWNER, STEP_ONLY, discard, guide, refusal_guide
 from taskloop.task_status import task_status
 from taskloop.task_status import words as status_words
-from taskloop.tracker import leaked_claim
 
 
 def human(command: str, result: Result, db: Path | None) -> list[str]:
-    """`tl step land`'s answers and refusals are `land_render`'s; the rest (a land candidate's refused release too, with
+    """`tl land run`'s answers and refusals are `land_render`'s; the rest (a land candidate's refused release too, with
     its own guide) `_step_lines`'."""
-    if isinstance(result, Landed | Withdrawn | LandSummary) or (isinstance(result, Failed) and command == COMMAND):
+    if isinstance(result, AttemptExport | SlotList):
+        return rows_render.lines(result)
+    if isinstance(result, Landed | Withdrawn | LandSummary) or (isinstance(result, Failed) and command.startswith(COMMAND)):
         return land_lines(command, result)
     return _step_lines(command, result, db)
 
@@ -51,20 +61,21 @@ def _step_lines(command: str, result: StepResult, db: Path | None) -> list[str]:
         case Failed():
             lines = [f"{command}: {result.word}", *(block(result.detail).split("\n") if result.detail else [])]  # an echoed id is untrusted
             lines += [f"  {view.name} {view.state} {view.reason or view.attempt_id or ''} {view.path}" for view in result.slots]
-            named = "`tl step release --abandon`" in result.detail  # the detail names the action (`HALF_DONE`, `UNCLAIMING`)
-            lines += [] if named else _guides(result)
-            return lines + ([f"Admitted: {HELD} Re-run `tl step start` to retry the launch."] if result.admitted else [])
+            lines += list(dict.fromkeys(SLOT[view.reason] for view in result.slots if view.reason is not None))
+            lines += _guides(result)
+            admitted = [f"Admitted: {HELD} Inspect the registered entry before deciding to retry the launch."] if result.admitted else []
+            return lines + admitted
         case Started():
             entry = "" if result.entry is None else f"; entry pid {result.entry[0]}"
             lines = [f"{result.status}: attempt {result.attempt_id} for {result.task_id} (backlog {result.backlog}){entry}"]
             lines += [f"Result: {result.result}"] if result.result else []
             if result.number is not None:
-                stand = f"attempt {result.number - 1}'s choices stand; deadline from --minutes"
+                stand = f"attempt {result.number - 1}'s choices stand; deadline from the minutes given"
                 lines += [f"attempt {result.number} of at most {ATTEMPTS}; {stand}"]
             lines += ["existing attempt; its admitted choices stand"] if result.existing else [HELD]
-            return [*lines, f"Step commands ({STEP_ONLY}). Follow it with `tl step show {result.task_id} --backlog {result.backlog}`."]
+            return [*lines, STEP_ONLY, "The attempt's status and retained evidence show its progress."]
         case Shown(view=each):
-            paths = [f"Directory: {result.directory}", f"Entry log: {result.entry_log}"]
+            paths = [f"Directory: {result.directory}", f"Entry log: {result.entry_log}", f"Events: {result.events_path}"]
             ended = each.release
             abandoning = each.next == "release" and each.land is not None and each.land.row.superseded == "abandoned"
             told = guide(each.next, checks=each.checks is not None, land=each.land is not None)
@@ -74,12 +85,12 @@ def _step_lines(command: str, result: StepResult, db: Path | None) -> list[str]:
             told = ({"done": NEEDS_OWNER, "release": f"{told} {NEEDS_OWNER}"}.get(each.next, told)) if asked else told
             told = hold_guide(each) if each.next in ("hold", "on_hold") else told
             steps = [told, *(stuck if each.next.startswith("stuck:") else [])]
-            left = [f"Unsettled: {each.leftovers[0]}", *(f"  {line}" for line in each.leftovers[1:])] if each.leftovers else []
+            left = [f"Uncommitted: {each.leftovers[0]}", *(f"  {line}" for line in each.leftovers[1:])] if each.leftovers else []
             last = [] if each.last_entry is None else [f"Last entry result: {each.last_entry}"]
             return [*show_lines(result), *paths, *last, *left, f"Status: {status_words(task_status(each))}", f"Next: {each.next}", *steps]
-        case Listed() | Round() | Ended():
+        case Listed() | Round() | Ended() | SetupTimingReport():
             return _rows_lines(command, result, stuck)
-        case VerifiedTask() | ReleasedTask() | PublishedTask():
+        case CommittedTask() | ReleasedTask() | PublishedTask():
             return _released_lines(result)
         case Adoption() | Loaded():
             return _setup_lines(result)
@@ -87,9 +98,12 @@ def _step_lines(command: str, result: StepResult, db: Path | None) -> list[str]:
 
 def _guides(result: Failed) -> list[str]:
     """The guide of the kind and the reason: a land candidate's release (`result.land`) has its own words first."""
-    found = [CANDIDATE_RELEASE.get(each) if result.land else None for each in (result.kind, result.reason)]
-    return [text or guide(each, checks=result.checks) for each, text in zip((result.kind, result.reason), found, strict=True)
-            if text is not None or each in GUIDE]
+    if result.config is not None:
+        return [CONFIG[result.config.reason]]
+    text = CANDIDATE_RELEASE.get(result.reason) if result.land else None
+    kind = CANDIDATE_RELEASE.get(result.kind) if result.land else None
+    kind = kind or (guide(result.kind, checks=result.checks) if result.kind in GUIDE else None)
+    return list(dict.fromkeys([*([kind] if kind else []), text or refusal_guide(result.reason, checks=result.checks)]))
 
 
 def _path(move: Move) -> list[str]:
@@ -97,16 +111,22 @@ def _path(move: Move) -> list[str]:
     return [f"  {move.detail}"] if move.word.startswith("unusable:") and move.detail else []
 
 
-def _rows_lines(command: str, result: Listed | Round | Ended, stuck: list[str]) -> list[str]:
-    """`tl step list`: one row per task. `tl step next`: one line per move as performed, `Stopped:` when admission ended
-    early, then the guide of each distinct reported, skipped or stopping word once. `tl step rounds`: why it ended."""
+def _rows_lines(command: str, result: Listed | Round | Ended | SetupTimingReport, stuck: list[str]) -> list[str]:
+    """Render ordered rows, setup samples, or the reason rounds ended."""
+    if isinstance(result, SetupTimingReport):
+        return [f"Setup times: backlog {result.backlog}", *[
+            f"Task {row.task_id}; repo {row.repo_id}; attempt {row.attempt_id}; run {row.run}; "
+            f"{encode(row.conclusion) or 'unfinished'}; {setup_times(row.started_at, row.ended_at, row.duration_seconds)}"
+            for row in result.rows], f"Usable samples: {result.sample_count} of {len(result.rows)} displayed (at most 10)"]
     if isinstance(result, Ended):
-        ended = {"interrupted": "Rounds stopped: interrupted. Launched steps keep running; `tl step rounds` again continues them.",
+        ended = {Reason.DRAINING: "Rounds stopped: new work is blocked by the durable drain request.",
+                 Reason.DRAINED: "Idle was verified; new work remains blocked. The owner can decide whether to restart or upgrade.",
+                 "interrupted": "Rounds stopped: interrupted. Launched steps keep running; restarting scheduling continues them.",
                  "abrupt": "Stopped at once."}
         if result.reason in ended:
             return [ended[result.reason]]
         return [f"{command}: {result.reason}", *([result.detail] if result.detail else []),
-                *(GUIDE[each] for each in result.reason.split(":") if each in GUIDE)]
+                automatic_guide(result.reason)]
     if isinstance(result, Listed):
         attempts = result.attempts
         rows = [f"{a.task_id}\t{a.backlog}\t{a.step}\t{a.number}{'' if a.checks else f'/{ATTEMPTS}'}\t{a.slot}\t{a.phase}\t{a.entry}\t"
@@ -122,14 +142,14 @@ def _rows_lines(command: str, result: Listed | Round | Ended, stuck: list[str]) 
     lines += [f"Stopped: {result.stopped}"] if result.stopped else []
     lines += [] if result.moves or result.stopped else [f"Nothing to do in backlog {result.backlog}."]
     words = [("abandoned_skip" if each.word == "abandoned" else each.word) for each in result.moves
-             if each.action in ("report", "skip", "advance")]
+             if each.action in ("report", "skip", "advance") or ":" in each.word]
     pending = dict.fromkeys(pending_guide(each.word) for each in result.moves if each.action == "hold" and each.word.startswith("pending "))
-    keys = dict.fromkeys(key for word in [*words, result.stopped] for key in (word, word.split(":")[0]) if key in GUIDE)
-    leaked = [f"claim_leaked: {leaked_claim(each.task_id)}" for each in result.moves if each.word == "claim_leaked"]
-    return lines + [f"{key}: {GUIDE[key]}" for key in keys] + [f"hold: {each}" for each in pending] + leaked
+    words = [word for word in words if not word.startswith("pending ")]
+    keys = dict.fromkeys([*words, *([result.stopped] if result.stopped else [])])
+    return lines + [f"{key}: {automatic_guide(key)}" for key in keys] + [f"hold: {each}" for each in pending]
 
 
-def _released_lines(result: VerifiedTask | ReleasedTask | PublishedTask) -> list[str]:
+def _released_lines(result: CommittedTask | ReleasedTask | PublishedTask) -> list[str]:
     """A verdict with the release and the publication that followed it; a release with each change on its own line (an
     abandon's land candidate first, then its checks attempt); a publication."""
     if isinstance(result, PublishedTask):
@@ -137,9 +157,10 @@ def _released_lines(result: VerifiedTask | ReleasedTask | PublishedTask) -> list
         done = publish_word(found)
         return [f"{done}: task/{result.task_id} at {found.commit} on origin (attempt {result.attempt_id}, backlog {result.backlog})",
                 *(["Nothing changed: it was published before."] if done == "already_published" else [])]
-    if isinstance(result, VerifiedTask):
-        held = [f"Release: {result.release}"] + ([] if is_released(result.release) else [GUIDE["release"]])
-        held += [f"Publish: {result.published}"] + ([] if is_published(result.published) else [PUBLISH])
+    if isinstance(result, CommittedTask):
+        held = [f"Release: {result.release}"] + ([] if is_released(result.release) else [refusal_guide(result.release.split(":", 1)[1])])
+        held += [f"Publish: {result.published}"] + ([] if is_published(result.published) else [
+            refusal_guide(result.published.split(":", 1)[1])])
         return [f"{result.status}: attempt {result.attempt_id} for {result.task_id} (backlog {result.backlog})", *held]
     found, task = result.result, result.task_id
     first = [] if result.land is None else _released_lines(result.land)
@@ -152,13 +173,13 @@ def _released_lines(result: VerifiedTask | ReleasedTask | PublishedTask) -> list
     lines += [f"Slot {found.slot} parked at {found.parked}" if found.parked else f"Slot {found.slot}: no Git write"]
     lines += [f"Reservation of {found.slot} removed"] if found.reservation_removed else []
     claims = {"kept": "Claim kept", "unclaimed": "Claim returned to the tracker",
-              "not_held": f"Claim not held by taskloop (reverted, or another actor's): check `bd show {task}`"}
+              "not_held": "Claim not held by the factory: it was reverted or belongs to another actor. Inspect tracker ownership."}
     lines += [claims[found.claim]]
     fresh = found.abandoned and found.claim != "kept"  # a checks attempt's abandon keeps the claim: its implement attempt's follows
-    return lines + ([f"Abandoned: `tl step start {task}` admits a fresh attempt"] if fresh else [])
+    return lines + (["Abandoned: the next approved admission starts a fresh attempt."] if fresh else [])
 
 
-SLOT_COUNT_NOTE = "slot_count only adds slots (`tl slot adopt`); lowering it retires none: rounds use every slot adopted in factory.db."
+SLOT_COUNT_NOTE = "Slot adoption only adds slots; lowering slot_count retires none. Rounds use every slot adopted in factory.db."
 
 
 def _setup_lines(result: Adoption | Loaded) -> list[str]:
@@ -167,8 +188,12 @@ def _setup_lines(result: Adoption | Loaded) -> list[str]:
         lines = [f"{each.name} {'adopted' if isinstance(each, Adopted) else each.reason} {each.path or ''}".rstrip() for each in slots]
         missing = any(not isinstance(each, Adopted) and each.reason == "not_listed" for each in slots)
         attached = any(not isinstance(each, Adopted) and each.reason == "attached" for each in slots)
-        hints = ["Make each not_listed slot with `git worktree add --detach <path>`, then adopt again."] if missing else []
-        return lines + hints + (["Run `git switch --detach` in a slot left on a task branch, then adopt again."] if attached else [])
+        hints = ["Missing slots need registered detached worktrees before adoption can finish."] if missing else []
+        hints += ["A slot attached to a task branch needs its work preserved and its HEAD detached before adoption."] if attached else []
+        return lines + hints + list(
+            dict.fromkeys(SLOT[each.reason] for each in slots if not isinstance(each, Adopted)))
     lines = [f"Config file: {result.path} ({'exists' if result.exists else 'missing: built-in defaults'})"]
     lines += [f"{key} = {'unset' if each.value is None else each.value} ({each.source})" for key, each in result.settings.pairs()]
+    lines += [f"{key} = {each['value']} ({each['source']})"
+              for key, each in display(result.settings.agents, result.settings.agent_sources).items()]
     return [*lines, SLOT_COUNT_NOTE]

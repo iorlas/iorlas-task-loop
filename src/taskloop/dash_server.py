@@ -1,4 +1,4 @@
-"""The dashboard's HTTP server: JSON endpoints, one server-sent-events stream and the static page, on 127.0.0.1 only, in
+"""The dashboard's HTTP server: JSON endpoints, one server-sent-events stream and the static page, on a literal address, in
 threads of the rounds process. Read-only: every handler is a GET over reads that already exist (`dash_board`,
 `dash_task`, `round_reader`). One poller thread, only while a page is connected, turns changes into stream messages.
 This is the one module that imports the standard library's HTTP server (`.importlinter`: `no-runtime-mechanisms`)."""
@@ -6,22 +6,30 @@ This is the one module that imports the standard library's HTTP server (`.import
 import json
 import queue
 import re
+import socket
 import threading
 from collections import Counter
 from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from ipaddress import IPv4Address, IPv6Address
 from pathlib import Path
+from socketserver import TCPServer
 from typing import override
 
-from taskloop.dash_model import AttemptBody, Board, Card, FeedPage, TaskDetail, TrackerDetail
+from pydantic import BaseModel
+
+from taskloop.check_feed import decode as decode_check_cursor
+from taskloop.dash_model import AttemptBody, Board, Card, FeedPage, LandDetail, TaskDetail, TrackerDetail
 from taskloop.operations import Failed
 from taskloop.round_log import IDENT
 from taskloop.round_reader import LogRow
 
 PAGES = {"": "index.html", "index.html": "index.html", "app.js": "app.js", "api.js": "api.js", "drawer.js": "drawer.js",
-         "logs.js": "logs.js", "ui.js": "ui.js", "lines.js": "lines.js", "rail.js": "rail.js",
-         "taskview.js": "taskview.js", "result.js": "result.js", "words.js": "words.js", "dash.css": "dash.css"}
+         "event-detail.js": "event-detail.js",
+         "logs.js": "logs.js", "ui.js": "ui.js", "lines.js": "lines.js", "rail.js": "rail.js", "duration.js": "duration.js",
+         "taskview.js": "taskview.js", "result.js": "result.js", "words.js": "words.js", "usage.js": "usage.js", "dash.css": "dash.css",
+         "accessibility.js": "accessibility.js", "navigation.js": "navigation.js", "feed.js": "feed.js"}
 TYPES = {".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8"}
 
 
@@ -37,6 +45,7 @@ class DashPorts:
     body: Callable[[str, str, int], AttemptBody | Failed | None]  # task, step, attempt number
     log: Callable[[], tuple[LogRow, ...]]
     feed: Callable[[str, str, int, str | None], FeedPage | Failed | None]  # task, step, attempt number, cursor
+    delivery: Callable[[str], LandDetail | Failed | None]
     backlog: str
     static: Path
     interval: float = 2.0
@@ -46,7 +55,13 @@ class DashPorts:
 
 
 def _message(kind: str, **fields: object) -> str:
-    return "data: " + json.dumps({"kind": kind, **fields}) + "\n\n"
+    return "data: " + json.dumps({"kind": kind, **fields}, default=_json_model) + "\n\n"
+
+
+def _json_model(value: object) -> object:
+    if isinstance(value, BaseModel):
+        return value.model_dump(mode="json")
+    raise TypeError(f"Cannot serialize {type(value).__name__}")
 
 
 class Channel:
@@ -153,20 +168,34 @@ NOT_FOUND = Reply(404, b'{"error":"not_found"}', JSON)
 FORBIDDEN = Reply(403, b'{"error":"forbidden_host"}', JSON)
 
 
-def _json(found: Board | TaskDetail | TrackerDetail | AttemptBody | FeedPage | Failed | None) -> Reply:
+def _json(found: Board | TaskDetail | TrackerDetail | AttemptBody | FeedPage | LandDetail | Failed | None) -> Reply:
     if isinstance(found, Failed):
         return Reply(503, json.dumps({"error": found.word}).encode(), JSON)
-    return NOT_FOUND if found is None else Reply(200, json.dumps(asdict(found)).encode(), JSON)
+    if found is None:
+        return NOT_FOUND
+    data = found.model_dump(mode="json") if isinstance(found, LandDetail) else asdict(found)
+    return Reply(200, json.dumps(data, default=_json_model).encode(), JSON)
 
 
 FEED = re.compile(r"api/tasks/(?P<task>[A-Za-z0-9._:@+-]{1,128})/attempts/(?P<step>[a-z]+)/(?P<n>[0-9]{1,6})/feed")
 BODY = re.compile(r"api/tasks/(?P<task>[A-Za-z0-9._:@+-]{1,128})/attempts/(?P<step>[a-z]+)/(?P<n>[0-9]{1,6})")
 TRACKER = re.compile(r"api/tasks/(?P<task>[A-Za-z0-9._:@+-]{1,128})/tracker")
+DELIVERY = re.compile(r"api/tasks/(?P<task>[A-Za-z0-9._:@+-]{1,128})/delivery")
 AFTER = re.compile(r"after=([0-9]{1,20}:[0-9]{1,20})")
 
 
 def _feed(ports: DashPorts, found: re.Match[str], query: str) -> Reply:
-    """The agent's lines of one attempt; the only query is `after=<cursor>`, the opaque cursor of the last answer."""
+    """The only query is `after=<cursor>`; checks and agents have separate cursor codecs."""
+    if found["step"] == "checks":
+        cursor = query.removeprefix("after=") if query else None
+        try:
+            if cursor is not None:
+                if not query.startswith("after="):
+                    raise ValueError("Invalid check query")
+                decode_check_cursor(cursor)
+        except ValueError:
+            return Reply(400, b'{"error":"bad_cursor"}', JSON)
+        return _json(ports.feed(found["task"], found["step"], int(found["n"]), cursor))
     after = AFTER.fullmatch(query)
     if query and after is None:
         return Reply(400, b'{"error":"bad_cursor"}', JSON)
@@ -181,6 +210,10 @@ def _task_api(ports: DashPorts, path: str, query: str) -> Reply | None:
         return _json(ports.body(found["task"], found["step"], int(found["n"])))
     if found := TRACKER.fullmatch(path):
         return _json(ports.tracker(found["task"]))
+    if found := DELIVERY.fullmatch(path):
+        delivery = ports.delivery(found["task"])
+        return Reply(503, json.dumps({"error": delivery.detail or delivery.word}).encode(), JSON) \
+            if isinstance(delivery, Failed) else _json(delivery)
     if path.startswith("api/tasks/") and IDENT.fullmatch(path[10:]):
         return _json(ports.task(path[10:]))
     return None
@@ -199,7 +232,7 @@ def respond(ports: DashPorts, path: str, query: str = "") -> Reply:
     return NOT_FOUND
 
 
-def _handler(ports: DashPorts, hub: Hub, hosts: set[str]) -> type[BaseHTTPRequestHandler]:
+def _handler(ports: DashPorts, hub: Hub, hosts: set[str] | None) -> type[BaseHTTPRequestHandler]:
     class Handler(BaseHTTPRequestHandler):
         @override
         def log_message(self, format: str, *args: object) -> None:
@@ -214,7 +247,7 @@ def _handler(ports: DashPorts, hub: Hub, hosts: set[str]) -> type[BaseHTTPReques
             self.wfile.write(reply.body)
 
         def do_GET(self) -> None:
-            if self.headers.get("Host") not in hosts:  # a page served under another name (DNS rebinding) never reads this
+            if hosts is not None and self.headers.get("Host") not in hosts:  # prevent DNS rebinding on loopback
                 return self._reply(FORBIDDEN)
             path, _, query = self.path.partition("?")
             path = path.strip("/")
@@ -252,15 +285,32 @@ def _handler(ports: DashPorts, hub: Hub, hosts: set[str]) -> type[BaseHTTPReques
     return Handler
 
 
+class _HTTPServer(ThreadingHTTPServer):
+    @override
+    def server_bind(self) -> None:
+        TCPServer.server_bind(self)
+        host, self.server_port = self.server_address[:2]
+        self.server_name = str(host)
+
+
+class _IPv6HTTPServer(_HTTPServer):
+    address_family = socket.AF_INET6
+
+
 class DashServer:
     """Serves until `stop`: the HTTP server and the poller, both daemon threads. `port` 0 picks a free one (`address`). Binding
-    raises OSError when the port is taken. Only requests addressed to 127.0.0.1 or localhost on that port are answered."""
+    raises OSError when the address or port is unavailable. Loopback requires a local Host authority; explicit non-loopback
+    binding accepts proxy Host authorities. The operator supplies the proxy with sign-in; the dashboard has no authentication."""
 
-    def __init__(self, ports: DashPorts, port: int) -> None:
-        self.hub, self.hosts = Hub(ports), set[str]()
-        self.http = ThreadingHTTPServer(("127.0.0.1", port), _handler(ports, self.hub, self.hosts))
+    def __init__(self, ports: DashPorts, host: IPv4Address | IPv6Address, port: int) -> None:
+        self.hub = Hub(ports)
+        self.hosts: set[str] | None = set() if host.is_loopback else None
+        server_type = _IPv6HTTPServer if isinstance(host, IPv6Address) else _HTTPServer
+        self.http = server_type((str(host), port), _handler(ports, self.hub, self.hosts))
         self.http.daemon_threads = True
-        self.hosts |= {f"127.0.0.1:{self.address[1]}", f"localhost:{self.address[1]}"}
+        if self.hosts is not None:
+            authority = f"[{host}]" if isinstance(host, IPv6Address) else str(host)
+            self.hosts |= {f"127.0.0.1:{self.address[1]}", f"localhost:{self.address[1]}", f"{authority}:{self.address[1]}"}
         self.ports, self.done = ports, threading.Event()
         self.threads = [threading.Thread(target=self.http.serve_forever, daemon=True), threading.Thread(target=self._poll, daemon=True)]
 

@@ -1,4 +1,5 @@
 ---
+# Status: evidence; historical format specimen, not current system authority
 nature: human
 can:
   - {does: "write the main checkout; no agent does", through: area/engine}

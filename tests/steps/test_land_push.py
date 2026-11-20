@@ -4,6 +4,7 @@ invocation, then `target_moved`); every push answer; the fetch failure; `--withd
 candidate; a delivery recorded by a concurrent land."""
 
 from pathlib import Path
+from typing import Literal
 
 import pytest
 from doubles import CHECKS
@@ -176,14 +177,20 @@ def test_a_closed_task_with_a_pushable_candidate_not_on_origin_is_refused_closed
     assert b.rows()[0].pushable and b.repo.pushes == 1
 
 
-def test_at_most_one_new_candidate_per_invocation(b: LandBench) -> None:
+def test_at_most_one_new_candidate_per_invocation(b: LandBench, monkeypatch: pytest.MonkeyPatch) -> None:
     """A resumed candidate superseded `moved` makes candidate 2 once; main moving again under it is `target_moved`."""
     pushable(b)
+    first = b.rows()[0].key
     b.advance({"OTHER": "another task\n"})
-    def third() -> None:  # after candidate 1's supersede, right before candidate 2's insert
-        b.racing = lambda: b.advance({"MORE": "a third task\n"})
+    supersede = b.lands.supersede
 
-    b.racing = third
+    def third(key: AttemptKey, why: Literal["moved", "withdrawn", "gone"], now: float) -> bool:
+        changed = supersede(key, why, now)
+        if changed and key == first:
+            b.racing = lambda: b.advance({"MORE": "a third task\n"})  # right before candidate 2's insert
+        return changed
+
+    monkeypatch.setattr(b.lands, "supersede", third)
     assert word(b.land()) == ("unavailable", "target_moved")
     assert [(row.number, row.superseded) for row in b.rows()] == [(1, "moved"), (2, "moved")] and b.repo.pushes == 1
     found = b.land()

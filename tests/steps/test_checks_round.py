@@ -1,5 +1,5 @@
 """The round takes a task through its check step (S6e, tl-8bh9.14.6 section 9), end to end over a factory.db file, the
-rounds bench (`round_bench`: real admission, verify, release and publish, scripted agents, the Git fake), the real checks
+rounds bench (`round_bench`: real admission, commit, release and publish, scripted agents, the Git fake), the real checks
 admission at a `main` requiring `check` and `test`, and the real checks launcher (`launch.Launcher` over `CheckStore`)
 whose registered start runs a scripted checks entry at once: it registers, then concludes and releases its slot as the
 entry does, counts a relaunchable refusal, stays running, crashes before counting, or never starts."""
@@ -11,7 +11,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 
 import pytest
-from doubles import MAIN_PROFILE, PinnedViews
+from doubles import MAIN_PROFILE, PinnedViews, put_workflow
 from git_porcelain import Recorded
 from git_porcelain.testing import FakeWorktree
 from round_bench import Factory, Tracker, scripts, task
@@ -19,15 +19,17 @@ from sqlite_store import Store, begin_immediate
 from stream_proc import OwnedProcess, ProcessObservation
 
 from taskloop import land_store
-from taskloop.admit import issued
-from taskloop.admit_rows import reserve
+from taskloop.admit_store import issued, reserve
+from taskloop.agents.settings import Overrides, StepSettings
 from taskloop.attempt_types import DEFAULT_GIT_READ_SECONDS, AttemptKey, EntryIdentity, Seen, SlotFiles
 from taskloop.check_admit import ChecksAdmission, ChecksRequest
 from taskloop.check_release import ChecksRelease
 from taskloop.check_store import CheckStore
+from taskloop.command_conclusion import CommandConclusion
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.factory_schema import SCHEMA
 from taskloop.git_views import GitProfileFiles
+from taskloop.ids import NativeIds
 from taskloop.launch import CHECK_ENTRY_MODULE, Launcher, LaunchResult
 from taskloop.operations import LATE, ChecksPorts, Failed, Started, StartPorts, StartRequest, start
 from taskloop.round import RoundPorts
@@ -78,9 +80,9 @@ class Checking(Factory):
 
     def starting(self) -> StartPorts:
         admission = ChecksAdmission(lambda: self.con, begin_immediate, self.tracker.inspect, self.checkouts, lambda: self.now,
-                                    lambda _p: True, self.files, lambda path: GitProfileFiles(path, self.checkouts))
+                                    lambda _p: True, self.files, lambda path: GitProfileFiles(path, self.checkouts), ids=NativeIds())
         launcher = Launcher(self.path, EvidenceFiles(self.tmp), lambda: self.now, self.entry, self.process, "python",
-                            targets=CheckStore, module=CHECK_ENTRY_MODULE, read_seconds=DEFAULT_GIT_READ_SECONDS)
+                            targets=CheckStore, module=CHECK_ENTRY_MODULE, read_seconds=DEFAULT_GIT_READ_SECONDS, ids=NativeIds())
         return replace(super().starting(), checks=ChecksPorts(admission, launcher, self.releasing()))
 
     def observe(self, _entry: EntryIdentity) -> Seen:
@@ -130,7 +132,7 @@ class Checking(Factory):
         self.checks.registered(key, block, 0, OwnedProcess(pid, pid, f"check-{pid}", "boot"))
         self.groups[pid] = "alive"
         if pid == 901:
-            self.checks.finish(key, block, 0, "lingering", 0, self.now)
+            self.checks.finish(key, block, 0, CommandConclusion.LINGERING, 0, self.now)
             self.checks.conclude(key, "failed", "check:lingering", self.now)
 
     def checks_commit(self, key: AttemptKey) -> str:
@@ -145,6 +147,10 @@ class Checking(Factory):
 
     def conclude(self, key: AttemptKey, body: str, me: EntryIdentity) -> None:
         """The entry's conclusion, then its settled release of its own slot."""
+        if body == "failed" and not self.checks.results(key):
+            block = self.checks.block(key)
+            self.checks.start(key, block, 0, "test", "c" * 64, 600, self.now)
+            self.checks.finish(key, block, 0, CommandConclusion.FAILED, 1, self.now)
         if body == "passed":
             self.checks.conclude(key, "passed", None, self.now)
         else:
@@ -157,7 +163,7 @@ class Checking(Factory):
 
     def releasing(self) -> ChecksRelease:
         return ChecksRelease(self.checks, self.checkouts, self.files, lambda _entry: "gone", custody, lambda: self.now,
-                             self.command, lambda _scratch: True)
+                             self.command, lambda _scratch: True, ids=NativeIds())
 
     def finish(self, task_id: str, body: str) -> None:
         """The running entry of the task's checks attempt ends with `body`."""
@@ -184,7 +190,9 @@ def rig(tmp_path: Path, slot: FakeWorktree, checkouts: PinnedViews, slot_files: 
     """One adopted slot, tl-1 ready with `auto`; the person's `main` requires `check` and `test` (`MAIN_PROFILE`)."""
     root = slot.repo.worktree(slot.repo.identity().root)
     root.write_file(".task-loop.json", json.dumps(MAIN_PROFILE))
+    put_workflow(root)
     assert isinstance(root.record("profile", paths="all"), Recorded)
+    root.push("main")
     path = tmp_path / "factory.db"
     con = Store(SCHEMA).open_rw(path)
     assert con is not None
@@ -195,11 +203,11 @@ def rig(tmp_path: Path, slot: FakeWorktree, checkouts: PinnedViews, slot_files: 
 
 
 def implemented(rig: Checking) -> None:
-    """tl-1 planned, advanced, implemented and verified by four rounds; its check advance is next."""
+    """tl-1 planned, advanced, implemented and committed by four rounds; its check advance is next."""
     assert rig.round() == [("tl-1", "plan", "start", "started")]
-    assert rig.round() == [("tl-1", "plan", "verify", "verified release=released branch=published")]
+    assert rig.round() == [("tl-1", "plan", "commit", "committed release=released branch=published")]
     assert rig.round() == [("tl-1", "implement", "advance", "started")]
-    assert rig.round() == [("tl-1", "implement", "verify", "verified release=released branch=published")]
+    assert rig.round() == [("tl-1", "implement", "commit", "committed release=released branch=published")]
     assert rig.next_words() == {"tl-1": ("implement", "advance")}
 
 
@@ -231,7 +239,7 @@ def test_a_failed_check_is_held_once_never_re_run_and_new_work_still_starts(rig:
     implement = rig.current("tl-1")
     ready(rig, "tl-2")
     assert rig.round(rig.last.written) == [("tl-1", "check", "hold", "held failed:test:failed"), ("tl-2", "plan", "start", "started")]
-    assert rig.round(rig.last.written) == [("tl-2", "plan", "verify", "verified release=released branch=published")]
+    assert rig.round(rig.last.written) == [("tl-2", "plan", "commit", "committed release=released branch=published")]
     assert rig.logged("tl-1", "check", "hold", "held", "failed:test:failed", implement) == 1
     assert rig.rows() == [("tl-1", 1, "concluded", "failed")] and rig.starts == 1  # no re-run, no relaunch
     assert rig.next_words()["tl-1"] == ("implement", "on_hold") and rig.tracker.claims == ["tl-1", "tl-2"]
@@ -286,7 +294,10 @@ def test_two_counted_refusals_hold_the_task_without_stopping_new_work_and_a_star
     assert rig.round(frozenset()) == [held, ("tl-2", "plan", "start", "started")]
     assert held not in rig.round(rig.last.written) and rig.starts == 2 and rig.counted("tl-1") == ("checks:running", 2)
     rig.now += 1
-    by_hand = start(rig.starting(), StartRequest("tl-1", "tasks", "/tracker", rig.slot.repo.path, "m", "high", 30))
+    by_hand = start(
+        rig.starting(),
+        StartRequest("tl-1", "tasks", "/tracker", rig.slot.repo.path, StepSettings(), Overrides(model="m", effort="high"), 30),
+    )
     assert isinstance(by_hand, Failed) and by_hand.word == "refused:on_hold"
     assert rig.con.execute("SELECT count(*) FROM attempt WHERE task_id='tl-1' AND step='plan'").fetchone() == (1,)
 
@@ -332,15 +343,15 @@ def test_two_done_tasks_and_one_slot_check_in_release_order_and_the_freed_slot_w
     ready(rig, "tl-2")
     for _ in range(4):  # plan and implement both, interleaved through the one slot
         rig.round()
-    assert rig.next_words() == {"tl-1": ("implement", "advance"), "tl-2": ("implement", "verify")}
+    assert rig.next_words() == {"tl-1": ("implement", "advance"), "tl-2": ("implement", "commit")}
     rig.bodies = ["running", "passed"]
     ready(rig, "tl-3")
-    assert rig.round() == [("tl-2", "implement", "verify", "verified release=released branch=published"),
+    assert rig.round() == [("tl-2", "implement", "commit", "committed release=released branch=published"),
                            ("tl-1", "check", "advance", "started")]
     reads = rig.tracker.ready_reads
     assert rig.round() == [("tl-1", "check", "report", "running")] and rig.last.stopped == "no_free_slot"
     assert rig.tracker.ready_reads == reads and rig.next_words()["tl-2"] == ("implement", "advance")  # tl-2 and tl-3 wait
-    rig.finish("tl-1", "passed")
+    rig.finish("tl-1", CommandConclusion.PASSED)
     # tl-1 waits for its land: the slot it freed is left to that land (tl-8bh9.14.34), so tl-2 and tl-3 still wait
     assert rig.round() == [LAND_LINE] and rig.last.stopped == "slot_for_land"
     assert rig.rows() == [("tl-1", 1, "concluded", "passed")] and rig.next_words()["tl-2"] == ("implement", "advance")
@@ -400,7 +411,7 @@ def test_a_hold_kept_by_a_lingering_check_is_retried_each_round_logged_once_and_
 
 
 def _candidate(rig: Checking, *, slot: bool) -> AttemptKey:
-    """tl-1's land candidate 1 of its passed checks attempt, as `tl step land` inserts it: validated `same_tree` with no
+    """tl-1's land candidate 1 of its passed checks attempt, as `tl land run` inserts it: validated `same_tree` with no
     slot, or pending in s1 with its reservation (then concluded `passed` by the test)."""
     checks = rig.key("tl-1").attempt_id
     repo_id = rig.con.execute("SELECT repo_id FROM slot WHERE name='s1'").fetchone()[0]
@@ -426,7 +437,7 @@ def test_rounds_never_land_never_relaunch_and_never_release_a_land_s_slot(rig: C
     assert rig.next_words() == {"tl-1": ("check", "land")} and rig.round() == [LAND_LINE]
     key = _candidate(rig, slot=True)
     lands = land_store.LandStore(lambda: rig.con)
-    assert rig.next_words() == {"tl-1": ("check", "land")} and rig.round() == [LAND_LINE]  # pending: `tl step land` resumes it
+    assert rig.next_words() == {"tl-1": ("check", "land")} and rig.round() == [LAND_LINE]  # pending: `tl land run` resumes it
     lands.conclude(key, "passed", None, rig.now)
     reserved = rig.con.execute("SELECT slot,attempt_id FROM reservation").fetchall()
     assert rig.round(frozenset()) == [("tl-1", "check", "report", "release")] and rig.last.stopped == "no_free_slot"
@@ -459,7 +470,10 @@ def test_a_pending_hold_refuses_a_start_by_hand_and_never_abandons_a_passing_re_
     assert rig.round() == [("tl-1", "check", "advance", "started")]
     rig.tracker.down = {"labels"}
     assert rig.round() == [("tl-1", "check", "hold", "pending labels unavailable:tracker")]
-    by_hand = start(rig.starting(), StartRequest("tl-1", "tasks", "/tracker", rig.slot.repo.path, "m", "high", 30))
+    by_hand = start(
+        rig.starting(),
+        StartRequest("tl-1", "tasks", "/tracker", rig.slot.repo.path, StepSettings(), Overrides(model="m", effort="high"), 30),
+    )
     assert isinstance(by_hand, Failed) and by_hand.word == "refused:held" and rig.starts == 1
     implement = rig.store.attempt_of("tasks", "tl-1")
     assert implement is not None
@@ -475,7 +489,7 @@ def test_a_pending_hold_refuses_a_start_by_hand_and_never_abandons_a_passing_re_
 
 
 def test_a_task_waiting_for_its_land_keeps_the_last_free_slot_from_new_starts(rig: Checking) -> None:
-    """tl-8bh9.14.34: the one slot freed by tl-1's passed checks is left to `tl step land`, not refilled by tl-2's start."""
+    """tl-8bh9.14.34: the one slot freed by tl-1's passed checks is left to `tl land run`, not refilled by tl-2's start."""
     implemented(rig)
     rig.bodies = ["passed"]
     assert rig.round() == [("tl-1", "check", "advance", "started")]
@@ -515,7 +529,7 @@ def test_a_task_started_by_hand_that_failed_main_moved_is_reported_never_re_run_
     rig.by_hand("tl-1")
     rig.by_hand("tl-1")  # plan, then implement; the label-less task is now at its check advance
     rig.bodies = ["main_moved"]
-    request = StartRequest("tl-1", "tasks", "/tracker", rig.slot.repo.path, "m", "high", 30)
+    request = StartRequest("tl-1", "tasks", "/tracker", rig.slot.repo.path, StepSettings(), Overrides(model="m", effort="high"), 30)
     assert isinstance(start(rig.starting(), request), Started)
     assert rig.round() == [("tl-1", "check", "report", "failed:main_moved")]
     assert rig.starts == 1 and rig.tracker.holds == []

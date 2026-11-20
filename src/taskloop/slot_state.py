@@ -159,6 +159,20 @@ def _status(repo: Repo, slot: Path) -> tuple[tuple[str, str], ...] | None:
     return tuple(found)
 
 
+def index_status(repo: Repo, slot: Path) -> tuple[str, ...]:
+    """Structured porcelain records identifying every index change, including rename source paths."""
+    raw = repo.worktree_state(slot)
+    if raw is None:
+        raise GitUnavailable("The slot's index status is unreadable")
+    found: list[str] = []
+    renamed = False
+    for record in raw.split(b"\0"):
+        if renamed or record[:2] in (b"1 ", b"2 ", b"u "):
+            found.append(record.hex())
+        renamed = not renamed and record.startswith(b"2 ")
+    return tuple(found)
+
+
 def listing(repo: Repo, slot: Path) -> tuple[str, ...]:
     """The slot's leftovers as `XY path` lines from one porcelain status read, `bounded`: data for a person and a
     repeat's feedback, never parsed for control."""

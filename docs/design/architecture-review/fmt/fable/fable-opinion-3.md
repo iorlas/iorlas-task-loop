@@ -1,3 +1,5 @@
+Status: **evidence**. Historical architecture-review format/opinion specimen; its proposals are not adopted system authority.
+
 # System doc format: round 3
 
 Marks: **[K]** = I know (mechanical or stated in CLAUDE.md), **[B]** = I believe. Nothing here was checked against the repo's code; names of docs "waiting" are my reading of CLAUDE.md and the samples.

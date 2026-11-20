@@ -1,0 +1,25 @@
+{
+  "prepared_commit": "639692cb4c8d2f6a7c58147299df197d0c869536",
+  "cited_paths": [
+    "src/taskloop/admit.py",
+    "src/taskloop/admit_chain.py",
+    "src/taskloop/admit_store.py",
+    "src/taskloop/check_admit.py",
+    "src/taskloop/claim_lease.py",
+    "src/taskloop/launch.py",
+    "src/taskloop/composition.py",
+    "src/taskloop/resume_plan.py",
+    "src/taskloop/drain/store.py",
+    "src/taskloop/drain/reconcile.py",
+    "src/taskloop/operations.py",
+    "src/taskloop/repeat.py",
+    "tests/steps/test_admit.py",
+    "tests/steps/test_admit_chain.py",
+    "tests/steps/test_claim_lease.py",
+    "tests/steps/test_check_admit.py",
+    "tests/steps/test_repeat.py",
+    "tests/rules/test_ratchet.py",
+    "docs/design/tl-8bh9.14.88.1/plan.md",
+    "docs/design/tl-8bh9.14.98/plan.md"
+  ]
+}

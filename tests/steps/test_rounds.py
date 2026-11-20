@@ -9,7 +9,9 @@ from pathlib import Path
 
 import pytest
 
+from taskloop.agents.settings import Overrides, StepSettings
 from taskloop.attempt_reads import SlotUse
+from taskloop.clock_jumps import ClockContext, ClockDirection, ClockJump
 from taskloop.exit_codes import exit_code
 from taskloop.operations import Ended, Failed, Move, Quiet, Round
 from taskloop.round import NextRequest
@@ -27,6 +29,7 @@ class Bench:
     def __init__(self, results: Sequence[Round | Failed], use: Callable[[float], SlotUse | None] = lambda _t: SlotUse(0, HELD)) -> None:
         self.results, self.use = list(results), use
         self.now, self.cost = 0.0, 0.0
+        self.wall_offset = 0.0
         self.stopped, self.warned = False, 0
         self.stop_at: int | None = None
         self.raise_at: int | None = None
@@ -36,6 +39,7 @@ class Bench:
         self.lines: list[str] = []
         self.log: Callable[[str], None] = self.lines.append
         self.during: Callable[[], object] = lambda: None
+        self.during_wait: Callable[[], object] = lambda: None
 
     def round(self, quiet: Quiet) -> Round | Failed:
         self.rounds.append((self.now, quiet))
@@ -52,6 +56,7 @@ class Bench:
     def wait(self, seconds: float) -> None:
         self.waits.append(seconds)
         self.now += seconds
+        self.during_wait()
         if len(self.waits) == self.raise_at:
             raise KeyboardInterrupt
         self.stopped = self.stopped or len(self.waits) == self.stop_at
@@ -60,7 +65,7 @@ class Bench:
         self.warned += 1
 
     def run(self, every: int = 60) -> Ended:
-        ports = RoundsPorts(self.round, self.slot_use, lambda: 1000 + self.now, lambda: self.now, self.wait, self.log,
+        ports = RoundsPorts(self.round, self.slot_use, lambda: 1000 + self.now + self.wall_offset, lambda: self.now, self.wait, self.log,
                        self.warn, lambda: self.stopped, 7)
         return run_rounds(ports, RoundsRequest("tasks", every))
 
@@ -110,7 +115,7 @@ def test_only_a_removed_reservation_row_wakes_the_next_round(use: Callable[[floa
 
 
 def test_a_slot_released_during_the_round_wakes_the_next_round_at_the_first_check() -> None:
-    bench = Bench([CLEAN, CLEAN], lambda t: SlotUse(0, HELD if t < 0.5 else frozenset()))  # the round's own verify released it
+    bench = Bench([CLEAN, CLEAN], lambda t: SlotUse(0, HELD if t < 0.5 else frozenset()))  # the round's own commit released it
     bench.cost = 1
     bench.run()
     assert bench.times() == [0, 3]
@@ -160,8 +165,9 @@ def test_a_longer_interval_is_its_own_cap() -> None:
     (Failed("unavailable", "store", "locked"), True),  # a whole-round unknown: backs off and goes on
     (Round("tasks", (), "uncertain:launch"), True),
     (Round("tasks", (), "refused:task"), False),  # about one task: written once, tried again next round
+    (Round("tasks", (), "uncommitted:staged"), False),
     (Round("tasks", (Move("tl-1", "publish", "unavailable:remote", "a1"),)), False),  # a per-task word never backs off
-], ids=["store", "launch", "refused_task", "publish"])
+], ids=["store", "launch", "refused_task", "uncommitted", "publish"])
 def test_what_backs_off_and_what_does_not(result: Round | Failed, backoff: bool) -> None:
     bench = Bench([result, result, CLEAN])
     ended = bench.run()
@@ -245,22 +251,28 @@ def test_an_unwritable_log_changes_nothing_but_warns_once_each_time_it_stops_bei
     assert flapping.warned == 2
 
 
-REQUEST = NextRequest("tasks", "/tracker", Path("/checkout"), "auto", "m", "high", 30)
+REQUEST = NextRequest("tasks", "/tracker", Path("/checkout"), "auto", StepSettings(), Overrides(model="m", effort="high"), 30)
 
 
 @pytest.mark.parametrize("change, reason", [
     ({"backlog": "a/b"}, "backlog"), ({"backlog": ""}, "backlog"), ({"backlog": "a b"}, "backlog"), ({"label": " "}, "label"),
-    ({"model": ""}, "choices"), ({"effort": " "}, "choices"), ({"effort": "-high"}, "choices"), ({"model": "-m"}, "choices"),
     ({"minutes": 0}, "choices"), ({"minutes": 7 * 24 * 60 + 1}, "choices"),
 ])
 def test_the_rounds_choices_are_checked_before_anything(change: dict[str, str | int], reason: str) -> None:
     fields = {"backlog": "tasks", "label": "auto", "model": "m", "effort": "high", "minutes": 30} | change
-    request = NextRequest(str(fields["backlog"]), "/tracker", Path("/checkout"), str(fields["label"]), str(fields["model"]),
-                          str(fields["effort"]), int(fields["minutes"]))
+    request = NextRequest(
+        str(fields["backlog"]),
+        "/tracker",
+        Path("/checkout"),
+        str(fields["label"]),
+        StepSettings(),
+        Overrides(model=str(fields["model"]), effort=str(fields["effort"])),
+        int(fields["minutes"]),
+    )
     refused = inputs(request)
     assert refused is not None and (refused.kind, refused.reason) == ("refused", reason)
     assert inputs(REQUEST) is None
-    assert inputs(replace(REQUEST, effort="ultra")) is None  # which efforts exist is the vendor's to say
+    assert inputs(replace(REQUEST, overrides=Overrides(effort="ultra"))) is None  # which efforts exist is the vendor's to say
 
 
 def test_the_abrupt_line_is_best_effort() -> None:
@@ -276,3 +288,44 @@ def test_the_abrupt_line_is_best_effort() -> None:
 
     abrupt(failing, lambda: 0, "tasks")
     abrupt(pressed, lambda: 0, "tasks")
+
+
+@pytest.mark.parametrize("use", [lambda _t: SlotUse(0, frozenset()), gone, lambda _t: SlotUse(0, HELD)])
+@pytest.mark.parametrize("broken", [False, True])
+def test_idle_jumps_preserve_cadence_backoff_and_release_wakes(use: Callable[[float], SlotUse], broken: bool) -> None:
+    bench, control = Bench([TRACKER, TRACKER, CLEAN, CLEAN], use), Bench([TRACKER, TRACKER, CLEAN, CLEAN], use)
+    records: list[ClockJump] = []
+
+    def jump() -> None:
+        if len(bench.waits) == 1:
+            bench.wall_offset += 7200
+        elif len(bench.waits) == 2:
+            bench.wall_offset -= 14400
+
+    def log(line: str) -> None:
+        if " rounds clock-jump " in line:
+            records.append(ClockJump.model_validate_json(line.split(" rounds clock-jump ", 1)[1]))
+            if broken:
+                raise OSError("full")
+        bench.lines.append(line)
+
+    bench.during_wait, bench.log = jump, log
+    assert bench.run() == control.run()
+    assert (bench.times(), bench.waits, bench.reads) == (control.times(), control.waits, control.reads)
+    assert [record.context for record in records] == [ClockContext.IDLE, ClockContext.IDLE]
+    assert [record.direction for record in records] == [ClockDirection.FORWARD, ClockDirection.BACKWARD]
+    assert [record.difference for record in records] == [7200, -14400]
+
+
+def test_idle_round_boundaries_record_jumps_without_a_wait_callback() -> None:
+    bench = Bench([CLEAN, CLEAN])
+    offsets = iter([7200.0, -7200.0])
+
+    def jump() -> None:
+        bench.wall_offset = next(offsets)
+
+    bench.during = jump
+    bench.run()
+    records = [ClockJump.model_validate_json(line.split(" rounds clock-jump ", 1)[1])
+               for line in bench.lines if " rounds clock-jump " in line]
+    assert [record.difference for record in records] == [7200, -14400]

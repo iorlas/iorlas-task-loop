@@ -3,23 +3,38 @@
 import hashlib
 import json
 import os
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Final, Literal
 
 from any_agent import RunOutcome
 
-from taskloop.activity_file import ActivityPage, command_time, follow, tail
+from taskloop.activity_file import ActivityPage, command_time, complete, follow, tail
 from taskloop.attempt_types import AttemptKey, Evidence, FileRef
+from taskloop.check_feed import CheckLog, CheckPage
+from taskloop.check_feed import read as read_checks
+from taskloop.check_repeat.feedback import TAIL_BYTES, TAIL_LINES, Availability, OutputTail
+from taskloop.clock_jumps import ClockJump, encode
+from taskloop.duration_evidence import DurationObserver, DurationSample
+from taskloop.duration_file import invalidate as invalidate_duration
+from taskloop.duration_file import read as read_duration
+from taskloop.duration_file import write as write_duration
+from taskloop.ids import Ids
+from taskloop.operation_evidence import OperationKind, OperationObserver, OperationSample
+from taskloop.operation_file import read as read_operations
+from taskloop.operation_file import write as write_operation
+from taskloop.recovery.execution_models import Callback
+from taskloop.recovery.models import Intent
 from taskloop.round_log import WORD
 from taskloop.slot_state import shown
 
 ENTRY_STATUS: Final = frozenset({"refused", "unavailable", "pending", "collected", "conflict", "failed"})
 TERMINATED: Final = "terminated_by_signal"  # the entry log's cause word when a signal ended the entry (`attempt_entry`)
-ENTRY_WORDS: Final = 8  # at most: status, reason, publish=, then=, verify=, claim=, release=, branch= (attempt_entry)
+ENTRY_WORDS: Final = 8  # at most: status, reason, publish=, then=, commit=, claim=, release=, branch= (attempt_entry)
 LOG_CAP: Final = 32 << 20  # bytes of one setup run's or one check's log, and of one agent attempt's stdout or stderr; then `[truncated]`
 TRUNCATED: Final = b"[truncated]\n"
 EVENTS_CAP: Final = 8 << 20  # bytes of one attempt's `events.jsonl` (its agent activity); then `[truncated]`
+CLOCK_JUMPS_CAP: Final = 1 << 20  # bytes of one attempt's clock-jump evidence, independent of agent activity
 TAIL_CAP: Final = 256 << 10  # bytes `round_tail` reads from the end of the round log
 
 
@@ -94,9 +109,58 @@ class EvidenceFiles:
             raise EvidenceError("Cannot capture artifact") from error
         return FileRef(relative, hashlib.sha256(data).hexdigest())
 
-    def directory(self, key: AttemptKey) -> str:
+    def directory(self, key: AttemptKey, execution: Intent | Callback | None = None) -> str:
         encoded = json.dumps([key.attempt_id, key.dispatch_token, key.reservation_generation]).encode()
-        return "attempts/" + hashlib.sha256(encoded).hexdigest()
+        directory = "attempts/" + hashlib.sha256(encoded).hexdigest()
+        if execution is not None:
+            if execution.key != key:
+                raise EvidenceError("Recovery destination does not match the attempt")
+            encoded = json.dumps([execution.generation, execution.token]).encode()
+            directory += "/recovery/" + hashlib.sha256(encoded).hexdigest()
+        return directory
+
+    def launch_root(self, key: AttemptKey, execution: Intent | Callback | None = None) -> Path:
+        """Private launcher files, outside the worktree reset by preparation."""
+        path = self._path(self.directory(key, execution) + "/launcher")
+        path.mkdir(parents=True, exist_ok=True)
+        return path
+
+    def duration(self, key: AttemptKey, execution: Intent | Callback | None = None) -> DurationSample | None:
+        """Saved values only: reopening never counts downtime or creates files."""
+        try:
+            identity = self.directory(key, execution)
+            return read_duration(self._path(identity), identity)
+        except (EvidenceError, OSError):
+            return None
+
+    def write_duration(self, key: AttemptKey, sample: DurationSample, execution: Intent | Callback | None = None) -> None:
+        identity = self.directory(key, execution)
+        write_duration(self._path(identity), identity, sample)
+
+    def observe_duration(
+        self, key: AttemptKey, clock: Callable[[], float], execution: Intent | Callback | None = None,
+    ) -> DurationObserver:
+        return DurationObserver(
+            lambda: self.directory(key, execution), clock, lambda sample: self.write_duration(key, sample, execution),
+            lambda: invalidate_duration(self._path(self.directory(key, execution))),
+        )
+
+    def operations(self, key: AttemptKey) -> tuple[OperationSample, ...]:
+        try:
+            identity = self.directory(key)
+            return read_operations(self._path(identity), identity)
+        except (EvidenceError, OSError):
+            return ()
+
+    def write_operation(self, key: AttemptKey, sample: OperationSample) -> None:
+        identity = self.directory(key)
+        write_operation(self._path(identity), identity, sample)
+
+    def observe_operation(
+        self, key: AttemptKey, kind: OperationKind, *, clock: Callable[[], float], wall: Callable[[], float], ids: Ids,
+    ) -> OperationObserver:
+        return OperationObserver(lambda: (self.directory(key), ids.hex()), kind, clock, wall,
+                                 lambda sample: self.write_operation(key, sample))
 
     def entry_log(self, key: AttemptKey) -> Path:
         """The attempt's entry process log (`entry.log` in its key-derived directory), with that directory made."""
@@ -116,7 +180,7 @@ class EvidenceFiles:
 
     def check_path(self, key: AttemptKey, block: int, name: str) -> Path:
         """Check `name`'s log in block `block` (`check-<block>-<name>.log` in the attempt's key-derived directory), made
-        nothing (`tl step show`). A check name is the profile's `[A-Za-z0-9._-]`, never starting with `.` or `-`: no
+        nothing (`tl attempt show`). A check name is the profile's `[A-Za-z0-9._-]`, never starting with `.` or `-`: no
         escaping."""
         return self._path(f"{self.directory(key)}/check-{block}-{name}.log")
 
@@ -129,6 +193,16 @@ class EvidenceFiles:
     def open_check_log(self, key: AttemptKey, block: int, name: str) -> CappedLog:
         """`check_log`, opened for append; OSError propagates (the check has not started)."""
         return CappedLog(self.check_log(key, block, name))
+
+    def check_feed(self, key: AttemptKey, block: int, logs: tuple[CheckLog, ...], cursor: str | None) -> CheckPage:
+        """Read-only check output, from key-derived paths; no log bytes supply lifecycle or workflow state."""
+        paths: list[tuple[CheckLog, Path | None]] = []
+        for log in logs:
+            try:
+                paths.append((log, self.check_path(key, block, log.name)))
+            except EvidenceError:
+                paths.append((log, None))
+        return read_checks(key.attempt_id, block, tuple(paths), cursor)
 
     def round_log(self) -> Path:
         """The scheduling rounds' append-only log (`rounds.log` beside `attempts/`), with the root made. Evidence for a
@@ -193,6 +267,13 @@ class EvidenceFiles:
         except (OSError, EvidenceError):
             return None
 
+    def captured_at(self, ref: FileRef) -> float | None:
+        """Display-only end time from captured evidence; unknown when its file is unavailable."""
+        try:
+            return self._path(ref.path).stat().st_mtime
+        except (OSError, EvidenceError):
+            return None
+
     def text(self, key: AttemptKey, name: Literal["input.txt", "answer.txt"], cap: int = 65536) -> str | None:
         """Read-only: the first `cap` bytes of the attempt's input or answer file, None when absent or unreadable. Display
         only (the dashboard's prompt and agent answer); never control state."""
@@ -219,9 +300,42 @@ class EvidenceFiles:
         except (OSError, EvidenceError):
             return None
 
+    def check_output(self, key: AttemptKey, block: int, name: str) -> OutputTail:
+        """Bounded evidence only: seek to the last 16 KiB and retain at most 100 lines, including an unfinished line."""
+        try:
+            with self.check_path(key, block, name).open("rb") as stream:
+                size = stream.seek(0, 2)
+                start = max(0, size - TAIL_BYTES)
+                stream.seek(start)
+                data = stream.read(TAIL_BYTES)
+        except (OSError, EvidenceError):
+            return OutputTail(availability=Availability.UNAVAILABLE)
+        if not data:
+            return OutputTail(availability=Availability.EMPTY)
+        lines = data.decode("utf-8", "replace").splitlines(keepends=True)
+        return OutputTail(availability=Availability.AVAILABLE, text="".join(lines[-TAIL_LINES:]),
+                          truncated=bool(start) or len(lines) > TAIL_LINES)
+
     def events_path(self, key: AttemptKey) -> Path:
         """The attempt's agent-activity file (`events.jsonl`), made nothing."""
         return self._path(self.directory(key) + "/events.jsonl")
+
+    def clock_jumps_path(self, key: AttemptKey) -> Path:
+        """The attempt's clock evidence, made nothing by this read."""
+        return self._path(self.directory(key) + "/clock-jumps.jsonl")
+
+    def append_clock_jump(self, key: AttemptKey, jump: ClockJump) -> None:
+        """Append within the attempt's shared cap; the observer drops evidence errors."""
+        path = self.clock_jumps_path(key)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        size = path.stat().st_size if path.exists() else 0
+        if size >= CLOCK_JUMPS_CAP:
+            return
+        log = CappedLog(path, CLOCK_JUMPS_CAP - size)
+        try:
+            log.write((encode(jump) + "\n").encode())
+        finally:
+            log.close()
 
     def open_events(self, key: AttemptKey) -> CappedLog:
         """`events_path`, its directory made, opened for append; OSError propagates (display only: the caller drops it)."""
@@ -229,6 +343,10 @@ class EvidenceFiles:
         path.parent.mkdir(parents=True, exist_ok=True)
         size = path.stat().st_size if path.exists() else 0
         return CappedLog(path, max(0, EVENTS_CAP - size))  # a resumed run adds to the file's cap, it does not start a new one
+
+    def activity_complete(self, key: AttemptKey) -> ActivityPage:
+        """Read-only: every retained logical action of an ended attempt; creates nothing. Display only."""
+        return complete(self.events_path(key), EVENTS_CAP + len(TRUNCATED))
 
     def activity_tail(self, key: AttemptKey, limit: int) -> ActivityPage:
         """Read-only: the latest `limit` actions of the attempt's agent, with the cursor to follow from; creates nothing.
@@ -243,15 +361,29 @@ class EvidenceFiles:
         """The admitted input, written once under the attempt's key-derived directory before any external effect."""
         return self._write(self.directory(key) + "/input.txt", text)
 
-    def prepare(self, key: AttemptKey, schema: Mapping[str, object]) -> tuple[str, str]:
+    def put_launched_input(self, key: AttemptKey, text: str, execution: Intent | Callback | None = None) -> FileRef:
+        """The complete dispatched prompt and source commit, retaining admission's original input snapshot."""
+        return self._write(self.directory(key, execution) + "/launched-input.txt", text)
+
+    def prepare(self, key: AttemptKey, schema: Mapping[str, object], execution: Intent | Callback | None = None) -> tuple[str, str]:
         """Write the step kind's answer `schema` (`schema.json`) and return its path and the native answer path, without
         executing a harness."""
-        directory = self.directory(key)
+        directory = self.directory(key, execution)
         ref = self._write(directory + "/schema.json", json.dumps(schema, sort_keys=True))
         return str(self._path(ref.path)), str(self._path(directory + "/native-answer.txt"))
 
-    def capture(self, key: AttemptKey, raw: RunOutcome) -> Evidence:
-        directory = self.directory(key)
-        diagnostic = "\n".join([raw.summary.vendor, raw.summary.tail, raw.watch.msg, raw.watch.words, raw.secret or "", *raw.stream_tail])
-        return Evidence(self._write(directory + "/stdout.txt", capped(raw.out)), self._write(directory + "/stderr.txt", capped(raw.err)),
-                        self._write(directory + "/answer.txt", raw.summary.text), self._write(directory + "/diagnostics.txt", diagnostic))
+    def capture(self, key: AttemptKey, raw: RunOutcome, execution: Callback | None = None) -> Evidence:
+        directory = self.directory(key, execution)
+        return Evidence(*(self._write(directory + "/" + name, text) for name, text in _capture_text(raw)))
+
+    def capture_refs(self, key: AttemptKey, raw: RunOutcome, execution: Callback | None = None) -> Evidence:
+        """The capture's immutable expected references, for a consumer's intent before the file effects."""
+        directory = self.directory(key, execution)
+        return Evidence(*(FileRef(directory + "/" + name, hashlib.sha256(text.encode()).hexdigest())
+                          for name, text in _capture_text(raw)))
+
+
+def _capture_text(raw: RunOutcome) -> tuple[tuple[str, str], ...]:
+    diagnostic = "\n".join([raw.summary.vendor, raw.summary.tail, raw.watch.msg, raw.watch.words, raw.secret or "", *raw.stream_tail])
+    return (("stdout.txt", capped(raw.out)), ("stderr.txt", capped(raw.err)),
+            ("answer.txt", raw.summary.text), ("diagnostics.txt", diagnostic))

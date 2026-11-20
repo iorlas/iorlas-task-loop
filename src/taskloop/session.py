@@ -9,6 +9,7 @@ from any_agent.procs import Worker
 from taskloop.attempt_reads import StoreRefused, StoreUnavailable
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import Admission, ExecutionFacts, SessionInput
+from taskloop.recovery.execution_models import Callback
 
 
 class RegistrationRefused(Exception):
@@ -37,8 +38,9 @@ class SessionLatch:
     Keeps the first ref seen while unaccepted, and a flag when a different ref arrives; never overwrites.
     """
 
-    def __init__(self, store: AttemptStore, admission: Admission) -> None:
+    def __init__(self, store: AttemptStore, admission: Admission, callback: Callback | None = None) -> None:
         self._store, self._admission = store, admission
+        self._callback = callback
         self._lock = threading.Lock()
         self._seen: str | None = None
         self._accepted = False
@@ -62,7 +64,7 @@ class SessionLatch:
                 self._fault = f"unexpected:{type(error).__name__}"
 
     def _record(self, ref: str) -> None:
-        status = self._store.session(self._admission, ref)
+        status = self._store.session(self._admission, ref, self._callback)
         if status == "conflict":
             self._conflict = True
         elif ref == self._seen:
@@ -74,13 +76,13 @@ class SessionLatch:
 
 
 def reconcile(
-    store: AttemptStore, admission: Admission, sessions: SessionInput, facts: ExecutionFacts
+    store: AttemptStore, admission: Admission, sessions: SessionInput, facts: ExecutionFacts, callback: Callback | None = None,
 ) -> Literal["complete", "pending", "conflict", "fault"]:
     """Publish the unaccepted first ref and the reported terminal ref, one conditional write each."""
     conflict, fault, pending = sessions.conflict, sessions.fault is not None, False
     for ref in dict.fromkeys(r for r in (sessions.first_ref, facts.session) if r is not None):
         try:
-            conflict = store.session(admission, ref) == "conflict" or conflict
+            conflict = store.session(admission, ref, callback) == "conflict" or conflict
         except StoreUnavailable:
             pending = True
         except StoreRefused:

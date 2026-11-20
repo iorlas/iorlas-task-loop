@@ -1,5 +1,5 @@
-"""The step surface for a task in its check step (S6d, tl-8bh9.14.6 section 9): `tl step show` lines and JSON of a checks
-attempt (its `Check:` lines, `Result:`, the moved `main`, the counted refusals), the `tl step list` row, the start and
+"""The step surface for a task in its check step (S6d, tl-8bh9.14.6 section 9): `tl attempt show` lines and JSON of a checks
+attempt (its `Check:` lines, `Result:`, the moved `main`, the counted refusals), the `tl attempt list` row, the start and
 the task's abandon (checks first), each through `main` with the operation stubbed."""
 
 import json
@@ -16,6 +16,7 @@ from taskloop.attempt_types import AttemptKey, AttemptResult
 from taskloop.check_status import HALF_DONE, ChecksView
 from taskloop.check_store import ChecksRow, ResultRow
 from taskloop.cli import main
+from taskloop.command_conclusion import CommandConclusion
 from taskloop.operations import Failed, ReleasedTask, Started
 from taskloop.result_data import Result
 from taskloop.setup_store import SetupRow
@@ -24,6 +25,8 @@ from taskloop.step_guide import CHECKS_GUIDE, GUIDE
 
 X, TARGET, D, SEEN = "a" * 40, "b" * 40, "d" * 40, "e" * 40
 CHECK, TEST, SMOKE = "1" * 64, "2" * 64, "3" * 64
+EVENTS = Path("/events.jsonl")
+
 LOGS = Path("/a/c")
 ROW = ChecksRow(
     AttemptKey("checks", "token-never-shown", 3), "implement", 2, "s1", D, TARGET, None,
@@ -32,10 +35,10 @@ ROW = ChecksRow(
     "repo", "/tracker", X,
 )
 RESULTS = (
-    ResultRow(1, 0, "check", CHECK, 600, None, 10.0, 51.0, 0, "passed"),
-    ResultRow(1, 1, "test", "9" * 64, 600, None, 51.0, 363.0, 1, "failed"),
-    ResultRow(1, 2, "slow", "8" * 64, 60, None, 363.0, 364.4, 0, "passed"),
-    ResultRow(1, 3, "smoke", None, None, None, 10.0, 10.0, None, "undefined"),
+    ResultRow(1, 0, "check", CHECK, 600, None, 10.0, 51.0, 0, CommandConclusion.PASSED),
+    ResultRow(1, 1, "test", "9" * 64, 600, None, 51.0, 363.0, 1, CommandConclusion.FAILED),
+    ResultRow(1, 2, "slow", "8" * 64, 60, None, 363.0, 364.4, 0, CommandConclusion.PASSED),
+    ResultRow(1, 3, "smoke", None, None, None, 10.0, 10.0, None, CommandConclusion.UNDEFINED),
 )
 VIEW = AttemptView(
     "tasks", "tl-1", "check", "checks", "s1", "concluded", "gone", AttemptResult("collected", "failed:test:failed"), False, "done",
@@ -43,8 +46,9 @@ VIEW = AttemptView(
     ReleaseRow(D, 1762941600.0, "kept"), PublishedRow(X, X, 6.0),
     ChecksView(ROW, RESULTS, (*(LOGS / f"check-1-{name}.log" for name in ("check", "test", "slow")), None)),
 )
-SHOWN = Shown(VIEW, LOGS, LOGS / "entry.log", SetupShown(SetupRow(1, X, "f" * 64, 0, None, "passed"), LOGS / "setup-1.log"))
-SHOW = ["step", "show", "tl-1", "--backlog", "tasks"]
+SETUP = SetupShown(SetupRow(1, X, "f" * 64, 0, None, CommandConclusion.PASSED, 1.0, 2.0), LOGS / "setup-1.log")
+SHOWN = Shown(VIEW, LOGS, LOGS / "entry.log", EVENTS, SETUP)
+SHOW = ["attempt", "show", "tl-1", "--backlog", "tasks"]
 
 
 def run(argv: list[str], result: Result, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch) -> str:
@@ -61,7 +65,8 @@ def test_show_prints_the_checks_attempt_s_lines_in_order(capsys: pytest.CaptureF
         "Task: tl-1 (backlog tasks)", "Step: check", "Attempt: checks (run 2)", "Earlier: first re-run", "Earlier: implement advanced",
         "Slot: s1", "Phase: concluded", "Entry: gone (pid 42)", f"Commit: {X}",
         f"Required: check, test, smoke (main at {TARGET})", f"Profile: {'f' * 64} at X",
-        f"Setup: run 1 passed at {X}; log /a/c/setup-1.log",
+        f"Setup: run 1 passed at {X}; log /a/c/setup-1.log; started 1970-01-01 00:00:01 UTC; "
+        "ended 1970-01-01 00:00:02 UTC; duration 1 s",
         "Check: check passed, exit 0, 41 s; log /a/c/check-1-check.log",
         "Check: test failed, exit 1, 312 s; log /a/c/check-1-test.log (argv differs from main)",
         "Check: slow passed, exit 0, 1 s; log /a/c/check-1-slow.log (not required)",
@@ -81,7 +86,7 @@ def test_show_prints_the_checks_attempt_s_lines_in_order(capsys: pytest.CaptureF
 def test_show_names_a_moved_main_the_counted_refusals_and_an_unread_profile(
     row: ChecksRow, line: str, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    assert line in run(SHOW, Shown(_with(ChecksView(row, RESULTS)), LOGS, LOGS / "entry.log"), capsys, monkeypatch).splitlines()
+    assert line in run(SHOW, Shown(_with(ChecksView(row, RESULTS)), LOGS, LOGS / "entry.log", EVENTS), capsys, monkeypatch).splitlines()
 
 
 def _with(checks: ChecksView) -> AttemptView:
@@ -89,10 +94,10 @@ def _with(checks: ChecksView) -> AttemptView:
 
 
 def test_show_of_no_block_yet_and_of_an_unfinished_check(capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch) -> None:
-    out = run(SHOW, Shown(_with(ChecksView(ROW, ())), LOGS, LOGS / "entry.log"), capsys, monkeypatch)
+    out = run(SHOW, Shown(_with(ChecksView(ROW, ())), LOGS, LOGS / "entry.log", EVENTS), capsys, monkeypatch)
     assert "Check: none yet" in out.splitlines()
     unfinished = ResultRow(1, 0, "check", CHECK, 600, None, 10.0, None, None, None)
-    out = run(SHOW, Shown(_with(ChecksView(ROW, (unfinished,))), LOGS, LOGS / "entry.log"), capsys, monkeypatch)
+    out = run(SHOW, Shown(_with(ChecksView(ROW, (unfinished,))), LOGS, LOGS / "entry.log", EVENTS), capsys, monkeypatch)
     assert "Check: check unfinished" in out.splitlines()
 
 
@@ -104,6 +109,7 @@ def test_show_json_adds_the_checks_facts_and_results(capsys: pytest.CaptureFixtu
     assert {key: checks[key] for key in ("commit", "target", "target_seen", "required", "profile_digest", "refusal", "refusals")} == {
         "commit": X, "target": TARGET, "target_seen": None, "required": ["check", "test", "smoke"], "profile_digest": "f" * 64,
         "refusal": None, "refusals": 0}
+    assert type(checks["results"][1]["conclusion"]) is str
     assert checks["results"][1] == {"name": "test", "required": True, "conclusion": "failed", "rc": 1, "block": 1, "started_at": 51.0,
                                     "ended_at": 363.0, "argv_differs": True, "log": "/a/c/check-1-test.log"}
     assert checks["results"][3]["log"] is None  # an undefined result has no log
@@ -114,11 +120,11 @@ def test_show_json_adds_the_checks_facts_and_results(capsys: pytest.CaptureFixtu
 
 def test_list_shows_the_check_step_s_row_and_json(capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch) -> None:
     listed = Listed((_with(ChecksView(ROW, RESULTS)),))
-    out = run(["step", "list"], listed, capsys, monkeypatch)
+    out = run(["attempt", "list"], listed, capsys, monkeypatch)
     row = "tl-1\ttasks\tcheck\t2\ts1\tconcluded\tgone\tcollected failed:test:failed\tneeds a person (failed:test:failed)\tdone\t-\t-"
     assert row in out.splitlines()
-    data = json.loads(run(["step", "list", "--json"], listed, capsys, monkeypatch))
-    assert data["attempts"][0]["checks"]["results"][0]["log"] is None  # logs are `tl step show`'s
+    data = json.loads(run(["attempt", "list", "--json"], listed, capsys, monkeypatch))
+    assert data["attempts"][0]["checks"]["results"][0]["log"] is None  # logs are `tl attempt show`'s
 
 
 def test_a_checks_start_names_its_step(capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch) -> None:
@@ -134,7 +140,7 @@ ABANDON = ReleasedTask("tasks", "tl-1", "implement", Released("s0", None, False,
                        ReleasedTask("tasks", "tl-1", "checks", Released("s1", D, True, "kept", True)))
 
 
-RELEASE = ["step", "release", "tl-1", "--backlog", "tasks", "--abandon"]
+RELEASE = ["step", "abandon", "tl-1", "--backlog", "tasks"]
 
 
 def test_the_task_s_abandon_shows_the_checks_attempt_first_then_the_claim(
@@ -143,7 +149,7 @@ def test_the_task_s_abandon_shows_the_checks_attempt_first_then_the_claim(
     assert run(RELEASE, ABANDON, capsys, monkeypatch).splitlines() == [
         "released: attempt checks for tl-1 (backlog tasks)", f"Slot s1 parked at {D}", "Reservation of s1 removed", "Claim kept",
         "released: attempt implement for tl-1 (backlog tasks)", "Slot s0: no Git write", "Claim returned to the tracker",
-        "Abandoned: `tl step start tl-1` admits a fresh attempt",
+        "Abandoned: the next approved admission starts a fresh attempt.",
     ]
     data = json.loads(run([*RELEASE, "--json"], ABANDON, capsys, monkeypatch))
     assert (data["attempt_id"], data["claim"], data["checks"]["attempt_id"], data["checks"]["claim"]) == ("implement", "unclaimed",
@@ -157,17 +163,17 @@ def test_a_checks_view_gets_its_own_guide_never_the_agent_s(
 ) -> None:
     running = ResultRow(1, 0, "check", CHECK, 600, OwnedProcess(600, 601, "start", "boot"), 10.0, None, None, None)
     view = replace(VIEW, next=word, release=None, checks=ChecksView(ROW, (running,)))
-    out = run(SHOW, Shown(view, LOGS, LOGS / "entry.log"), capsys, monkeypatch)
+    out = run(SHOW, Shown(view, LOGS, LOGS / "entry.log", EVENTS), capsys, monkeypatch)
     assert CHECKS_GUIDE[word] in out and GUIDE[word] not in out and "attempt_entry" not in out and "Worker" not in out
     assert "Check: check unfinished, process group 601" in out.splitlines()  # the group the hung guide verifies
-    assert "round relaunches the checks entry" in CHECKS_GUIDE["start"] and "late_relaunch" in CHECKS_GUIDE["start"]
-    assert "until the deadline" in CHECKS_GUIDE["start"] and "cannot finish counts" not in CHECKS_GUIDE["start"]
-    assert "taskloop.check_entry" in CHECKS_GUIDE["stuck:hung"]
-    listed = run(["step", "list", "--stuck"], Listed((replace(view, next="stuck:hung"),)), capsys, monkeypatch)
+    assert "Rounds relaunch the checks entry" in CHECKS_GUIDE["start"] and "Two consecutive counted refusals" in CHECKS_GUIDE["start"]
+    assert "until the deadline; past it every round's relaunch counts" in CHECKS_GUIDE["start"]
+    assert "verify the entry identity" in CHECKS_GUIDE["stuck:hung"]
+    listed = run(["attempt", "list", "--stuck"], Listed((replace(view, next="stuck:hung"),)), capsys, monkeypatch)
     assert f"stuck:hung: {CHECKS_GUIDE['stuck:hung']}" in listed.splitlines()
 
 
-def test_the_half_done_refusal_names_its_own_action_without_the_release_guide(
+def test_the_half_done_detail_keeps_the_structured_release_guide(
     capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     argv = ["step", "start", "tl-1", "--backlog", "tasks", "--tracker-root", "/t", "--checkout", "/c", "--model", "m", "--effort", "high",
@@ -175,4 +181,4 @@ def test_the_half_done_refusal_names_its_own_action_without_the_release_guide(
     monkeypatch.setitem(cli_step.OPERATIONS, ("step", "start"), lambda _arguments, _loaded: Failed("refused", "release", HALF_DONE))
     assert main(argv) == 1
     err = capsys.readouterr().err
-    assert HALF_DONE in err and GUIDE["release"] not in err
+    assert HALF_DONE in err and GUIDE["release"] in err

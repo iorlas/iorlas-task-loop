@@ -117,9 +117,6 @@ def test_missing_tracker_directory_is_an_invalid_binding(tmp_path: Path, capsys:
     [
         ["task"],
         ["task", "show"],
-        ["task", "show", "t-1"],
-        ["task", "show", "t-1", "--backlog", "configured"],
-        ["task", "show", "t-1", "--tracker-root", "."],
         ["task", "show", "t-1", "--backlog", "configured", "--tracker-root", ".", "--js"],
     ],
 )

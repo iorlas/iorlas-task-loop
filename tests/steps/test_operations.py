@@ -1,5 +1,5 @@
 """The plan commands' operations over a real factory.db file (read-only where the command is) with recording admission,
-launcher and verifier fakes and a fake entry observation: no process is started or inspected."""
+launcher and factory commit fakes and a fake entry observation: no process is started or inspected."""
 
 import json
 import sqlite3
@@ -14,12 +14,15 @@ from any_agent.testing import FakeRun
 from doubles import NO_CHECKS, FakeSlotFiles, NoAdvance, PinnedViews
 from git_porcelain import GitUnavailable, NotARepo, Repo
 from git_porcelain.testing import FakeWorktree
+from plan_fixtures import PLAN_TEXT
 from sqlite_store import Store
 
-from taskloop.access import SANDBOX
 from taskloop.admit import AdmitRefused, AdmitRequest, AdmitResult, Admitted, AdmitUnavailable
+from taskloop.agents.launch import AgentLaunch
+from taskloop.agents.settings import Overrides, StepSettings
 from taskloop.attempt import Attempts
 from taskloop.attempt_reads import PublishedRow, StoreUnavailable
+from taskloop.attempt_result import CommittedStatus
 from taskloop.attempt_status import AttemptView, EntryState, Listed, Next, Shown, StatusPorts, list_attempts, next_action, show_attempt
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import (
@@ -27,27 +30,32 @@ from taskloop.attempt_types import (
     AttemptKey,
     AttemptResult,
     Checkouts,
+    CommitRefused,
+    CommitResult,
+    Committed,
+    CommitWaiting,
+    CommitWaitingReason,
     EntryIdentity,
     NotApplicable,
     Rejected,
     Seen,
     SlotFiles,
-    Unsettled,
-    Verified,
-    VerifyRefused,
-    VerifyResult,
-    VerifyUnavailable,
+    Uncommitted,
 )
-from taskloop.cli_composition import adopt, open_land, open_reads, open_start, open_verify
+from taskloop.cli_composition import adopt, open_commit, open_land, open_reads, open_start
+from taskloop.commit import FactoryCommit
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.exit_codes import exit_code
 from taskloop.factory_schema import SCHEMA
 from taskloop.git_views import GitViews
+from taskloop.harness_choice import HarnessKind
+from taskloop.ids import NativeIds
 from taskloop.launch import AlreadyRunning, Launched, LaunchRefused, LaunchResult, LaunchUnavailable, LaunchUncertain
 from taskloop.operations import (
     MAX_MINUTES,
     UNCLAIMING,
     Adoption,
+    CommittedTask,
     Ended,
     Failed,
     Move,
@@ -56,21 +64,19 @@ from taskloop.operations import (
     Started,
     StartPorts,
     StartRequest,
-    VerifiedTask,
+    commit_task,
     publish_task,
     start,
-    verify_task,
 )
 from taskloop.publish import BranchPublish, BranchPublished, NotPublished, PublishResult
 from taskloop.slot_files import RealSlotFiles
 from taskloop.slot_lock import custody, hold
 from taskloop.slot_release import NotReleased, Released, ReleaseResult, SlotRelease
 from taskloop.slots import Adopted, SlotGit, SlotView
-from taskloop.verifier import Verifier
 
 KEY = AttemptKey("attempt", "dispatch", 1)
 ENTRY = (7, "entry-start", "boot")
-REQUEST = StartRequest("tl-1", "tasks", "/tracker", Path("/checkout"), "model-m", "high", 30)
+REQUEST = StartRequest("tl-1", "tasks", "/tracker", Path("/checkout"), StepSettings(), Overrides(model="model-m", effort="high"), 30)
 
 
 class Admission:
@@ -140,15 +146,15 @@ class Publishes:
 def releaser(store: AttemptStore, checkouts: Checkouts, slot_files: SlotFiles) -> SlotRelease:
     """The real release over the fakes: the entry gone, the agent gone, the real slot lock, a claim that returns."""
     return SlotRelease(store, checkouts, slot_files, lambda _entry: "gone", gone, custody, lambda _root, _task: True, lambda: 30,
-                       lambda _setup: "gone", lambda _scratch: True)
+                       lambda _setup: "gone", lambda _scratch: True, ids=NativeIds())
 
 
-class FakeVerifier:
-    def __init__(self, result: VerifyResult) -> None:
+class FakeFactoryCommit:
+    def __init__(self, result: CommitResult) -> None:
         self.result = result
         self.keys: list[AttemptKey] = []
 
-    def verify(self, key: AttemptKey) -> VerifyResult:
+    def commit(self, key: AttemptKey) -> CommitResult:
         self.keys.append(key)
         return self.result
 
@@ -181,7 +187,7 @@ def test_a_first_start_admits_with_the_fixed_sandbox_and_launches(empty: Attempt
     assert started == Started("started", "tasks", "tl-1", "attempt", False, ENTRY)
     request = admission.requests[0]
     assert (request.task_id, request.backlog, request.tracker_root, request.checkout) == ("tl-1", "tasks", "/tracker", Path("/checkout"))
-    assert (request.model, request.effort, request.sandbox, request.deadline) == ("model-m", "high", SANDBOX, 1000 + 30 * 60)
+    assert (request.settings, request.overrides, request.deadline) == (REQUEST.settings, REQUEST.overrides, 1000 + 30 * 60)
     assert (launcher.calls, launcher.minutes) == ([("tasks", "tl-1")], [30])
 
 
@@ -210,7 +216,7 @@ def test_minutes_out_of_range_are_refused_before_any_read_or_launch(minutes: int
     unread = AttemptStore(lambda: None)  # any read would raise StoreUnavailable
     found = start(StartPorts(unread, admission, launcher,
                              lambda: 1000, Repeats(), NoAdvance(), NO_CHECKS), replace(REQUEST, minutes=minutes))
-    assert found == Failed("refused", "choices", f"--minutes must be from 1 to {MAX_MINUTES}")
+    assert found == Failed("refused", "choices", f"Minutes must be from 1 to {MAX_MINUTES}")
     assert admission.requests == [] and launcher.calls == []
 
 
@@ -221,8 +227,8 @@ def test_an_impossible_model_or_effort_is_refused_before_any_read_or_launch(mode
     admission, launcher = Admission(Admitted(KEY, "s1")), FakeLauncher(Launched(KEY, ENTRY))
     unread = AttemptStore(lambda: None)
     ports = StartPorts(unread, admission, launcher, lambda: 1000, Repeats(), NoAdvance(), NO_CHECKS)
-    found = start(ports, replace(REQUEST, model=model, effort=effort))
-    assert isinstance(found, Failed) and found.word == "refused:choices" and found.detail.startswith("--")
+    with pytest.raises(ValueError):
+        start(ports, replace(REQUEST, overrides=Overrides(model=model, effort=effort)))
     assert admission.requests == [] and launcher.calls == []
 
 
@@ -242,7 +248,8 @@ def test_a_launch_failure_after_a_fresh_admission_says_the_attempt_is_admitted(e
     (LaunchRefused("dispatched"), Started("already_dispatched", "tasks", "tl-1", "attempt", True, step="plan")),
     (LaunchRefused("registration_refused"), Failed("refused", "registration_refused")),
     (LaunchUnavailable("store"), Failed("unavailable", "store")),
-    (LaunchUncertain(KEY, ENTRY), Failed("uncertain", "launch", "The registered entry may run; `tl step show` observes it")),
+    (LaunchUncertain(KEY, ENTRY),
+     Failed("uncertain", "launch", "The registered entry may already run. Confirm its identity before another launch.")),
 ])
 def test_an_existing_attempt_is_launched_as_admitted_without_the_tracker(
     reader: AttemptStore, launched: LaunchResult, expected: Started | Failed
@@ -286,14 +293,14 @@ NEXT: list[tuple[str, EntryState, AttemptResult, bool, Next]] = [
     ("admitted", "running", AttemptResult("pending", "admitted"), False, "wait"),
     ("registered", "running", AttemptResult("pending", "registered"), False, "wait"),
     ("registered", "running", AttemptResult("pending", "registered"), True, "stuck:hung"),
-    ("dispatching", "gone", AttemptResult("pending", "dispatching"), False, "stuck:entry_lost"),
-    ("registered", "different_process", AttemptResult("pending", "registered"), True, "stuck:entry_lost"),
-    ("captured", "gone", AttemptResult("pending", "verification"), True, "verify"),
+    ("dispatching", "gone", AttemptResult("pending", "dispatching"), False, "release"),
+    ("registered", "different_process", AttemptResult("pending", "registered"), True, "release"),
+    ("captured", "gone", AttemptResult("pending", "commit"), True, "commit"),
     ("captured", "gone", AttemptResult("pending", "session_pending"), False, "stuck:uncollected"),
     ("captured", "gone", AttemptResult("pending", "validation_pending"), False, "stuck:uncollected"),
     ("captured", "gone", AttemptResult("conflict", "session"), False, "stuck:conflict"),
     ("registered", "gone", AttemptResult("conflict", "session"), False, "stuck:conflict"),
-    ("captured", "gone", AttemptResult("collected", "verified"), True, "done"),
+    ("captured", "gone", AttemptResult("collected", "committed"), True, "done"),
     ("captured", "running", AttemptResult("collected", "rejected:paths"), False, "done"),
     ("admitted", "unknown", AttemptResult("pending", "admitted"), False, "unknown"),
     ("captured", "gone", AttemptResult("unavailable", "collect"), False, "unknown"),
@@ -307,7 +314,7 @@ def test_the_next_action_table(phase: str, entry: EntryState, collected: Attempt
 
 
 @pytest.mark.parametrize("phase, expected", [
-    ("admitted", "start"), ("dispatching", "stuck:entry_lost"), ("registered", "stuck:entry_lost"),
+    ("admitted", "start"), ("dispatching", "release"), ("registered", "release"),
 ])
 def test_an_entry_from_another_boot_is_relaunched_past_the_deadline_only_while_admitted(phase: str, expected: Next) -> None:
     pending = AttemptResult("pending", phase)
@@ -318,7 +325,7 @@ def gone(_worker: Worker) -> bool:
     return True
 
 
-def nothing_left(_key: AttemptKey) -> Unsettled | None:
+def nothing_left(_key: AttemptKey) -> Uncommitted | None:
     return None
 
 
@@ -397,44 +404,54 @@ def test_list_keeps_only_stuck_or_unknown_when_asked(reader: AttemptStore, now: 
 
 
 @pytest.mark.parametrize("verdict, expected", [
-    (Verified("blob"), VerifiedTask("verified", "tasks", "tl-1", "attempt", "released", "published")),
-    (Verified("blob", reused=True), VerifiedTask("reused", "tasks", "tl-1", "attempt", "released", "published")),
+    (Committed("blob"), CommittedTask(
+        CommittedStatus.COMMITTED, "tasks", "tl-1", "attempt", "released", "published")),
+    (Committed("blob", reused=True), CommittedTask(
+        CommittedStatus.REUSED, "tasks", "tl-1", "attempt", "released", "published")),
     (Rejected("paths"), Failed("rejected", "paths", "Release: released")),
     (NotApplicable("incomplete"), Failed("not_applicable", "incomplete")),
-    (VerifyRefused("session"), Failed("refused", "session")),
-    (Unsettled("dirty"), Failed("unsettled", "dirty")),
-    (VerifyUnavailable("git:NotARepo"), Failed("unavailable", "git:NotARepo")),
-    (VerifyUnavailable("inconsistent"), Failed("defect", "inconsistent")),
+    (CommitRefused("session"), Failed("refused", "session")),
+    (CommitRefused("head_moved", ("refs/tags/task/evil",)), Failed("refused", "head_moved", "refs/tags/task/evil")),
+    *[(Uncommitted(reason, ("file.py",)), Failed("uncommitted", reason, "file.py"))
+      for reason in ("staged", "uncommitted", "unsafe", "ignored", "dirty")],
+    (CommitWaiting(CommitWaitingReason.GIT, "NotARepo"), Failed("waiting", "git:NotARepo")),
+    *[(CommitWaiting(reason), Failed("waiting", str(reason))) for reason in CommitWaitingReason],
+    (CommitRefused("inconsistent"), Failed("refused", "inconsistent", "Contradictory retained facts: inconsistent verdict or end commit.")),
 ])
-def test_verify_maps_every_verdict(reader: AttemptStore, verdict: VerifyResult, expected: VerifiedTask | Failed) -> None:
-    verifier, releases, publishes = FakeVerifier(verdict), Releases(), Publishes()
-    assert verify_task(reader, verifier, releases, publishes, "tasks", "tl-1") == expected
-    assert verifier.keys == [KEY]
-    assert releases.calls == ([(KEY, False)] if isinstance(verdict, (Verified, Rejected)) else [])  # only after a verdict, settled
-    assert publishes.keys == ([KEY] if isinstance(verdict, Verified) else [])  # only a verified plan, after its release
-    absent = FakeVerifier(verdict)
+def test_commit_maps_every_verdict(reader: AttemptStore, verdict: CommitResult, expected: CommittedTask | Failed) -> None:
+    factory_commit, releases, publishes = FakeFactoryCommit(verdict), Releases(), Publishes()
+    assert commit_task(reader, factory_commit, releases, publishes, "tasks", "tl-1") == expected
+    assert factory_commit.keys == [KEY]
+    assert releases.calls == ([(KEY, False)] if isinstance(verdict, (Committed, Rejected)) else [])  # only after a verdict, settled
+    assert publishes.keys == ([KEY] if isinstance(verdict, Committed) else [])  # publish only after factory commit and release
+    absent = FakeFactoryCommit(verdict)
     missing = Failed("refused", "absent", "No attempt for tl-9 in backlog tasks")
-    assert verify_task(reader, absent, releases, publishes, "tasks", "tl-9") == missing
+    assert commit_task(reader, absent, releases, publishes, "tasks", "tl-9") == missing
     assert absent.keys == []
 
 
-def test_verify_returns_a_stored_verdict_with_no_git_read(
+def test_commit_returns_a_stored_verdict_with_no_git_read(
     registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles
 ) -> None:
     path = "docs/design/tl-1/plan.md"
 
     def agent(harness: Harness, spec: LaunchSpec, timeout: float, hooks: RunHooks | None) -> RunOutcome:
-        slot.write_file(path, "# Plan\n")
+        slot.write_file(path, PLAN_TEXT)
         text = json.dumps({"disposition": "planned", "plan_path": path, "paths": [path], "message": "Plan", "explanation": "done"})
         worker = Worker(pid=42, pgid=42, start="native-start", boot="boot")
         return FakeRun(RunOutcome(rc=0, worker=worker, summary=Summary(text=text, rc=0, stands=True)))(harness, spec, timeout, hooks)
 
     store = AttemptStore(lambda: registered)
-    attempts = Attempts(store, EvidenceFiles(tmp_path), lambda: ("/bin/codex", {}), agent, lambda: 10, checkouts, slot_files)
-    assert attempts.execute(KEY, ENTRY).reason == "verification"
-    releasing, publishing = releaser(store, checkouts, slot_files), BranchPublish(store, checkouts, slot_files, lambda: 40)
-    first = verify_task(store, Verifier(store, checkouts, slot_files, gone, lambda: 20, hold), releasing, publishing, "tasks", "tl-1")
-    assert first == VerifiedTask("verified", "tasks", "tl-1", "attempt", "released", "published") and slot.branch() is None
+    attempts = Attempts(
+        store, EvidenceFiles(tmp_path), AgentLaunch(lambda _harness: ("/bin/codex", {}), ids=NativeIds()),
+            agent, lambda: 10, checkouts, slot_files
+    )
+    assert attempts.execute(KEY, ENTRY).reason == "commit"
+    releasing, publishing = releaser(store, checkouts, slot_files), BranchPublish(store, checkouts, slot_files, lambda: 40, ids=NativeIds())
+    first = commit_task(store, FactoryCommit(store, checkouts, slot_files, gone, lambda: 20, hold,
+        ids=NativeIds()), releasing, publishing, "tasks", "tl-1")
+    assert first == CommittedTask(
+        CommittedStatus.COMMITTED, "tasks", "tl-1", "attempt", "released", "published") and slot.branch() is None
     slot.repo.drop_checkout(slot.path)
     opened: list[Path] = []
 
@@ -443,10 +460,12 @@ def test_verify_returns_a_stored_verdict_with_no_git_read(
         return checkouts(where, git_dir=git_dir)
 
     again = releaser(store, counted, slot_files)  # already released and published: nothing pending, no Git
-    verifier = Verifier(store, counted, slot_files, gone, lambda: 20, hold)
-    second = verify_task(store, verifier, again, BranchPublish(store, counted, slot_files, lambda: 50), "tasks", "tl-1")
+    factory_commit = FactoryCommit(store, counted, slot_files, gone, lambda: 20, hold, ids=NativeIds())
+    second = commit_task(store, factory_commit, again, BranchPublish(store, counted, slot_files, lambda: 50, ids=NativeIds()),
+                         "tasks", "tl-1")
     # the fresh call said released/published; the same verdict again says the already-done words
-    assert second == VerifiedTask("verified", "tasks", "tl-1", "attempt", "already_released", "already_published")
+    assert second == CommittedTask(
+        CommittedStatus.COMMITTED, "tasks", "tl-1", "attempt", "already_released", "already_published")
     assert opened == []
 
 
@@ -456,30 +475,33 @@ def test_show_reads_leftovers_fresh_and_names_the_repeat(
     path, stray = "docs/design/tl-1/plan.md", "docs/design/tl-1/stray.md"
 
     def agent(harness: Harness, spec: LaunchSpec, timeout: float, hooks: RunHooks | None) -> RunOutcome:
-        slot.write_file(path, "# Plan\n")
+        slot.write_file(path, PLAN_TEXT)
         slot.write_file(stray, "x")
         text = json.dumps({"disposition": "planned", "plan_path": path, "paths": [path], "message": "Plan", "explanation": "done"})
         worker = Worker(pid=42, pgid=42, start="native-start", boot="boot")
         return FakeRun(RunOutcome(rc=0, worker=worker, summary=Summary(text=text, rc=0, stands=True)))(harness, spec, timeout, hooks)
 
     store = AttemptStore(lambda: registered)
-    attempts = Attempts(store, EvidenceFiles(tmp_path), lambda: ("/bin/codex", {}), agent, lambda: 10, checkouts, slot_files)
-    assert attempts.execute(KEY, ENTRY).reason == "verification"
-    verifier = Verifier(store, checkouts, slot_files, gone, lambda: 20, hold)
-    reads = StatusPorts(store, observe("gone", []), lambda: 10, verifier.leftovers, lambda: "boot")
+    attempts = Attempts(
+        store, EvidenceFiles(tmp_path), AgentLaunch(lambda _harness: ("/bin/codex", {}), ids=NativeIds()),
+            agent, lambda: 10, checkouts, slot_files
+    )
+    assert attempts.execute(KEY, ENTRY).reason == "commit"
+    factory_commit = FactoryCommit(store, checkouts, slot_files, gone, lambda: 20, hold, ids=NativeIds())
+    reads = StatusPorts(store, observe("gone", []), lambda: 10, factory_commit.leftovers, lambda: "boot")
     before = show_attempt(reads, tmp_path / "art", "tasks", "tl-1")
-    assert isinstance(before, Shown) and (before.view.next, before.view.leftovers) == ("verify", ())  # nothing committed yet
-    left = Failed("unsettled", "uncommitted", f"?? {stray}")  # as show lists it
-    assert verify_task(store, verifier, Releases(), Publishes(), "tasks", "tl-1") == left
+    assert isinstance(before, Shown) and (before.view.next, before.view.leftovers) == ("commit", ())  # nothing committed yet
+    left = Failed("uncommitted", "uncommitted", f"?? {stray}")  # as show lists it
+    assert commit_task(store, factory_commit, Releases(), Publishes(), "tasks", "tl-1") == left
     shown = show_attempt(reads, tmp_path / "art", "tasks", "tl-1")
     assert isinstance(shown, Shown) and shown.view.next == "repeat"
     assert (shown.view.result.status, shown.view.result.reason) == ("pending", "repeat")
     assert shown.view.leftovers == ("uncommitted", f"?? {stray}")
     probed: list[AttemptKey] = []
 
-    def counted(key: AttemptKey) -> Unsettled | None:
+    def counted(key: AttemptKey) -> Uncommitted | CommitRefused | None:
         probed.append(key)
-        return verifier.leftovers(key)
+        return factory_commit.leftovers(key)
 
     counting = StatusPorts(store, observe("gone", []), lambda: 10, counted, lambda: "boot")
     assert list_attempts(counting, stuck=True) == Listed(()) and probed == []  # no Git read for a filtered-out attempt
@@ -487,45 +509,50 @@ def test_show_reads_leftovers_fresh_and_names_the_repeat(
     assert isinstance(listed, Listed) and [each.next for each in listed.attempts] == ["repeat"] and probed == [KEY]
     slot.remove_file(stray)
     tidied = show_attempt(reads, tmp_path / "art", "tasks", "tl-1")
-    assert isinstance(tidied, Shown) and (tidied.view.next, tidied.view.leftovers) == ("verify", ())
+    assert isinstance(tidied, Shown) and (tidied.view.next, tidied.view.leftovers) == ("commit", ())
 
 
-def test_show_and_verify_agree_on_a_slot_moved_off_its_task_branch(
+def test_show_and_commit_agree_on_a_slot_moved_off_its_task_branch(
     registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles
 ) -> None:
-    """Before the factory's commit, `show` reads the leftovers only on the task branch: off it, as `verify` says, `branch`
-    (not repeatable, so the next word is `verify`), never a repeat of leftovers the commit would not reach."""
+    """Before the factory's commit, `show` reads the leftovers only on the task branch: off it, as `commit` says, `branch`
+    (not repeatable, so the next word is `commit`), never a repeat of leftovers the commit would not reach."""
     path, near = "docs/design/tl-1/plan.md", "docs/design/tl-1/.gitignore"
 
     def agent(harness: Harness, spec: LaunchSpec, timeout: float, hooks: RunHooks | None) -> RunOutcome:
-        slot.write_file(path, "# Plan\n")
+        slot.write_file(path, PLAN_TEXT)
         slot.write_file(near, "x")
         text = json.dumps({"disposition": "planned", "plan_path": path, "paths": [path], "message": "Plan", "explanation": "done"})
         worker = Worker(pid=42, pgid=42, start="native-start", boot="boot")
         return FakeRun(RunOutcome(rc=0, worker=worker, summary=Summary(text=text, rc=0, stands=True)))(harness, spec, timeout, hooks)
 
     store = AttemptStore(lambda: registered)
-    attempts = Attempts(store, EvidenceFiles(tmp_path), lambda: ("/bin/codex", {}), agent, lambda: 10, checkouts, slot_files)
-    assert attempts.execute(KEY, ENTRY).reason == "verification"
-    verifier = Verifier(store, checkouts, slot_files, gone, lambda: 20, hold)
-    reads = StatusPorts(store, observe("gone", []), lambda: 10, verifier.leftovers, lambda: "boot")
+    attempts = Attempts(
+        store, EvidenceFiles(tmp_path), AgentLaunch(lambda _harness: ("/bin/codex", {}), ids=NativeIds()),
+            agent, lambda: 10, checkouts, slot_files
+    )
+    assert attempts.execute(KEY, ENTRY).reason == "commit"
+    factory_commit = FactoryCommit(store, checkouts, slot_files, gone, lambda: 20, hold, ids=NativeIds())
+    reads = StatusPorts(store, observe("gone", []), lambda: 10, factory_commit.leftovers, lambda: "boot")
     on = show_attempt(reads, tmp_path / "art", "tasks", "tl-1")
-    assert isinstance(on, Shown) and (on.view.next, on.view.leftovers) == ("repeat", ("unsafe", near))
+    assert isinstance(on, Shown) and on.view.next == "repeat"
+    assert on.view.leftovers[0] == "unsafe" and on.view.leftovers[-1] == near
+    assert "A changed Git file" in on.view.leftovers[1] and near in on.view.leftovers[1]
     slot.checkout_new("other")
-    assert verifier.leftovers(KEY) == Unsettled("branch")
+    assert factory_commit.leftovers(KEY) == CommitRefused("branch")
     off = show_attempt(reads, tmp_path / "art", "tasks", "tl-1")
-    assert isinstance(off, Shown) and (off.view.next, off.view.leftovers) == ("verify", ("branch",))
-    assert verify_task(store, verifier, Releases(), Publishes(), "tasks", "tl-1") == Failed("unsettled", "branch")
+    assert isinstance(off, Shown) and (off.view.next, off.view.leftovers) == ("commit", ("branch",))
+    assert commit_task(store, factory_commit, Releases(), Publishes(), "tasks", "tl-1") == Failed("refused", "branch")
 
 
 def test_every_opener_but_adopt_refuses_a_missing_database_and_creates_none(tmp_path: Path) -> None:
     missing = tmp_path / "factory.db"  # in an existing directory: a writable open would create it
-    refused = Failed("refused", "database", "No readable factory.db at this path; `tl slot adopt` creates it")
+    refused = Failed("refused", "database", "No readable factory.db at this path; slot adoption initializes it")
     with open_reads(missing, missing.parent, GitViews(DEFAULT_GIT_READ_SECONDS)) as reads:
         assert reads == refused
     with open_start(missing, tmp_path / "art", GitViews(DEFAULT_GIT_READ_SECONDS)) as ports:
         assert ports == refused
-    with open_verify(missing, GitViews(DEFAULT_GIT_READ_SECONDS)) as opened:
+    with open_commit(missing, GitViews(DEFAULT_GIT_READ_SECONDS), tmp_path) as opened:
         assert opened == refused
     with open_land(missing, tmp_path / "art", GitViews(DEFAULT_GIT_READ_SECONDS)) as land_ports:
         assert land_ports == refused
@@ -569,17 +596,17 @@ def test_adopt_refuses_another_schema_and_otherwise_creates_the_database(
     assert database.exists()
 
 
-# the entry's longest line: a retried publication, its collected outcome, the verify, claim and release words
-LONGEST = ("unavailable evidence publish=accepted then=collected:verified verify=unavailable:git claim=unrenewed release=held:slot_dirty "
+# the entry's longest line: a retried publication, its collected outcome, the commit, claim and release words
+LONGEST = ("unavailable evidence publish=accepted then=collected:committed commit=unavailable:git claim=unrenewed release=held:slot_dirty "
            "branch=unavailable:remote")
 
 
 @pytest.mark.parametrize(("tail", "expected"), [
     (None, None),
     ("", None),
-    ("refused slot_staged verify=refused:not_captured\n", "refused slot_staged verify=refused:not_captured"),
-    ("unavailable credentials:auth verify=refused:not_captured\nnoise\n", "unavailable credentials:auth verify=refused:not_captured"),
-    ("collected verified verify=verified\nrefused \x1b]0;owned\x07\n", "collected verified verify=verified"),
+    ("refused slot_staged commit=refused:not_captured\n", "refused slot_staged commit=refused:not_captured"),
+    ("unavailable credentials:auth commit=refused:not_captured\nnoise\n", "unavailable credentials:auth commit=refused:not_captured"),
+    ("collected committed commit=committed\nrefused \x1b]0;owned\x07\n", "collected committed commit=committed"),
     ("refused slot_staged\x9b31m\n", None),
     ("Traceback (most recent call last):\n", None),
     ("failed TypeError\n", "failed TypeError"),
@@ -614,7 +641,10 @@ def test_a_step_that_ended_on_a_dirty_slot_says_release_then_done_then_start_aft
         return FakeRun(RunOutcome(rc=1, worker=worker, summary=Summary(text="", rc=1, stands=True)))(harness, spec, timeout, hooks)
 
     store = AttemptStore(lambda: registered)
-    attempts = Attempts(store, EvidenceFiles(tmp_path), lambda: ("/bin/codex", {}), failed, lambda: 10, checkouts, slot_files)
+    attempts = Attempts(
+        store, EvidenceFiles(tmp_path), AgentLaunch(lambda _harness: ("/bin/codex", {}), ids=NativeIds()),
+            failed, lambda: 10, checkouts, slot_files
+    )
     assert attempts.execute(KEY, ENTRY).status == "collected"
     reads = StatusPorts(store, observe("gone", []), lambda: 10, nothing_left, lambda: "boot")
 
@@ -653,9 +683,11 @@ def test_list_shows_one_row_per_task_its_latest_attempt_and_show_names_the_aband
     registered.execute("UPDATE reservation SET attempt_id='fresh',generation=2")
     registered.execute(
         """INSERT INTO attempt (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,
-        input_digest,schema_version,model,effort,sandbox,deadline,number,seq,slot_head)
+        input_digest,schema_version,model,effort,access_policy,deadline,number,seq,slot_head,engine_digest,workflow_digest,workflow_sha,
+        admitted_at)
         SELECT 'fresh','token',2,step,adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,input_digest,schema_version,model,effort,
-        sandbox,deadline,1,2,slot_head FROM attempt WHERE attempt_id='attempt'"""
+        access_policy,deadline,1,2,slot_head,engine_digest,workflow_digest,workflow_sha,
+        admitted_at FROM attempt WHERE attempt_id='attempt'"""
     )
     reads = StatusPorts(AttemptStore(lambda: registered), observe("gone", []), lambda: 10, nothing_left, lambda: "boot")
     listed = list_attempts(reads)
@@ -678,10 +710,11 @@ def test_an_abandon_whose_claim_is_still_unclaiming_says_release_and_start_refus
     assert (admission.requests, launcher.calls) == ([], [])
 
 
-def test_verify_reports_a_failed_publication_without_changing_its_result(reader: AttemptStore) -> None:
+def test_commit_reports_a_failed_publication_without_changing_its_result(reader: AttemptStore) -> None:
     publishes = Publishes(NotPublished("unavailable", "remote"))
-    checked = verify_task(reader, FakeVerifier(Verified("blob")), Releases(), publishes, "tasks", "tl-1")
-    assert checked == VerifiedTask("verified", "tasks", "tl-1", "attempt", "released", "unavailable:remote") and exit_code(checked) == 0
+    checked = commit_task(reader, FakeFactoryCommit(Committed("blob")), Releases(), publishes, "tasks", "tl-1")
+    assert checked == CommittedTask(
+        CommittedStatus.COMMITTED, "tasks", "tl-1", "attempt", "released", "unavailable:remote") and exit_code(checked) == 0
 
 
 @pytest.mark.parametrize("result, expected, code", [
@@ -698,21 +731,24 @@ def test_publish_task_maps_every_result_and_its_exit_code(
     assert publish_task(reader, publishes, "tasks", "tl-9") == Failed("refused", "absent", "No attempt for tl-9 in backlog tasks")
 
 
-def test_a_verified_plan_is_release_first_then_publish_then_advance(
+def test_a_committed_plan_is_release_first_then_publish_then_advance(
     registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles
 ) -> None:
     path = "docs/design/tl-1/plan.md"
 
     def agent(harness: Harness, spec: LaunchSpec, timeout: float, hooks: RunHooks | None) -> RunOutcome:
-        slot.write_file(path, "# Plan\n")
+        slot.write_file(path, PLAN_TEXT)
         text = json.dumps({"disposition": "planned", "plan_path": path, "paths": [path], "message": "Plan", "explanation": "done"})
         worker = Worker(pid=42, pgid=42, start="native-start", boot="boot")
         return FakeRun(RunOutcome(rc=0, worker=worker, summary=Summary(text=text, rc=0, stands=True)))(harness, spec, timeout, hooks)
 
     store = AttemptStore(lambda: registered)
-    attempts = Attempts(store, EvidenceFiles(tmp_path), lambda: ("/bin/codex", {}), agent, lambda: 10, checkouts, slot_files)
-    assert attempts.execute(KEY, ENTRY).reason == "verification"
-    verifier = Verifier(store, checkouts, slot_files, gone, lambda: 20, hold)
+    attempts = Attempts(
+        store, EvidenceFiles(tmp_path), AgentLaunch(lambda _harness: ("/bin/codex", {}), ids=NativeIds()),
+            agent, lambda: 10, checkouts, slot_files
+    )
+    assert attempts.execute(KEY, ENTRY).reason == "commit"
+    factory_commit = FactoryCommit(store, checkouts, slot_files, gone, lambda: 20, hold, ids=NativeIds())
     reads = StatusPorts(store, observe("gone", []), lambda: 10, nothing_left, lambda: "boot")
 
     def shown() -> AttemptView:
@@ -721,13 +757,13 @@ def test_a_verified_plan_is_release_first_then_publish_then_advance(
         return found.view
 
     held = NotReleased("unavailable", "slot_busy")
-    assert verify_task(store, verifier, Releases(held), Publishes(), "tasks", "tl-1") == VerifiedTask(
-        "verified", "tasks", "tl-1", "attempt", "unavailable:slot_busy", "published")  # the stub publishes nothing
+    assert commit_task(store, factory_commit, Releases(held), Publishes(), "tasks", "tl-1") == CommittedTask(
+        CommittedStatus.COMMITTED, "tasks", "tl-1", "attempt", "unavailable:slot_busy", "published")  # the stub publishes nothing
     assert shown().next == "release"  # freeing the slot comes first
     assert isinstance(releaser(store, checkouts, slot_files).release(KEY, False), Released)
     assert (shown().next, shown().published) == ("publish", None)
     x = next(ref.sha for ref in slot.repo.refs(["refs/heads/task/"]) if ref.name == "refs/heads/task/tl-1")
-    found = publish_task(store, BranchPublish(store, checkouts, slot_files, lambda: 40), "tasks", "tl-1")
+    found = publish_task(store, BranchPublish(store, checkouts, slot_files, lambda: 40, ids=NativeIds()), "tasks", "tl-1")
     assert found == PublishedTask("tasks", "tl-1", "attempt", BranchPublished(x, x))
     assert (shown().next, shown().published) == ("advance", PublishedRow(x, x, 40.0))  # implement follows plan
 
@@ -735,8 +771,8 @@ def test_a_verified_plan_is_release_first_then_publish_then_advance(
 @pytest.mark.parametrize("stopped, word, code", [
     ("", "started", 0),
     ("no_free_slot", "refused:claimed_elsewhere", 0),
-    ("", "verified release=unavailable:slot_busy branch=published", 0),  # a held release: as verify's own exit
-    ("", "verified release=released branch=unavailable:remote", 3),  # as a publish move's
+    ("", "committed release=unavailable:slot_busy branch=published", 0),  # a held release: as commit's own exit
+    ("", "committed release=released branch=unavailable:remote", 3),  # as a publish move's
     ("", "claim_leaked", 0),
     ("", "unavailable:ancestry", 3),
     ("", "unavailable:store", 3),
@@ -752,3 +788,13 @@ def test_a_rounds_exit_code(stopped: str, word: str, code: int) -> None:
 @pytest.mark.parametrize("reason, code", [("interrupted", 0), ("abrupt", 130), ("refused:database", 1), ("refused:schema", 1)])
 def test_a_rounds_end_exit_code(reason: str, code: int) -> None:
     assert exit_code(Ended("tasks", reason)) == code
+
+
+def test_a_harness_override_is_forwarded_for_validation_after_admission_selects_the_step(empty: AttemptStore) -> None:
+    admission, launcher = Admission(Admitted(KEY, "s1")), FakeLauncher(Launched(KEY, ENTRY))
+    ports = StartPorts(empty, admission, launcher, lambda: 10, Repeats(), NoAdvance(), NO_CHECKS)
+    request = replace(REQUEST, overrides=Overrides(harness=HarnessKind.CLAUDE, model="opus"))
+    found = start(ports, request)
+    assert isinstance(found, Started)
+    assert admission.requests[0].overrides == request.overrides
+    assert admission.requests[0].settings == request.settings

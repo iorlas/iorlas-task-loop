@@ -12,7 +12,25 @@ from contextlib import AbstractContextManager, contextmanager
 from pathlib import Path
 
 import pytest
-from doubles import CANDIDATE, CHECKS, MAIN_PROFILE, ORIGIN, REQUIRED, SQUASH, TARGET, D, Done, FakeSlotFiles, PinnedViews, X
+from doubles import (
+    CANDIDATE,
+    CHECKS,
+    MAIN_PROFILE,
+    ORIGIN,
+    PIN_DIGEST,
+    REQUIRED,
+    SQUASH,
+    TARGET,
+    WORKFLOW_BYTES,
+    WORKFLOW_FILES,
+    D,
+    Done,
+    FakeSlotFiles,
+    PinnedViews,
+    X,
+    pin_workflow,
+    put_workflow,
+)
 from git_porcelain import Recorded
 from git_porcelain.testing import FakeRemote, FakeRepo, FakeWorktree
 from sqlite_store import Store, begin_immediate
@@ -32,14 +50,20 @@ def factory() -> Generator[sqlite3.Connection]:
             if statement.strip():
                 con.execute(statement)
         con.execute(f"PRAGMA user_version={SCHEMA.version}")
+        con.execute("INSERT INTO workflow_file VALUES (?,?)", (PIN_DIGEST, WORKFLOW_BYTES))
     yield con
     con.close()
 
 
 @pytest.fixture
-def repo(tmp_path: Path) -> FakeRepo:
+def remote() -> FakeRemote:
     remote = FakeRemote("https://example.invalid/repo.git")
-    remote.advance("main", {"README": "one"})
+    remote.advance("main", {"README": "one", ".task-loop.json": "{}", **WORKFLOW_FILES})
+    return remote
+
+
+@pytest.fixture
+def repo(tmp_path: Path, remote: FakeRemote) -> FakeRepo:
     return FakeRepo.clone(remote, tmp_path / "main")
 
 
@@ -85,12 +109,16 @@ def admitted(tmp_path: Path, slot: FakeWorktree) -> Path:
     with begin_immediate(con):
         con.execute("INSERT INTO slot (repo_id,name,path) VALUES (?,'s1',?)", (repo_id, str(slot.path)))  # adopted
         con.execute("INSERT INTO reservation VALUES ('s1',?,1,'attempt')", (repo_id,))
+        pin_workflow(con)
         con.execute(
             """INSERT INTO attempt
             (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,input_digest,
-             schema_version,model,effort,sandbox,deadline,number,seq,slot_head)
+             schema_version,model,effort,access_policy,deadline,number,seq,slot_head,engine_digest,workflow_digest,workflow_sha,admitted_at)
             VALUES ('attempt','dispatch',1,'plan','beads','tasks','tl-1','/tracker',?,'s1','input.txt',?,1,'chosen','high',
-            'workspace-write',100,1,1,?)""",
+            '{"harness":"codex","sandbox":"workspace-write"}',100,1,1,?,
+        'abababababababababababababababababababababababababababababababab',
+        (SELECT digest FROM workflow_file),
+        'eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',1.0)""",
             (repo_id, hashlib.sha256(text.encode()).hexdigest(), head(slot)),
         )
     con.close()
@@ -109,9 +137,13 @@ def registered(factory: sqlite3.Connection, slot: FakeWorktree, tmp_path: Path) 
         factory.execute(
             """INSERT INTO attempt
             (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,input_digest,
-             schema_version,model,effort,sandbox,deadline,entry_pid,entry_start,entry_boot,number,seq,slot_head)
+             schema_version,model,effort,access_policy,deadline,entry_pid,entry_start,entry_boot,number,seq,slot_head,
+             engine_digest,workflow_digest,workflow_sha,admitted_at)
             VALUES ('attempt','dispatch',1,'plan','beads','tasks','tl-1','/tracker',?,'s1','input.txt',?,1,'chosen','high',
-            'workspace-write',100,7,'entry-start','boot',1,1,?)""",
+            '{"harness":"codex","sandbox":"workspace-write"}',100,7,'entry-start','boot',1,1,?,
+        'abababababababababababababababababababababababababababababababab',
+        (SELECT digest FROM workflow_file),
+        'eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',1.0)""",
             (repo_id, hashlib.sha256(b"Plan the actual task").hexdigest(), head(slot)),
         )
     (tmp_path / "input.txt").write_text("Plan the actual task")
@@ -126,9 +158,14 @@ def checking(factory: sqlite3.Connection) -> sqlite3.Connection:
         factory.execute("INSERT INTO slot (repo_id,name,path) VALUES ('r','s1','/slots/s1'),('r','s2','/slots/s2')")
         factory.execute(
             """INSERT INTO attempt (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,
-            input_path,input_digest,schema_version,model,effort,sandbox,deadline,phase,base_commit,end_commit,number,seq,slot_head,
-            after_commit) VALUES ('implement','implement-token',1,'implement','beads','tasks','tl-1','/tracker','r','s1','input.txt',
-            'digest',1,'m','e','workspace-write',100,'captured',?,?,1,2,?,?)""", ("b" * 40, X, D, "a" * 40))
+            input_path,input_digest,schema_version,model,effort,access_policy,deadline,phase,base_commit,end_commit,number,seq,slot_head,
+            after_commit,engine_digest,workflow_digest,workflow_sha,
+            admitted_at) VALUES ('implement','implement-token',1,'implement','beads','tasks','tl-1',
+            '/tracker','r','s1','input.txt',
+            'digest',1,'m','e','{"harness":"codex","sandbox":"workspace-write"}',100,'captured',?,?,1,2,?,?,
+        'abababababababababababababababababababababababababababababababab',
+        (SELECT digest FROM workflow_file),
+        'eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',1.0)""", ("b" * 40, X, D, "a" * 40))
         factory.execute("INSERT INTO slot_release VALUES ('implement','implement-token',1,?,1,'kept')", (D,))
         factory.execute("INSERT INTO reservation VALUES ('s2','r',1,'checks')")
         check_store.insert(factory, check_store.ChecksAdmitted(CHECKS, "implement", 1, "s2", D, TARGET, REQUIRED, 100.0))
@@ -163,11 +200,18 @@ def on_slot(tmp_path: Path, repo: FakeRepo, slot: FakeWorktree) -> Path:
     assert con is not None
     with begin_immediate(con):
         con.execute("INSERT INTO slot (repo_id,name,path) VALUES (?,'s0','/elsewhere/s0'),(?,'s1',?)", (repo_id, repo_id, str(slot.path)))
+        pin_workflow(con)
         con.execute(
             """INSERT INTO attempt (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,
-            input_path,input_digest,schema_version,model,effort,sandbox,deadline,phase,base_commit,end_commit,number,seq,slot_head,
-            after_commit) VALUES ('implement','implement-token',1,'implement','beads','tasks','tl-1','/tracker',?,'s0','input.txt',
-            'digest',1,'m','e','workspace-write',100,'captured',?,?,1,2,?,?)""", (repo_id, "b" * 40, made.sha, d, "a" * 40))
+            input_path,input_digest,schema_version,model,effort,access_policy,deadline,phase,base_commit,end_commit,number,seq,slot_head,
+            after_commit,engine_digest,workflow_digest,workflow_sha,
+            admitted_at) VALUES ('implement','implement-token',1,'implement','beads','tasks','tl-1',
+            '/tracker',?,'s0','input.txt',
+            'digest',1,'m','e','{"harness":"codex","sandbox":"workspace-write"}',100,'captured',?,?,1,2,?,?,
+        'abababababababababababababababababababababababababababababababab',
+        (SELECT digest FROM workflow_file),
+        'eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',1.0)""", (repo_id,
+            "b" * 40, made.sha, d, "a" * 40))
         con.execute("INSERT INTO slot_release VALUES ('implement','implement-token',1,?,1,'kept')", (d,))
         con.execute("INSERT INTO reservation VALUES ('s1',?,1,'checks')", (repo_id,))
         check_store.insert(con, check_store.ChecksAdmitted(CHECKS, "implement", 1, "s1", d, made.sha, REQUIRED, 100.0))
@@ -200,18 +244,19 @@ DONE = (  # the implement attempt's capture, verdict, settled release and public
     """INSERT INTO execution (attempt_id,dispatch_token,generation,rc,timed_out,work,stands,stdout_path,stdout_digest,stderr_path,
     stderr_digest,answer_path,answer_digest,diagnostic_path,diagnostic_digest,answer_kind,effect,session_state) VALUES
     ('implement','implement-token',1,0,0,1,1,'o','d','e','d','a','d','g','d','valid','commit','complete')""",
-    """INSERT INTO verification (attempt_id,dispatch_token,generation,verdict,observed_at)
-    VALUES ('implement','implement-token',1,'verified',5)""",
+    """INSERT INTO factory_commit (attempt_id,dispatch_token,generation,verdict,observed_at)
+    VALUES ('implement','implement-token',1,'committed',5)""",
 )
 
 
 @pytest.fixture
 def done(tmp_path: Path, repo: FakeRepo, slot: FakeWorktree) -> Done:
-    """`<tmp>/factory.db`: tl-1's done implement attempt `implement` (verified, released `kept` from slot s0, published at X)
+    """`<tmp>/factory.db`: tl-1's done implement attempt `implement` (committed, released `kept` from slot s0, published at X)
     and the adopted, free slot s1 (the Git fake's, detached at D). The person's `main` holds `MAIN_PROFILE` (the target);
     `task/tl-1` holds X on it. No checks attempt yet."""
     root, d = repo.worktree(repo.identity().root), head(slot)
     root.write_file(".task-loop.json", json.dumps(MAIN_PROFILE))
+    put_workflow(root)
     target = root.record("profile", paths="all")
     root.checkout_new("task/tl-1")
     root.write_file("src/x.py", "X = 1\n")
@@ -223,11 +268,18 @@ def done(tmp_path: Path, repo: FakeRepo, slot: FakeWorktree) -> Done:
     assert con is not None
     with begin_immediate(con):
         con.execute("INSERT INTO slot (repo_id,name,path) VALUES (?,'s0','/elsewhere/s0'),(?,'s1',?)", (repo_id, repo_id, str(slot.path)))
+        pin_workflow(con)
         con.execute(
             """INSERT INTO attempt (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,
-            input_path,input_digest,schema_version,model,effort,sandbox,deadline,phase,base_commit,end_commit,number,seq,slot_head,
-            after_commit) VALUES ('implement','implement-token',1,'implement','beads','tasks','tl-1','/tracker',?,'s0','input.txt',
-            'digest',1,'m','e','workspace-write',100,'captured',?,?,1,2,?,?)""", (repo_id, target.sha, x.sha, d, target.sha))
+            input_path,input_digest,schema_version,model,effort,access_policy,deadline,phase,base_commit,end_commit,number,seq,slot_head,
+            after_commit,engine_digest,workflow_digest,workflow_sha,
+            admitted_at) VALUES ('implement','implement-token',1,'implement','beads','tasks','tl-1',
+            '/tracker',?,'s0','input.txt',
+            'digest',1,'m','e','{"harness":"codex","sandbox":"workspace-write"}',100,'captured',?,?,1,2,?,?,
+        'abababababababababababababababababababababababababababababababab',
+        (SELECT digest FROM workflow_file),
+        'eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',1.0)""", (repo_id,
+            target.sha, x.sha, d, target.sha))
         for statement in DONE:
             con.execute(statement)
         con.execute("INSERT INTO slot_release VALUES ('implement','implement-token',1,?,4,'kept')", (d,))

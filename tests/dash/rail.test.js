@@ -1,0 +1,799 @@
+// Load rail.html from a static server or Chromium with --allow-file-access-from-files. No dependencies needed.
+import { rail, changeReason, lasted, commitTitle } from "../../src/taskloop/dash/static/rail.js";
+import { say, wordNode } from "../../src/taskloop/dash/static/words.js";
+import { COLUMNS, STATE, el, position, quietSpan, tick as updateTime } from "../../src/taskloop/dash/static/ui.js";
+import { result } from "../../src/taskloop/dash/static/result.js";
+import { apply, lines, setNote, show } from "../../src/taskloop/dash/static/lines.js";
+import { initDrawer, openDrawer, closeDrawer, onTaskMoved } from "../../src/taskloop/dash/static/drawer.js";
+import { apiSource } from "../../src/taskloop/dash/static/api.js";
+import { taskView } from "../../src/taskloop/dash/static/taskview.js";
+import { usageText } from "../../src/taskloop/dash/static/usage.js";
+import { receiveDuration } from "../../src/taskloop/dash/static/duration.js";
+import { commandExpansion, toolRows, messageFolding, jumpToLatest } from "./lines.test.js";
+import { checkFollowing, checkActivation, checkStaleFeed } from "./check-lines.test.js";
+import { operationRail } from "./operation-rail.test.js";
+import { taskEvents } from "./task-events.test.js";
+
+let monotonic = 0;
+Object.defineProperty(performance, "now", { value: () => monotonic, configurable: true });
+
+const fixture = document.getElementById("fixture");
+const results = document.getElementById("results");
+const assert = (condition, message) => { if (!condition) throw new Error(message); };
+const attempt = (step, n = 1, extra = {}) => ({ step, n, state: "succeeded", summary: "collected", started_at: null, ended_at: null, feed: [], ...extra });
+const commit = (n = 37, extra = {}) => attempt("commit", n, { summary: "committed", ...extra });
+const task = { id: "tl-test", title: "Compact rail fixture", column: "landed", attempt: 1 };
+const tracked = { fields: {
+  description: "Fixture task", labels: [], depends_on: [],
+  created_at: "2026-11-14T10:00:00Z", updated_at: "2026-11-14T10:00:00Z",
+}, comments: [] };
+const healthy = () => [attempt("plan"), commit(), attempt("implement"), commit(38), attempt("checks", 1, { summary: "passed" })];
+const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
+const button = (root, text) => [...root.querySelectorAll("button")].find((b) => b.textContent === text);
+const marks = (root) => [...root.querySelectorAll("button[aria-label]")];
+const primary = (root) => [...root.querySelectorAll(":scope > ol > li")];
+function mount(list, t = task, selected = {}, select = () => {}, events = []) {
+  const node = rail(list, t, selected, select, {}, events);
+  fixture.replaceChildren(node);
+  return node;
+}
+
+function healthyRows() {
+  const clicks = [];
+  const node = mount(healthy(), task, { step: "commit", n: 38 }, (...args) => clicks.push(args));
+  assert(primary(node).length === 4 && button(node, "Check—Success"), "healthy task: Plan, Implement, Check, Land");
+  assert(marks(node).length === 2 && marks(node).every((b) => b.textContent === "✓ Factory commit completed"),
+    "success marks have visible verdict words attached to agents");
+  assert(!node.textContent.includes("attempt 1") && !node.textContent.includes("Factory checked"), "no routine attempt/factory commit text");
+  assert(!node.querySelector("button button"), "no nested buttons");
+  assert(marks(node)[1].getAttribute("aria-pressed") === "true", "selected factory commit has an indication");
+  assert(marks(node)[1].getAttribute("aria-label").includes("Implement"), "accessible name identifies its agent step");
+  marks(node)[1].focus();
+  assert(document.activeElement === marks(node)[1], "mark independently focusable");
+  marks(node)[1].click();
+  assert(clicks[0].join("/") === "commit/38", "factory commit number need not match agent attempt");
+  button(node, "PlanUnknown durationSuccess").click();
+  assert(clicks[1].join("/") === "plan/1", "step button selects its own result");
+  for (const [state, label] of Object.entries(STATE)) {
+    const row = primary(mount([attempt("implement", 1, { state })]))[0];
+    assert(row.querySelector(`.${label.dot.split(" ")[0]}`), `${state} dot retained`);
+    const text = [...row.querySelectorAll("span")].find((s) => s.textContent === label.label);
+    assert(text && !text.hidden && !text.classList.contains("sr-only"), `${state} has adjacent visible state words`);
+  }
+}
+
+function factoryCommitStates() {
+  for (const code of ["committed", "reused", "uncommitted:unsafe", "rejected:paths", "rejected:plan_rule"]) {
+    const failed = !["committed", "reused"].includes(code);
+    const selected = [];
+    const node = mount([attempt("plan", 1, { state: failed ? "failed" : "succeeded", summary: failed ? "commit" : "committed" }), commit(42, { summary: code, state: failed ? "failed" : "succeeded" })], task, {}, (...args) => selected.push(args));
+    const label = failed && !say(code).startsWith("Not committed:") ? `Not committed: ${say(code)}` : say(code);
+    assert(marks(node)[0].textContent === `${failed ? "✗" : "✓"} ${label}`, `${code} mark has visible verdict words`);
+    marks(node)[0].click();
+    if (failed) {
+      const why = [...node.querySelectorAll("button")].find((b) => b.textContent.startsWith("✗ Not committed:"));
+      assert(why && !why.textContent.includes("Not committed: Not committed:"), "one rejection prefix");
+      assert(why.title.includes(code), "raw failure code in hover");
+      assert(!node.textContent.includes("Factory commit has no successful verdict"), "factory commit failure not duplicated on agent row");
+      why.click();
+    }
+    assert(selected.every((args) => args.join("/") === "commit/42"), "all failure controls select Result");
+  }
+  let node = mount([attempt("plan", 1, { state: "failed", summary: "commit" }), commit(4, { state: "running", summary: "pending" })]);
+  assert(!node.textContent.includes(say("commit")), "attached pending result covers the agent's commit summary");
+  assert(marks(node)[0].textContent === "… Factory commit pending" && !node.textContent.includes("Not committed:"), "pending neutral with words");
+  node = mount([attempt("plan"), commit(4, { state: "failed", summary: "pending" })]);
+  assert(node.textContent.includes("factory commit outcome was not recorded"), "terminal missing outcome truthful");
+  node = mount([attempt("plan")]);
+  assert(!marks(node).length, "absent factory commit has no invented mark");
+  node = mount([attempt("checks"), commit()]);
+  assert(!marks(node).length, "factory commit never attached to Checks");
+  node = mount([attempt("checks", 2, { state: "failed", summary: "failed:test:lint" })]);
+  assert(node.textContent.includes("Checks failed: lint"), "other step failures stay readable");
+}
+
+function gaps() {
+  const end = "2026-11-14T10:00:00Z";
+  for (const seconds of [119, 120]) {
+    const list = [attempt("plan", 1, { ended_at: end }), commit(), attempt("implement", 1, { started_at: new Date(Date.parse(end) + seconds * 1000).toISOString() })];
+    const node = mount(list);
+    assert(node.textContent.includes("Approximate gap") === (seconds === 120), `gap boundary ${seconds}`);
+    assert(node.querySelectorAll("li[title]")[1].title.includes("Approximate elapsed gap"), "short gaps stay in hover");
+    assert(!node.textContent.includes("idle"), "no idle rows");
+  }
+  for (const start of [null, "invalid", "2026-11-14T09:59:00Z"]) {
+    const node = mount([attempt("plan", 1, { ended_at: end }), attempt("implement", 1, { started_at: start })]);
+    assert(!node.textContent.includes("Approximate gap") && !node.textContent.includes("NaN"), "invalid gap omitted");
+  }
+  const node = mount(healthy(), { ...task, column: "land", land: "manual",
+    status_note: "waiting for land: waits for a person; the profile says land: manual" });
+  assert(node.textContent.includes("land: manual") && !node.textContent.includes("idle"), "Land keeps policy, no idle line");
+  for (const [land, status_note] of [["unknown", "waiting for land: landing policy is unavailable"],
+    ["waiting", "waiting for land: waits for the factory"]]) {
+    const waiting = mount(healthy(), { ...task, column: "land", land, status_note });
+    assert(waiting.textContent.includes(status_note), "Land uses the server's policy explanation");
+    assert(!waiting.textContent.includes("next round"), "Land makes no unconditional timing promise");
+  }
+  assert(lasted(attempt("plan", 1, { started_at: "bad", ended_at: end })) === "Unknown duration", "missing evidence is explicit");
+}
+
+const repeat = (step, n, extra = {}) => attempt(step, n, { after: "repeat", repeat_of: n - 1, reason: "unsafe", ...extra });
+const restart = (n, extra = {}) => attempt("plan", n, { after: "restart_at_plan", reason: "restarted at plan", ...extra });
+function restartsAndRepeats() {
+  const today = new Date(); today.setHours(20, 38, 0, 0);
+  const before = new Date(today.getTime() - 501000);
+  let node = mount([attempt("plan", 1, { ended_at: before.toISOString() }), restart(2, { started_at: today.toISOString() })]);
+  let row = [...node.querySelectorAll("button")].find((b) => b.textContent.startsWith("Restarted at plan"));
+  assert(row.textContent === "Restarted at plan · 20:38 · waited 8m 21s", "today restart is short, contains wait");
+  assert(row.title.startsWith("Reason not recorded"), "placeholder not a cause");
+  assert(!node.textContent.includes("Approximate gap"), "restart gap stays in restart row");
+  const yesterday = new Date(today); yesterday.setDate(today.getDate() - 1);
+  node = mount([restart(2, { started_at: yesterday.toISOString(), reason: "Owner changed scope" })]);
+  row = [...node.querySelectorAll("button")].find((b) => b.textContent.startsWith("Restarted at plan"));
+  assert(row.textContent.includes(yesterday.toLocaleString([], { month: "short", day: "numeric" })), "past local date shown");
+  assert(row.title === "Owner changed scope", "genuine restart explanation preserved");
+  node = mount([restart(2)]);
+  assert(button(node, "Restarted at plan"), "no invented timestamp");
+  assert(changeReason(restart(2)) === "Reason not recorded", "restart detail normalizes placeholder too");
+  for (const summary of ["passed", "failed:test:lint"]) {
+    node = mount([attempt("checks", 1, { summary, ended_at: before.toISOString() }),
+      repeat("checks", 2, { reason: "The factory restarted", started_at: today.toISOString() })]);
+    const tag = [...node.querySelectorAll("span")].find((s) => s.textContent === "Re-run after restart");
+    assert(tag?.title.includes("Re-run after restart of Check attempt 1: The factory restarted"),
+      "checks re-run tag identifies restart and prior checks regardless of outcome");
+    assert(tag.title.includes("8m 21s") && node.textContent.includes("attempt 2"), "checks re-run keeps gap and numbering");
+    assert(!tag.title.includes(summary) && !node.textContent.includes("Repeat"), "previous outcome is not a restart cause");
+  }
+  for (const step of ["plan", "implement"]) {
+    node = mount([attempt(step, 1, { ended_at: before.toISOString() }), repeat(step, 2, { started_at: today.toISOString() })]);
+    const tag = [...node.querySelectorAll("span")].find((s) => s.textContent === "Repeat");
+    assert(tag?.title.includes("attempt 1: A listed path is unsafe") && tag.title.includes("8m 21s"),
+      "readable repeat tag with previous attempt and gap");
+    assert(node.textContent.includes("attempt 2"), "repeated attempt numbered");
+    assert(!node.textContent.includes("Factory work") && !node.textContent.includes("Restarted"), "repeat adds no row or factory gap");
+    assert(!node.querySelector("details"), "repeat never starts another group");
+  }
+  const clicks = [];
+  node = mount([attempt("implement"), commit(), attempt("checks", 1, { state: "failed", summary: "failed:test:lint" }),
+    repeat("implement", 2, { reason: "failed_check" })], task, {}, (...args) => clicks.push(args));
+  const tag = [...node.querySelectorAll("span")].find((s) => s.textContent === "Repeat");
+  assert(tag.title.includes("The checks failed") && marks(node).length === 1, "check-driven repeat invents no factory commit cause");
+  [...node.querySelectorAll("button")].find((b) => b.textContent.includes("Checks failed: lint")).click();
+  assert(clicks[0].join("/") === "checks/1", "failed Check result remains reachable");
+}
+
+function reviewed() {
+  const past = healthy().map((a) => ({ ...a, past: true }));
+  return [...past, restart(2), commit(39), attempt("implement", 2, { state: "failed", summary: "commit" }), commit(40, { state: "failed", summary: "uncommitted:unsafe" }),
+    repeat("implement", 3, { led_by: 40 }), commit(41), attempt("checks", 2, { summary: "passed" })];
+}
+async function pastRuns() {
+  const selected = { step: "checks", n: 2 };
+  let node = mount(reviewed(), task, selected);
+  assert(node.querySelector("summary").textContent ===
+    "History 1 · Plan ✓ Factory commit completed · Implement ✓ Factory commit completed · Check ✓ Success",
+    "past status from actual results");
+  assert(node.querySelector("summary").title.includes("every attempt and factory commit result"), "history tooltip uses attempt");
+  assert(!node.querySelector("details").open && primary(node).length === 6, "reviewed shape folds past, about eight lines including failure");
+  node.querySelector("details").open = true;
+  await tick();
+  node = mount(reviewed(), task, selected);
+  assert(node.querySelector("details").open, "expanded group survives redraw");
+  selected.step = "commit"; selected.n = 37;
+  node = mount(reviewed(), task, selected);
+  assert(node.querySelector("details").open && node.querySelector("[aria-pressed=true]"), "selected factory commit revealed");
+  await tick();
+  node.querySelector("details").open = false;
+  await tick();
+  node = mount(reviewed(), task, selected);
+  assert(!node.querySelector("details").open, "person may close selected group until selection changes");
+  const history = [attempt("plan", 1, { past: true }), commit(1, { state: "failed", summary: "uncommitted:unsafe", past: true }),
+    repeat("plan", 2, { past: true }), commit(2, { past: true }), restart(3, { past: true }), commit(3, { past: true }), restart(4)];
+  node = mount(history);
+  const summaries = [...node.querySelectorAll("summary")];
+  assert(summaries.length === 2 && summaries[1].textContent.startsWith("History 2"), "restart boundaries split past history");
+  assert(summaries[0].textContent.includes("Plan ✓ Factory commit completed (earlier failure)"), "success never hides earlier failures");
+  node = mount([attempt("plan", 1, { past: true })], { ...task, column: "waiting" });
+  assert(!node.querySelector(":scope > ol") && !primary(node).length, "entirely past waiting task invents no steps");
+  assert(node.querySelector("summary").textContent.includes("Plan … Success; Factory commit pending"),
+    "answer without a factory commit never marked committed and has visible outcome words");
+  for (const state of ["running", "failed"]) {
+    node = mount([attempt("checks", 1, { past: true, state })]);
+    assert(node.querySelector("summary").textContent.includes(STATE[state].label), `folded ${state} check has words`);
+  }
+  node = mount([attempt("plan", 1, { past: true }), commit(1, { past: true, state: "failed", summary: "uncommitted:unsafe" })]);
+  assert(node.querySelector("summary").textContent.includes("✗ Not committed: a listed path is unsafe"),
+    "folded factory commit failure explains its mark");
+}
+
+async function drawerSelection() {
+  fixture.replaceChildren();
+  const list = reviewed();
+  const requested = [];
+  const factoryCommit = { of_step: "implement", of: 2, listed: ["src/link.py"], listing: ["src/link.py"], result: "uncommitted:unsafe", checks: [{ name: "Path must be a plain file", state: "failed" }] };
+  const source = {
+    detail: async () => ({ task, attempts: list, operations: [
+      { operation: "drawer-commit", step: "implement", n: 3, kind: "commit", state: "completed", elapsed_ms: 1250,
+        started_at: "2026-11-14T10:00:00Z", past: false },
+    ] }),
+    tracker: async () => tracked,
+    body: async (id, step, n) => {
+      requested.push(`${step}/${n}`);
+      return { input: "Implement the task", added: [], result: { summary: step === "commit" ? "uncommitted:unsafe" : "passed", checks: [], factory_commit: step === "commit" ? factoryCommit : null } };
+    },
+  };
+  initDrawer(source, new Map([[task.id, task]]));
+  await openDrawer(task.id); await tick();
+  const drawer = document.getElementById("drawer");
+  assert(drawer.querySelector('[data-operation="drawer-commit"]'), "drawer passes operation evidence to rail");
+  drawer.querySelector("#rail details").open = true;
+  button(drawer, "Prompt").click();
+  assert(drawer.querySelector("#rail details").open, "disclosure survives redraw before toggle event fires");
+  await tick();
+  for (const tab of ["Lines", "Prompt", "Result"]) {
+    const row = [...drawer.querySelectorAll("#rail button")].find((b) => b.textContent.includes("Implementattempt 3"));
+    row.click(); await tick();
+    assert(drawer.querySelector("section h3").textContent.includes("Implement, attempt 3"), "selected attempt title");
+    assert(drawer.querySelector("section").textContent.includes("Success"), "successful attempt badge");
+    button(drawer, tab).click(); await tick();
+    assert(drawer.textContent.includes("A listed path is unsafe"), "selected repeat reason translated");
+    assert(drawer.textContent.includes("Began after a repeat of Implement, attempt 2"), "agent repeat wording preserved");
+    const mark = marks(drawer).find((b) => b.textContent.startsWith("✗ "));
+    mark.click(); await tick();
+    assert(drawer.querySelector("section h3").textContent.includes("Factory commit of Implement attempt 2"), "factory commit title");
+    assert(drawer.querySelector("section").textContent.includes("Failure"), "failed attempt and validation badges");
+    assert(mark.getAttribute("aria-label").includes("Implement attempt 2"), "accessible factory commit reference");
+    assert(drawer.textContent.includes("Named by the failed check") && drawer.textContent.includes("src/link.py") && drawer.textContent.includes("Path must be a plain file"), `${tab} → factory commit Result includes rule and listing`);
+    assert(drawer.querySelector("#rail [aria-pressed=true]"), "factory commit selection survives body redraw");
+  }
+  assert(requested.includes("commit/40"), "real factory commit endpoint selected");
+  closeDrawer();
+}
+
+async function checksRestartDetail() {
+  for (const summary of ["passed", "failed:test:lint"]) {
+    const list = [attempt("implement"), attempt("checks", 1, { summary }),
+      repeat("checks", 2, { reason: "The factory restarted", summary: "passed" })];
+    initDrawer({
+      detail: async () => ({ task, attempts: list }),
+      tracker: async () => tracked,
+      body: async () => ({ result: { summary: "passed", checks: [] } }),
+    }, new Map([[task.id, task]]));
+    await openDrawer(task.id); await tick();
+    const drawer = document.getElementById("drawer");
+    const row = [...drawer.querySelectorAll("#rail button")].find((b) => b.textContent.includes("Re-run after restart"));
+    row.click(); await tick();
+    const detail = drawer.querySelector("section");
+    assert(detail.textContent.includes("Re-run after restart of Check, attempt 1"),
+      "checks detail identifies restart and prior attempt");
+    assert(detail.textContent.includes("The factory restarted") && !detail.textContent.includes("a repeat of"),
+      "checks detail explains restart independently of previous outcome");
+    assert(detail.querySelector("h3").textContent.includes("Check, attempt 2"), "checks re-run selection keeps its number");
+    closeDrawer();
+  }
+}
+
+const landButton = (root) => [...root.querySelectorAll("#rail button")].find((b) => b.textContent.endsWith("Land"));
+const delivery = (extra = {}) => ({ actions: ["Integrate the task's changes.", "Mark the task complete."],
+  summary: ["src/change.py +2 -1"], diff_files: 1, added: 2, deleted: 1,
+  pr_url: null, ...extra });
+const landEvent = (kind, extra = {}) => ({ id: `checks/${kind}`, kind, checks_id: "checks", checks_n: 1,
+  candidate_id: null, candidate_n: null, at: null, past: false, explanation: `Recorded ${kind}`, waits: [], ...extra });
+const landHistory = () => [landEvent("ready", { at: "2026-11-14T10:00:00Z", waits: [{ after: "checks/ready",
+  started_at: "2026-11-14T10:00:00Z", ended_at: null, open: false, awaited: "Waiting for a delivery try." }] }),
+landEvent("tried", { id: "candidate/tried", candidate_id: "candidate", candidate_n: 1,
+  waits: [{ after: "candidate/tried", started_at: null, ended_at: null, open: true, awaited: "Waiting for integration into main." }] })];
+
+async function landSelection() {
+  const pending = { ...task, column: "land", land: "manual", status_note: "Awaiting your delivery decision" };
+  let resolve, calls = 0;
+  const source = {
+    detail: async () => ({ task: pending, attempts: healthy(), land_events: landHistory() }), tracker: async () => tracked,
+    body: async () => ({ result: { summary: "passed", checks: [] } }),
+    delivery: () => { calls++; return new Promise((done) => { resolve = done; }); },
+  };
+  initDrawer(source, new Map([[task.id, pending]]));
+  await openDrawer(task.id); await tick();
+  const drawer = document.getElementById("drawer");
+  assert(calls === 0, "summary is not read until Land selection");
+  assert(drawer.querySelectorAll("[data-land-event]").length === 2, "history appears before selecting Land");
+  landButton(drawer).focus();
+  assert(document.activeElement === landButton(drawer), "Land is independently focusable");
+  button(drawer, "Land tried · candidate 1").focus();
+  assert(document.activeElement === button(drawer, "Land tried · candidate 1"), "event is keyboard focusable");
+  button(drawer, "Land tried · candidate 1").click();
+  assert(drawer.textContent.includes("Loading delivery details"), "delivery loads on selection");
+  assert(landButton(drawer).getAttribute("aria-pressed") === "true", "Land selection has accessible state");
+  resolve(delivery({ pr_url: "https://example.invalid/pull/17" })); await tick();
+  assert(drawer.textContent.includes("Intended actions") && drawer.textContent.includes("Mark the task complete"), "actions shown");
+  assert(drawer.textContent.includes("1 files changed (+2 −1)") && drawer.textContent.includes("src/change.py"), "diff totals and files shown");
+  assert(!drawer.textContent.includes("git diff") && !drawer.textContent.includes("tl step land"), "no command references");
+  assert(![...drawer.querySelectorAll("button")].some((b) => ["Accept", "Reject"].includes(b.textContent)), "no decision controls");
+  assert(drawer.querySelector('a[href="https://example.invalid/pull/17"]')?.rel.includes("noopener"), "available PR linked");
+  assert(drawer.textContent.includes("Awaiting your delivery decision"), "waiting notes survive Land selection");
+  button(drawer, "Task").click(); button(drawer, "Steps 3").click();
+  assert(landButton(drawer).getAttribute("aria-pressed") === "true", "selection survives task view navigation");
+  button(drawer, "ImplementUnknown durationSuccess").click(); await tick();
+  assert(drawer.querySelector("section h3").textContent.includes("Implement, attempt 1"), "Land returns to attempt navigation");
+  landButton(drawer).click(); await tick();
+  assert(calls === 1, "navigation reuses the selected summary");
+  source.delivery = async () => { calls++; throw new Error("Delivery temporarily unavailable"); };
+  await onTaskMoved({ ...pending, land: "waiting" }); await tick();
+  assert(drawer.textContent.includes("Delivery temporarily unavailable") && calls === 2, "task change refreshes Land and explains failure");
+  assert(drawer.querySelectorAll("[data-land-event]").length === 2, "history survives summary failure and refresh");
+  source.delivery = async () => delivery({ summary: ["<img src=x onerror=bad>"], pr_url: "javascript:bad()" });
+  button(drawer, "Retry").click(); await tick();
+  assert(!drawer.querySelector("section a") && !drawer.querySelector("img"), "unsafe PR omitted and summary rendered as text");
+  assert(drawer.textContent.includes("<img src=x onerror=bad>"), "outside summary is retained as text");
+  closeDrawer();
+}
+
+async function landStaleReplies() {
+  let resolve, calls = 0;
+  const source = {
+    detail: async (id) => ({ task: { ...task, id }, attempts: healthy(), land_events: landHistory() }), tracker: async () => tracked,
+    body: async () => ({ result: { summary: "passed", checks: [] } }),
+    delivery: () => { calls++; return new Promise((done) => { resolve = done; }); },
+  };
+  initDrawer(source, new Map());
+  await openDrawer("first"); await tick();
+  const drawer = document.getElementById("drawer");
+  landButton(drawer).click();
+  const stale = resolve;
+  await onTaskMoved({ ...task, id: "first", column: "land", land: "manual" });
+  assert(calls === 2, "changed task refreshes an unfinished summary");
+  stale(delivery({ actions: ["STALE"] })); await tick();
+  assert(drawer.textContent.includes("Loading delivery details") && !drawer.textContent.includes("STALE"), "stale refresh is ignored");
+  assert(drawer.querySelectorAll("[data-land-event]").length === 2, "stale replies cannot erase history");
+  resolve(delivery({ actions: ["Current delivery"] })); await tick();
+  assert(drawer.textContent.includes("Current delivery"), "fresh delivery fills the selected pane");
+  await onTaskMoved({ ...task, id: "first", column: "land", land: "waiting" });
+  const otherTask = resolve;
+  await openDrawer("second"); await tick();
+  otherTask(delivery({ actions: ["WRONG TASK"] })); await tick();
+  assert(!drawer.textContent.includes("WRONG TASK") && drawer.textContent.includes("second"), "previous task cannot replace the drawer");
+  landButton(drawer).click();
+  closeDrawer();
+  resolve(delivery()); await tick();
+  assert(drawer.classList.contains("translate-x-full"), "a late response cannot reopen the drawer");
+  const fetch = globalThis.fetch;
+  try {
+    globalThis.fetch = async (path) => { assert(path === "/api/tasks/task%3Aid/delivery", "delivery route encodes the task id");
+      return { ok: true, json: async () => delivery() }; };
+    assert((await apiSource().delivery("task:id")).pr_url === null, "missing PR stays absent");
+  } finally { globalThis.fetch = fetch; }
+}
+
+function words() {
+  for (const [code, expected] of [
+    ["needs_owner", "The agent needs your decision"],
+    ["failed:test:failed", "Checks failed: test"],
+    ["answer:schema_invalid", "The agent's answer was in the wrong format"],
+  ]) {
+    assert(say(code) === expected, `${code} exact label`);
+    const word = wordNode(el, code);
+    assert(word.textContent === expected && word.title === code, `${code} label and raw-code hover`);
+    const item = attempt("implement", 1, { state: "failed", summary: code });
+    const node = mount([item]);
+    const summary = node.querySelector(`button span[title="${code}"]`);
+    assert(summary?.textContent === expected, `${code} failed rail label and raw-code hover`);
+    const body = { result: { summary: code, checks: [] } };
+    const view = result(item, body, { key: "implement/1", opened: new Map() });
+    fixture.replaceChildren(view);
+    const conclusion = view.querySelector(`p[title="${code}"]`);
+    assert(conclusion?.textContent === expected, `${code} conclusion label and raw-code hover`);
+  }
+  const item = attempt("implement", 1, { state: "failed", summary: "needs_owner" });
+  const body = { result: { summary: "needs_owner", checks: [], answer: {
+    disposition: "needs_owner", text: '{"explanation":"Owner decision required"}', truncated: false,
+  } } };
+  const view = result(item, body, { key: "implement/1", opened: new Map() });
+  fixture.replaceChildren(view);
+  const disposition = view.querySelector('span[title="needs_owner"]');
+  assert(disposition?.textContent === "The agent needs your decision", "answer badge label and raw-code hover");
+  for (const code of ["commit", "unsafe", "ignored", "uncommitted", "failed_check", "test:lint"]) assert(say(code) !== code, `${code} readable`);
+  assert(say("unknown:new") === "unknown:new" && say("Owner changed scope") === "Owner changed scope", "unknown codes/prose preserved");
+  assert(wordNode(el, "unsafe").title === "unsafe", "raw code hover retained");
+  assert(say("run:unknown") === "The agent attempt failed: unknown", "agent failure family keeps its tail");
+}
+
+function eventIndicators() {
+  const at = "2026-11-14T10:00:00Z";
+  const cases = [
+    ["command", "💻 Command", { cmd: "build", state: "running" }],
+    ["tool", "🧰 Tool", { name: "Read", cmd: "source", state: "running" }],
+    ["message", "💬 Agent message", { text: "Hello" }],
+    ["think", "🧠 Agent reasoning", { text: "Consider the task" }],
+    ["error", "❌ Error", { text: "Unavailable" }],
+    ["waiting", "⏳ Waiting", { text: "Pending reply" }],
+    ["check", "🧪 Check", { name: "lint", passed: true, duration_ms: 1000 }],
+    ["step", "🚦 Step", { step: "implement", attempt: 1 }],
+  ];
+  const feed = cases.map(([type, , fields]) => ({ type, id: type, at, ...fields }));
+  const item = attempt("implement", 1, { feed });
+  fixture.replaceChildren(lines(item));
+  const assertLabels = () => {
+    const rows = [...fixture.querySelectorAll("#lines > div")];
+    assert(rows.length === cases.length, "one row per event kind");
+    cases.forEach(([, label], i) => {
+      const kind = rows[i].children[1];
+      assert(kind.textContent === label && !kind.hidden && !kind.classList.contains("sr-only"),
+        `${label} has adjacent visible words`);
+    });
+  };
+  assertLabels();
+  item.feed = [];
+  fixture.replaceChildren(lines(item));
+  for (const event of feed) { apply(item, event); show(item, event); }
+  assertLabels();
+  const completed = { ...feed[0], state: "finished", exit_code: 1, duration_ms: 1000 };
+  apply(item, completed); show(item, completed);
+  assertLabels();
+  assert(fixture.querySelector("#lines > div").textContent.includes("exit 1"), "replacement keeps failure words");
+}
+
+function vocabulary() {
+  assert(COLUMNS.find((c) => c.id === "checks").label === "Check", "step label singular");
+  assert(COLUMNS.find((c) => c.id === "held").label === "Hold", "hold label");
+  assert(STATE.succeeded.label === "Success" && STATE.failed.label === "Failure", "outcome labels");
+  assert(position({ column: "implement", attempt: 3 }) === "step 2 of 4 · attempt 3", "board attempt position");
+  assert(position({ column: "land", attempt: 3 }) === "step 4 of 4", "land adds no numbered attempt");
+  const list = [attempt("implement", 2), commit(88)];
+  assert(commitTitle(list, list[1]) === "Factory commit of Implement attempt 2", "factory commit names the agent attempt");
+  const item = attempt("checks", 2, { feed: [
+    { type: "step", step: "checks", attempt: 2, at: "2026-11-14T10:00:00Z" },
+    { type: "check", name: "try external command", passed: true, duration_ms: 1000, at: "2026-11-14T10:00:01Z" },
+    { type: "check", name: "lint", passed: false, duration_ms: 1000, at: "2026-11-14T10:00:02Z" },
+  ] });
+  fixture.replaceChildren(lines(item));
+  assert(fixture.textContent.includes("Check attempt 2 started"), "feed uses the step's display label");
+  assert(fixture.textContent.includes("Success") && fixture.textContent.includes("Failure"), "feed check outcomes");
+  assert(fixture.textContent.includes("try external command"), "external check name preserved");
+  setNote({ ...item, state: "running", feedError: "offline" });
+  assert(document.getElementById("feednote").textContent === "Feed stopped: offline. Reconnecting.", "feed reconnection");
+  const body = { result: { summary: "passed", checks: [
+    { name: "build", passed: true, duration_ms: 1000, block: 1, output: "try raw output" },
+    { name: "lint", passed: false, duration_ms: 1000, block: 1, output: "error" },
+  ] } };
+  const view = result(item, body, { key: "checks/2", opened: new Map() });
+  const checks = [...view.querySelectorAll("details")];
+  assert(checks[0].querySelector("summary").textContent.includes("Failure") && checks[0].open, "failed check open first");
+  assert(checks[1].querySelector("summary").textContent.includes("Success") && !checks[1].open, "successful check folded");
+  assert(view.textContent.includes("Checks · 2") && view.textContent.includes("try raw output"), "collection and raw output");
+  let reloads = 0;
+  const task = taskView({ state: "failed", error: "offline" }, () => reloads++);
+  button(task, "Reload task").click();
+  assert(reloads === 1, "reload reads tracker through the existing callback");
+  const clock = Date.now;
+  Date.now = () => Date.parse("2026-11-14T10:15:00Z");
+  try {
+    const duration = { execution: `vocabulary-${document.documentElement.classList.contains("dark")}`,
+      number: 1, elapsed_ms: 119999, quiet_ms: 119999, frozen: false };
+    receiveDuration(duration);
+    const activity = quietSpan(duration);
+    assert(activity.hidden, "activity age hidden under two minutes");
+    monotonic += 1;
+    updateTime(activity);
+    assert(!activity.hidden && activity.textContent === "Last activity 2m 00s ago", "activity age at two minutes");
+    assert(activity.querySelector(".bg-amber-500"), "two-minute activity colour retained");
+    monotonic += 780000;
+    updateTime(activity);
+    assert(activity.textContent === "Last activity 15m 00s ago" && activity.querySelector(".bg-rose-500"),
+      "fifteen-minute activity wording and colour");
+  } finally {
+    Date.now = clock;
+  }
+}
+
+function landEvents() {
+  const stamp = "2026-11-14T10:00:00Z", end = "2026-11-14T10:02:00Z";
+  const events = [...landHistory(), landEvent("tried", { id: "second/tried", candidate_n: 2, waits: [
+    { after: "second/tried", started_at: stamp, ended_at: end, open: false, awaited: "Slot release" },
+    { after: "second/tried", started_at: stamp, ended_at: null, open: true, awaited: "Completion" },
+  ] }), landEvent("landed", { id: "second/landed", at: end, candidate_n: 2 })];
+  const node = mount(healthy(), task, {}, () => {}, events);
+  assert(node.querySelectorAll("[data-land-event]").length === 4, "ready, every try and landed are distinct events");
+  assert(node.textContent.includes("Waited · 2m") && node.textContent.includes("Wait duration unavailable"), "completed and unknown waits");
+  const live = node.querySelector("[data-since]");
+  const wall = Date.now;
+  try {
+    Date.now = () => Date.parse(end);
+    updateTime(live);
+    assert(live.textContent.includes("2m"), "open wait ticks from its known start");
+    Date.now = () => Date.parse(end) + 60000;
+    updateTime(live);
+    assert(live.textContent.includes("3m"), "open wait advances");
+  } finally { Date.now = wall; }
+  const history = mount([...healthy().map((a) => ({ ...a, past: true })), restart(2)], task, {}, () => {},
+    events.map((e) => ({ ...e, past: true })));
+  assert(history.querySelector("details [data-land-event]") && history.textContent.includes("Historical"), "abandoned chain keeps events");
+  for (const [start, finish] of [[end, stamp], ["invalid", end], [null, null]]) {
+    const invalid = mount(healthy(), task, {}, () => {}, [landEvent("ready", { waits: [
+      { after: "checks/ready", started_at: start, ended_at: finish, open: false, awaited: "Integration" },
+    ] })]);
+    assert(invalid.textContent.includes("Wait duration unavailable") && !invalid.querySelector("[data-since]"), "bad bounds have no clock");
+  }
+  const active = mount(healthy(), { ...task, column: "land", land: "landing" }, {}, () => {}, [landEvent("tried")]);
+  assert(!active.querySelector("[data-since]") && !active.textContent.includes("Waiting since"), "active validation has no wait clock");
+}
+
+async function waitingRows() {
+  for (const land of ["manual", "waiting", "unknown"]) {
+    for (const stamp of [null, "2026-11-14T10:00:06Z"]) {
+      const node = mount(healthy(), { ...task, column: "land", land, waiting_since: stamp,
+        status_note: `Awaiting ${land}` });
+      assert(node.textContent.includes(`Awaiting ${land}`), "Land row explains awaited action");
+      assert(stamp ? node.querySelector("[data-waiting-since]")?.title === stamp
+        : node.textContent.includes("Waiting since not recorded"), "Land row wait start");
+      assert(!node.querySelector("[data-quiet]"), "Land row has no quiet observation");
+    }
+  }
+  const node = mount(healthy(), { ...task, column: "land", land: "landing" });
+  assert(!node.textContent.includes("Waiting since"), "active land has no waiting clock");
+  for (const step of ["plan", "implement", "checks"]) {
+    const source = {
+      detail: async () => ({ task, attempts: [attempt(step, 1, {
+        state: "running", started_at: "2026-11-14T10:00:00Z",
+        duration: step === "checks" ? null
+          : { execution: `waiting-${step}`, number: 1, elapsed_ms: 1000, quiet_ms: 1000, frozen: false },
+      })], usage: {} }),
+      tracker: async () => tracked,
+      body: async () => ({ input: "Input", result: { summary: "pending", checks: [] } }),
+    };
+    initDrawer(source, new Map([[task.id, task]]));
+    await openDrawer(task.id); await tick();
+    assert(Boolean(document.querySelector("#drawer [data-quiet]")) === (step !== "checks"),
+      "drawer activity belongs only to running agents");
+    closeDrawer();
+  }
+}
+
+async function usage() {
+  const counts = { fresh: 49773, cached: 496768, output: 2375, turns: 74, attempts: 1, complete: 1 };
+  const sum = { ...counts, attempts: 2, complete: 1 };
+  const text = usageText(counts);
+  for (const value of ["fresh input 49,773", "cached input 496,768", "output 2,375", "reported turns 74"]) {
+    assert(text.includes(value), `exact reported count: ${value}`);
+  }
+  assert(usageText({ fresh: 0, cached: 0, output: 0, turns: 0 }).includes("output 0"), "reported zero stays zero");
+  assert(usageText({}).includes("not reported"), "absent attempt usage");
+  assert(usageText({ ...counts, turns: null }).includes("reported turns not reported"), "missing turns independent of tokens");
+  const list = [attempt("plan", 1, { usage: counts }), repeat("plan", 2, { usage: {} })];
+  const node = rail(list, task, {}, () => {}, { plan: sum });
+  fixture.replaceChildren(node);
+  assert(node.textContent.includes("Step total") && node.textContent.includes("reported values only"), "partial step total visible");
+  assert(primary(node)[0].title.includes(text) && primary(node)[0].title.includes("1/2 attempts complete"), "hover has attempt and step total");
+  assert(primary(node)[1].title.includes("not reported"), "missing report in attempt hover");
+  assert(node.querySelector("span[title*='Repeat of']").title.includes("unsafe"), "repeat explanation retained with usage");
+  for (const tracker of [{ state: "loading" }, { state: "failed", error: "offline" }, { state: "none" }]) {
+    const view = taskView(tracker, () => {}, sum);
+    assert(view.textContent.includes("Task total") && view.textContent.includes("1/2 attempts complete"), "tracker-independent task total");
+  }
+  const run = { harness: "Codex", provider: "OpenAI", model: "chosen", effort: "high", access: "full access" };
+  const source = {
+    detail: async () => ({ task, attempts: [attempt("plan", 1, { usage: counts, run })], step_usage: { plan: counts }, usage: counts }),
+    tracker: async () => tracked,
+    body: async () => ({ input: "Plan", result: { summary: "passed", checks: [] } }),
+  };
+  initDrawer(source, new Map([[task.id, task]]));
+  await openDrawer(task.id); await tick();
+  const drawer = document.getElementById("drawer");
+  const header = drawer.querySelector("section > div");
+  assert(header.textContent.includes(text) && header.textContent.includes("Unknown duration"), "attempt counts beside timing");
+  const usage = header.querySelector("span[title*='one model request and its reply']");
+  assert(usage, "reported turns explained in hover");
+  assert(usage.title.includes("Historical values") && usage.title.includes("falls back"), "reporting limitations explained");
+  assert(drawer.textContent.includes("Codex · OpenAI · chosen · high effort · full access"), "run context retained");
+  assert(drawer.textContent.includes("Task total"), "task context total visible while inspecting attempt");
+  button(drawer, "Task").click(); await tick();
+  assert(drawer.textContent.includes("Task total") && !drawer.textContent.includes("not reported"), "task view retains total");
+  closeDrawer();
+  source.detail = async () => ({ task, attempts: [attempt("plan", 1, { usage: {}, run })], usage: {} });
+  await openDrawer(task.id); await tick();
+  assert(drawer.querySelector("section > div").textContent.includes("Tokens · not reported"), "missing attempt report in header");
+  closeDrawer();
+}
+
+const feedEvents = (count, start = 0) => Array.from({ length: count }, (_, i) => ({
+  id: `m${start + i}`, type: "message", text: `Message ${start + i}`, at: new Date((start + i) * 3000).toISOString(),
+}));
+const feedStep = { type: "step", step: "implement", attempt: 1, at: "1970-01-01T00:00:00Z" };
+const feedIds = () => [...document.querySelectorAll("#lines [data-eid]")].map((row) => row.dataset.eid);
+
+function feedDisplay() {
+  for (const state of ["running", "succeeded", "failed"]) {
+    for (const count of [0, 20, 26]) {
+      const feed = count ? [feedStep, ...feedEvents(count - 1)] : [];
+      const item = attempt("implement", 1, { state, feed });
+      const view = lines(item);
+      const note = state === "running" ? "Latest 20 lines, live" : "Retained lines";
+      assert(view.querySelector("#feednote").textContent === note, "initial note is set before mounting");
+      fixture.replaceChildren(view);
+      const expected = state === "running" ? feed.slice(-20) : feed;
+      assert(feedIds().join(",") === expected.map((e) => e.id || "").join(","), `${state}/${count}: ordered row identities`);
+      assert(feedIds().length === expected.length, `${state}/${count}: step counts toward the live cap`);
+      assert(Boolean(view.textContent.includes("No lines recorded")) === !count, "empty feed placeholder");
+      if (count === 26 && state === "running") {
+        assert(view.querySelector("#lines").firstChild.textContent.includes("paused"), "cutoff keeps preceding pause evidence");
+      }
+      for (const event of feedEvents(2, 25)) { apply(item, event); show(item, event); }
+      assert(item.feed.length === (state === "running" ? Math.min(count + 2, 20) : count + 2), "state governs model retention");
+      assert(feedIds().length === item.feed.length && feedIds().at(-1) === "m26", "incremental rows follow retention");
+      const changed = { ...item.feed.at(-1), text: "Updated message" };
+      apply(item, changed); show(item, changed);
+      assert(feedIds().length === item.feed.length && feedIds().filter((id) => id === "m26").length === 1,
+        "matching ID replaces without duplication");
+      assert(document.querySelector('#lines [data-eid="m26"]').textContent.includes("Updated message"), "replacement content");
+      setNote({ ...item, feedError: "offline" });
+      assert(view.querySelector("#feednote").textContent === `Feed stopped: offline.${state === "running" ? " Reconnecting." : ""}`,
+        "errors override retention note without reconnecting ended attempts");
+      setNote(item);
+      assert(view.querySelector("#feednote").textContent === note, "recovery restores state-specific note");
+    }
+  }
+}
+
+async function liveFeedDisplay() {
+  fixture.replaceChildren();
+  const interval = window.setInterval;
+  let poll;
+  window.setInterval = (callback, ms) => ms === 2000 ? (poll = callback, 0) : interval(callback, ms);
+  try {
+    for (const state of ["succeeded", "failed"]) {
+      const live = { ...task, column: "implement", status: "running" };
+      let detail = { task: live, attempts: [attempt("implement", 1, {
+        state: "running", feed: [feedStep, ...feedEvents(25)],
+      })] };
+      let page = { events: feedEvents(30), cursor: "replacement", replaced: true, duration: null };
+      let reads = 0;
+      initDrawer({
+        detail: async () => { reads++; return structuredClone(detail); },
+        tracker: async () => tracked,
+        body: async () => ({ input: "Input", added: [], change: null, result: { summary: "pending", checks: [] } }),
+        feed: async () => structuredClone(page),
+      }, new Map([[task.id, live]]));
+      await openDrawer(task.id); await tick();
+      assert(feedIds().length === 20 && feedIds()[0] === "m5" && feedIds().at(-1) === "m24", "initial live tail");
+      await poll();
+      assert(feedIds().length === 20 && feedIds()[0] === "m10" && feedIds().at(-1) === "m29", "replacement page tail");
+      page = { ...page, replaced: false, events: feedEvents(30, 30) };
+      await poll();
+      assert(feedIds().length === 20 && feedIds()[0] === "m40" && feedIds().at(-1) === "m59", "large incremental batch tail");
+      const command = { id: "cmd", type: "command", cmd: "build", state: "running", at: "1970-01-01T00:03:00Z" };
+      page.events = [command];
+      await poll();
+      const completed = { ...command, state: "finished", duration_ms: 1000, exit_code: 0 };
+      page.events = [completed];
+      await poll();
+      assert(feedIds().length === 20 && feedIds()[0] === "m41" && feedIds().at(-1) === "cmd", "command replacement keeps tail");
+      assert(feedIds().filter((id) => id === "cmd").length === 1, "completed command replaces running row");
+      assert(!document.querySelector('#lines [data-eid="cmd"]').textContent.includes("running"), "finished command content");
+      const ended = { ...live, column: "held", status: "held" };
+      detail = { task: ended, attempts: [attempt("implement", 1, { state, feed: [feedStep, ...feedEvents(60), completed] })] };
+      await onTaskMoved(ended);
+      assert(reads === 2 && feedIds().length === 62, `${state}: completion refresh restores full history`);
+      assert(feedIds()[0] === "" && feedIds()[1] === "m0" && feedIds().at(-1) === "cmd", "full history includes step and endpoints");
+      assert(document.getElementById("feednote").textContent === "Retained lines", "completion removes live cap note");
+      closeDrawer();
+    }
+  } finally {
+    closeDrawer();
+    window.setInterval = interval;
+  }
+}
+
+async function liveDurations() {
+  const sample = { execution: `drawer-duration-${document.documentElement.classList.contains("dark")}`,
+    number: 1, elapsed_ms: 119999, quiet_ms: 119999, frozen: false };
+  const live = { ...task, column: "implement", status: "running", duration: sample };
+  const list = [attempt("implement", 1, { state: "running", started_at: "2099-01-01T00:00:00Z", duration: sample,
+    feed: [{ type: "step", at: "1900-01-01T00:00:00Z", step: "implement", attempt: 1 }] })];
+  const interval = window.setInterval;
+  const wall = Date.now;
+  let poll;
+  let reads = 0;
+  let page = { events: [], cursor: null, replaced: false, available: true, duration: sample };
+  window.setInterval = (callback, ms) => ms === 2000 ? (poll = callback, 0) : interval(callback, ms);
+  initDrawer({
+    detail: async () => { reads++; return { task: live, attempts: structuredClone(list), usage: {} }; },
+    tracker: async () => tracked,
+    feed: async () => structuredClone(page),
+    body: async () => ({ input: "Input", added: [], result: { summary: "pending", checks: [] } }),
+  }, new Map([[task.id, live]]));
+  const drawer = document.getElementById("drawer");
+  const refresh = () => drawer.querySelectorAll("[data-duration],[data-quiet]").forEach(updateTime);
+  const times = (text) => {
+    const nodes = [...drawer.querySelectorAll("[data-duration]")];
+    assert(nodes.length === 2 && nodes.every((n) => n.textContent.startsWith(text) || n.textContent === `ran ${text}`),
+      `header and rail show ${text}: ${nodes.map((n) => n.textContent).join("; ")}`);
+  };
+  try {
+    await openDrawer(task.id); await tick();
+    times("1m 59s");
+    assert(drawer.querySelector("#quiet").hidden, "drawer quiet is hidden at 119999ms despite feed timestamp");
+    Date.now = () => wall() + 86400000;
+    monotonic += 1; refresh();
+    times("2m 00s");
+    assert(drawer.querySelector("#quiet .bg-amber-500"), "drawer amber at 120000ms");
+    Date.now = () => wall() - 86400000;
+    monotonic += 1000;
+    await onTaskMoved({ ...live, duration: { ...sample, number: 0, elapsed_ms: 0, quiet_ms: 0 } });
+    times("2m 01s");
+    assert(reads === 1, "same-signature card does not reload detail");
+    button(drawer, "Prompt").click(); await tick();
+    times("2m 01s");
+    button(drawer, "Lines").click();
+    page.duration = { ...sample, number: 2, elapsed_ms: 130000, quiet_ms: 130000 };
+    await poll();
+    times("2m 10s");
+    monotonic += 769999; refresh();
+    assert(drawer.querySelector("#quiet .bg-amber-500"), "drawer stays amber at 899999ms");
+    monotonic += 1; refresh();
+    times("15m 00s");
+    assert(drawer.querySelector("#quiet .bg-rose-500"), "empty page measurement reaches red at 900000ms");
+    page.duration = sample;
+    await poll(); times("15m 00s");
+    assert(drawer.querySelector("#quiet .bg-rose-500"), "stale feed sample cannot reset quiet age");
+    await onTaskMoved({ ...live, duration: { ...sample, number: 3, elapsed_ms: 900000, quiet_ms: 0 } });
+    assert(drawer.querySelector("#quiet").hidden, "same-signature card command evidence refreshes drawer quiet");
+    monotonic += 1000;
+    page = { ...page, duration: null, events: [{ type: "message", text: "hello", at: "1900-01-01T00:00:00Z" }] };
+    await poll(); refresh();
+    assert(!drawer.querySelector("[data-duration]"), "null feed clears cached execution bindings");
+    assert(drawer.textContent.includes("Unknown duration"), "null feed makes elapsed unknown");
+    assert(drawer.querySelector("#quiet").textContent === "Last activity unknown", "null feed makes quiet unknown");
+    await onTaskMoved({ ...live, duration: null });
+    assert(!drawer.querySelector("[data-duration]"), "same-signature null card stays unknown");
+    await onTaskMoved({ ...live, duration: { ...sample, number: 4, elapsed_ms: 901000, quiet_ms: null } });
+    times("15m 01s");
+    assert(drawer.querySelector("#quiet").textContent === "Last activity unknown", "known elapsed allows unknown quiet");
+    page.duration = { ...sample, number: 5, elapsed_ms: 3000, quiet_ms: null, frozen: true };
+    await poll();
+    times("3.0s");
+    assert(!drawer.querySelector("#quiet"), "frozen feed suppresses active quiet indicator");
+    monotonic += 86400000; refresh();
+    times("3.0s");
+    button(drawer, "Prompt").click(); await tick();
+    times("3.0s");
+    for (const state of ["succeeded", "failed"]) {
+      list[0] = { ...list[0], state, started_at: null, ended_at: null, duration: page.duration };
+      closeDrawer();
+      await openDrawer(task.id); await tick();
+      times("3.0s");
+      assert(drawer.querySelector("section > div").textContent.includes("ran 3.0s"), "terminal header uses final evidence");
+      assert(!drawer.querySelector("#quiet"), "terminal attempt has no quiet warning");
+      monotonic += 86400000; refresh(); times("3.0s");
+    }
+  } finally {
+    closeDrawer();
+    window.setInterval = interval;
+    Date.now = wall;
+  }
+}
+
+try {
+  for (const dark of [false, true]) {
+    document.documentElement.classList.toggle("dark", dark);
+    document.documentElement.classList.toggle("light", !dark);
+  for (const test of [healthyRows, factoryCommitStates, gaps, restartsAndRepeats, pastRuns,
+    drawerSelection, checksRestartDetail, landSelection, landStaleReplies, words, eventIndicators, vocabulary,
+    landEvents, waitingRows, usage, feedDisplay, liveFeedDisplay, liveDurations, operationRail,
+    commandExpansion, toolRows, messageFolding, jumpToLatest, checkFollowing, checkActivation, checkStaleFeed, taskEvents]) {
+    fixture.replaceChildren();
+    await test();
+  }
+  }
+  for (const dark of [false, true]) {
+    document.documentElement.classList.toggle("dark", dark);
+    document.documentElement.classList.toggle("light", !dark);
+    const node = mount(reviewed());
+    assert(node.querySelector("button").getBoundingClientRect().height > 0, "theme renders buttons");
+  }
+  document.documentElement.classList.toggle("dark", location.hash === "#dark");
+  document.documentElement.classList.toggle("light", location.hash !== "#dark");
+  results.textContent = "PASS: 27 browser contracts, both themes";
+  document.documentElement.dataset.result = "passed";
+} catch (error) {
+  results.textContent = `FAIL: ${error.stack}`;
+  document.documentElement.dataset.result = "failed";
+}

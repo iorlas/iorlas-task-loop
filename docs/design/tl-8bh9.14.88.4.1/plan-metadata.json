@@ -1,0 +1,23 @@
+{
+  "prepared_commit": "7408f9824de955d8cfa8c49c3a9dd80230391616",
+  "cited_paths": [
+    "src/taskloop/land.py",
+    "src/taskloop/land_check.py",
+    "src/taskloop/land_store.py",
+    "src/taskloop/land_data.py",
+    "src/taskloop/factory_schema.py",
+    "src/taskloop/land_push.py",
+    "src/taskloop/cli_composition.py",
+    "src/taskloop/dash_land.py",
+    "src/taskloop/land_conflict/composition.py",
+    "tests/steps/test_land.py",
+    "tests/steps/test_land_store.py",
+    "tests/steps/test_land_resolved_validation.py",
+    "tests/steps/land_bench.py",
+    "tests/steps/conftest.py",
+    "tests/steps/real/test_land_real.py",
+    "tests/cli/test_land_cli.py",
+    "tests/cli/test_dash_composition.py",
+    "tests/rules/test_attempt_sql_ownership.py"
+  ]
+}

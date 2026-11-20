@@ -3,7 +3,7 @@ reservation, the foreground validation of a pending candidate in its slot, and t
 
 The insert is one write transaction: a slot's reservation (`admit.reserve` of the lowest observed-free slot still unheld,
 D its HEAD) and `land_store.insert` when S validates; no slot and `same_tree` (or `no_change`) otherwise. The validation,
-in the `tl step land` process, never through an entry: the slot's custody (`landing`, never waiting: `unavailable
+in the `tl land run` process, never through an entry: the slot's custody (`landing`, never waiting: `unavailable
 slot_busy`, also what a second concurrent land of the task meets), held to the release; under it the land process's
 identity written on the candidate (`LandStore.hold`, replacing a stored one only when it is gone); one claim renewal (lost
 concludes `failed claim_lost` after the reconcile), then the keep-alive around the shared validation (`validate.validate`
@@ -15,27 +15,28 @@ supervision stops the running check's tree, and the rerun's reconcile marks it `
 """
 
 import contextlib
-import secrets
-import sqlite3
 from collections.abc import Callable, Mapping
 from contextlib import AbstractContextManager, nullcontext
 from dataclasses import dataclass
 from pathlib import Path
-from uuid import uuid4
+from typing import Final
 
 from git_porcelain import Repo
 
-from taskloop.admit import AdmitRefused, Tasks, free_slots, issued, unheld
-from taskloop.admit_rows import reserve
+from taskloop.admit import AdmitRefused, Tasks, free_slots
+from taskloop.admit_store import issued, reserve, unheld
 from taskloop.attempt_reads import StoreRefused, StoreUnavailable
 from taskloop.attempt_types import AttemptKey, AttemptResult, Checkouts, EntryIdentity, Replaced
 from taskloop.check_admit import heads
 from taskloop.check_release import CandidateTarget, ChecksRelease
 from taskloop.check_store import ChecksRow, Required
+from taskloop.claim import ClaimWord
 from taskloop.claim_lease import HeartbeatFor, KeepAlive, Stop, keeping, renewal
 from taskloop.composition import Checking
-from taskloop.factory_schema import LANDING
-from taskloop.land_store import LandAdmitted, LandRow, LandStore, Settled, insert
+from taskloop.ids import Ids
+from taskloop.land_conflict.handoff import Handoff
+from taskloop.land_store import LandAdmitted, LandRow, LandStore, Settled, admission_raced, insert
+from taskloop.land_timing import Phase
 from taskloop.operations import Failed
 from taskloop.profile import ProfileFiles
 from taskloop.repo import RepoId
@@ -46,7 +47,8 @@ from taskloop.tracker_client import Close
 from taskloop.validate import Ended, Target, Verdict, concluded, reconcile, validate
 
 NO_SLOT = "No slot is free: rerun when one is, or stop rounds."
-RACED = "Another land of the task, or a change of its attempts, came first: `tl step show TASK`."
+UNAVAILABLE: Final = "unavailable"
+RACED = "Another land of the task, or a change of its attempts, came first: look at the task's status."
 type Squash = tuple[int, str, str, bool, Required]  # number, O, S, S's tree is X's, the required names at O
 
 
@@ -70,11 +72,24 @@ class LandPorts:
     custody: Callable[[str, str], AbstractContextManager[None]]
     environ: Mapping[str, str]
     close: Close
+    conflicts: Handoff
+    ids: Ids
 
 
 def _release(ports: LandPorts, hold: Callable[[str, str], AbstractContextManager[None]]) -> ChecksRelease:
     work = ports.work
-    return ChecksRelease(work.store, work.checkouts, work.slot_files, work.entry_seen, hold, work.clock, work.seen, work.scratch)
+    return ChecksRelease(work.store, work.checkouts, work.slot_files, work.entry_seen, hold, work.clock,
+        work.seen, work.scratch, ids=ports.ids)
+
+
+def checked(ports: LandPorts, row: LandRow) -> LandRow | Failed:
+    """The validation of a pending candidate; passed is pushable, failed is `checks_failed`."""
+    found = validated(ports, row)
+    if isinstance(found, Failed) or found.validation == "passed":
+        return found
+    return Failed("refused", "checks_failed", f"The checks of S ({found.commit}) failed ({found.reason}), though they passed on "
+                  "the task's own commit: the change does not hold on the current main. The `Land check:` logs say which. Nothing was "
+                  "pushed; a flaky check may be retried (land the task again), otherwise the task starts again.")
 
 
 def released(ports: LandPorts, row: LandRow | None) -> tuple[LandRow | None, str | None] | tuple[Failed, None]:
@@ -91,14 +106,14 @@ def released(ports: LandPorts, row: LandRow | None) -> tuple[LandRow | None, str
 def _settled(ports: LandPorts, checks: ChecksRow, squash: Squash, validation: Settled) -> LandRow | Failed:
     """A candidate with no slot: validated `same_tree` (or `no_change`, delivered at insert) in one write."""
     number, o, s, same, required = squash
-    key = AttemptKey(uuid4().hex, secrets.token_hex(16), 0)  # no reservation: the generation names none
+    key = AttemptKey(ports.ids.hex(), ports.ids.token(16), 0)  # no reservation: the generation names none
     con = ports.lands.connect()
     if con is None:
         raise StoreUnavailable("Factory database unavailable")
     with ports.lands.begin(con):
         insert(con, LandAdmitted(key, checks.key.attempt_id, number, o, s, same, required, None, None, None, validation,
                                  ports.work.clock()))
-    return ports.lands.row(key) or Failed("unavailable", "changed")
+    return ports.lands.row(key) or Failed(UNAVAILABLE, "changed")
 
 
 def _reserved(ports: LandPorts, repo: Repo, checks: ChecksRow, squash: Squash, deadline: float) -> LandRow | Failed:
@@ -114,25 +129,17 @@ def _reserved(ports: LandPorts, repo: Repo, checks: ChecksRow, squash: Squash, d
     if not isinstance(free, tuple):
         detail = f"{NO_SLOT} {free.detail}".strip() if isinstance(free, AdmitRefused) else free.detail
         return Failed("unavailable", free.reason if isinstance(free, AdmitRefused) else free.what, detail)
-    key = AttemptKey(uuid4().hex, secrets.token_hex(16), issued(con, repo_id, tuple(each.name for each in free)) + 1)
+    key = AttemptKey(ports.ids.hex(), ports.ids.token(16), issued(con, repo_id, tuple(each.name for each in free)) + 1)
     with ports.lands.begin(con):
         chosen = next((slot for each in free if (slot := unheld(con, repo_id, each, key.reservation_generation)) is not None), None)
         if chosen is None:
-            return _raced(con, checks, number)
+            if admission_raced(con, checks.key.attempt_id, number):
+                return Failed("refused", "landing", f"{RACED} Nothing was recorded.")
+            return Failed("unavailable", "no_free_slot", NO_SLOT)
         reserve(con, repo_id, chosen[0], key)
         insert(con, LandAdmitted(key, checks.key.attempt_id, number, o, s, same, required, chosen[0], chosen[1], deadline, None,
                                  ports.work.clock()))
     return ports.lands.row(key) or Failed("unavailable", "changed")
-
-
-def _raced(con: sqlite3.Connection, checks: ChecksRow, number: int) -> Failed:
-    """No slot left at this candidate's generation: another land of the task came first (a candidate numbered this one or
-    later, or `LANDING`), else every slot is in use."""
-    found = con.execute(f"SELECT (SELECT coalesce(max(number),0) FROM land_candidate WHERE checks_attempt_id=c.attempt_id),{LANDING} "
-                        "FROM checks_attempt c WHERE c.attempt_id=?", (checks.key.attempt_id,)).fetchone()
-    if found is not None and (int(found[0]) >= number or found[1]):
-        return Failed("refused", "landing", f"{RACED} Nothing was recorded.")
-    return Failed("unavailable", "no_free_slot", NO_SLOT)
 
 
 def inserted(ports: LandPorts, repo: Repo, checks: ChecksRow, squash: Squash, settled: Settled | None, deadline: float) -> LandRow | Failed:
@@ -151,7 +158,7 @@ def _held(ports: LandPorts, checks: ChecksRow) -> Failed | None:
     if held is None or not held.holds_slot or held.pending:
         return None
     return Failed("refused", "landing", f"The land candidate {held.number} still holds its slot {held.slot} (its release was "
-                  "held): rerun `tl step land`, which retries the release first, or `tl step release TASK`. Nothing was recorded.")
+                  "held): land the task again, which retries the release first, or release the task. Nothing was recorded.")
 
 
 def _unheld(_slot_path: str, _candidate_id: str) -> AbstractContextManager[None]:
@@ -178,7 +185,7 @@ def _ended(ports: LandPorts, row: LandRow, target: Target) -> Ended:
     """One renewal, then the validation inside the keep-alive (lost: only the reconcile, then `claim_lost`)."""
     alive = KeepAlive(ports.heartbeat_for(row.tracker_root, row.task_id), ports.stop(), ports.work.clock)
     alive.renew()
-    if alive.word() == "lost":
+    if alive.word() is ClaimWord.LOST:
         with contextlib.suppress(StoreRefused, StoreUnavailable):
             reconcile(ports.work, target)
         return Verdict("failed", "claim_lost")
@@ -192,6 +199,10 @@ def _custody(ports: LandPorts, row: LandRow, slot_path: str, me: EntryIdentity) 
     if refused is not None:
         return refused
     lands, key = ports.lands, row.key
+    try:
+        lands.start_phase(key, Phase.VALIDATION, ports.work.clock())
+    except StoreRefused as refused_by:
+        return Failed(UNAVAILABLE, refused_by.reason, "The candidate changed before validation: rerun.")
     target = Target(key, row.repo_id, slot_path, row.commit, row.required, row.deadline or 0.0, None,
                     lambda digest: lands.profiled(key, digest))
     ended = _ended(ports, row, target)
@@ -199,7 +210,7 @@ def _custody(ports: LandPorts, row: LandRow, slot_path: str, me: EntryIdentity) 
         verdict = concluded(ended)
         if verdict is None:
             where = f"The artifacts directory {ports.work.files.root} cannot be written. " if ended.reason == "log" else ""
-            return Failed("unavailable", ended.reason, f"{where}The validation could not go on: rerun `tl step land`.")
+            return Failed("unavailable", ended.reason, f"{where}The validation could not go on: land the task again.")
         ended = verdict
     try:
         lands.conclude(key, ended.outcome, ended.reason, ports.work.clock())

@@ -1,0 +1,70 @@
+# DRAFT v2 "prompt library": prose is written once under [text.*] and steps only reference it by name, so a sentence shared
+# by two steps (Git writes, saved work, plan handoff, final-answer warning) has one owner. Steps are tables keyed by name,
+# the order is an explicit `steps` list. Prose abbreviated with `…`. Not loadable; a design sketch.
+
+[workflow]
+name = "default"
+steps = ["plan", "implement", "check"]     # order lives here, not in table order
+
+# ------------------------------------------------------------- text library (strategy prose, verbatim in a real file)
+[text]
+final_answer_warning = """Your final message must be the JSON answer only; write plan.md before you answer `planned`; a message without a tool call ends the step."""
+depth_assessment = """First assess depth from the supplied task text alone, before any exploration or reading. … small 6, medium 12, large 20 …"""
+plan_reading_order = """After the depth assessment permits planning, follow this plan-only reading order. …"""
+plan_template = """Use exactly these sections in this order … # Header … ## Read list … ## Acceptance behaviours …"""
+size_gate = """Before answering `planned` or `unchanged`, require a Size estimate in Header … 60 files, 3 independent behaviours or 100 model calls …"""
+implement_reassess = """Read it first. Immediately after reading the plan, reassess scope … about 60 model calls or touches more than 60 files …"""
+implement_environment = """The factory ran this repository's `setup` before you started … `just check 2>&1 | tail -60` … `apply_patch` …"""
+git_writes = """You may read Git; do not run `git add`, `git commit`, `git push` or any other Git write; they will fail."""
+saved_work = """A commit on this branch whose message has a `Task-Loop-Wip:` trailer is unfinished work … keep, change or remove what it holds …"""
+plan_handoff = """Do not edit plan.md; the answer's paths list must not contain any plan.md … The handoff belongs in the one-line commit message."""
+failed_check_lead = """The factory's check failed. Fix the reported failure and run the checks before answering."""
+
+# ------------------------------------------------------------- agents defined once, steps point at them
+[agent.default]
+harness = "codex"
+model = "gpt-6.1-sol"
+effort = "high"
+
+# ------------------------------------------------------------- steps
+[step.plan]
+agent = "default"
+root = "docs/design/{task_id}/"
+answer = { planned = "commit", unchanged = "keep", incomplete = "none", needs_owner = "none" }
+prompt = [
+  { text = "final_answer_warning" },
+  { text = "depth_assessment" },
+  { use = "task" },
+  { use = "input_context" },
+  { text = "plan_reading_order" },
+  { text = "plan_template" },
+  { text = "size_gate" },
+  { text = "git_writes" },
+  { text = "saved_work" },
+]
+# `text = "<name>"` names an entry of [text]; `use = "<name>"` names a code renderer. One key, two namespaces.
+# code appends (not listed, cannot be removed): answer schema, plan metadata rule, repeat frame.
+repeat = { attempts = 3, on = ["uncommitted", "unsafe", "ignored"] }
+
+[step.implement]
+agent = "default"
+root = ""
+max_paths = 96
+deletions = true
+excluded = [".beads/", ".task-loop/"]
+answer = { implemented = "commit", unchanged = "keep", incomplete = "none", needs_owner = "none" }
+prompt = [
+  { use = "task" },
+  { use = "input_context" },
+  { text = "implement_reassess" },
+  { text = "implement_environment" },
+  { text = "git_writes" },
+  { text = "saved_work" },
+  { text = "plan_handoff" },
+]
+repeat = { attempts = 3, on = ["uncommitted", "unsafe", "ignored"] }
+failed_check = { lead = "failed_check_lead", sections = ["check_name", "check_argv", "check_result", "check_output_tail"] }
+
+[step.check]
+repeat_to = "implement"
+attempts = 3

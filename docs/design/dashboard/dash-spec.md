@@ -1,5 +1,7 @@
 # task-loop dashboard: implementation spec
 
+Historical/proposed command examples below do not establish CLI availability; use the current [README](../../../README.md) and `tl --help`.
+
 Status: **design**. Historical baseline dashboard specification; its dated draft and commands are preserved.
 The successor implements the separate [dashboard-ui.md](../dashboard-ui.md) contract.
 

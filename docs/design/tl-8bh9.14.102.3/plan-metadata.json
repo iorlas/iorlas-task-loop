@@ -1,0 +1,10 @@
+{
+  "prepared_commit": "e09a4694e0e9dc80ee80fba238d227fe92651d25",
+  "cited_paths": [
+    "src/taskloop",
+    "tests/rules/test_ratchet.py",
+    "tests/rules/test_pydantic_edges.py",
+    "tests/rules/test_policy.py",
+    "pyproject.toml"
+  ]
+}

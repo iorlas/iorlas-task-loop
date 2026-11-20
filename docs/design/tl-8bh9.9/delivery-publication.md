@@ -1,5 +1,7 @@
 # Delivery, publication and task completion
 
+Status: **design**. Accepted decisions and pending proposals are distinguished below; historical source observations are not a delivery receipt. Explicit holds remain in force except where superseded.
+
 > STORE scope update, 2026-11-09: Denis accepted the identity/lifecycle contract and lifted its design hold for
 > [reconciled STORE slices](../tl-sqd3.26/plan.md) only. Earlier blanket-hold statements below describe prior review history.
 > Explicit dependencies still gate affected actions; historical migration/compatibility scope and unrelated holds remain excluded.
@@ -167,6 +169,8 @@ For the partial-success case show code delivered, task completion pending; never
 required action is unresolved. Do not derive this state from log text or add a separate monitoring/status authority.
 
 ## Owner approval and structured contracts, 2026-11-09
+
+See [ADR 01](../tl-8bh9.14.119/adr-01-delivery-publication.md) for current scope and tests. Current direct push is built; PR waiting remains design.
 
 Denis: "Yes, I agree. Record that strategy, including merge plus squash and retrying only unfinished actions."
 The corrected strategy above is agreed, including completed plan/mutating-step publication, ordinary task-branch pushes,

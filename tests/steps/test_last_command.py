@@ -1,4 +1,4 @@
-"""The time since the agent's last command in `tl step show` and `tl step list` (roadmap B10): a live sink notes it in the
+"""The time since the agent's last command in `tl attempt show` and `tl attempt list` (roadmap B10): a live sink notes it in the
 attempt's evidence while the agent runs, the status reads it back. Display only: it never changes the `Next` word."""
 
 import sqlite3
@@ -37,7 +37,7 @@ def sink_of(files: EvidenceFiles, wall: Clock) -> CommandSink:
 
 
 def seen(con: sqlite3.Connection, files: EvidenceFiles, now: float, entry: Seen = "matching") -> tuple[list[str], list[str], object]:
-    """`tl step show`'s lines, `tl step list`'s lines and the listed attempt's JSON `last_command`."""
+    """`tl attempt show`'s lines, `tl attempt list`'s lines and the listed attempt's JSON `last_command`."""
     reads = StatusPorts(AttemptStore(lambda: con), lambda _entry: entry, lambda: now, lambda _key: None, lambda: "boot",
                         last_command=files.last_command)
     shown, listed = show_attempt(reads, files.root, "tasks", "tl-1"), list_attempts(reads)
@@ -45,7 +45,7 @@ def seen(con: sqlite3.Connection, files: EvidenceFiles, now: float, entry: Seen 
     rows = as_data(listed)["attempts"]
     assert isinstance(rows, list) and isinstance(rows[0], dict)
     assert as_data(shown)["last_command"] == rows[0]["last_command"]
-    return human("tl step show", shown, None), human("tl step list", listed, None), rows[0]["last_command"]
+    return human("tl attempt show", shown, None), human("tl attempt list", listed, None), rows[0]["last_command"]
 
 
 def test_a_running_agent_shows_the_seconds_since_its_last_command(registered: sqlite3.Connection, tmp_path: Path) -> None:

@@ -16,26 +16,30 @@ from any_agent.procs import Worker
 from any_agent.testing import FakeRun
 from beads_client import BdError
 from beads_client.testing import Script
-from doubles import FakeSlotFiles
+from doubles import ENGINE, FakeSlotFiles
 from git_porcelain import Repo, WorktreeInfo
-from git_porcelain.testing import FakeWorktree
+from git_porcelain.testing import FakeRemote, FakeWorktree
+from plan_fixtures import PLAN_TEXT
 from sqlite_store import begin_immediate
 from stream_proc import OwnedProcess
 
 from taskloop.admit import AdmitRefused
 from taskloop.admit_chain import ChainAdmission, RepeatRequest
+from taskloop.agents.launch import AgentLaunch
 from taskloop.attempt import Attempts
 from taskloop.attempt_reads import StoreRefused
 from taskloop.attempt_store import AttemptStore
-from taskloop.attempt_types import AttemptKey, Checkouts, EntryIdentity, FileStat, Seen, SlotFiles, Verified
+from taskloop.attempt_types import AttemptKey, Checkouts, Committed, EntryIdentity, FileStat, Seen, SlotFiles
+from taskloop.commit import FactoryCommit
 from taskloop.evidence_files import EvidenceFiles
+from taskloop.ids import NativeIds
 from taskloop.repo import RepoId
 from taskloop.setup_store import ProcessSeen
 from taskloop.slot_lock import custody, lock_path, probe
 from taskloop.slot_release import AlreadyReleased, NotReleased, Released, SlotRelease, release_word
 from taskloop.slots import SlotGit, adopt, observe
+from taskloop.slots_store import SlotsStore
 from taskloop.tracker_client import tracker_claims
-from taskloop.verifier import Verifier
 
 KEY = AttemptKey("attempt", "dispatch", 1)
 ENTRY = (7, "entry-start", "boot")
@@ -108,7 +112,7 @@ class Ports:
 
     def releaser(self) -> SlotRelease:
         return SlotRelease(AttemptStore(lambda: self.con), self.checkouts, self.files, self.observe, self.gone, self.hold, self.unclaim,
-                           lambda: 30, self.setup_seen, self.scratch)
+                           lambda: 30, self.setup_seen, self.scratch, ids=NativeIds())
 
 
 def agent(slot: FakeWorktree, files: dict[str, str], rc: int = 0) -> Callable[[Harness, LaunchSpec, float, RunHooks | None], RunOutcome]:
@@ -125,15 +129,23 @@ def executed(con: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checko
              written: dict[str, str], rc: int = 0) -> str:
     """The registered attempt run once (the slot prepared on `task/tl-1`): its result's reason."""
     store = AttemptStore(lambda: con)
-    attempts = Attempts(store, EvidenceFiles(tmp_path), lambda: ("/bin/codex", {}), agent(slot, written, rc), lambda: 10, checkouts, files)
+    attempts = Attempts(
+        store,
+        EvidenceFiles(tmp_path),
+        AgentLaunch(lambda _harness: ("/bin/codex", {}), ids=NativeIds()),
+        agent(slot, written, rc),
+        lambda: 10,
+        checkouts,
+        files,
+    )
     return attempts.execute(KEY, ENTRY).reason
 
 
-def verified(con: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, files: SlotFiles) -> str:
-    """The registered attempt run and verified: X, on `task/tl-1`."""
-    assert executed(con, tmp_path, slot, checkouts, files, {P: "# Plan\n"}) == "verification"
+def committed(con: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, files: SlotFiles) -> str:
+    """The registered attempt run and committed: X, on `task/tl-1`."""
+    assert executed(con, tmp_path, slot, checkouts, files, {P: PLAN_TEXT}) == "commit"
     store = AttemptStore(lambda: con)
-    assert isinstance(Verifier(store, checkouts, files, lambda _w: True, lambda: 20, nowhere).verify(KEY), Verified)
+    assert isinstance(FactoryCommit(store, checkouts, files, lambda _w: True, lambda: 20, nowhere, ids=NativeIds()).commit(KEY), Committed)
     return head(slot)
 
 
@@ -152,11 +164,11 @@ def stored(con: sqlite3.Connection) -> tuple[list[tuple[object, ...]], list[tupl
             con.execute("SELECT head,released_at,claim FROM slot_release").fetchall())
 
 
-def test_a_settled_release_parks_the_verified_slot_at_d_keeps_the_claim_and_then_has_nothing_pending(
+def test_a_settled_release_parks_the_committed_slot_at_d_keeps_the_claim_and_then_has_nothing_pending(
     registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles
 ) -> None:
     d = head(slot)
-    x = verified(registered, tmp_path, slot, checkouts, slot_files)
+    x = committed(registered, tmp_path, slot, checkouts, slot_files)
     ports = Ports(registered, checkouts, slot_files)
     assert ports.releaser().release(KEY, False) == Released("s1", d, True, "kept", False)
     assert (slot.branch(), head(slot), tip(slot)) == (None, d, x)  # detached at D; the branch keeps X
@@ -168,6 +180,37 @@ def test_a_settled_release_parks_the_verified_slot_at_d_keeps_the_claim_and_then
     assert (ports.opens, ports.holds, len(ports.emptied)) == (0, 0, 1)
 
 
+def test_interrupted_release_converges_on_recorded_origin_tip_without_refreshing(
+    registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    x = committed(registered, tmp_path, slot, checkouts, slot_files)
+    repo = slot.repo
+    original = dict(repo.branches())["main"]
+    origin = FakeRemote("https://example.invalid/current.git")
+    repo.add_remote("origin", origin)
+    repo.worktree(repo.path).push("main")
+    target = origin.advance("main", {"other": "Admitted destination\n"})
+    assert repo.fetch().ok
+    registered.execute("UPDATE attempt SET slot_head=?", (target,))
+    origin.advance("main", {"later": "Leave the destination alone\n"})
+    release = Ports(registered, checkouts, slot_files).releaser()
+    record = SlotRelease._record
+
+    def interrupted(*_args: object, **_kwargs: object) -> NoReturn:
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(repo, "fetch", lambda *_args, **_kwargs: pytest.fail("release fetched"))
+    monkeypatch.setattr(SlotRelease, "_record", interrupted)
+    with pytest.raises(KeyboardInterrupt):
+        release.release(KEY, False)
+    assert head(slot) == target and slot.branch() is None and tip(slot) == x
+    monkeypatch.setattr(SlotRelease, "_record", record)
+    assert isinstance(release.release(KEY, False), Released)
+    assert isinstance(release.release(KEY, False), AlreadyReleased)
+    assert head(slot) == target and tip(slot) == x and dict(repo.branches())["main"] == original
+
+
 @pytest.mark.parametrize("phase", ["admitted", "registered", "captured"])
 def test_settled_before_the_step_ended_is_not_terminal_and_changes_nothing(
     registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles, phase: str
@@ -175,15 +218,15 @@ def test_settled_before_the_step_ended_is_not_terminal_and_changes_nothing(
     if phase == "registered":
         registered.execute("UPDATE attempt SET phase='registered',base_commit=?,worker_pid=42,worker_pgid=42,worker_start='s',"
                            "worker_boot='b'", (head(slot),))
-    elif phase == "captured":  # pending verification
-        assert executed(registered, tmp_path, slot, checkouts, slot_files, {P: "# Plan\n"}) == "verification"
+    elif phase == "captured":  # pending factory commit
+        assert executed(registered, tmp_path, slot, checkouts, slot_files, {P: PLAN_TEXT}) == "commit"
     before, ports = stored(registered), Ports(registered, checkouts, slot_files)
     found = ports.releaser().release(KEY, False)
     assert isinstance(found, NotReleased) and (found.kind, found.reason) == ("refused", "not_terminal")
     assert (stored(registered), ports.opens, ports.holds, ports.observed) == (before, 0, 0, [])
 
 
-WORKING = "UPDATE attempt SET phase=?,base_commit='" + "b" * 40 + "',worker_pid=?,worker_pgid=?,worker_start=?,worker_boot=?"
+WORKING = "UPDATE attempt SET phase=?,base_commit='" + "b" * 40 + "',worker_pid=?,worker_pgid=?,worker_start=?,worker_boot=?,ended_at=NULL"
 
 
 @pytest.mark.parametrize(
@@ -193,9 +236,8 @@ WORKING = "UPDATE attempt SET phase=?,base_commit='" + "b" * 40 + "',worker_pid=
         ("unknown", False, "admitted", None, ("unavailable", "observe")),
         ("gone", True, "registered", WORKER, ("unsettled", "worker_alive")),
         ("different_process", True, "captured", WORKER, ("unsettled", "worker_alive")),
-        ("gone", False, "dispatching", None, ("unsettled", "worker_unknown")),
     ],
-    ids=["entry_running", "entry_unknown", "agent_alive", "group_alive", "dispatching_without_agent"],
+    ids=["entry_running", "entry_unknown", "agent_alive", "group_alive"],
 )
 def test_abandon_without_a_stop_proof_takes_no_lock_and_reads_no_git(
     registered: sqlite3.Connection, checkouts: Checkouts, slot_files: SlotFiles,
@@ -214,7 +256,7 @@ def test_abandon_without_a_stop_proof_takes_no_lock_and_reads_no_git(
 def test_the_entry_releasing_itself_passes_its_own_identity(
     registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles
 ) -> None:
-    verified(registered, tmp_path, slot, checkouts, slot_files)
+    committed(registered, tmp_path, slot, checkouts, slot_files)
     ports = Ports(registered, checkouts, slot_files, seen="matching")
     assert isinstance(ports.releaser().release(KEY, False, ENTRY), Released) and ports.observed == []
 
@@ -284,21 +326,22 @@ def test_a_held_slot_lock_is_slot_busy(
     before, ports = stored(registered), Ports(registered, checkouts, slot_files)
     with occupy(lock_path(str(slot.path))):
         found = ports.releaser().release(KEY, True)
-    assert found == NotReleased("unavailable", "slot_busy", "Another entry, verify or release holds the slot. Nothing changed.")
+    assert found == NotReleased("unavailable", "slot_busy", "Another entry, factory commit or release holds the slot. Nothing changed.")
     assert (stored(registered), ports.opens, ports.unclaimed) == (before, 0, [])
 
 
-def test_an_attempt_changed_after_the_proof_records_nothing_and_says_it_parked(
+def test_an_attempt_changed_after_the_proof_refuses_before_parking(
     registered: sqlite3.Connection, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles
 ) -> None:
-    """A relaunch registers another entry while the release holds the lock: the fence on `rev` refuses the transaction."""
+    """A changed entry at custody acquisition invalidates the proof before any Git write."""
     d = head(slot)
     slot.take_branch("task/tl-1", "HEAD", mode="resume")
     before, ports = stored(registered), Ports(registered, checkouts, slot_files)
     ports.inside = lambda: registered.execute("UPDATE attempt SET entry_pid=8,rev=rev+1")
     found = ports.releaser().release(KEY, True)
     assert isinstance(found, NotReleased) and (found.kind, found.reason) == ("unavailable", "changed")
-    assert f"parked at {d}" in found.detail and stored(registered) == before and ports.unclaimed == []
+    assert found.detail.endswith("Nothing changed.") and stored(registered) == before and ports.unclaimed == []
+    assert (head(slot), slot.branch()) == (d, "task/tl-1") and ports.opens == 0
 
 
 def test_the_claim_is_returned_once_retried_while_bd_fails_and_reported_when_not_ours(
@@ -318,11 +361,49 @@ def test_the_claim_is_returned_once_retried_while_bd_fails_and_reported_when_not
     assert other.releaser().release(KEY, True) == Released("s1", None, False, "not_held", True)
 
 
+@pytest.mark.parametrize("change", [
+    "UPDATE attempt SET entry_pid=8,rev=rev+1",
+    "UPDATE reservation SET generation=generation+1",
+], ids=["attempt", "reservation"])
+def test_a_change_before_the_record_transaction_keeps_the_reservation_and_claim(
+    registered: sqlite3.Connection, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles, change: str,
+) -> None:
+    """Custody proof has passed, but the transaction must still compare its snapshot before recording a release."""
+    ports = Ports(registered, checkouts, slot_files)
+
+    @contextmanager
+    def raced(con: sqlite3.Connection) -> Generator[None]:
+        con.execute(change)
+        with begin_immediate(con):
+            yield
+
+    releaser = replace(ports.releaser(), store=AttemptStore(lambda: registered, raced))
+    found = releaser.release(KEY, True)
+    assert isinstance(found, NotReleased) and (found.kind, found.reason) == ("unavailable", "changed")
+    reservations, releases = stored(registered)
+    assert reservations and releases == []
+    assert ports.unclaimed == ports.emptied == []
+
+
+def test_a_failed_reservation_deletion_rolls_back_the_release_record(
+    registered: sqlite3.Connection, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles,
+) -> None:
+    """A database failure after the insert leaves the claim held and the slot reserved; retry can finish normally."""
+    registered.execute("CREATE TRIGGER prevent_release BEFORE DELETE ON reservation "
+                       "BEGIN SELECT RAISE(ABORT, 'deletion failed'); END")
+    before, ports = stored(registered), Ports(registered, checkouts, slot_files)
+    found = ports.releaser().release(KEY, True)
+    assert isinstance(found, NotReleased) and (found.kind, found.reason) == ("unavailable", "store")
+    assert stored(registered) == before and ports.unclaimed == ports.emptied == []
+    registered.execute("DROP TRIGGER prevent_release")
+    assert ports.releaser().release(KEY, True) == Released("s1", None, True, "unclaimed", True)
+
+
 def test_abandoning_a_settled_release_flips_it_and_returns_the_claim_with_no_git(
     registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles
 ) -> None:
     d = head(slot)
-    verified(registered, tmp_path, slot, checkouts, slot_files)
+    committed(registered, tmp_path, slot, checkouts, slot_files)
     assert isinstance(Ports(registered, checkouts, slot_files).releaser().release(KEY, False), Released)
     ports = Ports(registered, checkouts, slot_files)
     assert ports.releaser().release(KEY, True) == Released("s1", None, False, "unclaimed", True)
@@ -342,11 +423,11 @@ def test_the_abandon_through_the_real_unclaim_ends_for_a_closed_or_deleted_task(
     """bd refuses the unclaim of a closed task and writes nothing; the abandon records `not_held` instead of staying
     `unclaiming` forever (tl-8bh9.14.9 5.3)."""
     d = head(slot)
-    verified(registered, tmp_path, slot, checkouts, slot_files)
+    committed(registered, tmp_path, slot, checkouts, slot_files)
     assert isinstance(Ports(registered, checkouts, slot_files).releaser().release(KEY, False), Released)
     ports, script = Ports(registered, checkouts, slot_files), Script().say(*reply)
     releaser = SlotRelease(AttemptStore(lambda: registered), ports.checkouts, slot_files, ports.observe, ports.gone, ports.hold,
-                           tracker_claims(script).unclaim, lambda: 30, ports.setup_seen, ports.scratch)
+                           tracker_claims(script).unclaim, lambda: 30, ports.setup_seen, ports.scratch, ids=NativeIds())
     assert releaser.release(KEY, True) == Released("s1", None, False, claim, True)
     assert stored(registered) == ([], [(d, 30.0, claim)]) and len(script.calls) == 1
 
@@ -355,13 +436,14 @@ def test_after_a_release_every_other_writer_meets_the_fence_and_the_slot_is_free
     registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles, root: Path,
     occupy: Callable[[Path], AbstractContextManager[None]],
 ) -> None:
-    verified(registered, tmp_path, slot, checkouts, slot_files)
+    committed(registered, tmp_path, slot, checkouts, slot_files)
     assert isinstance(Ports(registered, checkouts, slot_files).releaser().release(KEY, False), Released)
     store = AttemptStore(lambda: registered)
     with pytest.raises(StoreRefused, match="stale_reservation"):
         store.load(KEY)
     assert store.register_entry(KEY, (8, "later", "boot"), 10) == "refused"
-    admission = ChainAdmission(lambda: registered, begin_immediate, EvidenceFiles(tmp_path), lambda: 10)
+    admission = ChainAdmission(lambda: registered, begin_immediate, EvidenceFiles(tmp_path), lambda: 10,
+                               checkouts, slot_files, ids=NativeIds(), engine=ENGINE)
     assert admission.admit_repeat(RepeatRequest(KEY, "feedback", 1000, "unsafe")) == AdmitRefused("not_repeatable")
     opened: list[Path] = []
 
@@ -369,13 +451,15 @@ def test_after_a_release_every_other_writer_meets_the_fence_and_the_slot_is_free
         opened.append(path)
         return checkouts(path, git_dir=git_dir)
 
-    assert isinstance(Verifier(store, counted, slot_files, never, lambda: 20, never).verify(KEY), Verified) and opened == []
+    assert isinstance(FactoryCommit(store, counted, slot_files, never, lambda: 20, never,
+        ids=NativeIds()).commit(KEY), Committed) and opened == []
     git = SlotGit(checkouts, slot_files)
-    adopt(lambda: registered, begin_immediate, slot.repo, git, root, 1)  # the freed slot, detached and clean, is free again
+    store = SlotsStore(lambda: registered, begin_immediate)
+    adopt(store, slot.repo, git, root, 1)  # the freed slot, detached and clean, is free again
     repo_id = RepoId(slot.repo.identity().key)
-    assert [view.state for view in observe(registered, slot.repo, git, repo_id, probe)] == ["free"]
+    assert [view.state for view in observe(store, slot.repo, git, repo_id, probe)] == ["free"]
     with occupy(lock_path(str(slot.path))):  # a release still parking it holds the lock: never free
-        assert [(view.state, view.reason) for view in observe(registered, slot.repo, git, repo_id, probe)] == [("unknown", "locked")]
+        assert [(view.state, view.reason) for view in observe(store, slot.repo, git, repo_id, probe)] == [("unknown", "locked")]
 
 
 def test_a_clean_detached_slot_moved_off_d_is_parked_back_at_d(
@@ -408,7 +492,7 @@ def test_a_release_waits_for_a_setup_process_left_running_and_never_stops_it(
     stop could not prove gone): both modes refuse `held:setup_running`, nothing changed and no lock or Git touched,
     until the group is gone; unknown is `unavailable:setup_unknown`. Only the latest run counts."""
     if not abandon:
-        verified(registered, tmp_path, slot, checkouts, slot_files)
+        committed(registered, tmp_path, slot, checkouts, slot_files)
     registered.execute(SETUP, (1, "b" * 40, "d" * 64, 500, 500, 2.0, "lingering"))  # an earlier run: never asked
     registered.execute(SETUP, (2, "b" * 40, "d" * 64, 501, 501, None if conclusion is None else 3.0, conclusion))
     before, ports = stored(registered), Ports(registered, checkouts, slot_files)
@@ -454,7 +538,7 @@ def checks_attempt(con: sqlite3.Connection, number: int, abandoned: bool) -> Non
 
 
 def settled(con: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, files: SlotFiles) -> Ports:
-    verified(con, tmp_path, slot, checkouts, files)
+    committed(con, tmp_path, slot, checkouts, files)
     assert isinstance(Ports(con, checkouts, files).releaser().release(KEY, False), Released)
     return Ports(con, checkouts, files)
 
@@ -484,18 +568,15 @@ def test_a_checks_admission_committed_between_the_abandons_read_and_its_flip_ref
     """The admission commits first (`SUCCESSOR` in `FLIP`): the abandon read a current attempt, but its flip sees the checks
     attempt and changes nothing; the person reruns `--abandon`, which now refuses until the checks attempt is abandoned."""
     ports = settled(registered, tmp_path, slot, checkouts, slot_files)
-    opened = 0
+    @contextmanager
+    def raced(con: sqlite3.Connection) -> Generator[None]:
+        checks_attempt(registered, 1, False)
+        with begin_immediate(con):
+            yield
 
-    def connect() -> sqlite3.Connection:
-        nonlocal opened
-        opened += 1
-        if opened == 2:  # after the release's read, before its write transaction
-            checks_attempt(registered, 1, False)
-        return registered
-
-    releaser = replace(ports.releaser(), store=AttemptStore(connect))
+    releaser = replace(ports.releaser(), store=AttemptStore(lambda: registered, raced))
     found = releaser.release(KEY, True)
-    assert isinstance(found, NotReleased) and (found.kind, found.reason) == ("unavailable", "changed") and opened == 2
+    assert isinstance(found, NotReleased) and (found.kind, found.reason) == ("unavailable", "changed")
     assert stored(registered)[1] == [(head(slot), 30.0, "kept")] and ports.unclaimed == []
     assert release_word(ports.releaser().release(KEY, True)) == "refused:changed"
 

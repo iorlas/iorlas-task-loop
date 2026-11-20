@@ -7,26 +7,33 @@ import re
 import sqlite3
 from collections.abc import Callable, Generator
 from contextlib import AbstractContextManager, contextmanager
+from functools import partial
 from pathlib import Path
 from typing import override
 
 import pytest
+from admission_boundaries import guard_git, outside_transaction
 from any_agent import Harness, LaunchSpec, RunHooks, RunOutcome, Summary
 from any_agent.procs import Worker
 from any_agent.testing import FakeRun
-from doubles import FakeSlotFiles
+from doubles import WORKFLOW_FILES, FakeSlotFiles
 from git_porcelain import GitTimeout, GitUnavailable, HookRejected, MissingRemote, RefRejected, Rejected, RemoteRejected, Repo, Sha
 from git_porcelain.api import PushResult
 from git_porcelain.testing import FakeRemote, FakeRepo, FakeWorktree
+from plan_fixtures import PLAN_TEXT
+from sqlite_store import begin_immediate
 
+from taskloop.agents.launch import AgentLaunch
 from taskloop.attempt import Attempts
 from taskloop.attempt_reads import PublishedRow
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import AttemptKey, Checkouts, FileStat, SlotFiles
+from taskloop.commit import FactoryCommit
 from taskloop.evidence_files import EvidenceFiles
+from taskloop.ids import NativeIds
+from taskloop.operation_evidence import OperationKind, OperationState, OperationTiming
 from taskloop.publish import BranchPublish, BranchPublished, NotPublished, PublishResult, publish_word
 from taskloop.slot_release import Released, SlotRelease
-from taskloop.verifier import Verifier
 
 KEY = AttemptKey("attempt", "dispatch", 1)
 ENTRY = (7, "entry-start", "boot")
@@ -76,11 +83,31 @@ class Pushing(FakeWorktree):
         return answer if answer is not None else super().push(dst, remote=remote, head=head)
 
 
+@pytest.fixture(autouse=True)
+def external_git(registered: sqlite3.Connection, monkeypatch: pytest.MonkeyPatch) -> None:
+    guard_git(registered, monkeypatch)
+    for method in ("worktree", "is_ancestor", "remote_url"):
+        monkeypatch.setattr(ScriptedPushRepo, method, outside_transaction(registered, getattr(ScriptedPushRepo, method)))
+    monkeypatch.setattr(Pushing, "push", outside_transaction(registered, Pushing.push))
+
+
+def test_push_guard_rejects_a_write_transaction_before_effects(
+    registered: sqlite3.Connection, repo: ScriptedPushRepo, remote: FakeRemote,
+) -> None:
+    worktree = repo.worktree(repo.path)
+    effects: list[str] = []
+    repo.during = lambda: effects.append("push")
+    before = remote.branches()
+    with begin_immediate(registered), pytest.raises(AssertionError, match="outside the write transaction"):
+        worktree.push("task/tl-1")
+    assert effects == [] and remote.branches() == before
+
+
 @pytest.fixture
 def remote(request: pytest.FixtureRequest) -> FakeRemote:
     """origin; `indirect` parametrization adds files to main's first commit (a plan already at D)."""
     found = FakeRemote("https://example.invalid/repo.git")
-    found.advance("main", {"README": "one", **getattr(request, "param", {})})
+    found.advance("main", {"README": "one", ".task-loop.json": "{}", **getattr(request, "param", {}), **WORKFLOW_FILES})
     return found
 
 
@@ -123,17 +150,24 @@ def nowhere(*_args: object) -> AbstractContextManager[None]:
 
 
 def run(con: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, files: SlotFiles,
-        written: dict[str, str], disposition: str = "planned", *, verify: bool = True, release: bool = True) -> str:
-    """The registered attempt run once on `task/tl-1`, verified and released (settled): the branch tip."""
+        written: dict[str, str], disposition: str = "planned", *, commit: bool = True, release: bool = True) -> str:
+    """The registered attempt run once on `task/tl-1`, committed and released (settled): the branch tip."""
     store = AttemptStore(lambda: con)
-    attempts = Attempts(store, EvidenceFiles(tmp_path), lambda: ("/bin/codex", {}), agent(slot, written, disposition), lambda: 10,
-                            checkouts, files)
-    assert attempts.execute(KEY, ENTRY).reason == "verification"
-    if verify:
-        Verifier(store, checkouts, files, lambda _w: True, lambda: 20, nowhere).verify(KEY)
+    attempts = Attempts(
+        store,
+        EvidenceFiles(tmp_path),
+        AgentLaunch(lambda _harness: ("/bin/codex", {}), ids=NativeIds()),
+        agent(slot, written, disposition),
+        lambda: 10,
+        checkouts,
+        files,
+    )
+    assert attempts.execute(KEY, ENTRY).reason == "commit"
+    if commit:
+        FactoryCommit(store, checkouts, files, lambda _w: True, lambda: 20, nowhere, ids=NativeIds()).commit(KEY)
     if release:
         releaser = SlotRelease(store, checkouts, files, lambda _e: "gone", lambda _w: True, nowhere, lambda _r, _t: True, lambda: 30,
-                               lambda _setup: "gone", lambda _scratch: True)
+                               lambda _setup: "gone", lambda _scratch: True, ids=NativeIds())
         assert isinstance(releaser.release(KEY, False), Released)
     return tip(slot.repo)
 
@@ -142,19 +176,34 @@ def tip(repo: FakeRepo, prefix: str = "refs/heads/task/") -> str:
     return next(ref.sha for ref in repo.refs([prefix]) if ref.name in (BRANCH, "refs/remotes/origin/task/tl-1"))
 
 
-def publisher(con: sqlite3.Connection, git: Checkouts, files: SlotFiles, store: AttemptStore | None = None) -> BranchPublish:
-    return BranchPublish(store or AttemptStore(lambda: con), git, files, lambda: 40)
+def publisher(con: sqlite3.Connection, git: Checkouts, files: SlotFiles, store: AttemptStore | None = None,
+              timing: OperationTiming | None = None) -> BranchPublish:
+    return BranchPublish(store or AttemptStore(lambda: con), git, files, lambda: 40, ids=NativeIds(), timing=timing)
 
 
 def rows(con: sqlite3.Connection) -> list[tuple[object, ...]]:
     return con.execute("SELECT attempt_id,commit_sha,remote_head,published_at FROM published_branch").fetchall()
 
 
-def test_a_verified_released_plan_is_pushed_from_the_checkout_and_recorded_once(
+def test_commit_binds_commit_evidence_and_suppresses_stored_verdict(
+    registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles,
+) -> None:
+    run(registered, tmp_path, slot, checkouts, slot_files, {P: PLAN_TEXT}, commit=False, release=False)
+    files = EvidenceFiles(tmp_path)
+    timing = partial(files.observe_operation, clock=lambda: 10.0, wall=lambda: 100.0, ids=NativeIds())
+    factory_commit = FactoryCommit(AttemptStore(lambda: registered), checkouts, slot_files, lambda _w: True,
+                        lambda: 20, nowhere, ids=NativeIds(), timing=timing)
+    first = factory_commit.commit(KEY)
+    assert factory_commit.commit(KEY) == first
+    sample, = files.operations(KEY)
+    assert sample.kind is OperationKind.COMMIT and sample.state is OperationState.COMPLETED
+
+
+def test_a_committed_released_plan_is_pushed_from_the_checkout_and_recorded_once(
     registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, repo: ScriptedPushRepo, remote: FakeRemote, checkouts: Checkouts,
     slot_files: SlotFiles,
 ) -> None:
-    x = run(registered, tmp_path, slot, checkouts, slot_files, {P: "# Plan\n"})
+    x = run(registered, tmp_path, slot, checkouts, slot_files, {P: PLAN_TEXT})
     registered.execute("INSERT INTO reservation VALUES ('s1',?,2,'other')", (repo.identity().key,))  # taken again
     git = Observed(checkouts)
     found = publisher(registered, git, slot_files).publish(KEY)
@@ -166,7 +215,7 @@ def test_a_verified_released_plan_is_pushed_from_the_checkout_and_recorded_once(
     assert publisher(registered, again, slot_files).publish(KEY) == PublishedRow(x, x, 40.0) and again.opened == []
 
 
-@pytest.mark.parametrize("remote", [{P: "# Plan\n"}], indirect=True)
+@pytest.mark.parametrize("remote", [{P: PLAN_TEXT}], indirect=True)
 def test_a_reused_plan_publishes_b(
     registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, remote: FakeRemote, checkouts: Checkouts, slot_files: SlotFiles
 ) -> None:
@@ -178,8 +227,8 @@ def abandoned(con: sqlite3.Connection, _slot: FakeWorktree, _repo: ScriptedPushR
     con.execute("UPDATE slot_release SET claim='unclaimed'")
 
 
-def unverified(con: sqlite3.Connection, _slot: FakeWorktree, _repo: ScriptedPushRepo, _files: FakeSlotFiles) -> None:
-    con.execute("DELETE FROM verification")
+def uncommitted(con: sqlite3.Connection, _slot: FakeWorktree, _repo: ScriptedPushRepo, _files: FakeSlotFiles) -> None:
+    con.execute("DELETE FROM factory_commit")
 
 
 def redirected(_con: sqlite3.Connection, slot: FakeWorktree, _repo: ScriptedPushRepo, files: FakeSlotFiles) -> None:
@@ -206,28 +255,31 @@ def branch_rewritten(con: sqlite3.Connection, slot: FakeWorktree, _repo: Scripte
 @pytest.mark.parametrize(
     ("change", "reason", "opened"),
     [
-        (abandoned, "abandoned", 0), (unverified, "not_verified", 0), (redirected, "repository", 0),
+        (abandoned, "abandoned", 0), (uncommitted, "not_committed", 0), (redirected, "repository", 0),
         (other_repository, "repository", 1), (no_origin, "no_remote", 2), (branch_missing, "branch_moved", 2),
         (branch_rewritten, "branch_moved", 2),
     ],
-    ids=["abandoned", "not_verified", "redirected", "other_repository", "no_origin", "branch_missing", "branch_rewritten"],
+    ids=["abandoned", "not_committed", "redirected", "other_repository", "no_origin", "branch_missing", "branch_rewritten"],
 )
 def test_each_precondition_refuses_before_any_push(
     registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, repo: ScriptedPushRepo, remote: FakeRemote, checkouts: Checkouts,
     slot_files: FakeSlotFiles, change: Callable[[sqlite3.Connection, FakeWorktree, ScriptedPushRepo, FakeSlotFiles], None], reason: str,
     opened: int,
 ) -> None:
-    run(registered, tmp_path, slot, checkouts, slot_files, {P: "# Plan\n"})
+    run(registered, tmp_path, slot, checkouts, slot_files, {P: PLAN_TEXT})
     change(registered, slot, repo, slot_files)
     pushes: list[bool] = []
     repo.during = lambda: pushes.append(True)
     git = Observed(checkouts)
     found = publisher(registered, git, slot_files).publish(KEY)
     assert isinstance(found, NotPublished) and (found.kind, found.reason, publish_word(found)) == ("refused", reason, f"refused:{reason}")
+    assert all(recipe not in found.detail for recipe in ("tl step ", "git remote add", "git push"))
+    if reason == "not_committed":
+        assert "Factory commit must accept it before publication" in found.detail
     assert (pushes, rows(registered), "task/tl-1" in remote.branches(), len(git.opened)) == ([], [], False, opened)
 
 
-def test_absent_rejected_and_not_yet_verified_are_refused(
+def test_absent_rejected_and_not_yet_committed_are_refused(
     registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles
 ) -> None:
     git = Observed(checkouts)
@@ -235,7 +287,7 @@ def test_absent_rejected_and_not_yet_verified_are_refused(
         "refused", "absent", "No such attempt. Nothing was pushed or recorded.")
     run(registered, tmp_path, slot, checkouts, slot_files, {P: " \n"}, release=False)  # rejected: plan_empty
     found = publisher(registered, git, slot_files).publish(KEY)
-    assert isinstance(found, NotPublished) and found.reason == "not_verified" and "plan_empty" in found.detail and git.opened == []
+    assert isinstance(found, NotPublished) and found.reason == "not_committed" and "plan_empty" in found.detail and git.opened == []
 
 
 def test_a_remote_ahead_that_contains_x_is_refused_and_never_recorded(
@@ -243,7 +295,7 @@ def test_a_remote_ahead_that_contains_x_is_refused_and_never_recorded(
     slot_files: SlotFiles,
 ) -> None:
     """`ls_remote` reads the fetch side, which a `pushurl` may make another repository: only `Pushed` is recorded."""
-    x = run(registered, tmp_path, slot, checkouts, slot_files, {P: "# Plan\n"})
+    x = run(registered, tmp_path, slot, checkouts, slot_files, {P: PLAN_TEXT})
     repo.worktree(repo.path).push("task/tl-1", head=Sha(x))  # someone published X, then added a commit on top
     t = remote.advance("task/tl-1", {"later.md": "more"})
     repo.fetch("origin")
@@ -255,7 +307,7 @@ def test_a_remote_ahead_that_contains_x_is_refused_and_never_recorded(
 def test_a_rejected_push_records_nothing_even_when_the_remote_tip_is_x_and_a_rerun_records(
     registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, repo: ScriptedPushRepo, checkouts: Checkouts, slot_files: SlotFiles
 ) -> None:
-    x = run(registered, tmp_path, slot, checkouts, slot_files, {P: "# Plan\n"})
+    x = run(registered, tmp_path, slot, checkouts, slot_files, {P: PLAN_TEXT})
     repo.worktree(repo.path).push("task/tl-1", head=Sha(x))  # another publisher won the race
     repo.answer = RefRejected("! [rejected] (fetch first)")
     found = publisher(registered, checkouts, slot_files).publish(KEY)
@@ -297,7 +349,7 @@ def test_a_rejected_push_that_is_not_a_refusal_is_rerun_able_and_records_nothing
     registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, repo: ScriptedPushRepo, remote: FakeRemote, checkouts: Checkouts,
     slot_files: SlotFiles, arrange: Callable[[sqlite3.Connection, ScriptedPushRepo, FakeRemote], str], expected: tuple[str, str],
 ) -> None:
-    run(registered, tmp_path, slot, checkouts, slot_files, {P: "# Plan\n"})
+    run(registered, tmp_path, slot, checkouts, slot_files, {P: PLAN_TEXT})
     before = arrange(registered, repo, remote)
     repo.answer = RefRejected("! [rejected] (non-fast-forward)")
     found = publisher(registered, checkouts, slot_files).publish(KEY)
@@ -309,7 +361,7 @@ def test_a_diverged_remote_is_refused_and_kept_and_an_unknown_tip_is_remote_move
     registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, repo: ScriptedPushRepo, remote: FakeRemote, checkouts: Checkouts,
     slot_files: SlotFiles,
 ) -> None:
-    run(registered, tmp_path, slot, checkouts, slot_files, {P: "# Plan\n"})
+    run(registered, tmp_path, slot, checkouts, slot_files, {P: PLAN_TEXT})
     t = remote.advance("task/tl-1", {"other.md": "unrelated"})  # another branch of the same name, unknown here
     moved = publisher(registered, checkouts, slot_files).publish(KEY)
     assert isinstance(moved, NotPublished) and (moved.kind, moved.reason) == ("refused", "remote_moved") and t in moved.detail
@@ -334,7 +386,7 @@ def test_a_push_that_does_not_land_records_nothing_and_prints_no_git_output(
     registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, repo: ScriptedPushRepo, remote: FakeRemote, checkouts: Checkouts,
     slot_files: SlotFiles, answer: PushResult | GitUnavailable | None, expected: tuple[str, str],
 ) -> None:
-    run(registered, tmp_path, slot, checkouts, slot_files, {P: "# Plan\n"})
+    run(registered, tmp_path, slot, checkouts, slot_files, {P: PLAN_TEXT})
     remote.offline = answer is None
     repo.answer = answer
     found = publisher(registered, checkouts, slot_files).publish(KEY)
@@ -347,31 +399,96 @@ def test_an_abandon_committed_during_the_push_is_refused_and_records_nothing(
     registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, repo: ScriptedPushRepo, remote: FakeRemote, checkouts: Checkouts,
     slot_files: FakeSlotFiles,
 ) -> None:
-    x = run(registered, tmp_path, slot, checkouts, slot_files, {P: "# Plan\n"})
+    x = run(registered, tmp_path, slot, checkouts, slot_files, {P: PLAN_TEXT})
     repo.during = lambda: abandoned(registered, slot, repo, slot_files)
     found = publisher(registered, checkouts, slot_files).publish(KEY)
     assert isinstance(found, NotPublished) and (found.kind, found.reason) == ("refused", "abandoned")
     assert rows(registered) == [] and remote.branches()["task/tl-1"] == x  # the remote keeps X; nothing else is undone
 
 
+def test_a_changed_commit_during_the_push_records_nothing_and_can_be_retried(
+    registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, repo: ScriptedPushRepo, remote: FakeRemote, checkouts: Checkouts,
+    slot_files: SlotFiles,
+) -> None:
+    x = run(registered, tmp_path, slot, checkouts, slot_files, {P: PLAN_TEXT})
+    repo.during = lambda: registered.execute("UPDATE attempt SET end_commit=slot_head")
+    clock_calls: list[bool] = []
+
+    def clock() -> float:
+        assert registered.in_transaction
+        clock_calls.append(True)
+        return 40.0
+
+    app = BranchPublish(AttemptStore(lambda: registered), checkouts, slot_files, clock, ids=NativeIds())
+    found = app.publish(KEY)
+    assert found == NotPublished("unavailable", "changed",
+                                 f"The attempt changed during the push: origin holds {x}; nothing was recorded.")
+    assert rows(registered) == [] and remote.branches()["task/tl-1"] == x and clock_calls == []
+    repo.during = lambda: None
+    registered.execute("UPDATE attempt SET end_commit=?", (x,))
+    assert app.publish(KEY) == BranchPublished(x, x)
+    assert rows(registered) == [("attempt", x, x, 40.0)] and clock_calls == [True]
+
+
 def test_a_failed_record_is_unavailable_store_and_a_rerun_records_it(
     registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles
 ) -> None:
-    x = run(registered, tmp_path, slot, checkouts, slot_files, {P: "# Plan\n"})
+    x = run(registered, tmp_path, slot, checkouts, slot_files, {P: PLAN_TEXT})
 
     def refused(_con: sqlite3.Connection) -> AbstractContextManager[None]:
         raise sqlite3.OperationalError("database is locked")
 
-    failing = publisher(registered, checkouts, slot_files, AttemptStore(lambda: registered, refused))
+    files, now = EvidenceFiles(tmp_path), [0.0]
+    timing = partial(files.observe_operation, clock=lambda: now[0], wall=lambda: 100.0, ids=NativeIds())
+    failing = publisher(registered, checkouts, slot_files, AttemptStore(lambda: registered, refused), timing)
     found = failing.publish(KEY)
     assert isinstance(found, NotPublished) and (found.kind, found.reason) == ("unavailable", "store") and rows(registered) == []
-    assert publisher(registered, checkouts, slot_files).publish(KEY) == BranchPublished(x, x)  # pushed again: up to date
+    assert publisher(registered, checkouts, slot_files, timing=timing).publish(KEY) == BranchPublished(x, x)
+    samples = files.operations(KEY)
+    assert len(samples) == 2 and len({sample.operation for sample in samples}) == 2
+    assert all(sample.kind is OperationKind.PUBLISH and sample.state is OperationState.COMPLETED for sample in samples)
+    assert publisher(registered, checkouts, slot_files, timing=timing).publish(KEY) == PublishedRow(x, x, 40.0)
+    assert files.operations(KEY) == samples
+
+
+@pytest.mark.parametrize("broken_evidence", [False, True])
+def test_push_retry_retains_effect_duration_and_evidence_failure_does_not_repeat_push(
+    registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, repo: ScriptedPushRepo, checkouts: Checkouts,
+    slot_files: SlotFiles, monkeypatch: pytest.MonkeyPatch, broken_evidence: bool,
+) -> None:
+    x = run(registered, tmp_path, slot, checkouts, slot_files, {P: PLAN_TEXT})
+    files, now, calls = EvidenceFiles(tmp_path), [0.0], []
+    timing = partial(files.observe_operation, clock=lambda: now[0], wall=lambda: 100.0, ids=NativeIds())
+
+    def during() -> None:
+        assert not registered.in_transaction
+        now[0] += 5
+        calls.append(True)
+
+    def broken(*_args: object) -> None:
+        raise OSError("Evidence unavailable")
+
+    repo.during = during
+    if broken_evidence:
+        monkeypatch.setattr(files, "write_operation", broken)
+    repo.answer = RemoteRejected("remote refused")
+    app = publisher(registered, checkouts, slot_files, timing=timing)
+    assert isinstance(app.publish(KEY), NotPublished)
+    repo.answer = None
+    assert app.publish(KEY) == BranchPublished(x, x)
+    assert app.publish(KEY) == PublishedRow(x, x, 40.0) and len(calls) == 2
+    samples = files.operations(KEY)
+    if broken_evidence:
+        assert samples == ()
+    else:
+        assert len(samples) == 2 and all(sample.elapsed == 5.0 for sample in samples)
+        assert {sample.state for sample in samples} == {OperationState.FAILED, OperationState.COMPLETED}
 
 
 def test_two_publishers_at_once_record_one_row(
     registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, repo: ScriptedPushRepo, checkouts: Checkouts, slot_files: SlotFiles
 ) -> None:
-    x = run(registered, tmp_path, slot, checkouts, slot_files, {P: "# Plan\n"})
+    x = run(registered, tmp_path, slot, checkouts, slot_files, {P: PLAN_TEXT})
     inner: list[PublishResult] = []
     started: list[bool] = []
 
@@ -389,7 +506,7 @@ def test_a_ref_name_collision_on_origin_is_named_not_reported_as_the_remotes_pol
     registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, repo: ScriptedPushRepo, remote: FakeRemote, checkouts: Checkouts,
     slot_files: SlotFiles,
 ) -> None:
-    run(registered, tmp_path, slot, checkouts, slot_files, {P: "# Plan\n"})
+    run(registered, tmp_path, slot, checkouts, slot_files, {P: PLAN_TEXT})
     remote.advance("task/tl-1/x", {"other.md": "unrelated"})
     repo.answer = RemoteRejected("! [remote rejected] task/tl-1 (cannot lock ref)")
     found = publisher(registered, checkouts, slot_files).publish(KEY)

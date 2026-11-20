@@ -1,0 +1,20 @@
+{
+  "prepared_commit": "771f57ad2b82b9cb5e6e01e14966c82ad1705b7f",
+  "cited_paths": [
+    "src/taskloop/publish.py",
+    "src/taskloop/attempt_store.py",
+    "src/taskloop/attempt_write_store.py",
+    "src/taskloop/attempt_reads.py",
+    "src/taskloop/factory_schema.py",
+    "src/taskloop/composition.py",
+    "src/taskloop/cli_composition.py",
+    "src/taskloop/attempt_entry.py",
+    "src/taskloop/operations.py",
+    "src/taskloop/round.py",
+    "src/taskloop/step_render.py",
+    "src/taskloop/result_data.py",
+    "tests/steps/test_publish.py",
+    "tests/steps/real/test_publish_real.py",
+    "tests/rules/test_attempt_sql_ownership.py"
+  ]
+}

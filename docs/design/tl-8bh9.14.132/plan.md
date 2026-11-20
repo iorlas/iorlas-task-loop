@@ -1,5 +1,7 @@
 # Default backlog for step show and expose list hold causes
 
+Status: **built** for default backlog selection and hold-cause reads. The original proposal below is historical; current behavior is in the [README](../../../README.md), enforced by [status CLI tests](../../../tests/cli/test_step_status_cli.py) and [configuration tests](../../../tests/cli/test_config.py).
+
 Task: `tl-8bh9.14.132`. Prepared 2026-11-13 from the owner's run feedback and the current successor source.
 This is an implementation plan; implementation and verification remain to be done.
 

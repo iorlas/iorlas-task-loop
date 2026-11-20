@@ -1,5 +1,7 @@
 # Human input: settled working design
 
+Status: **design**. Accepted decisions and pending proposals are distinguished below; historical source observations are not a delivery receipt. Explicit holds remain in force except where superseded.
+
 2026-11-08. The owner requested several critical balancing rounds with Astra, a strong recommendation, then moving
 on. Three further rounds produced this baseline. It is delegated design judgment, not a claim of source implementation
 or a verbatim owner approval of each API detail. It supersedes conflicting exploratory recommendations in plan.md,

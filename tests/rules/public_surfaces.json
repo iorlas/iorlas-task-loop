@@ -1,0 +1,2552 @@
+{
+  "api": {
+    "taskloop.agents.api": {
+      "AgentStop": {
+        "kind": "class",
+        "methods": {
+          "consistent": "(self) -> taskloop.agents.stop_models.AgentStop"
+        },
+        "schema": {
+          "$defs": {
+            "Identity": {
+              "additionalProperties": false,
+              "properties": {
+                "boot": {
+                  "maxLength": 200,
+                  "minLength": 1,
+                  "title": "Boot",
+                  "type": "string"
+                },
+                "pgid": {
+                  "exclusiveMinimum": 0,
+                  "title": "Pgid",
+                  "type": "integer"
+                },
+                "pid": {
+                  "exclusiveMinimum": 0,
+                  "title": "Pid",
+                  "type": "integer"
+                },
+                "start": {
+                  "maxLength": 200,
+                  "minLength": 1,
+                  "title": "Start",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "pid",
+                "pgid",
+                "start",
+                "boot"
+              ],
+              "title": "Identity",
+              "type": "object"
+            },
+            "StopCause": {
+              "enum": [
+                "deadline",
+                "first_output",
+                "inactivity",
+                "stalled",
+                "answer",
+                "policy",
+                "limit",
+                "credit",
+                "authentication",
+                "network",
+                "watchdog",
+                "entry_signal",
+                "interrupt",
+                "parent_lost",
+                "caller_exit"
+              ],
+              "title": "StopCause",
+              "type": "string"
+            },
+            "StopOperation": {
+              "enum": [
+                "execute"
+              ],
+              "title": "StopOperation",
+              "type": "string"
+            },
+            "StopPhase": {
+              "enum": [
+                "requested",
+                "reported",
+                "observed_gone"
+              ],
+              "title": "StopPhase",
+              "type": "string"
+            },
+            "StopProof": {
+              "additionalProperties": false,
+              "properties": {
+                "error": {
+                  "title": "Error",
+                  "type": "boolean"
+                },
+                "kill_attempted": {
+                  "title": "Kill Attempted",
+                  "type": "boolean"
+                },
+                "kill_delivered": {
+                  "title": "Kill Delivered",
+                  "type": "boolean"
+                },
+                "survivors": {
+                  "items": {
+                    "$ref": "#/$defs/Survivor"
+                  },
+                  "title": "Survivors",
+                  "type": "array"
+                },
+                "term_attempted": {
+                  "title": "Term Attempted",
+                  "type": "boolean"
+                },
+                "term_delivered": {
+                  "title": "Term Delivered",
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "term_attempted",
+                "term_delivered",
+                "kill_attempted",
+                "kill_delivered",
+                "survivors",
+                "error"
+              ],
+              "title": "StopProof",
+              "type": "object"
+            },
+            "Survivor": {
+              "additionalProperties": false,
+              "properties": {
+                "pid": {
+                  "exclusiveMinimum": 0,
+                  "title": "Pid",
+                  "type": "integer"
+                },
+                "start": {
+                  "anyOf": [
+                    {
+                      "maxLength": 200,
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null,
+                  "title": "Start"
+                }
+              },
+              "required": [
+                "pid"
+              ],
+              "title": "Survivor",
+              "type": "object"
+            }
+          },
+          "additionalProperties": false,
+          "properties": {
+            "agent": {
+              "$ref": "#/$defs/Identity"
+            },
+            "attempt_id": {
+              "title": "Attempt Id",
+              "type": "string"
+            },
+            "cause": {
+              "$ref": "#/$defs/StopCause"
+            },
+            "dispatch_token": {
+              "title": "Dispatch Token",
+              "type": "string"
+            },
+            "entry": {
+              "$ref": "#/$defs/Identity"
+            },
+            "generation": {
+              "minimum": 1,
+              "title": "Generation",
+              "type": "integer"
+            },
+            "observed_gone_at": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Observed Gone At"
+            },
+            "operation": {
+              "$ref": "#/$defs/StopOperation",
+              "default": "execute"
+            },
+            "phase": {
+              "$ref": "#/$defs/StopPhase",
+              "default": "requested"
+            },
+            "proof": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/StopProof"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "reported_at": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Reported At"
+            },
+            "requested_at": {
+              "title": "Requested At",
+              "type": "number"
+            },
+            "requested_signal": {
+              "exclusiveMinimum": 0,
+              "maximum": 127,
+              "title": "Requested Signal",
+              "type": "integer"
+            },
+            "trigger_signal": {
+              "anyOf": [
+                {
+                  "exclusiveMinimum": 0,
+                  "maximum": 127,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Trigger Signal"
+            }
+          },
+          "required": [
+            "attempt_id",
+            "dispatch_token",
+            "generation",
+            "entry",
+            "agent",
+            "cause",
+            "requested_signal",
+            "requested_at"
+          ],
+          "title": "AgentStop",
+          "type": "object"
+        },
+        "signature": "(*, attempt_id: str, dispatch_token: str, generation: Annotated[int, Ge(ge=1)], entry: taskloop.agents.stop_models.Identity, agent: taskloop.agents.stop_models.Identity, operation: taskloop.agents.stop_models.StopOperation = <StopOperation.EXECUTE: 'execute'>, cause: taskloop.agents.stop_models.StopCause, requested_signal: Annotated[int, Gt(gt=0), Le(le=127)], trigger_signal: Annotated[int | None, Gt(gt=0), Le(le=127)] = None, requested_at: float, phase: taskloop.agents.stop_models.StopPhase = <StopPhase.REQUESTED: 'requested'>, reported_at: float | None = None, proof: taskloop.agents.stop_models.StopProof | None = None, observed_gone_at: float | None = None) -> None"
+      }
+    }
+  },
+  "cli": {
+    "committed": {
+      "argv": [
+        "step",
+        "commit",
+        "tl-1",
+        "--backlog",
+        "tasks"
+      ],
+      "exit": 0,
+      "stderr": [],
+      "stdout": [
+        {
+          "attempt_id": "attempt",
+          "backlog": "tasks",
+          "published": "published",
+          "release": "released",
+          "status": "committed",
+          "task": "tl-1"
+        }
+      ]
+    },
+    "config": {
+      "argv": [
+        "config",
+        "show"
+      ],
+      "exit": 0,
+      "stderr": [],
+      "stdout": [
+        {
+          "file": {
+            "exists": false,
+            "path": "/snapshot/config.toml"
+          },
+          "settings": {
+            "agents.implement.access.sandbox": {
+              "source": "default",
+              "value": "workspace-write"
+            },
+            "agents.implement.access.summary": {
+              "source": "derived",
+              "value": "workspace-write"
+            },
+            "agents.implement.compaction_token_limit": {
+              "source": "default",
+              "value": "null"
+            },
+            "agents.implement.effort": {
+              "source": "default",
+              "value": "medium"
+            },
+            "agents.implement.harness": {
+              "source": "default",
+              "value": "codex"
+            },
+            "agents.implement.model": {
+              "source": "default",
+              "value": "gpt-6.1-sol"
+            },
+            "agents.implement.provider": {
+              "source": "derived",
+              "value": "openai"
+            },
+            "agents.plan.access.sandbox": {
+              "source": "default",
+              "value": "workspace-write"
+            },
+            "agents.plan.access.summary": {
+              "source": "derived",
+              "value": "workspace-write"
+            },
+            "agents.plan.compaction_token_limit": {
+              "source": "default",
+              "value": "null"
+            },
+            "agents.plan.effort": {
+              "source": "default",
+              "value": "high"
+            },
+            "agents.plan.harness": {
+              "source": "default",
+              "value": "codex"
+            },
+            "agents.plan.model": {
+              "source": "default",
+              "value": "gpt-6.1-sol"
+            },
+            "agents.plan.provider": {
+              "source": "derived",
+              "value": "openai"
+            },
+            "artifacts": {
+              "source": "default",
+              "value": "/snapshot/.local/state/task-loop/artifacts"
+            },
+            "backlog": {
+              "source": "default",
+              "value": null
+            },
+            "db": {
+              "source": "default",
+              "value": "/snapshot/.local/state/task-loop/factory.db"
+            },
+            "git_read_seconds": {
+              "source": "default",
+              "value": 600
+            },
+            "round_seconds": {
+              "source": "default",
+              "value": 60
+            },
+            "slot_count": {
+              "source": "default",
+              "value": 1
+            },
+            "slots_root": {
+              "source": "default",
+              "value": "/snapshot/.local/share/task-loop/slots"
+            }
+          }
+        }
+      ]
+    },
+    "drain.complete": {
+      "argv": [
+        "drain"
+      ],
+      "exit": 0,
+      "stderr": [],
+      "stdout": [
+        {
+          "actions": [
+            {
+              "action_id": "action",
+              "backlog": "",
+              "checkout": "",
+              "kind": "dispatch",
+              "owner": {
+                "boot": "boot",
+                "pgid": 7,
+                "pid": 7,
+                "start": "process-start"
+              },
+              "rev": 0,
+              "state": "pending",
+              "subject": "attempt",
+              "tracker_root": ""
+            }
+          ],
+          "active": [
+            {
+              "identity": {
+                "boot": "boot",
+                "pgid": 7,
+                "pid": 7,
+                "start": "process-start"
+              },
+              "role": "entry",
+              "subject": "attempt"
+            }
+          ],
+          "active_count": 1,
+          "conclusion": "waiting",
+          "detail": "",
+          "generation": 1,
+          "pending_actions": 1,
+          "uncertain": [
+            {
+              "identity": {
+                "boot": "boot",
+                "pgid": 7,
+                "pid": 7,
+                "start": "process-start"
+              },
+              "role": "entry",
+              "subject": "attempt"
+            }
+          ],
+          "uncertain_count": 1
+        },
+        {
+          "actions": [],
+          "active": [],
+          "active_count": 0,
+          "conclusion": "complete",
+          "detail": "Drain result",
+          "generation": 1,
+          "pending_actions": 0,
+          "uncertain": [],
+          "uncertain_count": 0
+        }
+      ]
+    },
+    "drain.interrupted": {
+      "argv": [
+        "drain"
+      ],
+      "exit": 130,
+      "stderr": [
+        {
+          "actions": [],
+          "active": [],
+          "active_count": 0,
+          "conclusion": "interrupted",
+          "detail": "Drain result",
+          "generation": 1,
+          "pending_actions": 0,
+          "uncertain": [],
+          "uncertain_count": 0
+        }
+      ],
+      "stdout": [
+        {
+          "actions": [
+            {
+              "action_id": "action",
+              "backlog": "",
+              "checkout": "",
+              "kind": "dispatch",
+              "owner": {
+                "boot": "boot",
+                "pgid": 7,
+                "pid": 7,
+                "start": "process-start"
+              },
+              "rev": 0,
+              "state": "pending",
+              "subject": "attempt",
+              "tracker_root": ""
+            }
+          ],
+          "active": [
+            {
+              "identity": {
+                "boot": "boot",
+                "pgid": 7,
+                "pid": 7,
+                "start": "process-start"
+              },
+              "role": "entry",
+              "subject": "attempt"
+            }
+          ],
+          "active_count": 1,
+          "conclusion": "waiting",
+          "detail": "",
+          "generation": 1,
+          "pending_actions": 1,
+          "uncertain": [
+            {
+              "identity": {
+                "boot": "boot",
+                "pgid": 7,
+                "pid": 7,
+                "start": "process-start"
+              },
+              "role": "entry",
+              "subject": "attempt"
+            }
+          ],
+          "uncertain_count": 1
+        }
+      ]
+    },
+    "drain.refused": {
+      "argv": [
+        "drain"
+      ],
+      "exit": 1,
+      "stderr": [
+        {
+          "actions": [],
+          "active": [],
+          "active_count": 0,
+          "conclusion": "refused",
+          "detail": "Drain result",
+          "generation": 1,
+          "pending_actions": 0,
+          "uncertain": [],
+          "uncertain_count": 0
+        }
+      ],
+      "stdout": [
+        {
+          "actions": [
+            {
+              "action_id": "action",
+              "backlog": "",
+              "checkout": "",
+              "kind": "dispatch",
+              "owner": {
+                "boot": "boot",
+                "pgid": 7,
+                "pid": 7,
+                "start": "process-start"
+              },
+              "rev": 0,
+              "state": "pending",
+              "subject": "attempt",
+              "tracker_root": ""
+            }
+          ],
+          "active": [
+            {
+              "identity": {
+                "boot": "boot",
+                "pgid": 7,
+                "pid": 7,
+                "start": "process-start"
+              },
+              "role": "entry",
+              "subject": "attempt"
+            }
+          ],
+          "active_count": 1,
+          "conclusion": "waiting",
+          "detail": "",
+          "generation": 1,
+          "pending_actions": 1,
+          "uncertain": [
+            {
+              "identity": {
+                "boot": "boot",
+                "pgid": 7,
+                "pid": 7,
+                "start": "process-start"
+              },
+              "role": "entry",
+              "subject": "attempt"
+            }
+          ],
+          "uncertain_count": 1
+        }
+      ]
+    },
+    "drain.unavailable": {
+      "argv": [
+        "drain"
+      ],
+      "exit": 3,
+      "stderr": [
+        {
+          "actions": [],
+          "active": [],
+          "active_count": 0,
+          "conclusion": "unavailable",
+          "detail": "Drain result",
+          "generation": 1,
+          "pending_actions": 0,
+          "uncertain": [],
+          "uncertain_count": 0
+        }
+      ],
+      "stdout": [
+        {
+          "actions": [
+            {
+              "action_id": "action",
+              "backlog": "",
+              "checkout": "",
+              "kind": "dispatch",
+              "owner": {
+                "boot": "boot",
+                "pgid": 7,
+                "pid": 7,
+                "start": "process-start"
+              },
+              "rev": 0,
+              "state": "pending",
+              "subject": "attempt",
+              "tracker_root": ""
+            }
+          ],
+          "active": [
+            {
+              "identity": {
+                "boot": "boot",
+                "pgid": 7,
+                "pid": 7,
+                "start": "process-start"
+              },
+              "role": "entry",
+              "subject": "attempt"
+            }
+          ],
+          "active_count": 1,
+          "conclusion": "waiting",
+          "detail": "",
+          "generation": 1,
+          "pending_actions": 1,
+          "uncertain": [
+            {
+              "identity": {
+                "boot": "boot",
+                "pgid": 7,
+                "pid": 7,
+                "start": "process-start"
+              },
+              "role": "entry",
+              "subject": "attempt"
+            }
+          ],
+          "uncertain_count": 1
+        }
+      ]
+    },
+    "drain.waiting": {
+      "argv": [
+        "drain"
+      ],
+      "exit": 3,
+      "stderr": [],
+      "stdout": [
+        {
+          "actions": [
+            {
+              "action_id": "action",
+              "backlog": "",
+              "checkout": "",
+              "kind": "dispatch",
+              "owner": {
+                "boot": "boot",
+                "pgid": 7,
+                "pid": 7,
+                "start": "process-start"
+              },
+              "rev": 0,
+              "state": "pending",
+              "subject": "attempt",
+              "tracker_root": ""
+            }
+          ],
+          "active": [
+            {
+              "identity": {
+                "boot": "boot",
+                "pgid": 7,
+                "pid": 7,
+                "start": "process-start"
+              },
+              "role": "entry",
+              "subject": "attempt"
+            }
+          ],
+          "active_count": 1,
+          "conclusion": "waiting",
+          "detail": "",
+          "generation": 1,
+          "pending_actions": 1,
+          "uncertain": [
+            {
+              "identity": {
+                "boot": "boot",
+                "pgid": 7,
+                "pid": 7,
+                "start": "process-start"
+              },
+              "role": "entry",
+              "subject": "attempt"
+            }
+          ],
+          "uncertain_count": 1
+        },
+        {
+          "actions": [],
+          "active": [],
+          "active_count": 0,
+          "conclusion": "waiting",
+          "detail": "Drain result",
+          "generation": 1,
+          "pending_actions": 0,
+          "uncertain": [],
+          "uncertain_count": 0
+        }
+      ]
+    },
+    "export.empty": {
+      "argv": [
+        "attempt",
+        "export"
+      ],
+      "exit": 0,
+      "stderr": [],
+      "stdout": [
+        []
+      ]
+    },
+    "export.full": {
+      "argv": [
+        "attempt",
+        "export"
+      ],
+      "exit": 0,
+      "stderr": [],
+      "stdout": [
+        [
+          {
+            "admitted_at": 1.0,
+            "answer_kind": "valid",
+            "c_cached": null,
+            "c_in": null,
+            "c_out": null,
+            "compaction_token_limit": null,
+            "disposition": null,
+            "effect": null,
+            "effort": "high",
+            "ended_at": null,
+            "engine_digest": "engine",
+            "harness": "codex",
+            "input_digest": "input",
+            "latest_checks_conclusion": null,
+            "latest_checks_reason": null,
+            "model": "m",
+            "number": 1,
+            "rc": null,
+            "repeat_reason": null,
+            "step": "plan",
+            "t_cached": null,
+            "t_in": null,
+            "t_out": null,
+            "task_id": "tl-1",
+            "timed_out": 0,
+            "turns": null,
+            "usage_incomplete": null,
+            "wall_seconds": null,
+            "workflow_digest": "workflow",
+            "workflow_sha": "sha"
+          }
+        ]
+      ]
+    },
+    "land.empty": {
+      "argv": [
+        "land",
+        "run",
+        "tl-1",
+        "--backlog",
+        "tasks",
+        "--checkout",
+        "/snapshot"
+      ],
+      "exit": 0,
+      "stderr": [],
+      "stdout": [
+        {
+          "backlog": "tasks",
+          "candidate": {
+            "candidate_id": "attempt",
+            "checks_attempt_id": "checks",
+            "close": "closed",
+            "closed_at": 13.0,
+            "commit": "commit",
+            "deadline": 100.0,
+            "delivered_at": 12.0,
+            "delivery": "pushed",
+            "land_process": {
+              "boot": "boot",
+              "pid": 7,
+              "start": "process-start"
+            },
+            "number": 1,
+            "origin": "origin",
+            "parked": "parked",
+            "reason": null,
+            "released_at": 11.0,
+            "remote_head": "remote",
+            "required": [
+              "test"
+            ],
+            "slot": "s1",
+            "slot_head": "head",
+            "superseded": null,
+            "tree_same": false,
+            "validated_at": 10.0,
+            "validation": "passed"
+          },
+          "gate": null,
+          "release": null,
+          "status": "pushed",
+          "synced": false,
+          "task": "tl-1"
+        }
+      ]
+    },
+    "land.full": {
+      "argv": [
+        "land",
+        "run",
+        "tl-1",
+        "--backlog",
+        "tasks",
+        "--checkout",
+        "/snapshot"
+      ],
+      "exit": 0,
+      "stderr": [],
+      "stdout": [
+        {
+          "backlog": "tasks",
+          "candidate": {
+            "candidate_id": "attempt",
+            "checks_attempt_id": "checks",
+            "close": "closed",
+            "closed_at": 13.0,
+            "commit": "commit",
+            "deadline": 100.0,
+            "delivered_at": 12.0,
+            "delivery": "pushed",
+            "land_process": {
+              "boot": "boot",
+              "pid": 7,
+              "start": "process-start"
+            },
+            "number": 1,
+            "origin": "origin",
+            "parked": "parked",
+            "reason": null,
+            "released_at": 11.0,
+            "remote_head": "remote",
+            "required": [
+              "test"
+            ],
+            "slot": "s1",
+            "slot_head": "head",
+            "superseded": null,
+            "tree_same": false,
+            "validated_at": 10.0,
+            "validation": "passed"
+          },
+          "gate": {
+            "checks": [
+              {
+                "argv_at_origin": [
+                  "just",
+                  "test"
+                ],
+                "argv_at_x": null,
+                "name": "test"
+              }
+            ],
+            "configs": [
+              "pyproject.toml"
+            ],
+            "decisive": true,
+            "files": [
+              {
+                "added": 1,
+                "deleted": 1,
+                "kind": "M",
+                "path": "pyproject.toml"
+              }
+            ],
+            "required": {
+              "at_origin": [
+                "test"
+              ],
+              "at_s": []
+            },
+            "setup": {
+              "at_origin": [
+                [
+                  "just",
+                  "install"
+                ]
+              ],
+              "at_s": []
+            },
+            "weakened": [
+              {
+                "path": "tests/test.py",
+                "why": "removed test"
+              }
+            ]
+          },
+          "release": "released",
+          "status": "already_pushed",
+          "synced": false,
+          "task": "tl-1"
+        }
+      ]
+    },
+    "land.summary": {
+      "argv": [
+        "land",
+        "run",
+        "tl-1",
+        "--backlog",
+        "tasks",
+        "--checkout",
+        "/snapshot"
+      ],
+      "exit": 0,
+      "stderr": [],
+      "stdout": [
+        {
+          "added": [
+            "added"
+          ],
+          "again": true,
+          "argv": [
+            {
+              "argv_at_origin": [
+                "just",
+                "test"
+              ],
+              "argv_at_x": null,
+              "name": "test"
+            }
+          ],
+          "base": "base",
+          "checks_attempt_id": "checks",
+          "commit": "commit",
+          "conclusion": "passed",
+          "conflicts": [],
+          "gate": {
+            "checks": [
+              {
+                "argv_at_origin": [
+                  "just",
+                  "test"
+                ],
+                "argv_at_x": null,
+                "name": "test"
+              }
+            ],
+            "configs": [
+              "pyproject.toml"
+            ],
+            "decisive": true,
+            "files": [
+              {
+                "added": 1,
+                "deleted": 1,
+                "kind": "M",
+                "path": "pyproject.toml"
+              }
+            ],
+            "required": {
+              "at_origin": [
+                "test"
+              ],
+              "at_s": []
+            },
+            "setup": {
+              "at_origin": [
+                [
+                  "just",
+                  "install"
+                ]
+              ],
+              "at_s": []
+            },
+            "weakened": [
+              {
+                "path": "tests/test.py",
+                "why": "removed test"
+              }
+            ]
+          },
+          "message": "Ready",
+          "origin": "origin",
+          "removed": [
+            "removed"
+          ],
+          "results": [
+            {
+              "conclusion": "passed",
+              "name": "test"
+            }
+          ],
+          "state": "same_tree",
+          "status": "summary",
+          "target": "main"
+        }
+      ]
+    },
+    "land.withdrawn": {
+      "argv": [
+        "land",
+        "run",
+        "tl-1",
+        "--backlog",
+        "tasks",
+        "--checkout",
+        "/snapshot"
+      ],
+      "exit": 0,
+      "stderr": [],
+      "stdout": [
+        {
+          "backlog": "tasks",
+          "candidate": {
+            "candidate_id": "attempt",
+            "checks_attempt_id": "checks",
+            "close": "closed",
+            "closed_at": 13.0,
+            "commit": "commit",
+            "deadline": 100.0,
+            "delivered_at": 12.0,
+            "delivery": "pushed",
+            "land_process": {
+              "boot": "boot",
+              "pid": 7,
+              "start": "process-start"
+            },
+            "number": 1,
+            "origin": "origin",
+            "parked": "parked",
+            "reason": null,
+            "released_at": 11.0,
+            "remote_head": "remote",
+            "required": [
+              "test"
+            ],
+            "slot": "s1",
+            "slot_head": "head",
+            "superseded": null,
+            "tree_same": false,
+            "validated_at": 10.0,
+            "validation": "passed"
+          },
+          "status": "withdrawn",
+          "task": "tl-1"
+        }
+      ]
+    },
+    "list.empty": {
+      "argv": [
+        "attempt",
+        "list"
+      ],
+      "exit": 0,
+      "stderr": [],
+      "stdout": [
+        {
+          "attempts": []
+        }
+      ]
+    },
+    "list.full": {
+      "argv": [
+        "attempt",
+        "list"
+      ],
+      "exit": 0,
+      "stderr": [],
+      "stdout": [
+        {
+          "attempts": [
+            {
+              "agent_stop": {
+                "agent": {
+                  "boot": "boot",
+                  "pgid": 8,
+                  "pid": 8,
+                  "start": "agent-start"
+                },
+                "attempt_id": "attempt",
+                "cause": "deadline",
+                "entry": {
+                  "boot": "boot",
+                  "pgid": 7,
+                  "pid": 7,
+                  "start": "process-start"
+                },
+                "generation": 1,
+                "observed_gone_at": 12.0,
+                "operation": "execute",
+                "phase": "observed_gone",
+                "proof": {
+                  "error": false,
+                  "kill_attempted": true,
+                  "kill_delivered": true,
+                  "survivors": [
+                    {
+                      "pid": 9,
+                      "start": "survivor-start"
+                    }
+                  ],
+                  "term_attempted": true,
+                  "term_delivered": true
+                },
+                "reported_at": 11.0,
+                "requested_at": 10.0,
+                "requested_signal": 15,
+                "trigger_signal": 2
+              },
+              "attempt_id": "attempt",
+              "backlog": "tasks",
+              "checks": {
+                "commit": "commit",
+                "profile_digest": "digest",
+                "refusal": null,
+                "refusals": 0,
+                "required": [
+                  "test"
+                ],
+                "results": [
+                  {
+                    "argv_differs": true,
+                    "block": 1,
+                    "conclusion": "passed",
+                    "ended_at": 11.0,
+                    "log": "/snapshot/check.log",
+                    "name": "test",
+                    "rc": 0,
+                    "required": true,
+                    "started_at": 10.0
+                  }
+                ],
+                "target": "main",
+                "target_seen": "origin"
+              },
+              "deadline_passed": false,
+              "earlier": [
+                "previous"
+              ],
+              "entry": "gone",
+              "entry_process": {
+                "boot": "boot",
+                "pid": 7,
+                "start": "process-start"
+              },
+              "hold": {
+                "cause": "checks",
+                "cleared_at": null,
+                "commented_at": 17.0,
+                "held_at": 14.0,
+                "label": "approved",
+                "labelled_at": 15.0,
+                "labels": "moved",
+                "reason": "failed:test:failed"
+              },
+              "hold_due": "checks",
+              "label": "approved",
+              "land": {
+                "candidate_id": "attempt",
+                "checks_attempt_id": "checks",
+                "close": "closed",
+                "closed_at": 13.0,
+                "commit": "commit",
+                "deadline": 100.0,
+                "delivered_at": 12.0,
+                "delivery": "pushed",
+                "land_process": {
+                  "boot": "boot",
+                  "pid": 7,
+                  "start": "process-start"
+                },
+                "number": 1,
+                "origin": "origin",
+                "parked": "parked",
+                "process": "gone",
+                "reason": null,
+                "released_at": 11.0,
+                "remote_head": "remote",
+                "required": [
+                  "test"
+                ],
+                "results": [
+                  {
+                    "block": 1,
+                    "conclusion": "passed",
+                    "ended_at": 11.0,
+                    "log": "/snapshot/check.log",
+                    "name": "test",
+                    "rc": 0,
+                    "started_at": 10.0
+                  }
+                ],
+                "slot": "s1",
+                "slot_head": "head",
+                "superseded": null,
+                "tree_same": false,
+                "validated_at": 10.0,
+                "validation": "passed"
+              },
+              "last_command": 0,
+              "last_entry": "gone",
+              "leftovers": [
+                "uncommitted"
+              ],
+              "next": "commit",
+              "number": 2,
+              "phase": "captured",
+              "previous_attempt_id": "previous",
+              "published": {
+                "commit": "commit",
+                "published_at": 13.0,
+                "remote_head": "remote"
+              },
+              "release": {
+                "abandoned": true,
+                "claim": "unclaimed",
+                "head": "head",
+                "released_at": 12.0
+              },
+              "repeat_reason": "uncommitted",
+              "result": {
+                "explanation": "A check failed",
+                "reason": "checks",
+                "status": "refused"
+              },
+              "seq": 2,
+              "slot": "s1",
+              "source_checks_id": "checks",
+              "status": "abandoned",
+              "status_note": "abandoned: a person gave the attempt up; a round restarts it once the task carries the approval label",
+              "step": "implement",
+              "stop_cause": "The entry received SIGINT; the sender of the entry signal is unknown. The factory sent SIGTERM because its attempt deadline expired. It escalated to SIGKILL. The stop did not prove that the agent's whole process tree ended. The recorded agent and its process group were subsequently observed gone.",
+              "succeeded": false,
+              "task": "tl-1",
+              "worker": {
+                "pgid": 8,
+                "pid": 8
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "profile.empty": {
+      "argv": [
+        "profile",
+        "show",
+        "--checkout",
+        "/snapshot"
+      ],
+      "exit": 0,
+      "stderr": [],
+      "stdout": [
+        {
+          "at": "HEAD",
+          "checks": [],
+          "required": [],
+          "setup": [],
+          "target": "main",
+          "target_ref": "main"
+        }
+      ]
+    },
+    "profile.full": {
+      "argv": [
+        "profile",
+        "show",
+        "--checkout",
+        "/snapshot"
+      ],
+      "exit": 0,
+      "stderr": [],
+      "stdout": [
+        {
+          "at": "HEAD",
+          "checks": [
+            {
+              "argv": [
+                "just",
+                "test"
+              ],
+              "name": "test",
+              "timeout": 60
+            }
+          ],
+          "required": [
+            "test"
+          ],
+          "setup": [
+            [
+              "just",
+              "install"
+            ]
+          ],
+          "target": "main",
+          "target_ref": "main"
+        }
+      ]
+    },
+    "profile.refused": {
+      "argv": [
+        "profile",
+        "show",
+        "--checkout",
+        "/snapshot"
+      ],
+      "exit": 1,
+      "stderr": [
+        {
+          "error": {
+            "key": "engine",
+            "kind": "unknown_key",
+            "message": "Unknown profile key",
+            "side": "commit"
+          }
+        }
+      ],
+      "stdout": []
+    },
+    "profile.unavailable": {
+      "argv": [
+        "profile",
+        "show",
+        "--checkout",
+        "/snapshot"
+      ],
+      "exit": 3,
+      "stderr": [
+        {
+          "error": {
+            "kind": "unavailable",
+            "message": "Git unavailable"
+          }
+        }
+      ],
+      "stdout": []
+    },
+    "published": {
+      "argv": [
+        "step",
+        "publish",
+        "tl-1",
+        "--backlog",
+        "tasks"
+      ],
+      "exit": 0,
+      "stderr": [],
+      "stdout": [
+        {
+          "attempt_id": "attempt",
+          "backlog": "tasks",
+          "commit": "commit",
+          "remote_head": "remote",
+          "status": "published",
+          "task": "tl-1"
+        }
+      ]
+    },
+    "released": {
+      "argv": [
+        "step",
+        "release",
+        "tl-1",
+        "--backlog",
+        "tasks"
+      ],
+      "exit": 0,
+      "stderr": [],
+      "stdout": [
+        {
+          "abandoned": false,
+          "attempt_id": "attempt",
+          "backlog": "tasks",
+          "candidate": false,
+          "checks": null,
+          "claim": "unclaimed",
+          "land": null,
+          "parked": "parked",
+          "reservation_removed": true,
+          "slot": "s1",
+          "status": "released",
+          "task": "tl-1"
+        }
+      ]
+    },
+    "released.already": {
+      "argv": [
+        "step",
+        "release",
+        "tl-1",
+        "--backlog",
+        "tasks"
+      ],
+      "exit": 0,
+      "stderr": [],
+      "stdout": [
+        {
+          "abandoned": true,
+          "attempt_id": "attempt",
+          "backlog": "tasks",
+          "candidate": false,
+          "checks": null,
+          "claim": "kept",
+          "land": null,
+          "parked": null,
+          "reservation_removed": false,
+          "slot": "s1",
+          "status": "already_released",
+          "task": "tl-1"
+        }
+      ]
+    },
+    "released.nested": {
+      "argv": [
+        "step",
+        "release",
+        "tl-1",
+        "--backlog",
+        "tasks"
+      ],
+      "exit": 0,
+      "stderr": [],
+      "stdout": [
+        {
+          "abandoned": false,
+          "attempt_id": "attempt",
+          "backlog": "tasks",
+          "candidate": true,
+          "checks": {
+            "abandoned": false,
+            "attempt_id": "attempt",
+            "backlog": "tasks",
+            "candidate": false,
+            "checks": null,
+            "claim": "unclaimed",
+            "land": null,
+            "parked": "parked",
+            "reservation_removed": true,
+            "slot": "s1",
+            "status": "released",
+            "task": "tl-1"
+          },
+          "claim": "unclaimed",
+          "land": {
+            "abandoned": false,
+            "attempt_id": "attempt",
+            "backlog": "tasks",
+            "candidate": false,
+            "checks": null,
+            "claim": "unclaimed",
+            "land": null,
+            "parked": "parked",
+            "reservation_removed": true,
+            "slot": "s1",
+            "status": "released",
+            "task": "tl-1"
+          },
+          "parked": "parked",
+          "reservation_removed": true,
+          "slot": "s1",
+          "status": "released",
+          "task": "tl-1"
+        }
+      ]
+    },
+    "repo.origin.False": {
+      "argv": [
+        "repo",
+        "show",
+        "/snapshot"
+      ],
+      "exit": 0,
+      "stderr": [],
+      "stdout": [
+        {
+          "checkout_path": "/snapshot",
+          "common_dir": "/snapshot/git",
+          "origin_url": null,
+          "repo_id": "repo"
+        }
+      ]
+    },
+    "repo.origin.True": {
+      "argv": [
+        "repo",
+        "show",
+        "/snapshot"
+      ],
+      "exit": 0,
+      "stderr": [],
+      "stdout": [
+        {
+          "checkout_path": "/snapshot",
+          "common_dir": "/snapshot/git",
+          "origin_url": "https://example.test/repo",
+          "repo_id": "repo"
+        }
+      ]
+    },
+    "repo.refused": {
+      "argv": [
+        "repo",
+        "show",
+        "/snapshot"
+      ],
+      "exit": 1,
+      "stderr": [
+        {
+          "error": {
+            "kind": "unsupported_checkout",
+            "message": "Unsupported checkout"
+          }
+        }
+      ],
+      "stdout": []
+    },
+    "round.empty": {
+      "argv": [
+        "rounds",
+        "once",
+        "--backlog",
+        "tasks",
+        "--tracker-root",
+        "/tracker",
+        "--checkout",
+        "/snapshot",
+        "--minutes",
+        "30",
+        "--label",
+        "approved"
+      ],
+      "exit": 0,
+      "stderr": [],
+      "stdout": [
+        {
+          "backlog": "tasks",
+          "logged": true,
+          "moves": [],
+          "status": "round",
+          "stopped": null
+        }
+      ]
+    },
+    "round.full": {
+      "argv": [
+        "rounds",
+        "once",
+        "--backlog",
+        "tasks",
+        "--tracker-root",
+        "/tracker",
+        "--checkout",
+        "/snapshot",
+        "--minutes",
+        "30",
+        "--label",
+        "approved"
+      ],
+      "exit": 0,
+      "stderr": [],
+      "stdout": [
+        {
+          "backlog": "tasks",
+          "logged": false,
+          "moves": [
+            {
+              "action": "start",
+              "attempt_id": "attempt",
+              "detail": "detail",
+              "task": "tl-1",
+              "word": "started"
+            }
+          ],
+          "status": "round",
+          "stopped": "capacity"
+        }
+      ]
+    },
+    "rounds.drained": {
+      "argv": [
+        "rounds",
+        "start",
+        "--backlog",
+        "tasks",
+        "--tracker-root",
+        "/tracker",
+        "--checkout",
+        "/snapshot",
+        "--minutes",
+        "30",
+        "--label",
+        "approved"
+      ],
+      "exit": 0,
+      "stderr": [],
+      "stdout": [
+        {
+          "backlog": "tasks",
+          "detail": "Rounds ended",
+          "reason": "drained",
+          "status": "ended"
+        }
+      ]
+    },
+    "rounds.interrupted": {
+      "argv": [
+        "rounds",
+        "start",
+        "--backlog",
+        "tasks",
+        "--tracker-root",
+        "/tracker",
+        "--checkout",
+        "/snapshot",
+        "--minutes",
+        "30",
+        "--label",
+        "approved"
+      ],
+      "exit": 0,
+      "stderr": [],
+      "stdout": [
+        {
+          "backlog": "tasks",
+          "detail": "Rounds ended",
+          "reason": "interrupted",
+          "status": "ended"
+        }
+      ]
+    },
+    "rounds.start-end": {
+      "argv": [
+        "rounds",
+        "start",
+        "--backlog",
+        "tasks",
+        "--no-dashboard",
+        "--tracker-root",
+        "/tracker",
+        "--checkout",
+        "/snapshot",
+        "--minutes",
+        "30",
+        "--label",
+        "approved"
+      ],
+      "exit": 0,
+      "stderr": [],
+      "stdout": [
+        {
+          "backlog": "tasks",
+          "every": 60,
+          "label": "approved",
+          "log": "/snapshot/.local/state/task-loop/artifacts/rounds.log",
+          "max_running": 3,
+          "status": "rounds"
+        },
+        {
+          "backlog": "tasks",
+          "detail": null,
+          "reason": "interrupted",
+          "status": "ended"
+        }
+      ]
+    },
+    "rounds.unavailable": {
+      "argv": [
+        "rounds",
+        "start",
+        "--backlog",
+        "tasks",
+        "--tracker-root",
+        "/tracker",
+        "--checkout",
+        "/snapshot",
+        "--minutes",
+        "30",
+        "--label",
+        "approved"
+      ],
+      "exit": 1,
+      "stderr": [
+        {
+          "backlog": "tasks",
+          "detail": "Rounds ended",
+          "reason": "unavailable",
+          "status": "ended"
+        }
+      ],
+      "stdout": []
+    },
+    "setup-times": {
+      "argv": [
+        "attempt",
+        "setup-times",
+        "--backlog",
+        "tasks"
+      ],
+      "exit": 0,
+      "stderr": [],
+      "stdout": [
+        {
+          "backlog": "tasks",
+          "rows": [],
+          "sample_count": 0
+        }
+      ]
+    },
+    "setup-times.full": {
+      "argv": [
+        "attempt",
+        "setup-times",
+        "--backlog",
+        "tasks"
+      ],
+      "exit": 0,
+      "stderr": [],
+      "stdout": [
+        {
+          "backlog": "tasks",
+          "rows": [
+            {
+              "attempt_id": "attempt",
+              "conclusion": "passed",
+              "duration_seconds": 1.0,
+              "ended_at": 11.0,
+              "repo_id": "repo",
+              "run": 1,
+              "started_at": 10.0,
+              "task_id": "tl-1"
+            }
+          ],
+          "sample_count": 1
+        }
+      ]
+    },
+    "show.empty": {
+      "argv": [
+        "attempt",
+        "show",
+        "tl-1",
+        "--backlog",
+        "tasks"
+      ],
+      "exit": 0,
+      "stderr": [],
+      "stdout": [
+        {
+          "agent_stop": null,
+          "attempt_id": "attempt",
+          "backlog": "tasks",
+          "checks": null,
+          "deadline_passed": false,
+          "directory": "/snapshot",
+          "earlier": [],
+          "entry": "gone",
+          "entry_log": "/snapshot/entry.log",
+          "entry_process": null,
+          "events_path": "/snapshot/events.jsonl",
+          "failed_checks": null,
+          "hold": null,
+          "hold_due": null,
+          "label": null,
+          "land": null,
+          "last_command": null,
+          "last_entry": null,
+          "leftovers": [],
+          "next": "commit",
+          "number": 1,
+          "phase": "captured",
+          "previous_attempt_id": null,
+          "published": null,
+          "release": null,
+          "repeat_reason": null,
+          "result": {
+            "reason": "commit",
+            "status": "pending"
+          },
+          "seq": 1,
+          "setup": null,
+          "slot": "s1",
+          "source_checks_id": null,
+          "status": "settling",
+          "status_note": "settling",
+          "step": "implement",
+          "stop_cause": null,
+          "succeeded": false,
+          "task": "tl-1",
+          "worker": null
+        }
+      ]
+    },
+    "show.full": {
+      "argv": [
+        "attempt",
+        "show",
+        "tl-1",
+        "--backlog",
+        "tasks"
+      ],
+      "exit": 0,
+      "stderr": [],
+      "stdout": [
+        {
+          "agent_stop": {
+            "agent": {
+              "boot": "boot",
+              "pgid": 8,
+              "pid": 8,
+              "start": "agent-start"
+            },
+            "attempt_id": "attempt",
+            "cause": "deadline",
+            "entry": {
+              "boot": "boot",
+              "pgid": 7,
+              "pid": 7,
+              "start": "process-start"
+            },
+            "generation": 1,
+            "observed_gone_at": 12.0,
+            "operation": "execute",
+            "phase": "observed_gone",
+            "proof": {
+              "error": false,
+              "kill_attempted": true,
+              "kill_delivered": true,
+              "survivors": [
+                {
+                  "pid": 9,
+                  "start": "survivor-start"
+                }
+              ],
+              "term_attempted": true,
+              "term_delivered": true
+            },
+            "reported_at": 11.0,
+            "requested_at": 10.0,
+            "requested_signal": 15,
+            "trigger_signal": 2
+          },
+          "attempt_id": "attempt",
+          "backlog": "tasks",
+          "checks": {
+            "commit": "commit",
+            "profile_digest": "digest",
+            "refusal": null,
+            "refusals": 0,
+            "required": [
+              "test"
+            ],
+            "results": [
+              {
+                "argv_differs": true,
+                "block": 1,
+                "conclusion": "passed",
+                "ended_at": 11.0,
+                "log": "/snapshot/check.log",
+                "name": "test",
+                "rc": 0,
+                "required": true,
+                "started_at": 10.0
+              }
+            ],
+            "target": "main",
+            "target_seen": "origin"
+          },
+          "deadline_passed": false,
+          "directory": "/snapshot",
+          "earlier": [
+            "previous"
+          ],
+          "entry": "gone",
+          "entry_log": "/snapshot/entry.log",
+          "entry_process": {
+            "boot": "boot",
+            "pid": 7,
+            "start": "process-start"
+          },
+          "events_path": "/snapshot/events.jsonl",
+          "failed_checks": {
+            "commit": "commit",
+            "profile_digest": "digest",
+            "refusal": null,
+            "refusals": 0,
+            "required": [
+              "test"
+            ],
+            "results": [
+              {
+                "argv_differs": true,
+                "block": 1,
+                "conclusion": "passed",
+                "ended_at": 11.0,
+                "log": "/snapshot/check.log",
+                "name": "test",
+                "rc": 0,
+                "required": true,
+                "started_at": 10.0
+              }
+            ],
+            "target": "main",
+            "target_seen": "origin"
+          },
+          "hold": {
+            "cause": "checks",
+            "cleared_at": null,
+            "commented_at": 17.0,
+            "held_at": 14.0,
+            "label": "approved",
+            "labelled_at": 15.0,
+            "labels": "moved",
+            "reason": "failed:test:failed"
+          },
+          "hold_due": "checks",
+          "label": "approved",
+          "land": {
+            "candidate_id": "attempt",
+            "checks_attempt_id": "checks",
+            "close": "closed",
+            "closed_at": 13.0,
+            "commit": "commit",
+            "deadline": 100.0,
+            "delivered_at": 12.0,
+            "delivery": "pushed",
+            "land_process": {
+              "boot": "boot",
+              "pid": 7,
+              "start": "process-start"
+            },
+            "number": 1,
+            "origin": "origin",
+            "parked": "parked",
+            "process": "gone",
+            "reason": null,
+            "released_at": 11.0,
+            "remote_head": "remote",
+            "required": [
+              "test"
+            ],
+            "results": [
+              {
+                "block": 1,
+                "conclusion": "passed",
+                "ended_at": 11.0,
+                "log": "/snapshot/check.log",
+                "name": "test",
+                "rc": 0,
+                "started_at": 10.0
+              }
+            ],
+            "slot": "s1",
+            "slot_head": "head",
+            "superseded": null,
+            "tree_same": false,
+            "validated_at": 10.0,
+            "validation": "passed"
+          },
+          "last_command": 0,
+          "last_entry": "gone",
+          "leftovers": [
+            "uncommitted"
+          ],
+          "next": "commit",
+          "number": 2,
+          "phase": "captured",
+          "previous_attempt_id": "previous",
+          "published": {
+            "commit": "commit",
+            "published_at": 13.0,
+            "remote_head": "remote"
+          },
+          "release": {
+            "abandoned": true,
+            "claim": "unclaimed",
+            "head": "head",
+            "released_at": 12.0
+          },
+          "repeat_reason": "uncommitted",
+          "result": {
+            "explanation": "A check failed",
+            "reason": "checks",
+            "status": "refused"
+          },
+          "seq": 2,
+          "setup": {
+            "attempt_id": "setup",
+            "commit": "commit",
+            "conclusion": "passed",
+            "duration_seconds": 1.0,
+            "ended_at": 11.0,
+            "log": "/snapshot/setup.log",
+            "run": 1,
+            "started_at": 10.0
+          },
+          "slot": "s1",
+          "source_checks_id": "checks",
+          "status": "abandoned",
+          "status_note": "abandoned: a person gave the attempt up; a round restarts it once the task carries the approval label",
+          "step": "implement",
+          "stop_cause": "The entry received SIGINT; the sender of the entry signal is unknown. The factory sent SIGTERM because its attempt deadline expired. It escalated to SIGKILL. The stop did not prove that the agent's whole process tree ended. The recorded agent and its process group were subsequently observed gone.",
+          "succeeded": false,
+          "task": "tl-1",
+          "worker": {
+            "pgid": 8,
+            "pid": 8
+          }
+        }
+      ]
+    },
+    "show.refused": {
+      "argv": [
+        "attempt",
+        "show",
+        "tl-1",
+        "--backlog",
+        "tasks"
+      ],
+      "exit": 1,
+      "stderr": [
+        {
+          "error": {
+            "kind": "refused",
+            "message": "Operation refused",
+            "reason": "choices"
+          }
+        }
+      ],
+      "stdout": []
+    },
+    "show.unavailable": {
+      "argv": [
+        "attempt",
+        "show",
+        "tl-1",
+        "--backlog",
+        "tasks"
+      ],
+      "exit": 3,
+      "stderr": [
+        {
+          "error": {
+            "kind": "unavailable",
+            "message": "Operation refused",
+            "reason": "choices"
+          }
+        }
+      ],
+      "stdout": []
+    },
+    "slot-list": {
+      "argv": [
+        "slot",
+        "list"
+      ],
+      "exit": 0,
+      "stderr": [],
+      "stdout": [
+        [
+          {
+            "attempt_id": "attempt",
+            "name": "s1",
+            "path": "/slots/s1",
+            "repo_id": "repo",
+            "state": "held"
+          },
+          {
+            "attempt_id": null,
+            "name": "s2",
+            "path": "/slots/s2",
+            "repo_id": "repo",
+            "state": "free"
+          }
+        ]
+      ]
+    },
+    "slots": {
+      "argv": [
+        "slot",
+        "adopt",
+        "/snapshot"
+      ],
+      "exit": 1,
+      "stderr": [],
+      "stdout": [
+        {
+          "slots": [
+            {
+              "adopted": true,
+              "name": "s1",
+              "path": "/snapshot",
+              "reason": null
+            },
+            {
+              "adopted": false,
+              "name": "s2",
+              "path": "/snapshot",
+              "reason": "inside_checkout"
+            }
+          ]
+        }
+      ]
+    },
+    "start.already_dispatched": {
+      "argv": [
+        "step",
+        "start",
+        "tl-1",
+        "--backlog",
+        "tasks",
+        "--tracker-root",
+        "/tracker",
+        "--checkout",
+        "/snapshot",
+        "--minutes",
+        "30"
+      ],
+      "exit": 0,
+      "stderr": [],
+      "stdout": [
+        {
+          "attempt_id": "attempt",
+          "backlog": "tasks",
+          "entry_process": {
+            "boot": "boot",
+            "pid": 7,
+            "start": "process-start"
+          },
+          "existing": false,
+          "number": 2,
+          "result": "result",
+          "status": "already_dispatched",
+          "step": "implement",
+          "task": "tl-1"
+        }
+      ]
+    },
+    "start.already_running": {
+      "argv": [
+        "step",
+        "start",
+        "tl-1",
+        "--backlog",
+        "tasks",
+        "--tracker-root",
+        "/tracker",
+        "--checkout",
+        "/snapshot",
+        "--minutes",
+        "30"
+      ],
+      "exit": 0,
+      "stderr": [],
+      "stdout": [
+        {
+          "attempt_id": "attempt",
+          "backlog": "tasks",
+          "entry_process": {
+            "boot": "boot",
+            "pid": 7,
+            "start": "process-start"
+          },
+          "existing": false,
+          "number": 2,
+          "result": "result",
+          "status": "already_running",
+          "step": "implement",
+          "task": "tl-1"
+        }
+      ]
+    },
+    "start.empty": {
+      "argv": [
+        "step",
+        "start",
+        "tl-1",
+        "--backlog",
+        "tasks",
+        "--tracker-root",
+        "/tracker",
+        "--checkout",
+        "/snapshot",
+        "--minutes",
+        "30"
+      ],
+      "exit": 0,
+      "stderr": [],
+      "stdout": [
+        {
+          "attempt_id": "attempt",
+          "backlog": "tasks",
+          "entry_process": null,
+          "existing": false,
+          "number": null,
+          "result": null,
+          "status": "started",
+          "step": null,
+          "task": "tl-1"
+        }
+      ]
+    },
+    "start.refused": {
+      "argv": [
+        "step",
+        "start",
+        "tl-1",
+        "--backlog",
+        "tasks",
+        "--tracker-root",
+        "/tracker",
+        "--checkout",
+        "/snapshot",
+        "--minutes",
+        "30"
+      ],
+      "exit": 1,
+      "stderr": [
+        {
+          "error": {
+            "admitted": true,
+            "claim_leaked": true,
+            "kind": "refused",
+            "message": "Operation refused",
+            "reason": "choices",
+            "slots": [
+              {
+                "attempt_id": "attempt",
+                "name": "s1",
+                "path": "/snapshot",
+                "reason": null,
+                "state": "held"
+              }
+            ]
+          }
+        }
+      ],
+      "stdout": []
+    },
+    "start.relaunched": {
+      "argv": [
+        "step",
+        "start",
+        "tl-1",
+        "--backlog",
+        "tasks",
+        "--tracker-root",
+        "/tracker",
+        "--checkout",
+        "/snapshot",
+        "--minutes",
+        "30"
+      ],
+      "exit": 0,
+      "stderr": [],
+      "stdout": [
+        {
+          "attempt_id": "attempt",
+          "backlog": "tasks",
+          "entry_process": {
+            "boot": "boot",
+            "pid": 7,
+            "start": "process-start"
+          },
+          "existing": false,
+          "number": 2,
+          "result": "result",
+          "status": "relaunched",
+          "step": "implement",
+          "task": "tl-1"
+        }
+      ]
+    },
+    "start.repeated": {
+      "argv": [
+        "step",
+        "start",
+        "tl-1",
+        "--backlog",
+        "tasks",
+        "--tracker-root",
+        "/tracker",
+        "--checkout",
+        "/snapshot",
+        "--minutes",
+        "30"
+      ],
+      "exit": 0,
+      "stderr": [],
+      "stdout": [
+        {
+          "attempt_id": "attempt",
+          "backlog": "tasks",
+          "entry_process": {
+            "boot": "boot",
+            "pid": 7,
+            "start": "process-start"
+          },
+          "existing": false,
+          "number": 2,
+          "result": "result",
+          "status": "repeated",
+          "step": "implement",
+          "task": "tl-1"
+        }
+      ]
+    },
+    "start.started": {
+      "argv": [
+        "step",
+        "start",
+        "tl-1",
+        "--backlog",
+        "tasks",
+        "--tracker-root",
+        "/tracker",
+        "--checkout",
+        "/snapshot",
+        "--minutes",
+        "30"
+      ],
+      "exit": 0,
+      "stderr": [],
+      "stdout": [
+        {
+          "attempt_id": "attempt",
+          "backlog": "tasks",
+          "entry_process": {
+            "boot": "boot",
+            "pid": 7,
+            "start": "process-start"
+          },
+          "existing": false,
+          "number": 2,
+          "result": "result",
+          "status": "started",
+          "step": "implement",
+          "task": "tl-1"
+        }
+      ]
+    },
+    "start.unavailable": {
+      "argv": [
+        "step",
+        "start",
+        "tl-1",
+        "--backlog",
+        "tasks",
+        "--tracker-root",
+        "/tracker",
+        "--checkout",
+        "/snapshot",
+        "--minutes",
+        "30"
+      ],
+      "exit": 3,
+      "stderr": [
+        {
+          "error": {
+            "admitted": true,
+            "claim_leaked": true,
+            "kind": "unavailable",
+            "message": "Operation refused",
+            "reason": "choices",
+            "slots": [
+              {
+                "attempt_id": "attempt",
+                "name": "s1",
+                "path": "/snapshot",
+                "reason": null,
+                "state": "held"
+              }
+            ]
+          }
+        }
+      ],
+      "stdout": []
+    },
+    "task.dependencies.0": {
+      "argv": [
+        "task",
+        "show",
+        "tl-1",
+        "--backlog",
+        "tasks",
+        "--tracker-root",
+        "/tracker"
+      ],
+      "exit": 0,
+      "stderr": [],
+      "stdout": [
+        {
+          "acceptance": "Acceptance",
+          "dependencies": [],
+          "reference": {
+            "scope": {
+              "adapter": "beads",
+              "backlog": "tasks"
+            },
+            "task_id": "tl-1"
+          },
+          "requirements": "Requirements",
+          "title": "Task"
+        }
+      ]
+    },
+    "task.dependencies.1": {
+      "argv": [
+        "task",
+        "show",
+        "tl-1",
+        "--backlog",
+        "tasks",
+        "--tracker-root",
+        "/tracker"
+      ],
+      "exit": 0,
+      "stderr": [],
+      "stdout": [
+        {
+          "acceptance": "Acceptance",
+          "dependencies": [
+            {
+              "reference": {
+                "scope": {
+                  "adapter": "beads",
+                  "backlog": "tasks"
+                },
+                "task_id": "tl-2"
+              },
+              "relationship": "blocks",
+              "status": "open",
+              "title": "Dependency"
+            }
+          ],
+          "reference": {
+            "scope": {
+              "adapter": "beads",
+              "backlog": "tasks"
+            },
+            "task_id": "tl-1"
+          },
+          "requirements": "Requirements",
+          "title": "Task"
+        }
+      ]
+    },
+    "task.refused.False": {
+      "argv": [
+        "task",
+        "show",
+        "tl-1",
+        "--backlog",
+        "tasks",
+        "--tracker-root",
+        "/tracker"
+      ],
+      "exit": 1,
+      "stderr": [
+        {
+          "error": {
+            "kind": "not_found",
+            "message": "Task unavailable"
+          }
+        }
+      ],
+      "stdout": []
+    },
+    "task.refused.True": {
+      "argv": [
+        "task",
+        "show",
+        "tl-1",
+        "--backlog",
+        "tasks",
+        "--tracker-root",
+        "/tracker"
+      ],
+      "exit": 1,
+      "stderr": [
+        {
+          "error": {
+            "backend_kind": "missing",
+            "kind": "not_found",
+            "message": "Task unavailable",
+            "reference": {
+              "scope": {
+                "adapter": "beads",
+                "backlog": "tasks"
+              },
+              "task_id": "tl-1"
+            }
+          }
+        }
+      ],
+      "stdout": []
+    },
+    "version": {
+      "argv": [
+        "version"
+      ],
+      "exit": 0,
+      "stderr": [],
+      "stdout": [
+        {
+          "version": "1.2.3"
+        }
+      ]
+    }
+  },
+  "schema_version": 35
+}

@@ -1,0 +1,132 @@
+"""Public refusal coverage follows the producers, and asserts actual human presentation."""
+
+
+from itertools import pairwise
+from pathlib import Path
+
+import pytest
+import refusal_inventory
+from refusal_inventory import DYNAMIC_REASONS, REVIEWED_DYNAMIC, census, typed_reasons
+
+from taskloop import check_release, hold_cause, land, land_check, prepare
+from taskloop.hold_guide import HOLD, ON_HOLD, pending_guide
+from taskloop.inspection_guide import CONFIG, PROFILE, WORKFLOW, WORKFLOW_INIT
+from taskloop.land_guide import CANDIDATE_RELEASE, LAND_GUIDE
+from taskloop.machine_config import ConfigRefused, Refusal
+from taskloop.operations import Ended, Failed, Move, Round, refused_config
+from taskloop.result_data import as_data
+from taskloop.step_guide import CHECKS_GUIDE, GUIDE, refusal_guide
+from taskloop.step_render import human
+
+LITERALS, DYNAMIC = census()
+CASES = sorted(LITERALS | {("step", word) for word in typed_reasons() | DYNAMIC_REASONS})
+
+
+def test_dynamic_forwarding_has_an_explicit_reviewed_upstream_domain() -> None:
+    assert DYNAMIC == REVIEWED_DYNAMIC
+
+
+@pytest.mark.parametrize("context,reason", CASES)
+@pytest.mark.parametrize("detail", ["", "arbitrary detail mentioning `tl step abandon`"])
+def test_every_public_reason_renders_explanation_and_action(context: str, reason: str, detail: str) -> None:
+    result = Failed("refused", reason, detail)
+    lines = human("tl land run" if context == "land" else "tl step start", result, None)
+    expected = refusal_guide(reason, land=context == "land")
+    assert expected in lines and len(expected.split()) >= 6
+    assert as_data(result)["error"] == {"kind": "refused", "reason": reason, "message": detail or None}
+
+
+GIT_VERBS = {"add", "branch", "checkout", "commit", "fetch", "log", "pull", "push", "show", "status", "switch", "worktree"}
+TEXT_TABLES = (GUIDE, CHECKS_GUIDE, LAND_GUIDE, CANDIDATE_RELEASE, CONFIG, PROFILE, WORKFLOW, WORKFLOW_INIT,
+               hold_cause.RULES, hold_cause.RUN,
+               hold_cause.STUCK, hold_cause.LAND)
+TEXT_CONSTANTS = (HOLD, ON_HOLD, land.SHOW, land.NEEDS_MINUTES.detail, check_release.LANDED, check_release.CLOSED,
+                  check_release.LANDING, land_check.RACED, prepare.HELD_SLOT, prepare.HELD_MAIN, prepare.HELD_OTHER,
+                  prepare.UNPUBLISHED)
+
+
+def _strings(value: object) -> list[str]:
+    if isinstance(value, str):
+        return [value]
+    if isinstance(value, dict):
+        return [text for each in value.values() for text in _strings(each)]
+    return [text for each in value for text in _strings(each)] if isinstance(value, tuple) else []
+
+
+def test_no_guide_or_message_asks_the_owner_to_run_a_command() -> None:
+    texts = [text for table in TEXT_TABLES for text in _strings(table)] + list(TEXT_CONSTANTS)
+    assert len(texts) > 100
+    for text in texts:
+        words = text.replace("`", " ").split()
+        pairs = list(pairwise(words))
+        assert "tl" not in words and "bd" not in words and not any(word.startswith("--") for word in words), text
+        assert not any(first == "git" and second in GIT_VERBS for first, second in pairs), text
+
+
+def test_a_removed_guide_and_a_new_producer_reason_fail_coverage(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delitem(GUIDE, "label")
+    with pytest.raises(KeyError):
+        human("tl rounds once", Failed("refused", "label"), None)
+    for reason in ("new_reason_without_a_guide", "environment:new_reason", "answer:new_reason", "run:new_reason"):
+        with pytest.raises(KeyError):
+            human("tl step start", Failed("refused", reason), None)
+
+
+@pytest.mark.parametrize("reason", ["missing", "unknown_key"])
+def test_config_and_profile_collisions_have_different_remedies(reason: Refusal) -> None:
+    result = refused_config(ConfigRefused(reason, "detail"))
+    assert CONFIG[reason] in human("tl attempt show", result, None)
+    assert PROFILE[reason] not in human("tl attempt show", result, None)
+
+
+def test_checks_land_and_candidate_release_keep_their_overrides() -> None:
+    assert CHECKS_GUIDE["unsettled"] in human("tl step release", Failed("unsettled", "unsettled", checks=True), None)
+    assert LAND_GUIDE["expired"] in human("tl land run", Failed("refused", "expired"), None)
+    assert CANDIDATE_RELEASE["entry_running"] in human(
+        "tl step release", Failed("refused", "entry_running", land=True), None)
+
+
+@pytest.mark.parametrize("word", ["refused:label", "unavailable:store", "refused:conflict", "unusable:s1:dirty",
+                                  "waiting:worker_alive", "waiting:git:Unreadable", "waiting:validation_pending"])
+def test_rounds_and_end_results_do_not_omit_reasons_or_request_cli_actions(word: str) -> None:
+    result = Round("tasks", (Move("tl-1", "land", word),), "")
+    lines = human("tl rounds once", result, None)
+    assert len(lines) >= 2 and all("`tl " not in line and "`bd " not in line for line in lines)
+    ended = human("tl rounds start", Ended("tasks", word, "arbitrary detail"), None)
+    assert len(ended) >= 3 and "`tl " not in ended[-1]
+
+
+@pytest.mark.parametrize("word", ["held:slot_dirty", "unavailable:observe", "unsettled:check_running", "refused:landed"])
+def test_pending_holds_name_the_situation_and_decision_in_words(word: str) -> None:
+    text = pending_guide(f"pending implement {word}")
+    assert len(text.split()) >= 8 and "`tl " not in text and "`bd " not in text
+
+
+@pytest.mark.parametrize("context,reason", CASES)
+def test_forwarded_round_refusals_have_reason_guidance_without_cli_requests(context: str, reason: str) -> None:
+    result = Round("tasks", (Move("tl-1", "land" if context == "land" else "advance", f"refused:{reason}"),))
+    lines = human("tl rounds once", result, None)
+    assert len(lines) >= 2 and "`tl " not in lines[-1] and "`bd " not in lines[-1]
+
+
+def test_a_new_literal_producer_fails_until_it_has_a_guide(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    source = tmp_path / "new_operation.py"
+    source.write_text('def operation():\n    return Failed("refused", "new_producer_reason")\n')
+    monkeypatch.setattr(refusal_inventory, "ROOT", tmp_path)
+    cases, _dynamic = refusal_inventory.census()
+    assert cases == {("step", "new_producer_reason")}
+    for _context, reason in cases:
+        with pytest.raises(KeyError):
+            human("tl step start", Failed("refused", reason), None)
+
+
+def test_final_string_reasons_have_literal_coverage_and_other_names_stay_dynamic(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = tmp_path / "operation.py"
+    source.write_text('from typing import Final\nREASON: Final = "changed"\n'
+                      'def operation(reason):\n    Failed("unavailable", REASON)\n    Failed("unavailable", reason)\n')
+    monkeypatch.setattr(refusal_inventory, "ROOT", tmp_path)
+    literals, dynamic = refusal_inventory.census()
+    assert literals == {("step", "changed")}
+    assert dynamic == {("operation.py", "Failed", "reason")}

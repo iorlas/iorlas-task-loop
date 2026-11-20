@@ -25,13 +25,18 @@ def test_noneditable_install_matches_current_source() -> None:
     assert origin.get("dir_info", {}).get("editable", False) is False
     assert Path(unquote(urlparse(origin["url"]).path)).resolve() == ROOT
     project = tomllib.loads((ROOT / "pyproject.toml").read_text())
+    lock = tomllib.loads((ROOT / "uv.lock").read_text())
+    locked = next(package for package in lock["package"] if package["name"] == "iorlas-task-loop")
+    assert distribution.version == project["project"]["version"] == locked["version"]
+    assert distribution.version != "0"
     assert distribution.requires == project["project"]["dependencies"]
     installed = Path(taskloop.__file__).resolve().parent
     assert installed.is_relative_to(Path(sys.prefix).resolve())
     source = ROOT / "src" / "taskloop"
-    assert {path.name for path in installed.glob("*.py")} == {path.name for path in source.glob("*.py")}
-    for path in source.glob("*.py"):
-        assert (installed / path.name).read_bytes() == path.read_bytes(), path.name
+    assert {path.relative_to(installed) for path in installed.rglob("*.py")} == {
+        path.relative_to(source) for path in source.rglob("*.py")}
+    for path in source.rglob("*.py"):
+        assert (installed / path.relative_to(source)).read_bytes() == path.read_bytes(), path.name
     entries = [entry for entry in distribution.entry_points if entry.group == "console_scripts"]
     assert [(entry.name, entry.value) for entry in entries] == [("tl", "taskloop.cli:main")]
     assert entries[0].load() is cli.main

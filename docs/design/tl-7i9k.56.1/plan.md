@@ -1,5 +1,7 @@
 # Retries, cooldowns and pauses
 
+Status: **design**. Accepted decisions and pending proposals are distinguished below; historical source observations are not a delivery receipt. Explicit holds remain in force except where superseded.
+
 Task: tl-7i9k.56.1. Source review, 2026-11-08. Exact proposed contract for owner review; source remains unchanged.
 Previously agreed constraints: bounded repair loops, every actual execution represented as an attempt, agent-owned
 structured-output repair, factory workflow/budget ownership, local runtime state in SQLite, and explicit owner input.

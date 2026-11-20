@@ -1,5 +1,7 @@
 # Owner and agent workflows
 
+Status: **design**. Accepted decisions and pending proposals are distinguished below; historical source observations are not a delivery receipt. Explicit holds remain in force except where superseded.
+
 Review under tl-8bh9.7, 2026-11-08. Design only. Current code names below are quoted literally; target vocabulary
 is task, step and attempt. This records actual behavior separately from proposed simplifications.
 

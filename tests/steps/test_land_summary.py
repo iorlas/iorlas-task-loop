@@ -7,12 +7,18 @@ import json
 from pathlib import Path
 
 import pytest
-from doubles import CHECKS
+from doubles import CHECKS, FixedIds
 from git_porcelain import Recorded, Sha, Squashed, TreeId
-from land_bench import LandBench, bench
+from land_bench import LandBench, bench, executing
 
+from taskloop.attempt_status import Listed, StatusPorts, list_attempts
+from taskloop.attempt_store import AttemptStore
 from taskloop.check_store import ChecksRow, CheckStore, ResultRow
-from taskloop.land import Landed, LandResult
+from taskloop.command_conclusion import CommandConclusion
+from taskloop.dash_land import build_land
+from taskloop.dash_model import LandDetail
+from taskloop.land import Landed, LandRequest, LandResult, land
+from taskloop.land_data import summary_data
 from taskloop.land_gate import Changed
 from taskloop.land_summary import (
     LandSummary,
@@ -22,6 +28,7 @@ from taskloop.land_summary import (
     message_at,
     summary,
 )
+from taskloop.merge.models import Completed, Disposition, Terminal
 from taskloop.operations import Failed
 from taskloop.printable import one_line
 from taskloop.profile import Check, Profile
@@ -138,6 +145,53 @@ def test_the_summary_reports_a_conflict_and_no_change_as_facts(b: LandBench) -> 
     assert f"Origin main: {o}; conflict (1 paths): src/x.py" in lines(conflict)
     b.advance({"src/x.py": "X = 1\n"})
     assert summarized(b.land("summary")).state == "no_change" and b.rows() == ()
+    assert b.conflict_runs == [] and b.reservations() == [] and b.execs() == []
+
+
+def test_summary_with_retained_work_never_resumes_it_or_advances_delivery(b: LandBench) -> None:
+    b.advance({"src/x.py": "X = 2\n"})
+    b.land()
+    before = list(b.conflict_runs), b.reservations(), list(b.environment.events)
+    assert summarized(b.land("summary")).state == "conflict"
+    b.advance({"src/x.py": "X = 1\n"})
+    assert summarized(b.land("summary")).state == "no_change"
+    assert (b.conflict_runs, b.reservations(), b.environment.events) == before
+    assert b.rows() == () and b.repo.pushes == 0 and b.tracker == []
+
+
+@pytest.mark.parametrize("state", ["active", "terminal", "accepted"])
+def test_repeated_summaries_and_dashboard_reads_preserve_retained_conflict_state(tmp_path: Path, state: str) -> None:
+    world = bench(tmp_path, {"README": "the task\n"})
+    try:
+        world.advance({"README": "current main\n"})
+        ports, cases = executing(world, interrupt=True)
+        request = LandRequest("tasks", "tl-1", world.repo.path, 5, accept=True)
+        with pytest.raises(KeyboardInterrupt):
+            land(ports, request)
+        [case] = cases
+        if state != "active":
+            case.interrupt = False
+            case.disposition = Disposition.OWNER if state == "terminal" else Disposition.RESOLVED
+            for _ in range(3):
+                result = case.resume()
+                if isinstance(result, (Completed, Terminal)):
+                    break
+            assert isinstance(result, Terminal if state == "terminal" else Completed)
+        tables = ("land_conflict", "merge_operation", "reservation", "task_hold", "checks_attempt", "check_result", "land_candidate")
+        before = [world.con.execute(f"SELECT * FROM {table}").fetchall() for table in tables]
+        events, calls = list(world.environment.events), case.calls
+        reads = StatusPorts(AttemptStore(lambda: world.con), lambda _entry: "gone", lambda: world.now,
+                            lambda _key: None, lambda: "boot")
+        for _ in range(2):
+            found = land(ports, dataclasses.replace(request, minutes=None, mode="summary"))
+            assert isinstance(found, LandSummary)
+            assert isinstance(build_land(ports, "tasks", "tl-1", world.repo.path), LandDetail)
+            assert isinstance(list_attempts(reads), Listed)
+            assert [world.con.execute(f"SELECT * FROM {table}").fetchall() for table in tables] == before
+            assert world.environment.events == events and case.calls == calls
+            assert world.tracker == [] and world.repo.pushes == 0
+    finally:
+        world.con.close()
 
 
 def test_the_summary_compares_the_target_s_profile_with_x_s(b: LandBench) -> None:
@@ -168,13 +222,17 @@ def blob(name: str) -> tuple[str, Sha]:
 
 def test_each_required_name_s_result_and_printable_conflict_paths(b: LandBench) -> None:
     profile = Profile((), (Check("check", ("just", "check"), 600), Check("test", ("just", "test"), 600)), ("check", "test"), "main")
-    results = [ResultRow(1, 0, "check", None, None, None, 1.0, 2.0, 0, "passed"),
+    results = [ResultRow(1, 0, "check", None, None, None, 1.0, 2.0, 0, CommandConclusion.PASSED),
                ResultRow(1, 1, "test", None, None, None, 1.0, None, None, None)]
     files = {"src/x.py": blob("1")}
     trees = Trees(b.base, files, files, files)
     made = Squashed(Sha(SHA), TreeId(SHA))
     found = summary(checks_row(b), results, (profile, profile), checks_row(b).required, made, trees, ("m\n", None), b.base)
     assert found.results == (("check", "passed"), ("test", "unfinished")) and found.state == "no_change"
+    assert found.results[0][1] is CommandConclusion.PASSED
+    data = summary_data(found)
+    assert json.loads(json.dumps(data))["results"] == [
+        {"name": "check", "conclusion": "passed"}, {"name": "test", "conclusion": "unfinished"}]
     hostile = dataclasses.replace(found, state="conflict", conflicts=("src/\x1b[2Jx.py\nTask: y",))
     assert f"Origin main: {b.base}; conflict (1 paths): src/ [2Jx.py Task: y" in lines(hostile)
     assert all(line.isprintable() for line in lines(hostile))
@@ -212,3 +270,21 @@ def test_a_task_id_is_never_cut_even_when_it_overshoots_the_line(b: LandBench) -
     row = dataclasses.replace(checks_row(b), task_id="tl-" + "9" * 69)
     first = message("Widget and more", row, [], plan=False).split("\n")[0]
     assert first == f"W\u2026 (tl-{'9' * 69})" and len(first) > 72
+
+
+@pytest.mark.parametrize("validate_again", [False, True])
+def test_both_land_candidate_paths_use_the_supplied_id_and_keep_it_on_reentry(b: LandBench, validate_again: bool) -> None:
+    if validate_again:
+        b.advance({"README": "two\n"})
+    ids = FixedIds()
+    ports = dataclasses.replace(b.ports(), ids=ids)
+    request = LandRequest("tasks", "tl-1", b.repo.path, 5)
+    found = land(ports, request)
+    assert isinstance(found, Landed), found
+    row, = b.rows()
+    assert row.key.attempt_id == ids.fresh[1] and row.key.dispatch_token == ids.tokens[0][1]
+    assert b.con.execute("SELECT action_id FROM drain_action WHERE kind='land'").fetchone() == (ids.fresh[0],)
+    assert [size for size, _ in ids.tokens] == [16]
+    assert (row.slot is not None) is validate_again
+    land(ports, request)
+    assert b.rows() == (row,) and len(ids.tokens) == 1

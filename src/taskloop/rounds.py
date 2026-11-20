@@ -1,4 +1,4 @@
-"""`tl step rounds`: scheduling rounds one after another in this foreground process until it is stopped.
+"""`tl rounds start`: scheduling rounds one after another in this foreground process until it is stopped.
 
 A round at once; then the next regular round `every` seconds after the previous one ended, or sooner when a slot frees:
 the reserved slots are read just before and just after each round (their union is the baseline) and every `CHECK`
@@ -18,8 +18,10 @@ from dataclasses import dataclass
 from typing import Final
 
 from taskloop.attempt_reads import SlotUse
+from taskloop.clock_jumps import ClockContext, ClockJumps, encode
+from taskloop.drain.models import Reason
 from taskloop.evidence_files import EvidenceError
-from taskloop.operations import Ended, Failed, Quiet, Round, choices_refused, minutes_refused
+from taskloop.operations import Ended, Failed, Quiet, Round, minutes_refused
 from taskloop.round import STOPPING_UNKNOWN, NextRequest, max_running_refused
 from taskloop.round_log import IDENT, INTERRUPTED, fixed, stamped
 
@@ -49,6 +51,7 @@ class RoundsPorts:
     stopping: Callable[[], bool]
     pid: int
     ctrl_c: bool = True  # False when this process started with Ctrl-C ignored: only SIGTERM stops it
+    draining: Callable[[], bool] = lambda: False  # durable drain, separate from the interrupt flag
 
 
 def inputs(request: NextRequest) -> Failed | None:
@@ -57,8 +60,8 @@ def inputs(request: NextRequest) -> Failed | None:
     if not IDENT.fullmatch(request.backlog) or "/" in request.backlog:
         return Failed("refused", "backlog", "The backlog must be one word of letters, digits and ._:@+-")
     if not request.label.strip():
-        return Failed("refused", "label", "An approval label is required (`--label auto`); a round never takes every ready task")
-    return choices_refused(request.model, request.effort) or minutes_refused(request.minutes) or max_running_refused(request.max_running)
+        return Failed("refused", "label", "An approval label is required (name the label); a round never takes every ready task")
+    return minutes_refused(request.minutes) or max_running_refused(request.max_running)
 
 
 class _Log:
@@ -108,29 +111,34 @@ def run_rounds(ports: RoundsPorts, request: RoundsRequest) -> Ended:
     word of a whole-round refusal (`refused:database`, `refused:schema`, ...). Per-task words never end or back off. A
     `KeyboardInterrupt` once `rounds started` is written adds the best-effort `rounds stopped abrupt` and passes on."""
     log = _Log(ports, request.backlog)
+    jumps = ClockJumps(ClockContext.IDLE, ports.clock, ports.monotonic, lambda jump: log.write("clock-jump", encode(jump)))
     log.write("started", f"every={request.every}", f"pid={ports.pid}")
     try:
-        return _rounds(ports, request, log)
+        return _rounds(ports, request, log, jumps)
     except KeyboardInterrupt:
         abrupt(ports.log, ports.clock, request.backlog)
         raise
 
 
-def _rounds(ports: RoundsPorts, request: RoundsRequest, log: _Log) -> Ended:
+def _rounds(ports: RoundsPorts, request: RoundsRequest, log: _Log, jumps: ClockJumps) -> Ended:
     quiet: Quiet = frozenset()
     backoff = _Backoff(request.every)
-    while not ports.stopping():
+    while not ports.stopping() and not ports.draining():
+        jumps.sample()
         before = _held(ports)
-        found = ports.round(quiet)
+        try:
+            found = ports.round(quiet)
+        finally:
+            jumps.sample()
         if isinstance(found, Failed) and found.kind not in STOPPING_UNKNOWN:
-            return _end(log, request.backlog, found.word, found.detail)
+            return _end(log, request.backlog, Reason.DRAINING if found.reason == Reason.DRAINING else found.word, found.detail)
         if isinstance(found, Round):
             log.seen(found.logged)
             quiet = found.written
         if ports.stopping():
             break
-        _pause(ports, backoff.after(found, log), _union(before, _held(ports)))
-    return _end(log, request.backlog, INTERRUPTED)
+        _pause(ports, backoff.after(found, log), _union(before, _held(ports)), jumps)
+    return _end(log, request.backlog, Reason.DRAINING if ports.draining() else INTERRUPTED)
 
 
 def _held(ports: RoundsPorts) -> frozenset[tuple[str, str]] | None:
@@ -146,13 +154,15 @@ def _union(before: frozenset[tuple[str, str]] | None, after: frozenset[tuple[str
     return before | after
 
 
-def _pause(ports: RoundsPorts, delay: int, baseline: frozenset[tuple[str, str]] | None) -> None:
+def _pause(ports: RoundsPorts, delay: int, baseline: frozenset[tuple[str, str]] | None, jumps: ClockJumps) -> None:
     """Until the next regular round is due, a stop is asked, or a reserved slot of the baseline (read before and after
     the round) is no longer reserved. A slot reserved since never wakes; an empty baseline has nothing to lose and is not read
     again; a failed read neither wakes nor fails, and while there is no baseline each check retries it."""
+    jumps.sample()
     due = ports.monotonic() + delay
-    while not ports.stopping() and (left := due - ports.monotonic()) > 0:
+    while not ports.stopping() and not ports.draining() and (left := due - ports.monotonic()) > 0:
         ports.wait(min(CHECK, left))
+        jumps.sample()
         if baseline is not None and not baseline:
             continue
         now = _held(ports)

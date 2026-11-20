@@ -1,0 +1,11 @@
+{
+  "prepared_commit": "220beb55af526f716b1d5e0d3f2e6e700e126801",
+  "cited_paths": [
+    "docs/glossary.md",
+    "src/taskloop",
+    "tests/steps/test_verifier.py",
+    "tests/steps/test_verifier_leftovers.py",
+    "tests/steps/test_commit_paths.py",
+    "tests/cli/test_dash_words.py"
+  ]
+}

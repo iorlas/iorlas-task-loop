@@ -1,4 +1,5 @@
 ---
+# Status: evidence; historical format specimen, not current system authority
 when: "factory.db fails at start as corrupt or mismatched."
 actor: persona/owner
 touches: [area/storage, workflow/factory-start, external/tracker]

@@ -1,0 +1,9 @@
+{
+  "prepared_commit": "a1eca52afedd14c83de6186c24c77bad89580d16",
+  "cited_paths": [
+    "src/taskloop",
+    "tests/rules",
+    "pyproject.toml",
+    ".importlinter"
+  ]
+}
