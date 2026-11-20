@@ -75,14 +75,14 @@ def assert_permissions(config: ConfigParser, permissions: dict[str, list[str]]) 
 
 def test_ruff_permissions_match_only_literal_stores_and_exact_exceptions() -> None:
     config = configuration((ROOT / ".importlinter").read_text())
-    lint = tomllib.loads((ROOT / "ruff.toml").read_text())["lint"]
+    lint = tomllib.loads((ROOT / "pyproject.toml").read_text())["tool"]["ruff"]["lint"]
     assert {"sqlite3", "subprocess"} <= lint["flake8-tidy-imports"]["banned-api"].keys()
     assert "TID251" in lint["select"] and "TID251" not in lint["ignore"]
     assert_permissions(config, lint["per-file-ignores"])
 
 
 def test_ruff_sqlite_permissions_never_exempt_other_banned_apis() -> None:
-    lint = tomllib.loads((ROOT / "ruff.toml").read_text())["lint"]
+    lint = tomllib.loads((ROOT / "pyproject.toml").read_text())["tool"]["ruff"]["lint"]
     banned = set(lint["flake8-tidy-imports"]["banned-api"]) - {"sqlite3"}
     paths = set((ROOT / "tests").rglob("*.py"))
     paths.update(ROOT / path for path in lint["per-file-ignores"] if path != "tests/**")
@@ -108,7 +108,7 @@ def test_sqlite_permission_cannot_hide_another_banned_import(source: str) -> Non
 @pytest.mark.parametrize("extra", ["src/taskloop/*.py", "src/taskloop/profile.py"])
 def test_wildcard_and_spare_ruff_permissions_fail(extra: str) -> None:
     config = configuration((ROOT / ".importlinter").read_text())
-    lint = tomllib.loads((ROOT / "ruff.toml").read_text())["lint"]
+    lint = tomllib.loads((ROOT / "pyproject.toml").read_text())["tool"]["ruff"]["lint"]
     permissions = dict(lint["per-file-ignores"])
     permissions[extra] = ["TID251"]
     with pytest.raises(AssertionError):

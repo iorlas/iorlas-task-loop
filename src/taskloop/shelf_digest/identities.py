@@ -183,7 +183,8 @@ def _identity(name: str, project: _ProjectManifest, lock: _Lock, root: _LockedPa
 
 
 def _reconcile(project: _ProjectManifest, lock: _Lock) -> tuple[PackageIdentity, ...]:
-    _equal(set(PACKAGES), set(project.tool.uv.sources), "pyproject.toml shelf source names")
+    # The gate kit's dev dependencies are shelf sources too; the digest covers the runtime packages only.
+    _equal(set(PACKAGES), set(PACKAGES) & set(project.tool.uv.sources), "pyproject.toml shelf source names")
     root = _one([item for item in lock.package if item.name == project.project.name], "uv.lock task-loop package")
     _equal(project.project.version, root.version, "uv.lock task-loop version")
     _equal({"editable": "."}, root.source, "uv.lock task-loop source")

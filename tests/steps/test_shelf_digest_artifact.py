@@ -14,7 +14,7 @@ from taskloop.shelf_digest.render import TOKEN_LIMIT
 from taskloop.shelf_digest.source import SourceSnapshot, relative_path
 
 ROOT = Path(__file__).resolve().parents[2]
-SOURCE_COMMIT = "8c06a86e82744c3d72478310fcda7ae0c0032611"
+SOURCE_COMMIT = "3f55bbeb78dcb9ee80a010d36eeeed0cd2374938"
 
 
 def test_artifact_decodes_all_six_manifest_identities() -> None:
@@ -25,7 +25,7 @@ def test_artifact_decodes_all_six_manifest_identities() -> None:
     locked = {package["name"]: package for package in lock["package"]}
     assert artifact["source_commit"] == SOURCE_COMMIT
     assert [package[0] for package in artifact["packages"]] == list(PACKAGES)
-    assert set(declarations) == set(PACKAGES)
+    assert set(PACKAGES) <= set(declarations)
     for name, version, repository, tag, directory, commit in artifact["packages"]:
         declared = declarations[name]
         assert f"{name}=={version}" in project["project"]["dependencies"]

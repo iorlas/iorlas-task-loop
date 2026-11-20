@@ -13,3 +13,5 @@ __pycache__/
 .slots/
 .venv/
 .testmondata*
+.claude/worktrees/
+.beads/hooks/
