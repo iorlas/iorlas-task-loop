@@ -4,8 +4,8 @@ import json
 from collections.abc import Sequence
 
 import pytest
-from doubles import PinnedViews
-from git_porcelain import Diff, GitUnavailable, NothingToRecord, Recorded
+from doubles import PinnedViews, record_all
+from git_porcelain import Diff, GitUnavailable, Recorded
 from git_porcelain.testing import FakeRepo, FakeWorktree
 from plan_fixtures import PLAN_TEXT
 from pydantic import ValidationError
@@ -18,8 +18,7 @@ METADATA_PATH = "docs/design/tl-1/plan-metadata.json"
 
 
 def record(slot: FakeWorktree, message: str = "ordinary result") -> str:
-    result = slot.record(message, paths="all")
-    result = slot.record_empty(message) if isinstance(result, NothingToRecord) else result
+    result = record_all(slot, message)
     assert isinstance(result, Recorded)
     return str(result.sha)
 

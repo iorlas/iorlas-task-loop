@@ -31,7 +31,7 @@ from doubles import (
 from git_porcelain import Recorded
 from git_porcelain.testing import FakeWorktree
 from plan_fixtures import PLAN_TEXT
-from sqlite_sidecar import transaction as begin_immediate
+from sqlite_sidecar import transaction
 from sqlite_store import Store
 from test_steps import TASK as INSPECTION
 
@@ -137,7 +137,7 @@ def never(*_args: object, **_options: object) -> NoReturn:
 def admission(
     con: sqlite3.Connection, tmp_path: Path, checkouts: Checkouts, files: SlotFiles, clock: Callable[[], float] = lambda: 10
 ) -> ChainAdmission:
-    return ChainAdmission(lambda: con, begin_immediate, EvidenceFiles(tmp_path), clock, checkouts, files, ids=NativeIds(), engine=ENGINE)
+    return ChainAdmission(lambda: con, transaction, EvidenceFiles(tmp_path), clock, checkouts, files, ids=NativeIds(), engine=ENGINE)
 
 
 def gone(_worker: Worker) -> bool:
@@ -488,7 +488,7 @@ def test_two_starts_on_two_connections_admit_exactly_one(
     con = Store(SCHEMA).open_rw(path)
     assert con is not None
     repo_id = slot.repo.identity().key
-    with begin_immediate(con):
+    with transaction(con):
         con.execute("INSERT INTO slot (repo_id,name,path) VALUES (?,'s1',?)", (repo_id, str(slot.path)))
         con.execute("INSERT INTO reservation VALUES ('s1',?,1,'attempt')", (repo_id,))
         pin_workflow(con)
@@ -649,7 +649,7 @@ def test_start_repeats_a_captured_current_attempt_and_launches_any_other(
     store, launcher, repeats = AttemptStore(lambda: registered), Launching(), Repeats()
     fresh = AttemptAdmission(
         lambda: registered,
-        begin_immediate,
+        transaction,
         EvidenceFiles(tmp_path),
         never,
         never,
@@ -750,7 +750,7 @@ def test_a_held_slot_lock_refuses_the_takeover_and_admits_nothing(
     tmp_path: Path,
     checkouts: Checkouts,
     slot_files: FakeSlotFiles,
-    occupy: Callable[[Path], AbstractContextManager[object]],
+    occupy: Callable[[Path], AbstractContextManager[None]],
 ) -> None:
     """`admit_repeat` runs under the slot's lock, so an abandon parking the slot (or anyone else holding it) refuses it."""
     unsafe(registered, tmp_path, slot, checkouts, slot_files)

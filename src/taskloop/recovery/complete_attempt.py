@@ -15,7 +15,7 @@ class CapturedCompletion:
         self,
         attempts: Attempts,
         holds: HoldStore,
-        custody: Callable[[Admission], AbstractContextManager[object]],
+        custody: Callable[[Admission], AbstractContextManager[None]],
         observe: Observe,
     ) -> None:
         self.attempts, self.holds, self.custody, self.observe = attempts, holds, custody, observe

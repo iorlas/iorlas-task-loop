@@ -11,7 +11,7 @@ import pytest
 from doubles import D, X, pin_workflow
 from hold_fixtures import event_for
 from hold_fixtures import row as hold_row
-from sqlite_sidecar import transaction as begin_immediate
+from sqlite_sidecar import transaction
 
 from taskloop.answer_failures import AnswerFailureData, AnswerRule, encode
 from taskloop.attempt_reads import ReleaseRow, StoreUnavailable
@@ -149,7 +149,7 @@ def test_terminal_land_guidance_preserves_work_without_restart_advice(pending: b
 
 def plan(con: sqlite3.Connection, *, label: str | None = "auto", released: str | None = None) -> None:
     """tl-1's admitted plan attempt `a` (no entry, deadline 100), maybe released with `released` as its claim."""
-    with begin_immediate(con):
+    with transaction(con):
         pin_workflow(con)
         con.execute(
             """INSERT INTO attempt (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,
@@ -233,7 +233,7 @@ def test_a_finished_hold_is_on_hold_and_not_in_the_stuck_listing(factory: sqlite
 def test_a_task_taken_again_shows_its_new_attempt_without_the_old_hold(factory: sqlite3.Connection) -> None:
     plan(factory, released="unclaimed")
     recorded(factory)
-    with begin_immediate(factory):
+    with transaction(factory):
         factory.execute(
             """INSERT INTO attempt (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,
             repo_id,slot,input_path,input_digest,schema_version,model,effort,access_policy,deadline,number,seq,slot_head,label,
@@ -349,7 +349,7 @@ def test_list_stuck_reads_the_leftovers_of_a_round_taken_attempt_so_a_due_repeat
 ) -> None:
     """Attempt 3 of a step awaiting its commit whose slot has leftovers a repeat would hand back: `repeats_exhausted`, so
     a due hold; the leftovers are read for a labelled attempt only (a hand-started one never becomes a hold)."""
-    with begin_immediate(factory):
+    with transaction(factory):
         for number in (1, 2, 3):
             previous, why = (None, None) if number == 1 else (f"a{number - 1}", "uncommitted")
             factory.execute(
@@ -432,7 +432,7 @@ def test_show_of_a_task_held_for_failed_checks_names_each_failed_check_with_its_
 ) -> None:
     """After the hold's abandon the current attempt is the implement attempt, but the cause is the checks attempt: `show`
     prints that attempt's unpassed results from factory.db with their log paths (not the tracker comment, not a log)."""
-    with begin_immediate(checking):
+    with transaction(checking):
         checking.executemany(
             "INSERT INTO check_result VALUES ('checks',1,?,?,'checks-token',1,?,60,NULL,NULL,NULL,NULL,1,?,?,?)",
             [(0, "check", "1" * 64, 3, 1, "failed"), (1, "test", "2" * 64, 9, 0, "passed")],

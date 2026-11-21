@@ -336,7 +336,7 @@ def test_a_held_or_unlockable_slot_refuses_the_entry_before_anything_is_read_or_
     checkouts: Checkouts,
     slot_files: SlotFiles,
     slot: FakeWorktree,
-    occupy: Callable[[Path], AbstractContextManager[object]],
+    occupy: Callable[[Path], AbstractContextManager[None]],
     held: bool,
 ) -> None:
     """Held by another entry or commit: `refused slot_busy`. A lock file that cannot be made (here `.locks` is a file):

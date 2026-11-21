@@ -50,7 +50,7 @@ def attach(repo: Repo, slot: Worktree, work: Work, fence: Callable[[], None] = l
         if isinstance(moved, RefMoved):
             return Terminal(reason=Reason.MOVED, explanation="The task branch changed before the prepared result could be attached.")
     fence()
-    taken = slot.take_branch(work.branch, result, mode="resume")
+    taken = slot.take_branch(work.branch, result)
     if isinstance(taken, BranchHeld) or taken.head != result:
         return Terminal(reason=Reason.MOVED, explanation="The task branch changed while taking the prepared result; preparation stopped.")
     return None

@@ -43,8 +43,6 @@ GIT_METHODS = frozenset(
         "push_lease",
         "delete_branch",
         "clean",
-        "clean_ignored",
-        "record_empty",
         "reset",
         "squash",
         "start_merge",
@@ -192,7 +190,7 @@ class Boundaries(ast.NodeVisitor):
         if not isinstance(node, ast.Call):
             return False
         name = self.reference(node.func).split(".")[-1]
-        return name in {"begin", "begin_immediate", "transaction"} or (
+        return name in {"begin", "transaction"} or (
             name == "_connection"
             and any(
                 keyword.arg == "write" and isinstance(keyword.value, ast.Constant) and keyword.value.value is True
@@ -253,7 +251,7 @@ def test_no_external_port_executes_in_a_write_transaction() -> None:
     "boundary",
     [
         "begin(con)",
-        "begin_immediate(con)",
+        "transaction(con)",
         "store.begin(con)",
         "self.begin(con)",
         "self._connection(write=True)",

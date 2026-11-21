@@ -1,5 +1,6 @@
-# The files each gate step reads (any-gate): a step none of whose inputs changed since the upstream merge-base is not started.
-# fnmatch on the whole path, `*` crosses `/`. A step with no entry always runs; `["*"]` means any change.
+# The files each gate step reads (any-gate, ADR 0031): a step none of whose inputs changed since the upstream merge-base is not started.
+# fnmatch on the whole path, `*` crosses `/`. A step with no entry always runs; `["*"]` means any change. Change to this file, the
+# justfile or .blueprint/ runs everything; so does `just check-all`.
 guard = ["*pyproject.toml"]
 preset = ["*.toml", ".codespellrc", ".shellcheckrc"]
 render = ["*"]

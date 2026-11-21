@@ -11,7 +11,7 @@ import pytest
 from doubles import CHECKS, REQUIRED, Command, FakeSetupProcess, PinnedViews
 from git_porcelain import GitUnavailable, Recorded, WorktreeInfo
 from git_porcelain.testing import FakeRepo, FakeWorktree
-from sqlite_sidecar import transaction as begin_immediate
+from sqlite_sidecar import transaction
 
 from taskloop.access import folders
 from taskloop.agent_credentials import PUSH_REFUSED, scrubbed
@@ -88,7 +88,7 @@ def test_every_check_runs_in_order_after_its_identity_is_committed(bench: Bench)
 def test_a_new_checks_attempt_runs_commands_despite_a_previous_pass(bench: Bench) -> None:
     assert bench.run(CHECK, TEST) is None and bench.verdict() == ("passed", None)
     key = AttemptKey("new-checks", "new-token", 2)
-    with begin_immediate(bench.con):
+    with transaction(bench.con):
         bench.con.execute(
             "UPDATE checks_attempt SET phase='concluded',conclusion='passed',concluded_at=11,released_at=12,parked=?", (bench.x,)
         )

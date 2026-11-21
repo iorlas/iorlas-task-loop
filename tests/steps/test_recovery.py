@@ -56,7 +56,7 @@ def test_standalone_and_already_held_custody_revalidate_without_reacquisition(co
     first = app.authorize(KEY, OWNER)
     assert first.outcome is Outcome.AUTHORIZED and first.intent is not None
 
-    def forbidden(_admission: Admission) -> AbstractContextManager[object]:
+    def forbidden(_admission: Admission) -> AbstractContextManager[None]:
         raise AssertionError("An already-held slot must not be reacquired")
 
     app.custody = forbidden
@@ -119,7 +119,7 @@ def test_unavailable_custody_has_no_authorization_or_claim_read(
 ) -> None:
     app = recovery(con)
 
-    def unavailable(_admission: Admission) -> AbstractContextManager[object]:
+    def unavailable(_admission: Admission) -> AbstractContextManager[None]:
         raise exception()
 
     def forbidden(_admission: Admission) -> Claim:
@@ -263,7 +263,7 @@ def test_expired_allowance_renews_after_custody_stop_and_claim_proof(con: sqlite
     assert processes.calls == [] and facts(con) == before
     admissions: list[Admission] = []
 
-    def custody(admission: Admission) -> AbstractContextManager[object]:
+    def custody(admission: Admission) -> AbstractContextManager[None]:
         admissions.append(admission)
         assert processes.calls == []
         return nullcontext()

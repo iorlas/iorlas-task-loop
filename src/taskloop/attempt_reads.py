@@ -184,7 +184,7 @@ class StoreConnection:
         connect: Callable[[], sqlite3.Connection | None],
         begin: Callable[[sqlite3.Connection], AbstractContextManager[object]] = transaction,
     ) -> None:
-        """`begin` is the writer transaction; a composition on a Store passes its begin_immediate, which evicts a failed shared writer."""
+        """`begin` is the writer transaction; a Store composition passes its begin_immediate, which evicts a failed shared writer."""
         self.connect, self.begin = connect, begin
 
     def warm(self) -> None:

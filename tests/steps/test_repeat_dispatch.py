@@ -16,7 +16,7 @@ from doubles import ENGINE, FakeSlotFiles, RegisteringLauncher, origin_main_at
 from git_porcelain import Dirty, Recorded
 from git_porcelain.testing import FakeRepo, FakeWorktree
 from plan_fixtures import PLAN_TEXT, PLAN_V2
-from sqlite_sidecar import transaction as begin_immediate
+from sqlite_sidecar import transaction
 from test_repeat import CONTENT_DIGEST, refresh_discussion
 
 from taskloop.admit import Admitted
@@ -124,7 +124,7 @@ class Step:
     def admission(self) -> ChainAdmission:
         return ChainAdmission(
             lambda: self.con,
-            begin_immediate,
+            transaction,
             EvidenceFiles(self.tmp),
             lambda: 10,
             self.checkouts,

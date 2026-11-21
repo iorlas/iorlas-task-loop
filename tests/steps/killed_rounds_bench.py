@@ -13,7 +13,7 @@ from doubles import PinnedViews
 from git_porcelain.testing import FakeWorktree
 from plan_fixtures import PLAN_TEXT
 from round_bench import Factory, Tracker
-from sqlite_sidecar import transaction as begin_immediate
+from sqlite_sidecar import transaction
 from test_recovery import Processes
 
 from taskloop.agents.launch import AgentLaunch
@@ -66,7 +66,7 @@ def connect(path: Path, *, initialize: bool = False) -> sqlite3.Connection:
     con = sqlite3.connect(path, isolation_level=None)
     con.execute("PRAGMA foreign_keys=ON")
     if initialize:
-        with begin_immediate(con):
+        with transaction(con):
             for statement in SCHEMA.ddl.split(";"):
                 if statement.strip():
                     con.execute(statement)

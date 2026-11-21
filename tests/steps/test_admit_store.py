@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 from doubles import ENGINE, PIN_DIGEST, PIN_SHA
-from sqlite_sidecar import transaction as begin_immediate
+from sqlite_sidecar import transaction
 
 from taskloop import admit_store
 from taskloop.admit_rows import Free
@@ -87,7 +87,7 @@ def test_admission_reads_and_effects_share_the_callers_transaction(con: sqlite3.
     assert not admit_store.task_attempted(con, "tasks", "tl-1")
     assert admit_store.next_seq(con, "tasks", "tl-1") == 1
     assert admit_store.unheld(con, REPO, FREE, 1) == ("s1", FREE.park_commit)
-    with begin_immediate(con):
+    with transaction(con):
         admit_store.reserve(con, REPO, "s1", KEY)
         admit_store.insert_attempt(con, values(), EVIDENCE)
         assert con.in_transaction
@@ -115,7 +115,7 @@ def test_admission_failure_rolls_back_reservation_generation_attempt_and_evidenc
 ) -> None:
     if evidence_fails:
         con.execute("CREATE TRIGGER reject_evidence BEFORE INSERT ON task_content BEGIN SELECT RAISE(ABORT,'evidence unavailable'); END")
-    with pytest.raises(sqlite3.IntegrityError), begin_immediate(con):
+    with pytest.raises(sqlite3.IntegrityError), transaction(con):
         admit_store.reserve(con, REPO, "s1", KEY)
         admit_store.insert_attempt(con, values(), EVIDENCE if evidence_fails else None)
     assert con.execute("SELECT * FROM reservation").fetchall() == []
@@ -127,13 +127,13 @@ def test_admission_failure_rolls_back_reservation_generation_attempt_and_evidenc
 
 def test_transfer_fences_the_previous_holder_and_updates_generation_only_when_moved(con: sqlite3.Connection) -> None:
     successor = AttemptKey("successor", "next-dispatch", 2)
-    with begin_immediate(con):
+    with transaction(con):
         admit_store.reserve(con, REPO, "s1", KEY)
     for stale in (replace(KEY, attempt_id="other"), replace(KEY, reservation_generation=2)):
-        with begin_immediate(con):
+        with transaction(con):
             assert not admit_store.transfer(con, stale, successor, REPO, "s1")
         assert admit_store.issued(con, REPO, ("s1",)) == 1
-    with begin_immediate(con):
+    with transaction(con):
         assert admit_store.transfer(con, KEY, successor, REPO, "s1")
     assert con.execute("SELECT attempt_id,generation FROM reservation").fetchone() == ("successor", 2)
     assert admit_store.issued(con, REPO, ("s1",)) == 2
@@ -141,7 +141,7 @@ def test_transfer_fences_the_previous_holder_and_updates_generation_only_when_mo
 
 @pytest.mark.parametrize(("column", "value"), [("seq", "malformed"), ("step", "check"), ("step", "review")])
 def test_malformed_stored_admission_uses_the_store_error_path(con: sqlite3.Connection, column: str, value: str) -> None:
-    with begin_immediate(con):
+    with transaction(con):
         admit_store.insert_attempt(con, values(), EVIDENCE)
     con.execute("PRAGMA ignore_check_constraints=ON")
     con.execute(f"UPDATE attempt SET {column}=? WHERE attempt_id=?", (value, KEY.attempt_id))
@@ -155,14 +155,14 @@ def test_malformed_stored_admission_uses_the_store_error_path(con: sqlite3.Conne
 
 
 def test_failed_transfer_allows_the_caller_to_roll_back_the_inserted_successor(con: sqlite3.Connection) -> None:
-    with begin_immediate(con):
+    with transaction(con):
         admit_store.reserve(con, REPO, "s1", KEY)
         admit_store.insert_attempt(con, values(), EVIDENCE)
     successor = AttemptKey("successor", "next-dispatch", 2)
     repeated = values(successor)
     repeated.update(number=2, seq=2, previous_attempt_id=KEY.attempt_id, repeat_reason="uncommitted")
     stale = replace(KEY, reservation_generation=3)
-    with pytest.raises(RuntimeError, match="stale reservation"), begin_immediate(con):
+    with pytest.raises(RuntimeError, match="stale reservation"), transaction(con):
         admit_store.insert_attempt(con, repeated, EVIDENCE)
         if not admit_store.transfer(con, stale, successor, REPO, "s1"):
             raise RuntimeError("stale reservation")

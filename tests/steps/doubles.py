@@ -11,9 +11,10 @@ from pathlib import Path
 
 from beads_client import BdError, Bead
 from beads_client.testing import FakeTaskReadClient
-from git_porcelain import GitUnavailable, Pushed, Recorded, Repo
+from git_porcelain import GitUnavailable, NothingToRecord, Pushed, Recorded, Repo
+from git_porcelain.api import RecordResult
 from git_porcelain.testing import FakeRepo, FakeWorktree
-from sqlite_sidecar import transaction as begin_immediate
+from sqlite_sidecar import transaction
 from sqlite_store import Store
 from stream_proc import OwnedProcess
 
@@ -45,6 +46,12 @@ from taskloop.workflow_render import feedback_opening
 WORKFLOW_PATH = ".task-loop/workflows/default.toml"
 WORKFLOW_BYTES = (Path(__file__).resolve().parents[2] / WORKFLOW_PATH).read_bytes()
 WORKFLOW_FILES = {WORKFLOW_PATH: WORKFLOW_BYTES.decode()}  # for `advance` and `write_file`
+
+
+def record_all(slot: FakeWorktree, message: str) -> RecordResult:
+    """Commit everything, even when nothing changed."""
+    made = slot.record(message, paths="all")
+    return slot.record_empty(message) if isinstance(made, NothingToRecord) else made
 
 
 def put_workflow(root: FakeWorktree) -> None:
@@ -495,7 +502,7 @@ class ChecksBench:
     def begin(self, con: sqlite3.Connection) -> AbstractContextManager[object]:
         racing, self.racing = self.racing, lambda: None
         racing()
-        return begin_immediate(con)
+        return transaction(con)
 
     def admission(self) -> ChecksAdmission:
         return ChecksAdmission(

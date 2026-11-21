@@ -81,7 +81,7 @@ def _registered(
     return _Registered(work, row, me, slot)
 
 
-def _unheld(_slot_path: str, _attempt_id: str) -> AbstractContextManager[object]:
+def _unheld(_slot_path: str, _attempt_id: str) -> AbstractContextManager[None]:
     """The entry's release runs inside the slot lock the entry already holds."""
     return nullcontext()
 

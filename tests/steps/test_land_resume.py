@@ -98,7 +98,7 @@ def test_a_stored_land_process_still_running_is_never_replaced(b: LandBench) -> 
 
 
 def test_a_second_land_while_the_first_holds_the_slot_is_slot_busy(
-    b: LandBench, occupy: Callable[[Path], AbstractContextManager[object]]
+    b: LandBench, occupy: Callable[[Path], AbstractContextManager[None]]
 ) -> None:
     interrupted(b)
     with occupy(lock_path(str(b.slot.path))):

@@ -365,7 +365,7 @@ def test_present_bad_digest_is_never_skipped_without_shelf_declarations() -> Non
         read(Files(blobs={DIGEST_PATH: b"{}"}), "selected")
 
 
-@pytest.mark.parametrize("dependency", ["any-agent==0.19.0", "any-agent~=0.19", "any-agent!=0.18", "Any_Agent[extra]>=0.19"])
+@pytest.mark.parametrize("dependency", ["any-agent==0.15.0", "any-agent~=0.15", "any-agent!=0.14", "Any_Agent[extra]>=0.15"])
 def test_shelf_dependency_declarations_require_the_artifact(dependency: str) -> None:
     project = f'[project]\ndependencies = ["{dependency}"]\n'.encode()
     with pytest.raises(InputError, match="Required artifact is missing"):

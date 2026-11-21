@@ -83,7 +83,7 @@ def bench(
     repo.drop_worktree(task.path)
     remote.advance("main", {"README": "current main\n", "other": "another landed task\n"})
     assert repo.fetch().ok
-    slot.take_branch("task/tl-1", source, mode="resume")
+    slot.take_branch("task/tl-1", source)
     work = Work(
         attempt_id="attempt",
         dispatch_token="dispatch",

@@ -12,7 +12,7 @@ from pathlib import Path
 import pytest
 from doubles import CHECKS, D, X, pin_workflow
 from hold_fixtures import event, event_for
-from sqlite_sidecar import transaction as begin_immediate
+from sqlite_sidecar import transaction
 from stream_proc import OwnedProcess
 
 from taskloop.attempt_reads import ReleaseRow, StoreRefused
@@ -170,7 +170,7 @@ VIEW = AttemptView(
 
 @pytest.fixture
 def bench(factory: sqlite3.Connection, tmp_path: Path) -> Bench:
-    with begin_immediate(factory):
+    with transaction(factory):
         factory.execute("INSERT INTO slot (repo_id,name,path) VALUES ('r','s1','/slots/s1'),('r','s2','/slots/s2')")
         attempt(factory)
     return Bench(factory, tmp_path)
@@ -368,7 +368,7 @@ def test_a_lost_timeout_notice_response_survives_restart_and_a_later_timeout(ben
     assert restarted.hold(timeout).word == "held"
     assert restarted.row().commented_at == 11.0
     assert len(restarted.tracker.notices) == 1 and restarted.tracker.keys == ["a"]
-    with begin_immediate(bench.con):
+    with transaction(bench.con):
         attempt(bench.con, "b", seq=2)
     assert restarted.hold(replace(timeout, attempt_id="b")).word == "held"
     assert restarted.tracker.keys == ["a", "b"] and len(restarted.tracker.notices) == 2

@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 from hold_fixtures import STUCK_SQL
-from sqlite_sidecar import transaction as begin_immediate
+from sqlite_sidecar import transaction
 from test_attempt import AttemptSurroundings
 from test_attempt import surroundings as attempt_surroundings
 from test_native_continuation import WORKER, NativeRun, prepared
@@ -178,7 +178,7 @@ def test_crash_reopen_observes_before_execution(
 
             @contextmanager
             def lost_ack(connection: sqlite3.Connection) -> Generator[None]:
-                with begin_immediate(connection):
+                with transaction(connection):
                     yield
                 raise sqlite3.OperationalError("lost acknowledgement")
 
@@ -482,7 +482,7 @@ def test_claim_and_already_held_custody(tmp_path: Path, surroundings: AttemptSur
     recovery_app = recovery(con)
     recovery_app.claim = lambda _admission: claim
 
-    def forbidden(_admission: Admission) -> AbstractContextManager[object]:
+    def forbidden(_admission: Admission) -> AbstractContextManager[None]:
         raise AssertionError("Custody was acquired twice")
 
     recovery_app.custody = forbidden

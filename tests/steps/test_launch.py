@@ -10,7 +10,7 @@ from functools import partial
 from pathlib import Path
 
 import pytest
-from sqlite_sidecar import transaction as begin_immediate
+from sqlite_sidecar import transaction
 from sqlite_store import Store
 from stream_proc import (
     IdentityUnavailableError,
@@ -155,7 +155,7 @@ def probe_writer(db: Path) -> tuple[object, ...]:
     """A separate writer must be permitted at the process start boundary."""
     con = sqlite3.connect(db, timeout=0, isolation_level=None)
     try:
-        with begin_immediate(con):
+        with transaction(con):
             assert con.execute("SELECT count(*) FROM drain_action WHERE state='pending'").fetchone() == (1,)
         return stored(db)
     finally:
@@ -194,7 +194,7 @@ def test_start_guard_rejects_a_held_writer_before_registration_or_permission(adm
     registered: list[OwnedProcess] = []
     con = sqlite3.connect(admitted, timeout=0, isolation_level=None)
     try:
-        with admitted.open("rb") as log, begin_immediate(con), pytest.raises(sqlite3.OperationalError, match="locked"):
+        with admitted.open("rb") as log, transaction(con), pytest.raises(sqlite3.OperationalError, match="locked"):
             start(["entry"], registered=registered.append, stderr=log.fileno())
     finally:
         con.close()

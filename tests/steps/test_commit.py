@@ -139,7 +139,7 @@ def captured(
     assert attempts(con, tmp_path, checkouts, files, agent(slot, written, answer)).execute(KEY, ENTRY).reason == "commit"
 
 
-def unheld(_admission: Admission) -> AbstractContextManager[object]:
+def unheld(_admission: Admission) -> AbstractContextManager[None]:
     return nullcontext()
 
 
@@ -790,7 +790,7 @@ def test_a_factory_commit_racing_another_adopts_its_commit_never_nothing_written
     captured(registered, tmp_path, slot, checkouts, slot_files, PLANNED)
     recorded, raced = FakeWorktree.record, list[CommitResult]()
 
-    def record(self: FakeWorktree, message: str, **options: Literal["staged"] | bool) -> RecordResult:
+    def record(self: FakeWorktree, message: str, **options: Literal["staged"]) -> RecordResult:
         if not raced:
             raced.append(Uncommitted("racing"))
             raced[0] = factory_commit(registered, checkouts, slot_files, unheld).commit(KEY)

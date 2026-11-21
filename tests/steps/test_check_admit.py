@@ -12,7 +12,7 @@ from admission_boundaries import guard_git, outside_transaction
 from doubles import ENGINE, MAIN_PROFILE, ChecksBench, Done, FakeSlotFiles, FixedIds, PinnedViews
 from git_porcelain import Sha
 from git_porcelain.testing import FakeRemote, FakeRepo
-from sqlite_sidecar import transaction as begin_immediate
+from sqlite_sidecar import transaction
 
 from taskloop.admit import AdmitRefused, Admitted
 from taskloop.admit_chain import NextAdmission, NextStepRequest
@@ -252,7 +252,7 @@ def test_latest_number_keeps_earlier_land_facts_and_abandon_refusal_precedence(b
 def racer(bench: ChecksBench) -> None:
     """Another start's admission of number 1, committed between this admission's reads and its write."""
     repo_id = bench.repo.identity().key
-    with begin_immediate(bench.con):
+    with transaction(bench.con):
         bench.con.execute("INSERT INTO reservation VALUES ('s0',?,7,'winner')", (repo_id,))
         insert(
             bench.con,
@@ -292,7 +292,7 @@ def test_the_agent_advance_refuses_the_check_step_before_any_tracker_read_or_inp
     """`admit_chain` admits only agent steps: after implement it is `not_advanceable` (never `kind("check")`)."""
     advance = NextAdmission(
         lambda: bench.con,
-        begin_immediate,
+        transaction,
         EvidenceFiles(bench.done.path.parent),
         bench.inspect,
         bench.views,

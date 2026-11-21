@@ -33,7 +33,7 @@ from doubles import (
 )
 from git_porcelain import Recorded
 from git_porcelain.testing import FakeRemote, FakeRepo, FakeWorktree
-from sqlite_sidecar import transaction as begin_immediate
+from sqlite_sidecar import transaction
 from sqlite_store import Store
 
 from taskloop import check_store, land_store
@@ -46,7 +46,7 @@ from taskloop.slots import folder_name
 def factory() -> Generator[sqlite3.Connection]:
     con = sqlite3.connect(":memory:", isolation_level=None)
     con.execute("PRAGMA foreign_keys=ON")
-    with begin_immediate(con):
+    with transaction(con):
         for statement in SCHEMA.ddl.split(";"):
             if statement.strip():
                 con.execute(statement)
@@ -107,7 +107,7 @@ def admitted(tmp_path: Path, slot: FakeWorktree) -> Path:
     assert con is not None
     text = "Plan the actual task"
     repo_id = slot.repo.identity().key
-    with begin_immediate(con):
+    with transaction(con):
         con.execute("INSERT INTO slot (repo_id,name,path) VALUES (?,'s1',?)", (repo_id, str(slot.path)))  # adopted
         con.execute("INSERT INTO reservation VALUES ('s1',?,1,'attempt')", (repo_id,))
         pin_workflow(con)
@@ -132,7 +132,7 @@ def registered(factory: sqlite3.Connection, slot: FakeWorktree, tmp_path: Path) 
     """In memory: one admitted, entry-registered attempt (entry (7, entry-start, boot), deadline 100) on the adopted `slot`, its held
     reservation, and its input in the artifacts root `tmp_path`."""
     repo_id = slot.repo.identity().key
-    with begin_immediate(factory):
+    with transaction(factory):
         factory.execute("INSERT INTO slot (repo_id,name,path) VALUES (?,'s1',?)", (repo_id, str(slot.path)))  # adopted
         factory.execute("INSERT INTO reservation VALUES ('s1',?,1,'attempt')", (repo_id,))
         factory.execute(
@@ -155,7 +155,7 @@ def registered(factory: sqlite3.Connection, slot: FakeWorktree, tmp_path: Path) 
 def checking(factory: sqlite3.Connection) -> sqlite3.Connection:
     """In memory: tl-1's done implement attempt `implement` (seq 2, captured at X, released `kept`, its slot s1 free) and its
     checks attempt 1 `CHECKS` (deadline 100, required `REQUIRED`, target `TARGET`) admitted on slot s2 at D, with its held reservation."""
-    with begin_immediate(factory):
+    with transaction(factory):
         factory.execute("INSERT INTO slot (repo_id,name,path) VALUES ('r','s1','/slots/s1'),('r','s2','/slots/s2')")
         factory.execute(
             """INSERT INTO attempt (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,
@@ -179,7 +179,7 @@ def checking(factory: sqlite3.Connection) -> sqlite3.Connection:
 def landing(checking: sqlite3.Connection) -> sqlite3.Connection:
     """`checking` with `CHECKS` concluded `passed` and released (parked at D, slot s2 free), and its land candidate 1
     `CANDIDATE` (O `ORIGIN`, S `SQUASH`, S's tree not X's) pending on slot s1 at D, deadline 300, with its held reservation."""
-    with begin_immediate(checking):
+    with transaction(checking):
         checking.execute(
             """UPDATE checks_attempt SET phase='concluded',conclusion='passed',concluded_at=5,released_at=6,parked=?
         WHERE attempt_id='checks'""",
@@ -205,7 +205,7 @@ def on_slot(tmp_path: Path, repo: FakeRepo, slot: FakeWorktree) -> Path:
     path, repo_id, d = tmp_path / "factory.db", repo.identity().key, head(slot)
     con = Store(SCHEMA).open_rw(path)
     assert con is not None
-    with begin_immediate(con):
+    with transaction(con):
         con.execute("INSERT INTO slot (repo_id,name,path) VALUES (?,'s0','/elsewhere/s0'),(?,'s1',?)", (repo_id, repo_id, str(slot.path)))
         pin_workflow(con)
         con.execute(
@@ -238,7 +238,7 @@ def candidate_on_slot(on_slot: Path, repo: FakeRepo, slot: FakeWorktree) -> tupl
     assert isinstance(made, Recorded)
     d, con = head(slot), Store(SCHEMA).open_rw(on_slot)
     assert con is not None
-    with begin_immediate(con):
+    with transaction(con):
         con.execute(
             """UPDATE checks_attempt SET phase='concluded',conclusion='passed',concluded_at=5,released_at=6,parked=?
         WHERE attempt_id='checks'""",
@@ -278,7 +278,7 @@ def done(tmp_path: Path, repo: FakeRepo, slot: FakeWorktree) -> Done:
     path, repo_id = tmp_path / "factory.db", repo.identity().key
     con = Store(SCHEMA).open_rw(path)
     assert con is not None
-    with begin_immediate(con):
+    with transaction(con):
         con.execute("INSERT INTO slot (repo_id,name,path) VALUES (?,'s0','/elsewhere/s0'),(?,'s1',?)", (repo_id, repo_id, str(slot.path)))
         pin_workflow(con)
         con.execute(
@@ -313,7 +313,7 @@ def _occupied(path: Path) -> Generator[None]:
 
 
 @pytest.fixture
-def occupy() -> Callable[[Path], AbstractContextManager[object]]:
+def occupy() -> Callable[[Path], AbstractContextManager[None]]:
     """Another holder of a slot's lock file: its own open file description holding the exclusive `flock`, as another
     process would hold it."""
     return _occupied

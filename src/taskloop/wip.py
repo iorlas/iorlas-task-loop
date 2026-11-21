@@ -4,7 +4,7 @@ A hold saves, never resets: the slot's final working state (`capture`: staged an
 untracked files that no ignore rule hides) becomes one commit on `task/<id>`, parented on the branch's tip (D when the
 branch does not exist yet), made in Git objects only and moved onto the ref by compare and swap. The checkout's index
 then follows the saved commit (a mixed reset: no working byte changes), and the slot is parked at D with its ignored
-files kept (`park(keep_ignored=True)`). A saved commit is preservation, never an implementation result: it carries the
+files kept (`park`). A saved commit is preservation, never an implementation result: it carries the
 attempt's own trailer (the branch stays resumable) and the typed `Task-Loop-Wip` trailer, and checks admission, publication
 and land refuse a commit that has it (`is_saved`). Reconciliation asks Git: a branch tip that is this attempt's saved
 commit of the captured tree is adopted, never duplicated.

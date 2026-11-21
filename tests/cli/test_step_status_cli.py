@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 from doubles import pin_workflow
 from hold_fixtures import event_for
-from sqlite_sidecar import transaction as begin_immediate
+from sqlite_sidecar import transaction
 from sqlite_store import Store
 
 from taskloop import cli_composition
@@ -64,7 +64,7 @@ def factory(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Generator[sqlite
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
     con = Store(SCHEMA).open_rw(tmp_path / "factory.db")
     assert con is not None
-    with begin_immediate(con):
+    with transaction(con):
         con.execute("INSERT INTO slot (repo_id,name,path) VALUES ('repo','s1','/slots/s1')")
     try:
         yield con
@@ -75,7 +75,7 @@ def factory(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Generator[sqlite
 def attempt(
     con: sqlite3.Connection, key: str, backlog: str, task: str = "tl-1", *, seq: int = 1, label: str | None = None, deadline: float = 100
 ) -> None:
-    with begin_immediate(con):
+    with transaction(con):
         pin_workflow(con)
         con.execute(
             """INSERT INTO attempt (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,
@@ -91,7 +91,7 @@ def attempt(
 
 
 def release(con: sqlite3.Connection, key: str) -> None:
-    with begin_immediate(con):
+    with transaction(con):
         con.execute("INSERT INTO slot_release VALUES (?,?,1,?,14,'unclaimed')", (key, f"{key}-token", D))
 
 
@@ -104,7 +104,7 @@ def test_show_reports_persisted_answer_failure_without_artifacts(
 ) -> None:
     attempt(factory, "broken", "tasks")
     failure = AnswerFailureData(rule=AnswerRule.MESSAGE, explanation="A commit message must contain 1 to 500 characters")
-    with begin_immediate(factory):
+    with transaction(factory):
         factory.execute("UPDATE attempt SET phase='captured',base_commit=?", (D,))
         factory.execute(
             """INSERT INTO execution (attempt_id,dispatch_token,generation,rc,timed_out,work,stands,stdout_path,

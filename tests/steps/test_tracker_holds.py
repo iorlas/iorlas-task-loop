@@ -189,7 +189,7 @@ def test_every_hold_call_is_capped_at_bd_timeout_at_the_resolved_root(tmp_path: 
 
     class Recorded(Bd):
         def __init__(self, actor: str, cwd: str | None = None, **options: object) -> None:
-            built.append({"actor": actor, "cwd": cwd} | {key: value for key, value in options.items() if key not in {"run", "env", "exe"}})
+            built.append({"actor": actor, "cwd": cwd} | {key: value for key, value in options.items() if key not in {"run", "env"}})
             super().__init__(actor, cwd, exe="bd", run=Script().say("", "bd: no answer in 30.0s", 124))
 
     holds = tracker_holds(Script(), client=Recorded)

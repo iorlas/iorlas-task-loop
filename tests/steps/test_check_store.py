@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 from doubles import CANDIDATE, CHECKS, ORIGIN, REQUIRED, SQUASH, TARGET, D, X, pin_workflow
-from sqlite_sidecar import transaction as begin_immediate
+from sqlite_sidecar import transaction
 from stream_proc import OwnedProcess
 
 from taskloop import check_store, land_store
@@ -234,10 +234,10 @@ def admitted(number: int, attempt_id: str = "next", required: tuple[tuple[str, s
 
 def test_a_second_admission_of_the_same_number_lost_the_race_and_writes_nothing(checking: sqlite3.Connection) -> None:
     before = columns(checking, "SELECT attempt_id,number FROM checks_attempt")
-    with begin_immediate(checking), pytest.raises(StoreRefused, match="task_attempted"):
+    with transaction(checking), pytest.raises(StoreRefused, match="task_attempted"):
         check_store.insert(checking, admitted(1))
     assert columns(checking, "SELECT attempt_id,number FROM checks_attempt") == before
-    with begin_immediate(checking):
+    with transaction(checking):
         check_store.insert(checking, admitted(2))
     assert [row.number for row in store(checking).of_attempt("implement")] == [1, 2]
 
@@ -516,7 +516,7 @@ def test_a_registration_off_the_fence_writes_nothing(checking: sqlite3.Connectio
 def test_attempt_of_is_the_latest_checks_attempt_of_the_tasks_current_agent_attempt(checking: sqlite3.Connection) -> None:
     checks = store(checking)
     assert checks.attempt_of("tasks", "tl-2") is None
-    with begin_immediate(checking):
+    with transaction(checking):
         check_store.insert(checking, admitted(2))
     assert checks.attempt_of("tasks", "tl-1") == (AttemptKey("next", "next-token", 1), "admitted", None)
     pin_workflow(checking)
@@ -534,7 +534,7 @@ def test_attempt_of_is_the_latest_checks_attempt_of_the_tasks_current_agent_atte
 
 
 def released(con: sqlite3.Connection, read: tuple[int, str], abandoned: bool, key: AttemptKey = CHECKS) -> Recorded:
-    with begin_immediate(con):
+    with transaction(con):
         return record_release(con, key, read, D, 7, abandoned)
 
 
@@ -564,7 +564,7 @@ def test_an_abandon_releases_an_admitted_attempt_and_an_abandon_of_a_released_on
     assert checks.abandon_released(CHECKS) == "changed"  # not released yet
     checks.conclude(CHECKS, "failed", "test:failed", 5)
     assert released(checking, (1, "concluded"), False) == "released"
-    with begin_immediate(checking):
+    with transaction(checking):
         check_store.insert(checking, admitted(2))
         checking.execute("INSERT INTO reservation VALUES ('s1','r',1,'next')")
     later = AttemptKey("next", "next-token", 1)
@@ -599,7 +599,7 @@ def test_an_abandoned_or_released_checks_attempt_is_never_offered_to_the_launche
     checks = store(checking)
     assert released(checking, (0, "admitted"), True) == "abandoned"
     assert checks.attempt_of("tasks", "tl-1") == (CHECKS, "released", None)
-    with begin_immediate(checking):
+    with transaction(checking):
         check_store.insert(checking, admitted(2))
         checking.execute("INSERT INTO reservation VALUES ('s1','r',1,'next')")
     later = AttemptKey("next", "next-token", 1)
@@ -744,7 +744,7 @@ def test_the_abandon_first_then_no_candidate_is_inserted_or_delivered(checking: 
     assert released(checking, (1, "concluded"), False) == "released"
     assert checks.abandon_released(CHECKS) == "abandoned"
     admitted = land_store.LandAdmitted(CANDIDATE, "checks", 1, ORIGIN, SQUASH, True, REQUIRED, None, None, None, "same_tree", 9)
-    with begin_immediate(checking), pytest.raises(StoreRefused, match="not_checked"):
+    with transaction(checking), pytest.raises(StoreRefused, match="not_checked"):
         land_store.insert(checking, admitted)
     candidate(checking, 1)
     with pytest.raises(StoreRefused, match="abandoned"):
@@ -759,7 +759,7 @@ def test_the_abandon_of_a_checks_re_run_sees_the_land_candidates_of_the_earlier_
     checks.conclude(CHECKS, "failed", "test:failed", 5)
     assert released(checking, (1, "concluded"), False) == "released"
     candidate(checking, 1, validation="no_change", delivery="no_change", delivered_at=1)
-    with begin_immediate(checking):
+    with transaction(checking):
         check_store.insert(checking, admitted(2))
         checking.execute("INSERT INTO reservation VALUES ('s1','r',1,'next')")
     later = AttemptKey("next", "next-token", 1)

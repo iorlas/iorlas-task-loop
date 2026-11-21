@@ -26,7 +26,7 @@ class Continuation:
         key: AttemptKey,
         owner: Identity,
         *,
-        custody: AbstractContextManager[object] | None = None,
+        custody: AbstractContextManager[None] | None = None,
         intent: Intent | None = None,
     ) -> ContinuationResult:
         if intent is not None and (intent.key != key or intent.owner != owner):
@@ -97,7 +97,7 @@ class Continuation:
         self,
         pending: PendingExecution,
         *,
-        custody: AbstractContextManager[object] | None = None,
+        custody: AbstractContextManager[None] | None = None,
     ) -> ContinuationResult:
         """A returned result can only retry capture; this path has no execution effect."""
         try:

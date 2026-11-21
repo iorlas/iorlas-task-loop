@@ -18,7 +18,7 @@ from doubles import ENGINE, WORKFLOW_FILES, Environment, FakeSlotFiles, PinnedVi
 from git_porcelain import BranchHeld, GitReadFailure, Recorded, Repo, Sha
 from git_porcelain.api import TakeResult
 from git_porcelain.testing import FakeRemote, FakeRepo, FakeWorktree
-from sqlite_sidecar import transaction as begin_immediate
+from sqlite_sidecar import transaction
 from sqlite_store import Store
 
 from taskloop import prepare
@@ -443,7 +443,7 @@ def admitted(factory: sqlite3.Connection, repo: FakeRepo, root: Path, tmp_path: 
     claims = Claims(tmp_path / "artifacts")
     admission = AttemptAdmission(
         lambda: factory,
-        begin_immediate,
+        transaction,
         claims.files,
         tasks,
         PinnedViews(repo),
@@ -470,7 +470,7 @@ def admitted(factory: sqlite3.Connection, repo: FakeRepo, root: Path, tmp_path: 
 
 def slots(factory: sqlite3.Connection, repo: FakeRepo, root: Path, count: int) -> list[FakeWorktree]:
     made = [repo.add_worktree(root.resolve() / folder_name(repo.identity()) / f"s{n}", "HEAD") for n in range(1, count + 1)]
-    adopt(SlotsStore(lambda: factory, begin_immediate), repo, SlotGit(PinnedViews(repo), FakeSlotFiles(repo)), root, count)
+    adopt(SlotsStore(lambda: factory, transaction), repo, SlotGit(PinnedViews(repo), FakeSlotFiles(repo)), root, count)
     return made
 
 

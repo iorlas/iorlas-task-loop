@@ -10,7 +10,7 @@ from threading import Barrier
 import pytest
 from doubles import pin_workflow
 from hold_fixtures import STUCK_SQL
-from sqlite_sidecar import transaction as begin_immediate
+from sqlite_sidecar import transaction
 
 from taskloop.attempt_reads import StoreUnavailable
 from taskloop.attempt_types import AttemptKey
@@ -46,7 +46,7 @@ def seed(con: sqlite3.Connection, *, attempt: str = "attempt", task: str = "tl-1
 def database(path: Path) -> sqlite3.Connection:
     con = sqlite3.connect(path, isolation_level=None)
     con.execute("PRAGMA foreign_keys=ON")
-    with begin_immediate(con):
+    with transaction(con):
         for statement in SCHEMA.ddl.split(";"):
             if statement.strip():
                 con.execute(statement)
@@ -140,7 +140,7 @@ def test_failed_commit_leaves_no_authorization_after_reopen(tmp_path: Path, rene
 
     @contextmanager
     def fail_commit(connection: sqlite3.Connection) -> Generator[None]:
-        with begin_immediate(connection):
+        with transaction(connection):
             yield
             raise sqlite3.OperationalError("commit failed")
 
@@ -161,7 +161,7 @@ def test_deadline_is_checked_after_obtaining_the_writer_transaction(tmp_path: Pa
     @contextmanager
     def delayed(connection: sqlite3.Connection) -> Generator[None]:
         nonlocal now
-        with begin_immediate(connection):
+        with transaction(connection):
             now = 100  # allowance expires while authorization is obtaining the write transaction
             yield
 
@@ -299,7 +299,7 @@ def test_renewal_deadline_must_still_be_future_under_writer_lock(tmp_path: Path)
     @contextmanager
     def delayed(connection: sqlite3.Connection) -> Generator[None]:
         nonlocal now
-        with begin_immediate(connection):
+        with transaction(connection):
             now = 200
             yield
 

@@ -95,7 +95,7 @@ class Bench:
             self.unclaimed.append(task_id)
             return True
 
-        def nowhere(_path: str, _attempt: str) -> AbstractContextManager[object]:
+        def nowhere(_path: str, _attempt: str) -> AbstractContextManager[None]:
             raise AssertionError("an implement attempt released before needs no lock")
 
         released = SlotRelease(

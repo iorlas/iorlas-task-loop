@@ -52,7 +52,7 @@ P = "docs/design/tl-1/plan.md"
 PLAN = {"disposition": "planned", "plan_path": P, "paths": [P], "message": "Plan tl-1", "explanation": "Plan written"}
 
 
-type Occupy = Callable[[Path], AbstractContextManager[object]]
+type Occupy = Callable[[Path], AbstractContextManager[None]]
 
 
 def agent(slot: FakeWorktree, files: dict[str, str]) -> Execution:

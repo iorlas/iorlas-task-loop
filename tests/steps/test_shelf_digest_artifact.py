@@ -14,7 +14,7 @@ from taskloop.shelf_digest.render import TOKEN_LIMIT
 from taskloop.shelf_digest.source import SourceSnapshot, relative_path
 
 ROOT = Path(__file__).resolve().parents[2]
-SOURCE_COMMIT = "1c50f2e310234a7e52535be08dc7febdb71f5c1e"
+SOURCE_COMMIT = "8f980dd308abf22a8ab8ca31eab82b69495bc0b1"
 
 
 def test_artifact_decodes_all_six_manifest_identities() -> None:
@@ -78,13 +78,13 @@ def test_consumer_validates_all_pins_and_keeps_generation_provenance() -> None:
 @pytest.mark.parametrize(
     ("old", "new", "reason"),
     [
-        (b'"0.12.1"', b'"0.8.0"', "package identities"),
-        (b'"blueprint-v0.9.1"', b'"blueprint-v0.5.0"', "package identities"),
+        (b'"0.13.0"', b'"0.12.1"', "package identities"),
+        (b'"blueprint-v0.10.1"', b'"blueprint-v0.10.0"', "package identities"),
         (b'"packages/stream-proc"', b'"packages/other"', "package identities"),
-        (b'"bfb17bd22cb4eeb8744fbd6edd47015739458d6a"', b'"bfb17bd22cb4eeb8744fbd6edd47015739458d00"', "commit identities"),
-        (b'"0.19.0",0', b'"0.19.0",-1', "identity index"),
-        (b'"0.19.0",0', b'"0.19.0",true', "valid integer"),
-        (b'"stream-proc","0.12.1"', b'"any-agent","0.12.1"', "package identities"),
+        (b'"46aa5a5f116c3cbbef38d26214b83e764f7feae3"', b'"46aa5a5f116c3cbbef38d26214b83e764f7feae30"', "commit identities"),
+        (b'"0.20.0",0', b'"0.20.0",-1', "identity index"),
+        (b'"0.20.0",0', b'"0.20.0",true', "valid integer"),
+        (b'"stream-proc","0.13.0"', b'"any-agent","0.13.0"', "package identities"),
         (b"0=off", b"0=on", "fact or references"),
         (b'[3]],"usage"', b'[-1]],"usage"', "fact or references"),
         (b'[3]],"usage"', b'[0]],"usage"', "fact attribution"),

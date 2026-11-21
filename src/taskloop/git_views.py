@@ -3,7 +3,7 @@ ceiling, the remote-capable view and the profile port over Git objects. Wired by
 
 import os
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from git_porcelain import GitUnavailable, RealRepo, Repo
@@ -31,6 +31,7 @@ class GitViews:
     The machine config's `git_read_seconds`, passed down by the composition and to each entry process in its argv."""
 
     read_seconds: int
+    ambient: Mapping[str, str] = field(default_factory=lambda: dict(os.environ))  # read once, when the views are built
 
     def inspect_checkout(self, path: str) -> RepoInspection:
         """Resolve the native path once and request fresh shared-library observations."""
@@ -39,7 +40,7 @@ class GitViews:
         except RuntimeError as error:
             raise UnsupportedCheckout(f"Cannot expand checkout path: {path}") from error
         checkout = expanded.resolve()
-        return inspect_repo(RealRepo(checkout, ambient=dict(os.environ), memoize=False, read_timeout=self.read_seconds), checkout)
+        return inspect_repo(RealRepo(checkout, ambient=self.ambient, memoize=False, read_timeout=self.read_seconds), checkout)
 
     def checkouts(self, path: Path, *, git_dir: Path | None = None) -> Repo:
         """A fresh (unmemoized) real Git view from one checkout path, in the hardened Git environment, its discovery ceiling
@@ -47,17 +48,17 @@ class GitViews:
         (git_porcelain's `pins`: `<slot>/.git` is never read again, any other path is `NotARepo`). A pinned (slot) view
         also carries the factory's own commit identity (`IDENTITY`)."""
         pins = None if git_dir is None else {path: git_dir}
-        env = hardened(os.environ) | ceiling(path, os.environ) | ({} if git_dir is None else IDENTITY)
-        return RealRepo(path, ambient=dict(os.environ), memoize=False, env=env, read_timeout=self.read_seconds, pins=pins)
+        env = hardened(self.ambient) | ceiling(path, self.ambient) | ({} if git_dir is None else IDENTITY)
+        return RealRepo(path, ambient=self.ambient, memoize=False, env=env, read_timeout=self.read_seconds, pins=pins)
 
     def remotes(self, path: Path, *, git_dir: Path | None = None) -> Repo:
         """`checkouts` with a bounded transport (PUSH_TIMEOUT): the publication's view of the person's checkout. Hooks stay
         off (no `pre-push`), no push bar is added, and the person's own Git config and credentials apply; git_porcelain's
         base environment never prompts, so a locked key fails instead of hanging."""
         pins = None if git_dir is None else {path: git_dir}
-        env = hardened(os.environ) | ceiling(path, os.environ)
+        env = hardened(self.ambient) | ceiling(path, self.ambient)
         return RealRepo(
-            path, ambient=dict(os.environ), memoize=False, env=env, remote_timeout=PUSH_TIMEOUT, read_timeout=self.read_seconds, pins=pins
+            path, ambient=self.ambient, memoize=False, env=env, remote_timeout=PUSH_TIMEOUT, read_timeout=self.read_seconds, pins=pins
         )
 
     def slot_profiles(self, slot: Path, gitdir: Path) -> GitProfileFiles:

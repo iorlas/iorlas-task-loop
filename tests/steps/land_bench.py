@@ -21,7 +21,7 @@ from git_porcelain.api import PushResult
 from git_porcelain.testing import FakeRemote, FakeRepo, FakeWorktree
 from land_conflict_bench import ExecutionCase
 from merge_bench import MergeRepo
-from sqlite_sidecar import transaction as begin_immediate
+from sqlite_sidecar import transaction
 from sqlite_store import Store
 
 from taskloop import check_store
@@ -178,7 +178,7 @@ class LandBench:
     def begin(self, con: sqlite3.Connection) -> AbstractContextManager[object]:
         racing, self.racing = self.racing, lambda: None
         racing()
-        return begin_immediate(con)
+        return transaction(con)
 
     def show(self, task_id: str) -> Bead:
         return Bead(task_id, title=self.title, description="It must do X", status=self.status, assignee=self.assignee)
@@ -331,7 +331,7 @@ def database(path: Path, repo_id: str, slot: Path, base: str, x: str, d: str) ->
     attempt 1 concluded `passed` and released (parked at D), and the adopted free slot s1 at `slot` (generation 1)."""
     con = Store(SCHEMA).open_rw(path)
     assert con is not None
-    with begin_immediate(con):
+    with transaction(con):
         con.execute(
             "INSERT INTO slot (repo_id,name,path,generation) VALUES (?,'s0','/elsewhere/s0',0),(?,'s1',?,1)", (repo_id, repo_id, str(slot))
         )

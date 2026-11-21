@@ -206,7 +206,7 @@ CONTRACTS = (
     ),
     Contract(
         FactName.PARK,
-        "park detaches/cleans; park always preserves ignored files; tracked collision refuses before change; exclude is checkout-local.",
+        "park detaches/cleans and always preserves ignored files; tracked collision refuses before change; exclude is checkout-local.",
         (
             Rule(
                 "git-porcelain",

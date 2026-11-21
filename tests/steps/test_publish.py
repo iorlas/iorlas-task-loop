@@ -21,7 +21,7 @@ from git_porcelain import GitTimeout, GitUnavailable, HookRejected, MissingRemot
 from git_porcelain.api import PushResult
 from git_porcelain.testing import FakeRemote, FakeRepo, FakeWorktree
 from plan_fixtures import PLAN_TEXT
-from sqlite_sidecar import transaction as begin_immediate
+from sqlite_sidecar import transaction
 
 from taskloop.agents.launch import AgentLaunch
 from taskloop.attempt import Attempts
@@ -100,7 +100,7 @@ def test_push_guard_rejects_a_write_transaction_before_effects(
     effects: list[str] = []
     repo.during = lambda: effects.append("push")
     before = remote.branches()
-    with begin_immediate(registered), pytest.raises(AssertionError, match="outside the write transaction"):
+    with transaction(registered), pytest.raises(AssertionError, match="outside the write transaction"):
         worktree.push("task/tl-1")
     assert effects == [] and remote.branches() == before
 
@@ -146,7 +146,7 @@ def nothing() -> Generator[None]:
     yield
 
 
-def nowhere(*_args: object) -> AbstractContextManager[object]:
+def nowhere(*_args: object) -> AbstractContextManager[None]:
     return nothing()
 
 

@@ -20,7 +20,7 @@ from doubles import ENGINE, FakeSlotFiles
 from git_porcelain import Repo, WorktreeInfo
 from git_porcelain.testing import FakeRemote, FakeWorktree
 from plan_fixtures import PLAN_TEXT
-from sqlite_sidecar import transaction as begin_immediate
+from sqlite_sidecar import transaction
 from stream_proc import OwnedProcess
 
 from taskloop.admit import AdmitRefused
@@ -172,7 +172,7 @@ def nothing() -> Generator[None]:
     yield
 
 
-def nowhere(_admission: object) -> AbstractContextManager[object]:
+def nowhere(_admission: object) -> AbstractContextManager[None]:
     return nothing()
 
 
@@ -311,7 +311,7 @@ def test_abandon_a_prepared_admitted_attempt_parks_it_at_d(
     registered: sqlite3.Connection, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles
 ) -> None:
     d = head(slot)
-    slot.take_branch("task/tl-1", "HEAD", mode="resume")
+    slot.take_branch("task/tl-1", "HEAD")
     ports = Ports(registered, checkouts, slot_files)
     assert ports.releaser().release(KEY, True) == Released("s1", d, True, "unclaimed", True)
     assert (slot.branch(), head(slot), tip(slot)) == (None, d, d) and ports.unclaimed == [("/tracker", "tl-1")]
@@ -346,7 +346,7 @@ def test_a_slot_that_is_not_clean_on_its_branch_is_refused_and_stays_held(
     change: Callable[[FakeWorktree, FakeSlotFiles, pytest.MonkeyPatch], object],
     reason: str,
 ) -> None:
-    slot.take_branch("task/tl-1", "HEAD", mode="resume")
+    slot.take_branch("task/tl-1", "HEAD")
     change(slot, slot_files, monkeypatch)
     before, ports = stored(registered), Ports(registered, checkouts, slot_files)
     found = ports.releaser().release(KEY, True)
@@ -361,7 +361,7 @@ def test_a_held_slot_lock_is_slot_busy(
     slot: FakeWorktree,
     checkouts: Checkouts,
     slot_files: SlotFiles,
-    occupy: Callable[[Path], AbstractContextManager[object]],
+    occupy: Callable[[Path], AbstractContextManager[None]],
 ) -> None:
     before, ports = stored(registered), Ports(registered, checkouts, slot_files)
     with occupy(lock_path(str(slot.path))):
@@ -375,7 +375,7 @@ def test_an_attempt_changed_after_the_proof_refuses_before_parking(
 ) -> None:
     """A changed entry at custody acquisition invalidates the proof before any Git write."""
     d = head(slot)
-    slot.take_branch("task/tl-1", "HEAD", mode="resume")
+    slot.take_branch("task/tl-1", "HEAD")
     before, ports = stored(registered), Ports(registered, checkouts, slot_files)
     ports.inside = lambda: registered.execute("UPDATE attempt SET entry_pid=8,rev=rev+1")
     found = ports.releaser().release(KEY, True)
@@ -422,7 +422,7 @@ def test_a_change_before_the_record_transaction_keeps_the_reservation_and_claim(
     @contextmanager
     def raced(con: sqlite3.Connection) -> Generator[None]:
         con.execute(change)
-        with begin_immediate(con):
+        with transaction(con):
             yield
 
     releaser = replace(ports.releaser(), store=AttemptStore(lambda: registered, raced))
@@ -509,7 +509,7 @@ def test_after_a_release_every_other_writer_meets_the_fence_and_the_slot_is_free
     checkouts: Checkouts,
     slot_files: SlotFiles,
     root: Path,
-    occupy: Callable[[Path], AbstractContextManager[object]],
+    occupy: Callable[[Path], AbstractContextManager[None]],
 ) -> None:
     committed(registered, tmp_path, slot, checkouts, slot_files)
     assert isinstance(Ports(registered, checkouts, slot_files).releaser().release(KEY, False), Released)
@@ -518,7 +518,7 @@ def test_after_a_release_every_other_writer_meets_the_fence_and_the_slot_is_free
         store.load(KEY)
     assert store.register_entry(KEY, (8, "later", "boot"), 10) == "refused"
     admission = ChainAdmission(
-        lambda: registered, begin_immediate, EvidenceFiles(tmp_path), lambda: 10, checkouts, slot_files, ids=NativeIds(), engine=ENGINE
+        lambda: registered, transaction, EvidenceFiles(tmp_path), lambda: 10, checkouts, slot_files, ids=NativeIds(), engine=ENGINE
     )
     assert admission.admit_repeat(RepeatRequest(KEY, "feedback", 1000, "unsafe")) == AdmitRefused("not_repeatable")
     opened: list[Path] = []
@@ -532,7 +532,7 @@ def test_after_a_release_every_other_writer_meets_the_fence_and_the_slot_is_free
         and opened == []
     )
     git = SlotGit(checkouts, slot_files)
-    store = SlotsStore(lambda: registered, begin_immediate)
+    store = SlotsStore(lambda: registered, transaction)
     adopt(store, slot.repo, git, root, 1)  # the freed slot, detached and clean, is free again
     repo_id = RepoId(slot.repo.identity().key)
     assert [view.state for view in observe(store, slot.repo, git, repo_id, probe)] == ["free"]
@@ -670,7 +670,7 @@ def test_a_checks_admission_committed_between_the_abandons_read_and_its_flip_ref
     @contextmanager
     def raced(con: sqlite3.Connection) -> Generator[None]:
         checks_attempt(registered, 1, False)
-        with begin_immediate(con):
+        with transaction(con):
             yield
 
     releaser = replace(ports.releaser(), store=AttemptStore(lambda: registered, raced))
@@ -684,7 +684,7 @@ def test_a_checks_admission_committed_under_the_releases_lock_fails_its_fence(
     registered: sqlite3.Connection, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles
 ) -> None:
     """`SUCCESSOR` in `FENCE`: an unreleased attempt's release records nothing once a checks attempt names it."""
-    slot.take_branch("task/tl-1", "HEAD", mode="resume")
+    slot.take_branch("task/tl-1", "HEAD")
     before, ports = stored(registered), Ports(registered, checkouts, slot_files)
     ports.inside = lambda: checks_attempt(registered, 1, False)
     found = ports.releaser().release(KEY, True)

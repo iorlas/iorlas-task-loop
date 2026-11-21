@@ -14,7 +14,7 @@ from git_porcelain.testing import FakeRemote, FakeRepo, FakeWorktree
 from land_bench import REQUIRED, LandBench, bench
 from plan_fixtures import PLAN_TEXT
 from round_bench import Factory, Tracker, scripted, task
-from sqlite_sidecar import transaction as begin_immediate
+from sqlite_sidecar import transaction
 
 from taskloop import check_store
 from taskloop.attempt_store import AttemptStore
@@ -62,7 +62,7 @@ def abandon(b: LandBench) -> ReleasedTask | Failed:
 def seed_chain(b: LandBench, number: int, x: str) -> None:
     """The restarted chain's done implement attempt (X on `task/tl-1`, published) and its passed, released checks attempt."""
     base, repo_id, implement, checks = b.origin_main(), b.repo.identity().key, f"implement{number}", f"checks{number}"
-    with begin_immediate(b.con):
+    with transaction(b.con):
         pin_workflow(b.con)
         b.con.execute(
             """INSERT INTO attempt (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,

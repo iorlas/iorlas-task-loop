@@ -5,8 +5,8 @@ from collections.abc import Callable
 from pathlib import Path
 
 import pytest
-from doubles import FakeSlotFiles, PinnedViews
-from git_porcelain import GitUnavailable, NothingToRecord, Pushed, Recorded
+from doubles import FakeSlotFiles, PinnedViews, record_all
+from git_porcelain import GitUnavailable, Pushed, Recorded
 from git_porcelain.testing import FakeRemote, FakeRepo, FakeWorktree
 from merge_bench import Bench, MergeRepo, bench, head
 
@@ -155,9 +155,7 @@ def test_ordinary_preparation_does_not_accept_the_detached_consumers_base(clean:
 
 
 def test_merging_saved_work_keeps_its_ordinary_review_requirement(clean: Bench, registered: sqlite3.Connection) -> None:
-    message = "Save work\n\nTask-Loop-Attempt: prior\nTask-Loop-Wip: prior"
-    saved = clean.slot.record(message, paths="all")
-    saved = clean.slot.record_empty(message) if isinstance(saved, NothingToRecord) else saved
+    saved = record_all(clean.slot, "Save work\n\nTask-Loop-Attempt: prior\nTask-Loop-Wip: prior")
     assert isinstance(saved, Recorded)
     work = clean.store.put(clean.work, clean.work.model_copy(update={"source": saved.sha}))
     found = clean.operation().resume(work)

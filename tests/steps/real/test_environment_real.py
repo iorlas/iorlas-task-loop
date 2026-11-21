@@ -31,7 +31,11 @@ from taskloop.setup_store import SetupStore
 from taskloop.slot_env import RealEnvFiles, setup_process
 from taskloop.slots import folder_name
 
-VIEWS = GitViews(DEFAULT_GIT_READ_SECONDS)
+
+def git_views() -> GitViews:
+    """Built per use: the hermetic environment is applied by each test's fixture, after import."""
+    return GitViews(DEFAULT_GIT_READ_SECONDS)
+
 
 KEY = AttemptKey("attempt", "dispatch", 1)
 # fails unless the reset emptied `.venv` first; prints the slot's folders
@@ -54,12 +58,13 @@ def test_setup_resets_the_slot_and_runs_the_committed_setup_in_it(
     (main / ".task-loop.json").write_text(json.dumps({"setup": [["/bin/sh", "-c", SETUP]]}))
     git(main, "add", ".gitignore", ".task-loop.json")
     git(main, "commit", "-q", "-m", "base")
-    slot = root / "slots" / folder_name(VIEWS.checkouts(main).identity()) / "s1"
+    slot = root / "slots" / folder_name(git_views().checkouts(main).identity()) / "s1"
     git(main, "worktree", "add", "-q", "-b", "task/tl-1", str(slot), "HEAD")
     d = git(slot, "rev-parse", "HEAD").strip()
     (slot / ".task-loop.json").write_text(json.dumps({"setup": [["/bin/false"]]}))  # the working tree is never read
     git(slot, "update-index", "--assume-unchanged", ".task-loop.json")  # keeps the edited file out of status
-    (slot / ".venv").mkdir()
+    (slot / ".venv" / "nested").mkdir(parents=True)
+    git(slot / ".venv" / "nested", "init", "-q")  # a nested repository in an ignored folder: `-fdx` would keep it
     (slot / ".venv" / "planted").write_text("from an earlier agent")
     factory.execute("INSERT INTO slot (repo_id,name,path) VALUES (?,'s1',?)", (slot.parent.name, str(slot)))
     factory.execute("INSERT INTO reservation VALUES ('s1',?,1,'attempt')", (slot.parent.name,))
@@ -78,8 +83,8 @@ def test_setup_resets_the_slot_and_runs_the_committed_setup_in_it(
     assert record is not None
     ports = EnvironmentPorts(
         SetupStore(lambda: factory),
-        VIEWS.checkouts,
-        VIEWS.slot_profiles,
+        git_views().checkouts,
+        git_views().slot_profiles,
         RealEnvFiles(),
         setup_process,
         setup_seen,

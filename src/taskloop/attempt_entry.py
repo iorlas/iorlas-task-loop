@@ -208,13 +208,13 @@ def _record(app: Attempts, key: AttemptKey) -> AttemptRecord | str:
     return "refused absent" if record is None else record
 
 
-def _held(_admission: Admission) -> AbstractContextManager[object]:
+def _held(_admission: Admission) -> AbstractContextManager[None]:
     """The entry's factory commit runs inside its existing slot lock: the library's nonreentrant lock would refuse
     a second acquire in this process."""
     return nullcontext()
 
 
-def _unheld(_slot_path: str, _attempt_id: str) -> AbstractContextManager[object]:
+def _unheld(_slot_path: str, _attempt_id: str) -> AbstractContextManager[None]:
     """The entry's release runs inside the slot lock the entry already holds."""
     return nullcontext()
 

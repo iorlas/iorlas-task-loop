@@ -44,7 +44,7 @@ from taskloop.slot_state import SlotState, bounded, observe_slot, staged
 from taskloop.steps import kind
 from taskloop.verdict import judge
 
-type CommitHold = Callable[[Admission], AbstractContextManager[object]]
+type CommitHold = Callable[[Admission], AbstractContextManager[None]]
 LOCK_WORDS: dict[type[Exception], CommitWaitingReason] = {
     SlotBusy: CommitWaitingReason.SLOT_BUSY,
     SlotLockUnavailable: CommitWaitingReason.LOCK,

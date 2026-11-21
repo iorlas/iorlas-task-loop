@@ -15,7 +15,7 @@ from any_agent.procs import Worker
 from any_agent.testing import FakeRun
 from doubles import ENGINE, pin_workflow
 from git_porcelain.testing import FakeWorktree
-from sqlite_sidecar import transaction as begin_immediate
+from sqlite_sidecar import transaction
 from sqlite_store import Store
 
 from taskloop.agents.launch import AgentLaunch, CredentialReason, Credentials, CredentialsUnavailable, codex_access
@@ -103,7 +103,7 @@ def surroundings(tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, slot_
 def database(surroundings: AttemptSurroundings) -> sqlite3.Connection:
     con = sqlite3.connect(":memory:", isolation_level=None)
     con.execute("PRAGMA foreign_keys=ON")
-    with begin_immediate(con):
+    with transaction(con):
         for statement in SCHEMA.ddl.split(";"):
             if statement.strip():
                 con.execute(statement)
@@ -114,7 +114,7 @@ def database(surroundings: AttemptSurroundings) -> sqlite3.Connection:
 def seed(con: sqlite3.Connection, surroundings: AttemptSurroundings) -> sqlite3.Connection:
     """The authoritative prerequisites: an admitted, entry-registered attempt on the clean slot and its held reservation."""
     repo_id = surroundings.slot.repo.identity().key
-    with begin_immediate(con):
+    with transaction(con):
         con.execute("INSERT INTO slot (repo_id,name,path) VALUES (?,'s1',?)", (repo_id, str(surroundings.slot.path)))
         con.execute("INSERT INTO reservation VALUES ('s1',?,1,'attempt')", (repo_id,))
         pin_workflow(con)
