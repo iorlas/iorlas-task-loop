@@ -210,11 +210,18 @@ def test_start_dispatches_failed_check_output_at_x_and_fresh_checks_can_pass(rig
 
 def test_rounds_share_the_implement_cap_and_hold_once_after_three_attempts(rig: Repairing) -> None:
     failed(rig)
-    repair_agent(rig)
+    stored = WORKFLOW_BYTES.replace(b"[[step.feedback]]", b'[[step.feedback]]\nuse = "attempt_budget"\n\n[[step.feedback]]')
+    digest = hashlib.sha256(stored).hexdigest()
+    rig.con.execute("INSERT INTO workflow_file VALUES (?,?)", (digest, stored))
+    rig.con.execute("UPDATE attempt SET workflow_digest=?", (digest,))
+    specs = repair_agent(rig)
     for number in (2, 3):
         assert rig.next_words() == {"tl-1": ("check", "repeat")}
         assert rig.round() == [("tl-1", "implement", "repeat", "started")]
         assert rig.store.attempts("tasks", "tl-1")[0].number == number and not rig.tracker.holds
+        assert specs[-1].stdin.startswith(
+            f"Implement attempt {number}. The failed-check repeat cap is 3, including the initial attempt.\n\nFailed check\n"
+        )
         rig.round()  # commit, release, publish
         rig.bodies = ["failed"]
         rig.round()
@@ -225,13 +232,15 @@ def test_rounds_share_the_implement_cap_and_hold_once_after_three_attempts(rig: 
 
 def test_a_workflow_cap_of_two_holds_after_the_second_attempt_and_status_agrees_with_admission(rig: Repairing) -> None:
     failed(rig)
-    stored = WORKFLOW_BYTES + b"\n[step.implement]\nmax_attempts = 2\n"
+    stored = WORKFLOW_BYTES.replace(b"[[step.feedback]]", b'[[step.feedback]]\nuse = "attempt_budget"\n\n[[step.feedback]]')
+    stored += b"\n[step.implement]\nmax_attempts = 2\n"
     digest = hashlib.sha256(stored).hexdigest()
     rig.con.execute("INSERT INTO workflow_file VALUES (?,?)", (digest, stored))
     rig.con.execute("UPDATE attempt SET workflow_digest=?", (digest,))
-    repair_agent(rig)
+    specs = repair_agent(rig)
     assert rig.next_words() == {"tl-1": ("check", "repeat")}
     assert rig.round() == [("tl-1", "implement", "repeat", "started")]
+    assert specs[0].stdin.startswith("Implement attempt 2. The failed-check repeat cap is 2, including the initial attempt.\n")
     rig.round()  # commit, release, publish
     rig.bodies = ["failed"]
     rig.round()
