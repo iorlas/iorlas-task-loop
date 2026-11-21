@@ -197,7 +197,6 @@ class ExecutionFacts:
     session: str | None
     usage_incomplete: bool | None = None
     model: str | None = None  # the model that answered (resolved, not the requested alias); None = the harness could not tell
-    harness: str | None = None  # the CLI that ran
     harness_version: str | None = None  # that CLI's own version
     effort: str | None = None  # the reasoning effort the run used
 
@@ -446,7 +445,6 @@ def execution_facts(raw: RunOutcome) -> ExecutionFacts:
         ref if isinstance(ref := s.res.get("ref"), str) and ref else None,
         incomplete if isinstance(incomplete := s.res.get("usage_incomplete"), bool) else None,
         s.model or None,
-        s.harness or None,
         s.harness_version or None,
         s.effort or None,
     )
