@@ -72,7 +72,13 @@ class CheckRepeatStore(StoreConnection):
         results = checks.results(source)
         result = failed_result(row, results)
         if (
-            decision(current.number, lambda: CapStore(self.connect, self.begin).of(previous.attempt_id), row, results, blocked=blocked)
+            decision(
+                current.number,
+                lambda: CapStore(self.connect, self.begin).of(previous.attempt_id, Step.IMPLEMENT),
+                row,
+                results,
+                blocked=blocked,
+            )
             is not CheckRepeatDecision.REPEAT
             or result is None
         ):

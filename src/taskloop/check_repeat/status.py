@@ -11,7 +11,7 @@ from taskloop.attempt_types import AttemptKey
 from taskloop.check_store import ChecksRow, CheckStore, ResultRow
 from taskloop.command_conclusion import CommandConclusion, encode
 from taskloop.land_store import LandStore
-from taskloop.step import ATTEMPTS
+from taskloop.step import ATTEMPTS, Step
 from taskloop.workflow_read import WorkflowRefusal
 
 
@@ -40,11 +40,11 @@ def failed_result(row: ChecksRow, results: tuple[ResultRow, ...]) -> ResultRow |
 
 
 class CapStore(StoreConnection):
-    def of(self, attempt_id: str) -> int:
-        """How many attempts the implement step may take when checks fail: the pinned workflow's, read when asked."""
+    def of(self, attempt_id: str, step: Step) -> int:
+        """How many attempts `step` may take: the attempt's pinned workflow's, read when asked (the one owner of the cap)."""
         with self._connection() as con:
             try:
-                return stored_pin(con, attempt_id).workflow.implement_cap
+                return stored_pin(con, attempt_id).workflow.cap(step)
             except WorkflowRefusal:
                 raise StoreUnavailable("The stored workflow no longer loads") from None
 
@@ -75,5 +75,5 @@ def repeat_target(reader: AttemptStore, previous: AttemptKey, row: ChecksRow | N
     blocked = land is not None and (land.delivery is not None or land.holds_slot or land.pushable)
     results = CheckStore(reader.connect, reader.begin).results(row.key)
     cap = CapStore(reader.connect, reader.begin)
-    outcome = decision(rows[0].number, lambda: cap.of(previous.attempt_id), row, results, blocked=blocked)
+    outcome = decision(rows[0].number, lambda: cap.of(previous.attempt_id, Step.IMPLEMENT), row, results, blocked=blocked)
     return CheckRepeatTarget(previous, row.key) if outcome is CheckRepeatDecision.REPEAT else outcome

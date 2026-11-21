@@ -236,9 +236,23 @@ def test_a_workflow_cap_of_two_holds_after_the_second_attempt_and_status_agrees_
     rig.bodies = ["failed"]
     rig.round()
     assert rig.store.attempts("tasks", "tl-1")[0].number == 2
+    shown = show_attempt(rig.ports().reads, rig.tmp, "tasks", "tl-1")
+    assert not isinstance(shown, Failed) and shown.view.max_attempts == 2
     assert rig.next_words() == {"tl-1": ("check", "hold")}  # status never says repeat where admission refuses
     assert rig.round() == [("tl-1", "check", "hold", "held failed:test:failed")]
     assert rig.round() == [] and len(rig.tracker.comments) == 1
+
+
+def test_status_shows_the_workflow_cap_and_a_stored_workflow_that_no_longer_loads_is_unknown_not_a_crash(rig: Repairing) -> None:
+    failed(rig)
+    shown = show_attempt(rig.ports().reads, rig.tmp, "tasks", "tl-1")
+    assert not isinstance(shown, Failed) and shown.view.max_attempts == 3
+    rig.con.execute("UPDATE workflow_file SET content=?", (b"this is [not a workflow",))
+    shown = show_attempt(rig.ports().reads, rig.tmp, "tasks", "tl-1")
+    assert not isinstance(shown, Failed) and (shown.view.max_attempts, shown.view.next) == (None, "unknown")
+    assert rig.next_words() == {"tl-1": ("implement", "unknown")}  # the swap to the checks view is not made: nothing is guessed
+    assert rig.round() == [("tl-1", "implement", "report", "unknown")]  # reported, never repeated, held or crashed
+    assert rig.store.attempts("tasks", "tl-1")[0].number == 1 and not rig.tracker.holds
 
 
 def test_restart_after_admission_uses_one_successor_and_the_captured_input(rig: Repairing) -> None:

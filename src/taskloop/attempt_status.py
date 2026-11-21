@@ -1,6 +1,7 @@
 """Read-only attempt status shared by CLI, dashboard and rounds, including the latest checks attempt."""
 
 from collections.abc import Callable
+from contextlib import suppress
 from dataclasses import dataclass, field, replace
 from functools import partial
 from itertools import pairwise
@@ -31,7 +32,7 @@ from taskloop.profile import LandMode
 from taskloop.recovery.models import Observations, Outcome, Result
 from taskloop.recovery.status import process_gate
 from taskloop.setup_store import SETUP_RUNS, ProcessSeen, SetupRow, SetupSeen, SetupStore
-from taskloop.step import ATTEMPTS
+from taskloop.step import ATTEMPTS, Step, decode_step
 from taskloop.step_text import unsafe_details
 from taskloop.steps import CHECK, following
 
@@ -99,7 +100,7 @@ class AttemptView:
     entry_process: EntryIdentity | None = None  # the registered entry's identity, for the manual steps (not secret)
     worker: tuple[int, int] | None = None  # the agent's last known pid and process group, once registered
     leftovers: tuple[str, ...] = ()  # with `repeat`: why (REPEATABLE) and the listing, read now, never stored
-    number: int = 1  # in its step; at most ATTEMPTS
+    number: int = 1  # in its step; at most `max_attempts`
     previous_attempt_id: str | None = None  # the attempt this one repeats
     repeat_reason: str | None = None
     earlier: tuple[tuple[str, str], ...] = ()  # each earlier attempt, newest first: its repeat reason, `abandoned`, `advanced`
@@ -120,6 +121,7 @@ class AttemptView:
     hold_action: Next | None = None  # the action that made this hold due, before the hold projection
     stop: AgentStop | None = None
     repo_id: str = ""
+    max_attempts: int | None = None  # the pinned workflow's cap of its step; None: the stored workflow cannot be read now
     land_mode: LandMode | None = None
 
 
@@ -188,6 +190,8 @@ def _observed(reads: StatusPorts, entry: EntryIdentity | None) -> EntryState:
 def _show(reads: StatusPorts, row: AttemptRow, *, probe: bool = True) -> AttemptView:
     """Read the current agent or checks view; probe leftovers only when the caller needs them."""
     view = _agent(reads, row, probe=probe)
+    with suppress(StoreUnavailable):  # the cap stays unknown; the workflow's own refusal is shown where it matters (`next`)
+        view = replace(view, max_attempts=CapStore(reads.store.connect, reads.store.begin).of(row.key.attempt_id, decode_step(row.step)))
     if view.next != "advance" or following(row.step) != CHECK:
         return view
     try:
@@ -217,7 +221,11 @@ def _swapped(
     earlier = (*((each.key.attempt_id, "re-run") for each in reversed(rows[:-1])), (view.attempt_id, "advanced"))
     blocked = land is not None and (land.row.delivery is not None or land.row.holds_slot or land.row.pushable)
     repeat = decision(
-        view.number, lambda: CapStore(reads.store.connect, reads.store.begin).of(view.attempt_id), latest, results, blocked=blocked
+        view.number,
+        lambda: CapStore(reads.store.connect, reads.store.begin).of(view.attempt_id, Step.IMPLEMENT),
+        latest,
+        results,
+        blocked=blocked,
     )
     next_word = land_next(checks_next(latest, entry, expired, commands), latest, land)
     if repeat is CheckRepeatDecision.REPEAT:

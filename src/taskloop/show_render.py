@@ -19,7 +19,6 @@ from taskloop.hold_text import explained
 from taskloop.land_close import NOT_SYNCED
 from taskloop.land_status import LandView
 from taskloop.land_summary import one_line
-from taskloop.step import ATTEMPTS
 
 
 def _when(at: float) -> str:
@@ -64,13 +63,14 @@ def _agent_lines(each: AttemptView) -> list[str]:
     earlier, entry, released = _common(each)
     # the stored registration only: the agent may have exited long ago, so it is never shown as running
     worker = "none" if each.worker is None else f"last known pid {each.worker[0]}, process group {each.worker[1]} (not checked)"
+    cap = "" if each.max_attempts is None else f" of at most {each.max_attempts}"
     repeats = "" if each.previous_attempt_id is None else f"; repeats {each.previous_attempt_id}, {each.repeat_reason}"
     found = each.published
     published = [] if found is None else [f"Published: task/{each.task_id} at {found.commit} on origin, {_when(found.published_at)}"]
     return [
         f"Task: {each.task_id} (backlog {each.backlog})",
         f"Step: {each.step}",
-        f"Attempt: {each.attempt_id} ({each.number} of at most {ATTEMPTS}{repeats})",
+        f"Attempt: {each.attempt_id} ({each.number}{cap}{repeats})",
         *earlier,
         *([] if each.source_checks_id is None else [f"Source checks: {each.source_checks_id}"]),
         f"Slot: {each.slot}",
@@ -79,7 +79,7 @@ def _agent_lines(each: AttemptView) -> list[str]:
         f"Worker: {worker}",
         *([] if last_command(each) is None else [f"Last command: {last_command(each)}"]),
         f"Result: {each.result.status} {each.result.reason}".rstrip(),
-        *([] if each.result.execution is None or (ran := ran_line(each.result.execution.facts)) is None else [ran]),
+        *([] if each.result.execution is None else [ran_line(each.result.execution.facts)]),
         *([] if each.result.execution is None or not (usage := usage_explanation(each.result.execution.facts)) else [usage]),
         *(
             [f"Preparation: {one_line(each.result.explanation)}"]

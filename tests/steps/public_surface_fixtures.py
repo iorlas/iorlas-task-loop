@@ -202,6 +202,8 @@ def export_full() -> AttemptExport:
                 None,
                 None,
                 None,
+                None,
+                None,
             ),
         )
     )
@@ -209,7 +211,17 @@ def export_full() -> AttemptExport:
 
 def shown_cases() -> tuple[Shown, Shown]:
     view = AttemptView(
-        "tasks", "tl-1", "implement", "attempt", "s1", "captured", "gone", AttemptResult("pending", "commit"), False, "commit"
+        "tasks",
+        "tl-1",
+        "implement",
+        "attempt",
+        "s1",
+        "captured",
+        "gone",
+        AttemptResult("pending", "commit"),
+        False,
+        "commit",
+        max_attempts=3,
     )
     checks = checks_view()
     stop = agent_stop()

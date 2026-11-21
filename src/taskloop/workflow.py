@@ -131,6 +131,10 @@ class Workflow(Input):
         """Attempts of the implement step at most when a failed check repeats it; the file's `max_attempts`, else the ceiling."""
         return self.step.implement.max_attempts or ATTEMPTS
 
+    def cap(self, step: Step) -> int:
+        """Attempts of `step` at most: the implement step's own (`implement_cap`), the engine's ceiling for the plan step."""
+        return self.implement_cap if step is Step.IMPLEMENT else ATTEMPTS
+
     def table(self, step: Step) -> StepTable:
         match step:
             case Step.PLAN:
