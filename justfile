@@ -11,6 +11,16 @@ export UV_NO_EDITABLE := "1"
 install:
     uv sync --no-editable --reinstall-package iorlas-task-loop
 
+# Regenerate docs/shelf-digest.json from the pins committed at HEAD (commit pyproject.toml and uv.lock first) and set
+# SOURCE_COMMIT in the digest test to that commit: one step after a shelf pin or source change.
+shelf-digest: install
+    #!/usr/bin/env bash
+    set -euo pipefail
+    head=$(git rev-parse --verify HEAD)
+    uv run --frozen --no-sync python -I -m taskloop.shelf_digest --at "$head" > docs/shelf-digest.json.tmp
+    mv docs/shelf-digest.json.tmp docs/shelf-digest.json
+    sed -i "s/^SOURCE_COMMIT = .*/SOURCE_COMMIT = \"$head\"/" tests/steps/test_shelf_digest_artifact.py
+
 # Prepare a slot: the project environment with every pinned check tool (the factory's `setup`).
 bootstrap: install
 
