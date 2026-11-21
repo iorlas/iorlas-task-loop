@@ -40,10 +40,10 @@ Each command's own `--help` is the reference for its flags.
 | `tl land run` | E | Squash the checked commit onto origin's `main`, re-check if needed, push, close the task | pushes; closes the task in the local tracker | yes | you; a round under `land: auto` |
 | `tl land show` | E | Show the facts to read before landing | reads | no | you |
 | `tl land withdraw` | E | Give up a validated, undelivered land candidate | writes | yes | you |
-| `tl attempt show` | F | Explain a task's current attempt as the factory holds it: entry, setup, result, hold and what happens next | reads `factory.db`, evidence, Git | no | you; the dashboard reads the same |
+| `tl attempt show` | F | Explain a task's current attempt as the factory holds it: entry, setup, result, hold and what happens next | reads `factory.db`, evidence, Git; includes what the harness reported it ran | no | you; the dashboard reads the same |
 | `tl attempt list` | F | One line per task: where everything stands | reads `factory.db` | no | you; the dashboard |
 | `tl attempt setup-times` | F | Recent implement setup durations | reads `factory.db` | no | you |
-| `tl attempt export` | F | One row per agent attempt (digests, agent choice, times, tokens, disposition, latest checks result) as CSV or JSON, for A/A and A/B comparison | reads `factory.db` | no | you |
+| `tl attempt export` | F | One row per agent attempt (digests, agent choice asked for and the model, effort and CLI version the harness reported, times, tokens, disposition, latest checks result) as CSV or JSON, for A/A and A/B comparison | reads `factory.db` | no | you |
 | `tl drain` | G | Block new work, let executions finish and verify the factory idle before an upgrade or restart; a completed drain stays until `tl rounds start` runs again | writes a durable drain request | yes | you |
 
 `tl task show` is the tracker's view of a task; `tl attempt show` is the factory's view of its attempt.

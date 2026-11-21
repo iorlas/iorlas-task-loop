@@ -262,6 +262,10 @@ def _facts_values(facts: ExecutionFacts) -> tuple[object, ...]:
     )
 
 
+def _ran_values(facts: ExecutionFacts) -> tuple[str | None, ...]:
+    return (facts.model, facts.harness, facts.harness_version, facts.effort)
+
+
 def _verdict_values(result: Verdict) -> tuple[str, str | None, str | None, int]:
     if isinstance(result, Committed):
         return "committed", None, result.blob, int(result.reused)

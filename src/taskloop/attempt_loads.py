@@ -275,6 +275,7 @@ class AttemptLoads(StoreConnection, ABC):
             as_nullable_int(row[15]),
             as_nullable_text(row[16]),
             None if row[17] is None else bool(row[17]),
+            *(as_nullable_text(each) for each in row[37:41]),
         )
         evidence = Evidence(*(FileRef(as_text(row[i]), as_text(row[i + 1])) for i in (18, 20, 22, 24)))
         kind, session_state = as_text(row[26]), as_text(row[32])

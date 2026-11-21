@@ -770,11 +770,14 @@
             "ended_at": null,
             "engine_digest": "engine",
             "harness": "codex",
+            "harness_version": null,
             "input_digest": "input",
             "latest_checks_conclusion": null,
             "latest_checks_reason": null,
             "model": "m",
             "number": 1,
+            "ran_effort": null,
+            "ran_model": null,
             "rc": null,
             "repeat_reason": null,
             "step": "plan",
@@ -2548,5 +2551,5 @@
       ]
     }
   },
-  "schema_version": 35
+  "schema_version": 36
 }

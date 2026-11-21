@@ -24,6 +24,7 @@ DDL_DIGESTS = {
     33: "a225645f3dcb85e207f9a33b954e3b33ac1ee5011462a227c0caec47e86c205f",
     34: "005bc5b296be5a13f70591e59356d4e87099e614cad8ac07f190d398c3b6dd0d",
     35: "2bfe4b174666e3bb2f16975bdbccaad503f1fc0cec17a00e0cc4878373e9a46b",
+    36: "593323320454c66616fb8d55a1427c95d2ab3eb505e006fe1fb24732d9bd8c1f",
 }
 
 
@@ -48,14 +49,14 @@ def test_effective_ddl_matches_its_version_pin() -> None:
         ("committed", None, 2, False),
     ],
 )
-def test_factory_commit_verdict_constraints_at_schema_35(
+def test_factory_commit_verdict_constraints_at_schema_36(
     registered: sqlite3.Connection,
     kind: str,
     reason: str | None,
     reused: int,
     valid: bool,
 ) -> None:
-    assert SCHEMA.version == 35
+    assert SCHEMA.version == 36
     registered.execute(
         """INSERT INTO execution (attempt_id,dispatch_token,generation,timed_out,work,stands,stdout_path,stdout_digest,
         stderr_path,stderr_digest,answer_path,answer_digest,diagnostic_path,diagnostic_digest,session_state)

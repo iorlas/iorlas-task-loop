@@ -40,6 +40,9 @@ COLUMNS = [
     "usage_incomplete",
     "latest_checks_conclusion",
     "latest_checks_reason",
+    "ran_model",
+    "ran_effort",
+    "harness_version",
 ]
 
 

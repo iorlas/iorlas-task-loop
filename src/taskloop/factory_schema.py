@@ -54,7 +54,7 @@ _UNDEFINED = encode(CommandConclusion.UNDEFINED)
 # This is also the runtime's persisted-state compatibility version: increment it for incompatible changes to the
 # interpretation of execution state, even without a DDL change. Compatible code changes keep it and resume normally.
 SCHEMA = Schema(
-    version=35,
+    version=36,
     name="factory",
     steps={},
     ddl=f"""
@@ -163,6 +163,7 @@ CREATE TABLE execution (
  answered INTEGER, reason TEXT, http_status INTEGER, t_in INTEGER, t_cached INTEGER, t_out INTEGER,
  c_in INTEGER, c_cached INTEGER, c_out INTEGER, turns INTEGER, session TEXT,
  usage_incomplete INTEGER CHECK(usage_incomplete IS NULL OR usage_incomplete IN (0,1)),
+ model TEXT, harness TEXT, harness_version TEXT, effort TEXT,
  stdout_path TEXT NOT NULL, stdout_digest TEXT NOT NULL, stderr_path TEXT NOT NULL, stderr_digest TEXT NOT NULL,
  answer_path TEXT NOT NULL, answer_digest TEXT NOT NULL, diagnostic_path TEXT NOT NULL, diagnostic_digest TEXT NOT NULL,
  answer_kind TEXT NOT NULL DEFAULT 'validation_pending'
@@ -313,6 +314,7 @@ ATTEMPT_LOADED = (
 FACTS = (
     "rc,timed_out,stop,watch,work,stands,answered,reason,http_status,t_in,t_cached,t_out,c_in,c_cached,c_out,turns,session,usage_incomplete"
 )
+RAN = "model,harness,harness_version,effort"  # what the agent harness reported it ran: NULL when it could not tell
 EVIDENCE = "stdout_path,stdout_digest,stderr_path,stderr_digest,answer_path,answer_digest,diagnostic_path,diagnostic_digest"
 ANSWER = "answer_kind,disposition,effect,commit_paths,commit_message,answer_failure,session_state"
 VERDICT = "verdict,reason,blob,reused"

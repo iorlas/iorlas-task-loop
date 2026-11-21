@@ -9,6 +9,8 @@ from any_agent.testing import FakeRun
 from test_attempt import ENTRY, KEY, PLAN, WORKER, AttemptSurroundings, app, database
 from test_attempt import surroundings as attempt_surroundings
 
+from taskloop.attempt_export import AttemptExport, export
+from taskloop.attempt_export_store import ExportStore
 from taskloop.attempt_status import Shown, StatusPorts, show_attempt
 from taskloop.step_render import human
 
@@ -124,3 +126,35 @@ def test_missing_and_zero_usage_in_attempt_views(
     assert isinstance(shown, Shown)
     text = "\n".join(human("show", shown, None))
     assert words in text if words else "Usage was not reported" not in text
+
+
+def test_what_the_harness_ran_is_stored_shown_and_exported_and_unknown_stays_null(surroundings: AttemptSurroundings) -> None:
+    con = database(surroundings)
+    summary = Summary(
+        rc=0, text=json.dumps(PLAN), model="claude-opus-5-5-20261001", harness="claude", harness_version="2.4.1", effort="high"
+    )
+    execution = FakeRun(RunOutcome(rc=0, timed_out=False, stop="answer", worker=WORKER, summary=summary))
+    owner = app(con, surroundings, execution)
+    result = owner.execute(KEY, ENTRY)
+    assert result.execution is not None
+    assert con.execute("SELECT model,harness,harness_version,effort FROM execution").fetchone() == (
+        "claude-opus-5-5-20261001",
+        "claude",
+        "2.4.1",
+        "high",
+    )
+    ports = StatusPorts(owner.store, lambda _entry: "gone", lambda: 30, lambda _key: None, lambda: "boot")
+    shown = show_attempt(ports, surroundings.tmp, "tasks", "tl-1")
+    assert isinstance(shown, Shown)
+    assert "Ran: model claude-opus-5-5-20261001, effort high, claude 2.4.1" in "\n".join(human("show", shown, None))
+    row = export(ExportStore(lambda: con), None)
+    assert isinstance(row, AttemptExport)
+    assert (row.rows[0].ran_model, row.rows[0].ran_effort, row.rows[0].harness_version) == ("claude-opus-5-5-20261001", "high", "2.4.1")
+
+
+def test_a_harness_that_cannot_tell_leaves_the_ran_columns_null(surroundings: AttemptSurroundings) -> None:
+    con = database(surroundings)
+    execution = FakeRun(RunOutcome(rc=0, timed_out=False, stop="answer", worker=WORKER, summary=Summary(rc=0, text=json.dumps(PLAN))))
+    result = app(con, surroundings, execution).execute(KEY, ENTRY)
+    assert result.execution is not None and "Ran:" not in result.explanation
+    assert con.execute("SELECT model,harness,harness_version,effort FROM execution").fetchone() == (None, None, None, None)

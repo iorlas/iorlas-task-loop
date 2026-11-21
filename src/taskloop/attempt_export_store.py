@@ -1,7 +1,9 @@
 """The A/A and A/B comparison read: one row per agent attempt with its identity, setup, usage and latest checks conclusion.
 
 Read-only. NULL means unknown, never zero: an attempt that did not end captured has no `ended_at` and no wall time, and
-`usage_incomplete` 1 marks token counts that are a lower bound. Pool only rows with the same engine and workflow digests."""
+`usage_incomplete` 1 marks token counts that are a lower bound. `harness`, `model` and `effort` are what the attempt
+asked for; `ran_model`, `ran_effort` and `harness_version` what the harness reported (NULL: it could not tell).
+Pool only rows with the same engine and workflow digests."""
 
 from dataclasses import dataclass
 
@@ -15,7 +17,8 @@ QUERY = """SELECT
   e.disposition, e.effect, e.answer_kind, e.rc, e.timed_out, e.turns,
   e.t_in, e.t_cached, e.t_out, e.c_in, e.c_cached, e.c_out, e.usage_incomplete,
   (SELECT c.conclusion FROM checks_attempt c WHERE c.after_attempt_id = a.attempt_id ORDER BY c.number DESC LIMIT 1),
-  (SELECT c.reason FROM checks_attempt c WHERE c.after_attempt_id = a.attempt_id ORDER BY c.number DESC LIMIT 1)
+  (SELECT c.reason FROM checks_attempt c WHERE c.after_attempt_id = a.attempt_id ORDER BY c.number DESC LIMIT 1),
+  e.model, e.effort, e.harness_version
 FROM attempt a LEFT JOIN execution e ON e.attempt_id = a.attempt_id
 WHERE (? IS NULL OR a.backlog = ?)
 ORDER BY a.backlog, a.task_id, a.seq"""
@@ -55,6 +58,9 @@ class ExportRow:
     usage_incomplete: int | None
     latest_checks_conclusion: str | None
     latest_checks_reason: str | None
+    ran_model: str | None  # the model the agent harness reported answering (the resolved id), against `model`, the one asked for
+    ran_effort: str | None
+    harness_version: str | None
 
 
 def _real(value: object) -> float | None:
@@ -100,6 +106,9 @@ def _row(r: tuple[object, ...]) -> ExportRow:
         whole(r[27]),
         text(r[28]),
         text(r[29]),
+        text(r[30]),
+        text(r[31]),
+        text(r[32]),
     )
 
 

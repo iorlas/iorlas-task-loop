@@ -25,12 +25,18 @@ from taskloop.tracker_discussion import read_discussion
 BD = "bd"
 
 
-def _bd(client: type[Bd], cwd: str, run: Runner | None = None, **options: float | str) -> Bd:
+def _bd(client: type[Bd], cwd: str, run: Runner | None = None) -> Bd:
     """The one construction of a `Bd`: bd is found on this process's PATH, unless a test's runner is injected (nothing is run
-    or searched for then, so the name alone stands for it)."""
-    if run is not None:
-        options["exe"] = BD
-    return client(ACTOR, cwd=cwd, env=dict(os.environ), run=run, **options)
+    or searched for then, so the name alone stands for it: `exe` is empty for a real run and bd's name for an injected one)."""
+    return client(ACTOR, cwd=cwd, env=dict(os.environ), exe=BD * (run is not None), run=run)
+
+
+def _bounded(client: type[Bd], cwd: str, run: Runner | None, *, retry: bool) -> Bd:
+    """`_bd` with each bd call capped at BD_TIMEOUT_S, and without lock retries unless `retry`."""
+    exe, env = BD * (run is not None), dict(os.environ)
+    if retry:
+        return client(ACTOR, cwd=cwd, env=env, exe=exe, run=run, timeout=BD_TIMEOUT_S)
+    return client(ACTOR, cwd=cwd, env=env, exe=exe, run=run, timeout=BD_TIMEOUT_S, lock_retries=0)
 
 
 def _tracker_root(tracker_root: str) -> Path:
@@ -223,7 +229,7 @@ def tracker_claims(run: Runner | None = None, client: type[Bd] = Bd) -> TrackerC
             raise
 
     def heartbeat_for(tracker_root: str, task_id: str) -> Heartbeat:
-        renewing = _bd(client, located(tracker_root), run, timeout=BD_TIMEOUT_S, lock_retries=0)
+        renewing = _bounded(client, located(tracker_root), run, retry=False)
 
         def beat() -> Beat:
             try:
@@ -235,7 +241,7 @@ def tracker_claims(run: Runner | None = None, client: type[Bd] = Bd) -> TrackerC
         return beat
 
     def close(tracker_root: str, task_id: str, reason: str) -> CloseAnswer:
-        return _closed(_bd(client, located(tracker_root), run, timeout=BD_TIMEOUT_S), task_id, reason)
+        return _closed(_bounded(client, located(tracker_root), run, retry=True), task_id, reason)
 
     return TrackerClaims(claim, unclaim, heartbeat_for, close)
 
@@ -308,7 +314,7 @@ def tracker_holds(run: Runner | None = None, client: type[Bd] = Bd) -> TrackerHo
     within `hold_store.COMMENT_LEASE`; `client` is the seam a test checks the construction through."""
 
     def bd(tracker_root: str) -> Bd:
-        return _bd(client, str(Path(tracker_root).expanduser().resolve()), run, timeout=BD_TIMEOUT_S, lock_retries=0)
+        return _bounded(client, str(Path(tracker_root).expanduser().resolve()), run, retry=False)
 
     def labels(tracker_root: str, task_id: str, label: str | None) -> HoldAnswer[LabelStep]:
         return _labelled(bd(tracker_root), task_id, label)

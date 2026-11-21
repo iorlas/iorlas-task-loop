@@ -83,9 +83,6 @@
     "unreadable": 3,
     "wait": 4
   },
-  "src/taskloop/attempt_store.py": {
-    "e": 3
-  },
   "src/taskloop/attempt_types.py": {
     "": 5,
     "conflict": 3
