@@ -221,7 +221,6 @@
     "branch": 3,
     "dir": 3,
     "redirected": 3,
-    "staged": 3,
     "unborn": 3
   },
   "src/taskloop/factory_schema.py": {

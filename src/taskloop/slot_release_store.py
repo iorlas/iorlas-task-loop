@@ -112,7 +112,7 @@ def free(con: sqlite3.Connection, repo_id: str, slot: str, attempt_id: str, gene
 @dataclass(frozen=True)
 class SlotReleaseStore:
     connect: Callable[[], sqlite3.Connection | None]
-    begin: Callable[[sqlite3.Connection], AbstractContextManager[None]]
+    begin: Callable[[sqlite3.Connection], AbstractContextManager[object]]
 
     def _connected(self) -> sqlite3.Connection:
         con = self.connect()

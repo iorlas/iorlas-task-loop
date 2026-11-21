@@ -18,7 +18,7 @@ from doubles import ENGINE, WORKFLOW_BYTES, WORKFLOW_PATH
 from git_porcelain.history import Identity
 from git_porcelain.testing import apply_hermetic_env, git
 from plan_fixtures import PLAN_TEXT
-from sqlite_store import begin_immediate
+from sqlite_sidecar import transaction
 
 from taskloop.admit import AdmitRequest, Admitted, AttemptAdmission
 from taskloop.agents.launch import AgentLaunch
@@ -37,7 +37,11 @@ from taskloop.slots_store import SlotsStore
 from taskloop.task import TaskBinding, TaskInspection, TaskScope
 from taskloop.tracker import inspect_task
 
-VIEWS = GitViews(DEFAULT_GIT_READ_SECONDS)
+
+def git_views() -> GitViews:
+    """Built per use: the hermetic environment is applied by each test's fixture, after import."""
+    return GitViews(DEFAULT_GIT_READ_SECONDS)
+
 
 ENTRY = (7, "entry-start", "boot")
 WORKER = Worker(pid=42, pgid=42, start="native-start", boot="boot")
@@ -68,10 +72,10 @@ def test_a_detached_slot_is_prepared_on_its_task_branch_and_the_plan_is_committe
     (main / ".task-loop.json").write_text("{}")
     git(main, "add", "README", ".task-loop.json", WORKFLOW_PATH)
     git(main, "commit", "-q", "-m", "base")
-    slot = slots / folder_name(VIEWS.checkouts(main).identity()) / "s1"
+    slot = slots / folder_name(git_views().checkouts(main).identity()) / "s1"
     git(main, "worktree", "add", "-q", "--detach", str(slot), "HEAD")
     d = git(slot, "rev-parse", "HEAD").strip()
-    adopt(SlotsStore(lambda: factory, begin_immediate), VIEWS.checkouts(main), SlotGit(VIEWS.checkouts, RealSlotFiles()), slots, 1)
+    adopt(SlotsStore(lambda: factory, transaction), git_views().checkouts(main), SlotGit(git_views().checkouts, RealSlotFiles()), slots, 1)
     origin = root / "origin"
     git(root, "clone", "-q", str(main), str(origin))
     git(main, "remote", "add", "origin", str(origin))
@@ -80,10 +84,10 @@ def test_a_detached_slot_is_prepared_on_its_task_branch_and_the_plan_is_committe
     m = git(origin, "rev-parse", "HEAD").strip()
     admission = AttemptAdmission(
         lambda: factory,
-        begin_immediate,
+        transaction,
         EvidenceFiles(art),
         tasks,
-        VIEWS.checkouts,
+        git_views().checkouts,
         claimed,
         claimed,
         lambda: 10,
@@ -121,11 +125,13 @@ def test_a_detached_slot_is_prepared_on_its_task_branch_and_the_plan_is_committe
         AgentLaunch(lambda _harness: ("/bin/codex", {}), ids=NativeIds()),
         run,
         lambda: 10,
-        VIEWS.checkouts,
+        git_views().checkouts,
         files,
     )
     assert attempts.execute(admitted.key, ENTRY).reason == "commit"
-    verdict = FactoryCommit(store, VIEWS.checkouts, files, lambda _worker: True, lambda: 20, hold, ids=NativeIds()).commit(admitted.key)
+    verdict = FactoryCommit(store, git_views().checkouts, files, lambda _worker: True, lambda: 20, hold, ids=NativeIds()).commit(
+        admitted.key
+    )
     assert isinstance(verdict, Committed) and not verdict.reused
     x = git(slot, "rev-parse", "HEAD").strip()
     assert git(main, "rev-parse", "refs/heads/task/tl-1").strip() == x and git(slot, "rev-parse", "HEAD^").strip() == m != d

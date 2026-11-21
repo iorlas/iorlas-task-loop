@@ -17,7 +17,7 @@ from doubles import ENGINE, WORKFLOW_BYTES, WORKFLOW_PATH, RegisteringLauncher
 from git_porcelain.history import Identity
 from git_porcelain.testing import apply_hermetic_env, git
 from plan_fixtures import PLAN_TEXT, PLAN_V2
-from sqlite_store import begin_immediate
+from sqlite_sidecar import transaction
 from test_repeat import refresh_discussion
 
 from taskloop.admit_chain import ChainAdmission
@@ -75,7 +75,7 @@ def test_a_repeat_commits_x2_on_x1_from_the_dirty_worktree_and_the_chain_commits
     git(main, "commit", "-q", "-m", "base")
     git(main, "worktree", "add", "-q", "-b", "task/tl-1", str(slot), "HEAD")
     base = git(slot, "rev-parse", "HEAD").strip()
-    with begin_immediate(factory):
+    with transaction(factory):
         factory.execute("INSERT INTO slot (repo_id,name,path) VALUES (?,'s1',?)", (VIEWS.checkouts(main).identity().key, str(slot)))
         factory.execute("INSERT INTO reservation VALUES ('s1',?,1,'attempt')", (VIEWS.checkouts(main).identity().key,))
         factory.execute(
@@ -109,7 +109,7 @@ def test_a_repeat_commits_x2_on_x1_from_the_dirty_worktree_and_the_chain_commits
     assert factory_commit.commit(KEY) == Uncommitted("uncommitted", ("?? scratch.txt",))
     x1 = git(slot, "rev-parse", "HEAD").strip()
     admission = ChainAdmission(
-        lambda: factory, begin_immediate, EvidenceFiles(art), lambda: 10, VIEWS.checkouts, files, ids=NativeIds(), engine=ENGINE
+        lambda: factory, transaction, EvidenceFiles(art), lambda: 10, VIEWS.checkouts, files, ids=NativeIds(), engine=ENGINE
     )
     repeat = StepRepeat(
         store,

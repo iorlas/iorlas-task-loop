@@ -9,7 +9,8 @@ import pytest
 from check_repeat_bench import Repairing
 from doubles import ENGINE
 from round_bench import task
-from sqlite_store import Store, begin_immediate
+from sqlite_sidecar import transaction
+from sqlite_store import Store
 from test_check_repeat import failed, rig
 from test_repeat import CONTENT_DIGEST
 
@@ -29,7 +30,7 @@ from taskloop.operations import Failed, Started
 
 __all__ = ["rig"]
 
-Begin = Callable[[sqlite3.Connection], AbstractContextManager[None]]
+Begin = Callable[[sqlite3.Connection], AbstractContextManager[object]]
 Call = Callable[[], AdmitResult | Started | Failed]
 Build = Callable[[sqlite3.Connection, EvidenceFiles, Begin], Call]
 Rows = tuple[tuple[tuple[object, ...], ...], ...]
@@ -67,7 +68,7 @@ class InterruptedFiles(EvidenceFiles):
 
 @contextmanager
 def interrupted_commit(con: sqlite3.Connection) -> Generator[None]:
-    with begin_immediate(con):
+    with transaction(con):
         yield
         raise Interrupted  # SQLite rolls back the unfinished transaction before the connection disappears.
 
@@ -106,7 +107,7 @@ def protect(bench: Repairing) -> tuple[dict[Path, bytes], AttemptKey]:
     bench.adopt("s2")
     bench.tracker.beads["tl-2"] = task("tl-2")
     files = EvidenceFiles(bench.tmp)
-    admitted = initial(bench.con, files, begin_immediate, bench).admit(request(bench, "tl-2"))
+    admitted = initial(bench.con, files, transaction, bench).admit(request(bench, "tl-2"))
     assert isinstance(admitted, Admitted)
     files.put_input(AttemptKey("unrelated", "unrelated-token", 1), "Unrelated retained evidence\n")
     user = bench.tmp / "attempts" / "user-notes.bin"
@@ -121,7 +122,7 @@ def exercise(bench: Repairing, build: Build, *, inside: bool) -> None:
     reserved = bench.con.execute("SELECT * FROM reservation WHERE attempt_id=?", (protected.attempt_id,)).fetchone()
     files = InterruptedFiles(bench.tmp, inside=inside)
     with pytest.raises(Interrupted):
-        build(bench.con, files, interrupted_commit if inside else begin_immediate)()
+        build(bench.con, files, interrupted_commit if inside else transaction)()
     assert files.ref is not None and files.key is not None
     orphan = bench.tmp / files.ref.path
     retained[orphan] = orphan.read_bytes()
@@ -134,7 +135,7 @@ def exercise(bench: Repairing, build: Build, *, inside: bool) -> None:
         assert tuple(bench.tracker.claims) == claims
         assert all(path.read_bytes() == content for path, content in retained.items())
         fresh = EvidenceFiles(bench.tmp)
-        result = build(con, fresh, begin_immediate)()
+        result = build(con, fresh, transaction)()
         assert isinstance(result, (Admitted, Started))
         store = AttemptStore(lambda: con)
         current = store.attempt_of("tasks", "tl-1")
@@ -158,7 +159,7 @@ def exercise(bench: Repairing, build: Build, *, inside: bool) -> None:
         assert con is not None
         assert rows(con) == committed
         assert AttemptStore(lambda: con).input_ref(key) == committed_ref
-        again = build(con, EvidenceFiles(bench.tmp), begin_immediate)()
+        again = build(con, EvidenceFiles(bench.tmp), transaction)()
         assert isinstance(again, (AdmitRefused, Started))
         assert rows(con) == committed
         assert all(path.read_bytes() == content for path, content in retained.items())

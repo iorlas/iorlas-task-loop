@@ -190,7 +190,7 @@ class Boundaries(ast.NodeVisitor):
         if not isinstance(node, ast.Call):
             return False
         name = self.reference(node.func).split(".")[-1]
-        return name in {"begin", "begin_immediate"} or (
+        return name in {"begin", "transaction"} or (
             name == "_connection"
             and any(
                 keyword.arg == "write" and isinstance(keyword.value, ast.Constant) and keyword.value.value is True
@@ -251,7 +251,7 @@ def test_no_external_port_executes_in_a_write_transaction() -> None:
     "boundary",
     [
         "begin(con)",
-        "begin_immediate(con)",
+        "transaction(con)",
         "store.begin(con)",
         "self.begin(con)",
         "self._connection(write=True)",
@@ -276,8 +276,8 @@ def test_external_calls_are_rejected_in_each_write_scope(boundary: str, call: st
 @pytest.mark.parametrize(
     "source, call",
     [
-        ("from sqlite_store import begin_immediate as tx\nwith tx(con):\n    repo.tree('HEAD')", "repo.tree"),
-        ("import sqlite_store as db\nwith db.begin_immediate(con):\n    tracker.show('task')", "tracker.show"),
+        ("from sqlite_sidecar import transaction as tx\nwith tx(con):\n    repo.tree('HEAD')", "repo.tree"),
+        ("import sqlite_sidecar as db\nwith db.transaction(con):\n    tracker.show('task')", "tracker.show"),
         ("tx = self.begin\nread = repo.refs\nwith tx(con):\n    read([])", "read"),
         ("git = repo\nread = git.tree\nagain = read\nwith begin(con):\n    again('HEAD')", "again"),
         ("from stream_proc import popen_registered as launch\nwith begin(con):\n    launch(argv)", "launch"),

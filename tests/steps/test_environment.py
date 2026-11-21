@@ -204,7 +204,7 @@ def test_every_setup_resets_the_slots_ignored_files(entry: Entry, slot: FakeWork
 def test_a_reset_that_leaves_ignored_files_refuses(entry: Entry, slot: FakeWorktree, monkeypatch: pytest.MonkeyPatch) -> None:
     slot.repo.exclude_locally([".venv/"])
     slot.write_file(".venv/lib.py", "planted")
-    monkeypatch.setattr(FakeWorktree, "clean", lambda *_args, **_options: None)
+    monkeypatch.setattr(FakeWorktree, "clean_nested", lambda *_args, **_options: None)
     events = refused(entry, "refused", "environment:reset")
     assert not any(event.startswith("exec") for event in events) and rows(entry.environment.con) == []
 

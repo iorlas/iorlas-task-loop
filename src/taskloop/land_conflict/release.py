@@ -54,7 +54,7 @@ class ReleaseSaved:
             if current != release.before:
                 raise AbortRefused("The checkout matches neither the release input nor its recorded output.")
             p.fence()
-            p.checkouts(work.slot, git_dir=work.gitdir).worktree(work.slot).park(record.base, clean_keep=(), keep_ignored=True)
+            p.checkouts(work.slot, git_dir=work.gitdir).worktree(work.slot).park(record.base, clean_keep=())
         if observer._current(record, work, saved) != release.after:
             raise AbortRefused("Parking did not produce the admitted base and recorded ignored bytes.")
         p.fence()

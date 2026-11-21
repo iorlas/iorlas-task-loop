@@ -8,7 +8,7 @@ import pytest
 from doubles import FakeSlotFiles, PinnedViews, linked_into
 from git_porcelain import GitUnavailable, RepoIdentity, WorktreeInfo
 from git_porcelain.testing import FakeRemote, FakeRepo
-from sqlite_store import begin_immediate
+from sqlite_sidecar import transaction
 
 from taskloop.attempt_reads import SlotUse, StoreUnavailable
 from taskloop.attempt_store import AttemptStore
@@ -28,7 +28,7 @@ def add(repo: FakeRepo, root: Path, *names: str) -> None:
 
 
 def adopted(con: sqlite3.Connection, repo: FakeRepo, root: Path, count: int) -> tuple[Adopted | NotAdopted, ...]:
-    return adopt(SlotsStore(lambda: con, begin_immediate), repo, viewed(repo), root, count)
+    return adopt(SlotsStore(lambda: con, transaction), repo, viewed(repo), root, count)
 
 
 def viewed(repo: FakeRepo) -> SlotGit:
@@ -132,9 +132,9 @@ def test_adoption_rereads_a_slot_adopted_elsewhere_before_the_write(factory: sql
     add(repo, root, "s1", "s2")
     other_path = root / "elsewhere" / "s1"
 
-    def begin(con: sqlite3.Connection) -> AbstractContextManager[None]:
+    def begin(con: sqlite3.Connection) -> AbstractContextManager[object]:
         con.execute("INSERT INTO slot (repo_id,name,path) VALUES (?,'s1',?)", (rid(repo), str(other_path)))
-        return begin_immediate(con)
+        return transaction(con)
 
     found = adopt(SlotsStore(lambda: factory, begin), repo, viewed(repo), root, 2)
     assert found == (NotAdopted("s1", "other_root", derived(repo, root, "s1")), Adopted("s2", derived(repo, root, "s2")))
@@ -218,9 +218,9 @@ def test_nothing_pending_takes_no_write_lock(factory: sqlite3.Connection, repo: 
     adopted(factory, repo, root, 1)
     taken: list[int] = []
 
-    def begin(con: sqlite3.Connection) -> AbstractContextManager[None]:
+    def begin(con: sqlite3.Connection) -> AbstractContextManager[object]:
         taken.append(1)
-        return begin_immediate(con)
+        return transaction(con)
 
     assert adopt(SlotsStore(lambda: factory, begin), repo, viewed(repo), root, 1) == (Adopted("s1", derived(repo, root, "s1")),)
     repo.worktree(derived(repo, root, "s1")).write_file("dirty", "x")
@@ -297,7 +297,7 @@ def test_a_slot_is_read_only_through_its_verified_pinned_view_and_a_redirected_o
     s1, s2, s3 = (derived(repo, root, name) for name in ("s1", "s2", "s3"))
     files.contents[s2 / ".git"] = b"gitdir: /elsewhere/.git/worktrees/s2\n"
     linked_into(files, s3, other)
-    found = adopt(SlotsStore(lambda: factory, begin_immediate), repo, SlotGit(views, files), root, 3)
+    found = adopt(SlotsStore(lambda: factory, transaction), repo, SlotGit(views, files), root, 3)
     assert found == (Adopted("s1", s1), NotAdopted("s2", "redirected", s2), NotAdopted("s3", "redirected", s3))
     assert (views.slot_opens(s1), views.slot_opens(s2), views.slot_opens(s3)) == ([files.common / "worktrees/s1"], [], [])
     views.opened.clear()

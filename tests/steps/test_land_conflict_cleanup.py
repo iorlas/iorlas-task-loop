@@ -77,17 +77,17 @@ def interrupt(c: ExecutionCase, patch: pytest.MonkeyPatch, boundary: str, after:
         if boundary == "exclude" and c.calls:
             stop(True)
 
-    def parking(self: FakeWorktree, base: str, *, clean_keep: Sequence[str] | None = None, keep_ignored: bool = False) -> Sha:
+    def parking(self: FakeWorktree, base: str, *, clean_keep: Sequence[str] | None = None) -> Sha:
         if not c.calls:
-            return park(self, base, clean_keep=clean_keep, keep_ignored=keep_ignored)
-        assert clean_keep == () and keep_ignored
+            return park(self, base, clean_keep=clean_keep)
+        assert clean_keep == ()
         if boundary == "park":
             stop(False)
         if boundary == "partial":
-            park(self, base, keep_ignored=keep_ignored)
+            park(self, base)
             self.remove_file("notes/local")
             raise KeyboardInterrupt
-        value = park(self, base, clean_keep=clean_keep, keep_ignored=keep_ignored)
+        value = park(self, base, clean_keep=clean_keep)
         if boundary == "park":
             stop(True)
         return value
@@ -233,10 +233,10 @@ def test_cleanup_failure_keeps_intent(execution_case: ExecutionCase, monkeypatch
 
     park = FakeWorktree.park
 
-    def fail(self: FakeWorktree, base: str, *, clean_keep: Sequence[str] | None = None, keep_ignored: bool = False) -> Sha:
+    def fail(self: FakeWorktree, base: str, *, clean_keep: Sequence[str] | None = None) -> Sha:
         if c.calls:
             raise GitUnavailable("cleanup failed")
-        return park(self, base, clean_keep=clean_keep, keep_ignored=keep_ignored)
+        return park(self, base, clean_keep=clean_keep)
 
     with monkeypatch.context() as patch:
         patch.setattr(FakeWorktree, "park", fail)

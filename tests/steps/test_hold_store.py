@@ -11,7 +11,7 @@ import pytest
 from doubles import D, X, pin_workflow
 from hold_fixtures import event
 from pydantic import ValidationError
-from sqlite_store import begin_immediate
+from sqlite_sidecar import transaction
 
 from taskloop.attempt_reads import StoreRefused, StoreUnavailable
 from taskloop.hold_store import COMMENT_LEASE, HoldInsert, HoldRow, HoldStore, Labelled, Uncleared
@@ -60,7 +60,7 @@ def put(con: sqlite3.Connection, row: dict[str, object]) -> None:
 @pytest.fixture
 def con(factory: sqlite3.Connection) -> sqlite3.Connection:
     """tl-1's current attempt `a` taken under `auto`; tl-2's attempt `hand`, started by hand."""
-    with begin_immediate(factory):
+    with transaction(factory):
         attempt(factory, "a")
         attempt(factory, "hand", task="tl-2", label=None)
     return factory
@@ -77,7 +77,7 @@ def held(con: sqlite3.Connection, attempt_id: str = "a", cause: str = "a", now: 
 
 def later(con: sqlite3.Connection, attempt_id: str = "b", task: str = "tl-1", seq: int = 2) -> None:
     """The task taken again: a later attempt, so the held one is no longer current."""
-    with begin_immediate(con):
+    with transaction(con):
         attempt(con, attempt_id, task=task, seq=seq)
 
 
@@ -205,7 +205,7 @@ def test_a_second_insert_or_a_missing_or_superseded_attempt_is_changed(con: sqli
     with pytest.raises(StoreRefused, match="changed"):
         held(con, now=20.0)
     assert store(con).of_attempts(("a",)) == {"a": first}
-    with begin_immediate(con):
+    with transaction(con):
         attempt(con, "a2", task="tl-4")
     later(con, "b2", task="tl-4", seq=2)
     with pytest.raises(StoreRefused, match="changed"):
@@ -213,7 +213,7 @@ def test_a_second_insert_or_a_missing_or_superseded_attempt_is_changed(con: sqli
 
 
 def test_the_cause_must_be_current_agent_attempt_or_its_latest_live_checks_attempt(con: sqlite3.Connection) -> None:
-    with begin_immediate(con):
+    with transaction(con):
         checks(con, "k1", "a", 1, abandoned=True)
         checks(con, "k2", "a", 2)
     for cause in ("a", "k1", "nobody"):  # a live checks attempt is the task's current: A is no cause; k1 is not the latest
@@ -223,7 +223,7 @@ def test_the_cause_must_be_current_agent_attempt_or_its_latest_live_checks_attem
 
 
 def test_an_abandoned_latest_checks_attempt_is_no_cause_and_its_agent_attempt_is(con: sqlite3.Connection) -> None:
-    with begin_immediate(con):
+    with transaction(con):
         checks(con, "k1", "a", 1, abandoned=True)
     with pytest.raises(StoreRefused, match="changed"):
         held(con, cause="k1")
@@ -231,7 +231,7 @@ def test_an_abandoned_latest_checks_attempt_is_no_cause_and_its_agent_attempt_is
 
 
 def test_a_checks_cause_of_a_superseded_agent_attempt_is_changed(con: sqlite3.Connection) -> None:
-    with begin_immediate(con):
+    with transaction(con):
         checks(con, "k1", "a", 1)
     later(con)
     with pytest.raises(StoreRefused, match="changed"):
@@ -324,7 +324,7 @@ UNCLEARED: tuple[tuple[int, Labelled | None, bool], ...] = (
 
 
 def test_uncleared_lists_the_holds_that_may_have_added_held_once_their_task_was_taken_again(con: sqlite3.Connection) -> None:
-    with begin_immediate(con):
+    with transaction(con):
         for number, _, _ in UNCLEARED:
             attempt(con, f"t{number}", task=f"tl-{number}")
     for number, labels, _ in UNCLEARED:

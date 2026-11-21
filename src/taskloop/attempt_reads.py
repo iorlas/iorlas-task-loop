@@ -6,7 +6,7 @@ from collections.abc import Callable, Generator
 from contextlib import AbstractContextManager, contextmanager
 from dataclasses import dataclass
 
-from sqlite_store import begin_immediate
+from sqlite_sidecar import transaction
 
 from taskloop.agents.settings import AgentSetting, decode_setting
 from taskloop.attempt_types import EFFECTS, AttemptKey, ChainLink, Committed, Effect, EntryIdentity, ExecutionFacts, FileRef, Verdict
@@ -182,9 +182,9 @@ class StoreConnection:
     def __init__(
         self,
         connect: Callable[[], sqlite3.Connection | None],
-        begin: Callable[[sqlite3.Connection], AbstractContextManager[None]] = begin_immediate,
+        begin: Callable[[sqlite3.Connection], AbstractContextManager[object]] = transaction,
     ) -> None:
-        """`begin` is the writer transaction; a composition on a Store passes its begin_immediate, which evicts a failed shared writer."""
+        """`begin` is the writer transaction; a Store composition passes its begin_immediate, which evicts a failed shared writer."""
         self.connect, self.begin = connect, begin
 
     def warm(self) -> None:

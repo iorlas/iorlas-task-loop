@@ -6,7 +6,7 @@ from collections.abc import Callable
 from contextlib import AbstractContextManager
 
 from any_agent.procs import Worker
-from sqlite_store import begin_immediate
+from sqlite_sidecar import transaction
 
 from taskloop.attempt_reads import StoreConnection, StoreRefused, StoreUnavailable
 from taskloop.attempt_store import AttemptStore
@@ -47,7 +47,7 @@ class RecoveryStore(StoreConnection):
     def __init__(
         self,
         connect: Callable[[], sqlite3.Connection | None],
-        begin: Callable[[sqlite3.Connection], AbstractContextManager[None]] = begin_immediate,
+        begin: Callable[[sqlite3.Connection], AbstractContextManager[object]] = transaction,
     ) -> None:
         super().__init__(connect, begin)
         self.attempts = AttemptStore(connect, begin)

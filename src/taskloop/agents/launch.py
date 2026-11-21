@@ -143,16 +143,16 @@ class AgentLaunch:
         access: CodexAccess | ClaudeAccess | None = None
         found = folders(slot) if prepared else None
         if isinstance(policy, CodexPolicy):
-            harness = CodexHarness(resume=resume)
+            harness = CodexHarness(resume=resume, env=env)
             access = codex_access(policy, found, compaction_token_limit=setting.compaction_token_limit)
             if found is not None:
                 probe = probe_for(setting, slot, exe)
         elif isinstance(policy, ClaudePolicy):
-            harness = ClaudeHarness()
+            harness = ClaudeHarness(env=env)
             access = ClaudeAccess(permission_mode=policy.permission_mode, settings=policy.settings)
         elif isinstance(policy, OpenCodePolicy):
             box = policy.sandbox
-            harness = OpenCodeHarness(root=root, sandbox=Sandbox(readable=box.readable, scratch=box.scratch, runners=box.runners))
+            harness = OpenCodeHarness(root=root, sandbox=Sandbox(readable=box.readable, scratch=box.scratch, runners=box.runners), env=env)
         try:
             contract = Path(schema).read_text(encoding="utf-8")
             prompt += "\nReturn exactly one JSON object satisfying this answer schema:\n" + contract

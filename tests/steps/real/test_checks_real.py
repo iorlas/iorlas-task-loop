@@ -28,7 +28,11 @@ from taskloop.slot_env import setup_process
 from taskloop.slot_files import RealSlotFiles
 from taskloop.slots import folder_name
 
-VIEWS = GitViews(DEFAULT_GIT_READ_SECONDS)
+
+def git_views() -> GitViews:
+    """Built per use: the hermetic environment is applied by each test's fixture, after import."""
+    return GitViews(DEFAULT_GIT_READ_SECONDS)
+
 
 PASS = Check("pass", ("/bin/sh", "-c", "echo ok"), 30)
 UNTRACKED = Check("untracked", ("/bin/sh", "-c", "touch untracked-file"), 30)
@@ -50,16 +54,16 @@ def test_checks_run_on_the_host_in_a_slot_detached_at_x(
     (main / "README").write_text("one\n")
     git(main, "add", "README")
     git(main, "commit", "-q", "-m", "D")
-    slot = root / "slots" / folder_name(VIEWS.checkouts(main).identity()) / "s1"
+    slot = root / "slots" / folder_name(git_views().checkouts(main).identity()) / "s1"
     git(main, "worktree", "add", "-q", "--detach", str(slot), "HEAD")
     (main / "README").write_text("two\n")
     git(main, "commit", "-q", "-am", "X")
     x = git(main, "rev-parse", "HEAD").strip()
 
-    taken = detach_at(VIEWS.checkouts, RealSlotFiles(), str(slot), VIEWS.checkouts(main).identity().key, x)
+    taken = detach_at(git_views().checkouts, RealSlotFiles(), str(slot), git_views().checkouts(main).identity().key, x)
     assert isinstance(taken, Prepared) and taken.head == x
     assert git(slot, "rev-parse", "HEAD").strip() == x and (slot / "README").read_text() == "two\n"
-    view = VIEWS.checkouts(slot, git_dir=taken.gitdir)
+    view = git_views().checkouts(slot, git_dir=taken.gitdir)
     environ = {"PATH": os.environ["PATH"], "HOME": str(root)}
     target = BlockTarget(slot, view, x, REQUIRED, time.time() + 600, check_env(scrubbed(environ), slot))
     store, evidence = CheckStore(lambda: checking), EvidenceFiles(root / "art")

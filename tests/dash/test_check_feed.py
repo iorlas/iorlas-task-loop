@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 from conftest import checking, factory
 from doubles import CHECKS, REQUIRED, TARGET, D
-from sqlite_store import begin_immediate
+from sqlite_sidecar import transaction
 
 from taskloop import check_feed, check_store
 from taskloop.attempt_status import StatusPorts
@@ -179,7 +179,7 @@ def ports_of(con: sqlite3.Connection, files: EvidenceFiles) -> TaskPorts:
 
 
 def test_projection_uses_result_identity_and_typed_outcomes(checking: sqlite3.Connection, tmp_path: Path) -> None:
-    files, store = EvidenceFiles(tmp_path), CheckStore(lambda: checking, begin_immediate)
+    files, store = EvidenceFiles(tmp_path), CheckStore(lambda: checking, transaction)
     store.start(CHECKS, 1, 0, "lint", "a" * 64, 60, 3)
     files.check_log(CHECKS, 1, "lint").write_bytes(b"passed (display text only)\n")
     ports = ports_of(checking, files)
@@ -203,7 +203,7 @@ def test_projection_uses_result_identity_and_typed_outcomes(checking: sqlite3.Co
 
 
 def test_restart_numbering_and_unknown_attempts(checking: sqlite3.Connection, tmp_path: Path) -> None:
-    store, files = CheckStore(lambda: checking, begin_immediate), EvidenceFiles(tmp_path)
+    store, files = CheckStore(lambda: checking, transaction), EvidenceFiles(tmp_path)
     store.start(CHECKS, 1, 0, "lint", "a" * 64, 60, 3)
     checking.execute("UPDATE checks_attempt SET phase='concluded',conclusion='passed',concluded_at=5,released_at=6,parked=?", (D,))
     checking.execute("DELETE FROM reservation WHERE attempt_id='checks'")
@@ -225,7 +225,7 @@ def test_restart_numbering_and_unknown_attempts(checking: sqlite3.Connection, tm
 
 
 def test_checks_numbering_spans_implement_attempts(checking: sqlite3.Connection, tmp_path: Path) -> None:
-    store, files = CheckStore(lambda: checking, begin_immediate), EvidenceFiles(tmp_path)
+    store, files = CheckStore(lambda: checking, transaction), EvidenceFiles(tmp_path)
     store.start(CHECKS, 1, 0, "lint", "a" * 64, 60, 3)
     files.check_log(CHECKS, 1, "lint").write_bytes(b"original implement\n")
     checking.execute("UPDATE checks_attempt SET phase='concluded',conclusion='passed',concluded_at=5,released_at=6,parked=?", (D,))

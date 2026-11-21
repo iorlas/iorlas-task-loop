@@ -243,6 +243,6 @@ def test_the_production_run_hands_the_attempts_live_sink_to_the_shelf_run(monkey
 
     monkeypatch.setattr(composition, "run", shelf)
     sink = sink_of(EvidenceFiles(tmp_path), Clock(1.0))
-    composition._run(CodexHarness(), LaunchSpec(argv=[], env={}, cwd="", stdin=""), 1.0, WatchedHooks(live=sink))
-    composition._run(CodexHarness(), LaunchSpec(argv=[], env={}, cwd="", stdin=""), 1.0, RunHooks())
+    composition._run(CodexHarness(env={}), LaunchSpec(argv=[], env={}, cwd="", stdin=""), 1.0, WatchedHooks(live=sink))
+    composition._run(CodexHarness(env={}), LaunchSpec(argv=[], env={}, cwd="", stdin=""), 1.0, RunHooks())
     assert given == [sink, None]

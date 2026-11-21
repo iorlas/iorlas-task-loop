@@ -5,7 +5,8 @@ import hashlib
 from pathlib import Path
 
 from doubles import pin_workflow
-from sqlite_store import Store, begin_immediate
+from sqlite_sidecar import transaction
+from sqlite_store import Store
 
 from taskloop.attempt_types import AttemptKey
 from taskloop.factory_schema import SCHEMA
@@ -44,7 +45,7 @@ def admitted(path: Path) -> None:
     """One admitted, unregistered attempt (tasks/tl-1, deadline 100) and its reservation, as the conftest of tests/steps."""
     con = Store(SCHEMA).open_rw(path)
     assert con is not None
-    with begin_immediate(con):
+    with transaction(con):
         con.execute("INSERT INTO slot (repo_id,name,path) VALUES ('repo','s1','/slots/s1')")
         con.execute("INSERT INTO reservation VALUES ('s1','repo',1,'attempt')")
         pin_workflow(con)

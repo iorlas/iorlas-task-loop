@@ -15,7 +15,8 @@ from doubles import MAIN_PROFILE, PinnedViews, put_workflow
 from git_porcelain import Recorded
 from git_porcelain.testing import FakeWorktree
 from round_bench import Factory, Tracker, scripts, task
-from sqlite_store import Store, begin_immediate
+from sqlite_sidecar import transaction
+from sqlite_store import Store
 from stream_proc import OwnedProcess, ProcessObservation
 
 from taskloop import land_store
@@ -89,7 +90,7 @@ class Checking(Factory):
     def starting(self) -> StartPorts:
         admission = ChecksAdmission(
             lambda: self.con,
-            begin_immediate,
+            transaction,
             self.tracker.inspect,
             self.checkouts,
             lambda: self.now,
@@ -471,7 +472,7 @@ def _candidate(rig: Checking, *, slot: bool) -> AttemptKey:
     checks = rig.key("tl-1").attempt_id
     repo_id = rig.con.execute("SELECT repo_id FROM slot WHERE name='s1'").fetchone()[0]
     x = rig.checks_commit(rig.key("tl-1"))
-    with begin_immediate(rig.con):
+    with transaction(rig.con):
         key = AttemptKey("candidate", "candidate-token", issued(rig.con, repo_id, ("s1",)) + 1 if slot else 0)
         if slot:
             reserve(rig.con, repo_id, "s1", key)

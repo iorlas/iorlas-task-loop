@@ -45,7 +45,11 @@ from taskloop.task import TaskBinding, TaskInspection, TaskScope
 from taskloop.tracker import inspect_task
 from taskloop.tracker_client import CloseAnswer
 
-VIEWS = GitViews(DEFAULT_GIT_READ_SECONDS)
+
+def git_views() -> GitViews:
+    """Built per use: the hermetic environment is applied by each test's fixture, after import."""
+    return GitViews(DEFAULT_GIT_READ_SECONDS)
+
 
 CHECK = ["/bin/sh", "-c", "test -f src/x.py"]
 PROFILE = {"setup": [["/bin/sh", "-c", "true"]], "required": ["has-x"], "checks": [{"name": "has-x", "argv": CHECK, "timeout": 60}]}
@@ -82,7 +86,7 @@ class Real:
         git(self.main, "remote", "add", "origin", self.remote.as_uri())
         git(self.main, "push", "-q", "origin", "main")
         self.base = self.rev(self.main, "HEAD")
-        repo_id = VIEWS.checkouts(self.main).identity().key
+        repo_id = git_views().checkouts(self.main).identity().key
         self.slot = root / "slots" / repo_id / "s1"
         git(self.main, "worktree", "add", "-q", "--detach", str(self.slot), "HEAD")
         git(self.main, "switch", "-q", "-c", "task/tl-1")
@@ -125,8 +129,8 @@ class Real:
         preparation = Preparation(
             EnvironmentPorts(
                 setup,
-                VIEWS.checkouts,
-                VIEWS.slot_profiles,
+                git_views().checkouts,
+                git_views().slot_profiles,
                 RealEnvFiles(),
                 setup_process,
                 setup_seen,
@@ -145,9 +149,9 @@ class Real:
             CheckStore(lambda: con),
             setup,
             EvidenceFiles(art),
-            VIEWS.checkouts,
+            git_views().checkouts,
             RealSlotFiles(),
-            VIEWS.slot_profiles,
+            git_views().slot_profiles,
             preparation,
             Block(BlockPorts(setup_process, group_alive, time.time)),
             setup_seen,
@@ -160,8 +164,8 @@ class Real:
         return LandPorts(
             work,
             LandStore(lambda: con),
-            VIEWS.remotes,
-            lambda path: GitProfileFiles(path, VIEWS.remotes),
+            git_views().remotes,
+            lambda path: GitProfileFiles(path, git_views().remotes),
             self.tasks,
             heartbeat_for,
             NoBeats,
@@ -170,7 +174,7 @@ class Real:
             landing,
             dict(os.environ),
             self.close,
-            conflict_handoff(work, VIEWS, heartbeat_for),
+            conflict_handoff(work, git_views(), heartbeat_for),
             ids=NativeIds(),
         )
 

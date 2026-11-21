@@ -9,7 +9,8 @@ from doubles import ORIGIN, REQUIRED, SQUASH, D
 from git_porcelain import WorktreeInfo
 from git_porcelain.testing import FakeRepo
 from land_conflict_bench import Bench, bench, copy_row
-from sqlite_store import Store, begin_immediate
+from sqlite_sidecar import transaction
+from sqlite_store import Store
 
 from taskloop.admit_store import reserve
 from taskloop.attempt_reads import StoreRefused, StoreUnavailable
@@ -167,7 +168,7 @@ def test_ineligible_source_has_no_admission_effect(on_slot: Path, repo: FakeRepo
 @pytest.mark.parametrize("validation", ["same_tree", "no_change", None])
 def test_candidate_first_excludes_conflict(on_slot: Path, repo: FakeRepo, tmp_path: Path, validation: Settled | None) -> None:
     b = bench(on_slot, repo, tmp_path)
-    with begin_immediate(b.con):
+    with transaction(b.con):
         if validation is None:
             b.con.execute("INSERT INTO slot VALUES (?,'s2','/slots/s2',0)", (b.request.repo_id,))
             reserve(b.con, RepoId(b.request.repo_id), "s2", candidate(b, validation).key)
@@ -189,7 +190,7 @@ def test_conflict_first_excludes_candidate_and_rolls_back_its_reservation(
     assert admit(b.ports, b.request).outcome is Outcome.ADMITTED
     b.con.execute("INSERT INTO slot VALUES (?,'s2','/slots/s2',0)", (b.request.repo_id,))
     before = b.con.execute("SELECT * FROM reservation").fetchall()
-    with pytest.raises(StoreRefused, match="landing"), begin_immediate(b.con):
+    with pytest.raises(StoreRefused, match="landing"), transaction(b.con):
         if validation is None:
             reserve(b.con, RepoId(b.request.repo_id), "s2", candidate(b, validation).key)
         insert(b.con, candidate(b, validation))
@@ -203,7 +204,7 @@ def test_a_released_conflict_reservation_does_not_exclude_candidate(on_slot: Pat
     b = bench(on_slot, repo, tmp_path)
     assert admit(b.ports, b.request).outcome is Outcome.ADMITTED
     b.con.execute("DELETE FROM reservation")
-    with begin_immediate(b.con):
+    with transaction(b.con):
         insert(b.con, candidate(b))
     assert b.con.execute("SELECT count(*) FROM land_candidate").fetchone() == (1,)
     b.con.close()
@@ -213,7 +214,7 @@ def test_a_released_conflict_reservation_does_not_exclude_candidate(on_slot: Pat
 def test_later_checks_cannot_hide_an_earlier_candidate(on_slot: Path, repo: FakeRepo, tmp_path: Path, earlier_candidate: bool) -> None:
     b = bench(on_slot, repo, tmp_path)
     if earlier_candidate:
-        with begin_immediate(b.con):
+        with transaction(b.con):
             insert(b.con, candidate(b))
     key = AttemptKey("checks2", "checks2-token", 1)
     copy_row(b.con, "checks_attempt", "checks", {"attempt_id": key.attempt_id, "dispatch_token": key.dispatch_token, "number": 2})
@@ -350,11 +351,11 @@ def test_reciprocal_exclusion_uses_actual_reservation_generation(
     if conflict_first:
         assert admit(b.ports, b.request).outcome is Outcome.ADMITTED
         b.con.execute("UPDATE reservation SET generation=generation+1")
-        with begin_immediate(b.con):
+        with transaction(b.con):
             insert(b.con, candidate(b))
     else:
         b.con.execute("INSERT INTO slot VALUES (?,'s2','/slots/s2',0)", (b.request.repo_id,))
-        with begin_immediate(b.con):
+        with transaction(b.con):
             reserve(b.con, RepoId(b.request.repo_id), "s2", candidate(b, None).key)
             insert(b.con, candidate(b, None))
         b.con.execute("UPDATE reservation SET generation=generation+1")
