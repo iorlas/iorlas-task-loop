@@ -67,18 +67,18 @@ def test_portable_shared_dependency(name: str) -> None:
     assert "workspace" not in project.get("tool", {}).get("uv", {})
     assert set(project["tool"]["uv"]["sources"]) == SHARED | KIT
     assert project["tool"]["uv"]["sources"][name] == {
-        "git": "https://github.com/yoselabs/shelf.git",
+        "git": "https://github.com/yoselabs/shelf",
         "subdirectory": f"packages/{name}",
         "tag": tag,
     }
     dependency_origin_text = dependency.read_text("direct_url.json")
     assert dependency_origin_text is not None
     dependency_origin = json.loads(dependency_origin_text)
-    assert dependency_origin["url"] == "https://github.com/yoselabs/shelf.git"
+    assert dependency_origin["url"] == "https://github.com/yoselabs/shelf"
     assert dependency_origin["subdirectory"] == f"packages/{name}"
     assert dependency_origin["vcs_info"]["requested_revision"] == tag
     source = locked_source(name)
-    assert source.startswith("https://github.com/yoselabs/shelf.git?")
+    assert source.startswith("https://github.com/yoselabs/shelf?")
     assert f"subdirectory=packages%2F{name}" in source or f"subdirectory=packages/{name}" in source
     assert f"tag={tag}" in source
     assert source.rsplit("#", 1)[1] == dependency_origin["vcs_info"]["commit_id"]
