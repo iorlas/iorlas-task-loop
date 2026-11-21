@@ -45,6 +45,19 @@ COLUMNS = [
     "harness_version",
     "ran_model_differs",
     "max_attempts",
+    "attempt_id",
+    "backlog",
+    "previous_attempt_id",
+    "seq",
+    "base_commit",
+    "factory_commit_verdict",
+    "chain_id",
+    "setup_seconds",
+    "check_seconds",
+    "rework_count",
+    "time_to_green_seconds",
+    "hold_cause",
+    "terminal_result",
 ]
 
 
@@ -56,6 +69,9 @@ def test_the_export_gives_one_row_per_attempt_with_its_identity_and_no_invented_
     assert (row.task_id, row.step, row.number) == ("tl-1", "plan", 1)
     assert (row.engine_digest, row.workflow_digest) == (ENGINE, PIN_DIGEST)
     assert row.ended_at is None and row.wall_seconds is None and row.t_in is None  # not captured: unknown, not zero
+    assert (row.attempt_id, row.backlog, row.chain_id, row.previous_attempt_id, row.seq) == ("attempt", "tasks", "attempt", None, 1)
+    assert (row.setup_seconds, row.time_to_green_seconds, row.hold_cause, row.terminal_result) == (None, None, None, None)
+    assert row.check_seconds == {} and row.rework_count == 0
     header, line = rows_render.lines(found)
     assert header.split(",") == COLUMNS and line.startswith("tl-1,plan,1,,")
 
@@ -92,3 +108,39 @@ def test_the_export_flags_a_model_that_differs_from_the_asked_one_and_names_the_
     assert store.attempts(None)[0].ran_model_differs == 1
     registered.execute("UPDATE workflow_file SET content=?", (b"this is [not a workflow",))
     assert store.attempts(None)[0].max_attempts is None
+
+
+def test_export_uses_latest_checks_and_setup_without_writing(registered: sqlite3.Connection) -> None:
+    registered.execute("UPDATE attempt SET phase='captured',base_commit=slot_head,ended_at=4")
+    registered.execute(
+        """INSERT INTO setup_run (attempt_id,run,dispatch_token,generation,commit_sha,digest,started_at,ended_at,conclusion)
+        SELECT attempt_id,1,dispatch_token,generation,slot_head,engine_digest,1,2,'passed' FROM attempt"""
+    )
+    registered.execute(
+        """INSERT INTO setup_run (attempt_id,run,dispatch_token,generation,commit_sha,digest,started_at,ended_at,conclusion)
+        SELECT attempt_id,2,dispatch_token,generation,slot_head,engine_digest,2,3.5,'passed' FROM attempt"""
+    )
+    for number, conclusion, reason in ((1, "failed", "check:failed"), (2, "passed", None)):
+        registered.execute(
+            """INSERT INTO checks_attempt
+            (attempt_id,dispatch_token,generation,after_attempt_id,number,slot,slot_head,target_commit,required,deadline,
+             phase,conclusion,reason,concluded_at)
+            SELECT ?,?,1,attempt_id,?,slot,slot_head,slot_head,'[]',100,'concluded',?,?,10 FROM attempt""",
+            (f"checks-{number}", f"token-{number}", number, conclusion, reason),
+        )
+    registered.execute(
+        """INSERT INTO check_result
+        (attempt_id,block,position,name,dispatch_token,generation,argv_digest,timeout,started_at,ended_at,conclusion)
+        VALUES ('checks-1',1,0,'old','token-1',1,'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',10,3,4,'failed'),
+               ('checks-2',1,0,'check','token-2',1,'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',10,3,8,'passed'),
+               ('checks-2',2,0,'check','token-2',1,'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',10,8,9,'passed')"""
+    )
+    before = registered.total_changes
+    found = attempt_export.export(ExportStore(lambda: registered), None)
+    assert isinstance(found, attempt_export.AttemptExport)
+    (row,) = found.rows
+    assert (row.wall_seconds, row.setup_seconds, row.time_to_green_seconds) == (3, 1.5, 9)
+    assert row.check_seconds == {"check": 1} and row.latest_checks_conclusion == "passed"
+    assert registered.total_changes == before
+    registered.execute("UPDATE checks_attempt SET conclusion='failed',reason='check:failed' WHERE number=2")
+    assert ExportStore(lambda: registered).attempts(None)[0].time_to_green_seconds is None
