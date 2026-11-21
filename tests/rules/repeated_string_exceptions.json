@@ -83,9 +83,6 @@
     "unreadable": 3,
     "wait": 4
   },
-  "src/taskloop/attempt_store.py": {
-    "e": 3
-  },
   "src/taskloop/attempt_types.py": {
     "": 5,
     "conflict": 3
@@ -553,13 +550,11 @@
     "__all__": 4
   },
   "src/taskloop/shelf_digest/facts.py": {
-    "''": 4,
     "any-agent": 11,
     "bool": 3,
     "git-porcelain": 3,
     "real_write": 3,
     "registered": 3,
-    "str": 4,
     "stream-proc": 3,
     "supervisor": 6
   },

@@ -149,7 +149,8 @@ CONTRACTS = (
     ),
     Contract(
         FactName.SUMMARY,
-        "Summary(text,rc,res,vendor,stderr,work,check,stands,warnings,tail,data,facts,cost) settles outcomes; "
+        "Summary(text,rc,res,vendor,stderr,work,check,stands,warnings,tail,data,facts,cost,model,harness_version,harness,effort) "
+        "settles outcomes; "
         "RunOutcome.summary; finish: harness summary,live.end; killed rc=0 -> -SIGKILL.",
         (
             Rule(
@@ -159,16 +160,16 @@ CONTRACTS = (
                 tuple(
                     f"{name}: {kind} = {default}"
                     for name, kind, default in (
-                        ("text", "str", "''"),
+                        *(
+                            (name, "str", "''")
+                            for name in ("text", "vendor", "stderr", "tail", "model", "harness_version", "harness", "effort")
+                        ),
                         ("rc", "int | None", "None"),
                         ("res", "dict[str, Json]", "field(default_factory=dict)"),
-                        ("vendor", "str", "''"),
-                        ("stderr", "str", "''"),
                         ("work", "bool", "False"),
                         ("check", "bool", "True"),
                         ("stands", "bool", "False"),
                         ("warnings", "list[str]", "field(default_factory=list)"),
-                        ("tail", "str", "''"),
                         ("data", "Json", "None"),
                         ("facts", "dict[str, Json]", "field(default_factory=dict)"),
                         ("cost", "float", "0.0"),

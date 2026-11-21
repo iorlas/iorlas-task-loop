@@ -24,7 +24,7 @@ from taskloop.attempt_types import (
 )
 from taskloop.drain.models import ActionKind, Identity
 from taskloop.drain.store import blocked, pending
-from taskloop.factory_schema import EVIDENCE, FACTS, SUCCESSOR, VERDICT
+from taskloop.factory_schema import EVIDENCE, FACTS, RAN, SUCCESSOR, VERDICT
 from taskloop.recovery.execution_models import Callback
 from taskloop.recovery.models import Intent, Outcome, Result
 from taskloop.recovery.state_store import fence
@@ -249,10 +249,11 @@ class AttemptWrites(AttemptLoads):
                 *refs,
                 session_state,
                 None if callback is None else callback.model_dump_json(),
+                *attempt_reads._ran_values(facts),
             )
             marks = ",".join("?" * len(values))
             con.execute(
-                f"INSERT INTO execution (attempt_id,dispatch_token,generation,{FACTS},{EVIDENCE},session_state,recovery_callback) "
+                f"INSERT INTO execution (attempt_id,dispatch_token,generation,{FACTS},{EVIDENCE},session_state,recovery_callback,{RAN}) "
                 f"VALUES ({marks})",
                 values,
             )
