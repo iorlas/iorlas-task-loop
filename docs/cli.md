@@ -28,7 +28,7 @@ Each command's own `--help` is the reference for its flags.
 | `tl slot list` | A | Show the adopted slots and whether a reservation holds each | reads `factory.db` | no | you |
 | `tl repo show` | B | Show a checkout's repository identity | reads Git | no | you |
 | `tl profile show` | B | Show the resolved profile `.task-loop.json` (setup and checks at a commit; required, target and land from the target) | reads Git | no | you |
-| `tl workflow show` | B | Show a workflow file as the factory would read it: digest, agent choice and prompt sections per step, feedback sections, or why it is refused | reads Git | no | you |
+| `tl workflow show` | B | Show a workflow file as the factory would read it: digest, agent choice and prompt sections per step, feedback section count and ordered kinds (`text` or renderer, including `attempt_budget`), or why it is refused; JSON includes the ordered `feedback` list | reads Git | no | you |
 | `tl task show` | B | Show a task as the tracker holds it | reads the tracker | no | you |
 | `tl rounds once` | C | Run one scheduling round over the whole backlog | settles, advances and starts tasks; publishes; holds; under `land: auto` lands one | yes | you |
 | `tl rounds start` | C | The factory's long-running process: rounds on a timer and the read-only dashboard; reopens a completed drain | as `rounds once`, repeated | yes | you, in the background |

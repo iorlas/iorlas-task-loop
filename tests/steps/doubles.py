@@ -38,7 +38,7 @@ from taskloop.task import TaskBinding, TaskInspection, TaskScope
 from taskloop.tracker import inspect_task
 from taskloop.tracker_client import HoldAnswer, HoldWrite, LabelStep, TrackerHolds
 from taskloop.workflow import Workflow, load
-from taskloop.workflow_render import feedback_opening
+from taskloop.workflow_render import AttemptBudget, feedback_opening
 
 # The `checking` fixture's checks attempt: its key, its slot's HEAD D, the implement attempt's X, its target (`main`'s
 # commit at admission), and the required names with their argv digests at the target.
@@ -65,7 +65,7 @@ def loaded_workflow() -> Workflow:
 
 
 WORKFLOW = loaded_workflow()
-FEEDBACK_OPENING = feedback_opening(WORKFLOW.step)
+FEEDBACK_OPENING = feedback_opening(WORKFLOW.step, AttemptBudget(2, WORKFLOW.implement_cap))
 
 # A valid engine digest (64 lowercase hex) for admissions and rows that need one.
 ENGINE = "ab" * 32

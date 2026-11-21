@@ -32,6 +32,16 @@ def test_the_repo_default_workflow_loads_and_is_read_from_the_commit() -> None:
     assert files.asked == [("c" * 40, PATH)]
 
 
+def test_attempt_budget_workflow_differs_from_default_only_by_its_first_feedback_section() -> None:
+    default = REPO_FILE.read_bytes()
+    variant = REPO_FILE.with_name("attempt-budget.toml").read_bytes()
+    section = b'[[step.feedback]]\nuse = "attempt_budget"\n\n'
+    assert variant == default.replace(b"[[step.feedback]]", section + b"[[step.feedback]]", 1)
+    found = read_workflow(Files(variant), "c" * 40, "attempt-budget")
+    assert found.workflow.step.feedback[0].use is not None
+    assert found.workflow.implement_cap == 3
+
+
 @pytest.mark.parametrize(
     ("answer", "reason"),
     [

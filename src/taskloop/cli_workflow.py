@@ -37,7 +37,7 @@ def register(commands: argparse._SubParsersAction[argparse.ArgumentParser]) -> N
         help="Print a workflow as the factory reads it from Git at --at (read-only)",
         allow_abbrev=False,
         description="Print the workflow file `.task-loop/workflows/NAME.toml` as the factory reads it from Git at --at: its digest, "
-        "each step's agent choice and ordered prompt sections, and the feedback section count. Reads Git only; writes nothing.",
+        "each step's agent choice and ordered prompt sections, and the feedback sections. Reads Git only; writes nothing.",
     )
     show.add_argument("--at", default="HEAD", metavar="REV", help="The commit to read (default: HEAD)")
     show.add_argument("--checkout", default=".", metavar="PATH", help="The repository checkout (default: .)")
@@ -73,15 +73,22 @@ def _data(pin: Pin, name: str, at: str) -> dict[str, object]:
         "digest": pin.digest,
         "steps": {"plan": _table(pin.workflow.step.plan), "implement": _table(pin.workflow.step.implement) | _cap(pin)},
         "feedback_sections": len(pin.workflow.step.feedback),
+        "feedback": [_section(each) for each in pin.workflow.step.feedback],
     }
 
 
 def _step_lines(step: str, table: StepTable) -> list[str]:
     lines = [f"Step {step}"]
     lines += [f"  {key}: {ABSENT if value is None else value}" for key, value in _agent(table.agent).items()]
-    for number, each in enumerate(_section(each) for each in table.prompt):
-        lines.append(f"  prompt {number + 1}: " + (f'text "{each["start"]}"' if each[KIND] == "text" else f"renderer {each[NAME]}"))
+    lines += _section_lines("prompt", table.prompt)
     return lines
+
+
+def _section_lines(label: str, sections: tuple[Section, ...]) -> list[str]:
+    return [
+        f"  {label} {number + 1}: " + (f'text "{each["start"]}"' if each[KIND] == "text" else f"renderer {each[NAME]}")
+        for number, each in enumerate(_section(each) for each in sections)
+    ]
 
 
 def _lines(pin: Pin, name: str, at: str) -> list[str]:
@@ -94,6 +101,7 @@ def _lines(pin: Pin, name: str, at: str) -> list[str]:
         *_step_lines("implement", steps.implement),
         f"  max_attempts: {pin.workflow.implement_cap}",
         f"Feedback sections: {len(steps.feedback)}",
+        *_section_lines("feedback", steps.feedback),
     ]
 
 

@@ -109,7 +109,6 @@ def test_a_text_section_may_not_hold_a_factory_block_name(name: str) -> None:
         PLAN + IMPLEMENT + b'[[step.plan.prompt]]\ntext = "a"\nuse = "task"\n',  # both text and use
         PLAN + IMPLEMENT + b"[[step.plan.prompt]]\n",  # neither
         PLAN + CONTEXT_ONLY % b"implement",  # no feedback section
-        PLAN + IMPLEMENT + b'[[step.feedback]]\nuse = "task"\n',  # a feedback section is verbatim text
         PLAN + IMPLEMENT + b'[[step.plan.prompt]]\ntext = "   "\n',  # empty text
         PLAN + IMPLEMENT + b"[step.plan.agent]\nharness = 'nope'\n",
         PLAN + IMPLEMENT + b"[step.plan.agent]\nmodel = 3\n",
@@ -125,3 +124,15 @@ def test_a_wrong_shape_or_value_is_bad_value(data: bytes) -> None:
 def test_the_block_names_a_file_may_not_use_are_the_ones_the_factory_frames_with() -> None:
     for begin in (input_context.BEGIN, discussion.BEGIN, earlier_input.BEGIN):
         assert any(begin == f"BEGIN {name}" for name in RESERVED)
+
+
+@pytest.mark.parametrize("renderer", [Renderer.TASK, Renderer.INPUT_CONTEXT])
+def test_prompt_renderers_are_refused_in_feedback(renderer: Renderer) -> None:
+    data = PLAN + IMPLEMENT + f'[[step.feedback]]\nuse = "{renderer}"\n'.encode()
+    assert refused(data) == WorkflowRefused(Reason.BAD_VALUE, "step.feedback")
+
+
+@pytest.mark.parametrize("step", ["plan", "implement"])
+def test_attempt_budget_is_refused_in_prompt_sections(step: str) -> None:
+    data = PLAN + IMPLEMENT + f'[[step.{step}.prompt]]\nuse = "attempt_budget"\n'.encode()
+    assert refused(data) == WorkflowRefused(Reason.BAD_VALUE, f"step.{step}")

@@ -24,10 +24,11 @@ class Input(BaseModel):
 
 
 class Renderer(StrEnum):
-    """What a `use` section may name: the two factory blocks that need values the code holds."""
+    """What a `use` section may name: factory blocks that need values the code holds."""
 
     TASK = "task"
     INPUT_CONTEXT = "input_context"
+    ATTEMPT_BUDGET = "attempt_budget"
 
 
 class Reason(StrEnum):
@@ -90,6 +91,8 @@ class StepTable(Input):
 
     @model_validator(mode="after")
     def input_context_once(self) -> Self:
+        if any(each.use is Renderer.ATTEMPT_BUDGET for each in self.prompt):
+            raise ValueError("attempt_budget is only available in feedback")
         if sum(each.use is Renderer.INPUT_CONTEXT for each in self.prompt) != 1:
             raise ValueError("the prompt names the input_context renderer exactly once")
         return self
@@ -113,13 +116,13 @@ class Steps(Input):
 
     plan: StepTable
     implement: ImplementTable
-    feedback: tuple[Section, ...] = Field(min_length=1)  # the opening of a failed-check input: verbatim text sections only
+    feedback: tuple[Section, ...] = Field(min_length=1)
 
     @field_validator("feedback")
     @classmethod
-    def text_only(cls, value: tuple[Section, ...]) -> tuple[Section, ...]:
-        if any(each.text is None for each in value):
-            raise ValueError("a feedback section is verbatim text")
+    def feedback_renderers(cls, value: tuple[Section, ...]) -> tuple[Section, ...]:
+        if any(each.use not in (None, Renderer.ATTEMPT_BUDGET) for each in value):
+            raise ValueError("feedback only accepts text or attempt_budget")
         return value
 
 

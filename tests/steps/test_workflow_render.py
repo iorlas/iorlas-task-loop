@@ -1,12 +1,14 @@
 """A step's input is the workflow's sections in file order, then the kind's contract, which code owns."""
 
+import pytest
+
 from taskloop.input_context import InputContext
 from taskloop.step import Step
 from taskloop.step_text import GIT_WRITES
 from taskloop.steps import kind
 from taskloop.task import TaskInspection, TaskReference, TaskScope
-from taskloop.workflow import Workflow, load
-from taskloop.workflow_render import feedback_opening, render
+from taskloop.workflow import Renderer, Section, Steps, Workflow, load
+from taskloop.workflow_render import AttemptBudget, feedback_opening, render
 
 WORKFLOW = load(b"""
 [[step.plan.prompt]]
@@ -67,4 +69,17 @@ def test_the_workflow_cannot_remove_the_contract() -> None:
 
 def test_the_feedback_opening_is_its_text_sections_in_file_order_joined_by_blank_lines() -> None:
     assert isinstance(WORKFLOW, Workflow)
-    assert feedback_opening(WORKFLOW.step) == "FIRST WORDS\n\nSECOND WORDS"
+    assert feedback_opening(WORKFLOW.step, AttemptBudget(2, 3)) == "FIRST WORDS\n\nSECOND WORDS"
+
+
+@pytest.mark.parametrize(("number", "cap"), [(2, 3), (3, 3), (2, 2)])
+def test_attempt_budget_renders_the_supplied_facts_between_verbatim_sections(number: int, cap: int) -> None:
+    assert isinstance(WORKFLOW, Workflow)
+    steps = Steps(
+        plan=WORKFLOW.step.plan,
+        implement=WORKFLOW.step.implement,
+        feedback=(WORKFLOW.step.feedback[0], Section(use=Renderer.ATTEMPT_BUDGET), WORKFLOW.step.feedback[1]),
+    )
+    assert feedback_opening(steps, AttemptBudget(number, cap)) == (
+        f"FIRST WORDS\n\nImplement attempt {number}. The failed-check repeat cap is {cap}, including the initial attempt.\n\nSECOND WORDS"
+    )

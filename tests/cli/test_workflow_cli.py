@@ -61,7 +61,7 @@ def test_show_prints_digest_commit_agents_and_sections(monkeypatch: pytest.Monke
     first = "Read AGENTS.md first, then assess the task carefully before changing anything at all in the repository."
     assert f'  prompt 1: text "{first[:60].rstrip()}"' in lines
     assert "  prompt 2: renderer task" in lines and "  prompt 3: renderer input_context" in lines
-    assert lines[-1] == "Feedback sections: 1"
+    assert lines[-2:] == ["Feedback sections: 1", '  feedback 1: text "Failed"']
 
 
 def test_show_json_has_the_same_facts(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
@@ -72,6 +72,21 @@ def test_show_json_has_the_same_facts(monkeypatch: pytest.MonkeyPatch, capsys: p
     assert data["steps"]["plan"]["agent"] == {"harness": "codex", "model": "gpt-x", "effort": None, "compaction_token_limit": None}
     assert data["steps"]["implement"]["prompt"] == [{"kind": "renderer", "name": "input_context"}]
     assert data["feedback_sections"] == 1
+    assert data["feedback"] == [{"kind": "text", "start": "Failed"}]
+
+
+@pytest.mark.parametrize("structured", [False, True])
+def test_show_displays_the_attempt_budget_feedback_renderer(
+    structured: bool, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    data = AGENT + b'[[step.feedback]]\nuse = "attempt_budget"\n'
+    wired(monkeypatch, {("HEAD", ".task-loop/workflows/default.toml"): data})
+    assert main(["workflow", "show", *(["--json"] if structured else [])]) == 0
+    output = capsys.readouterr().out
+    if structured:
+        assert json.loads(output)["feedback"][1] == {"kind": "renderer", "name": "attempt_budget"}
+    else:
+        assert "  feedback 2: renderer attempt_budget" in output.splitlines()
 
 
 @pytest.mark.parametrize("structured", [False, True])
