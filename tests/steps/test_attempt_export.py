@@ -43,6 +43,8 @@ COLUMNS = [
     "ran_model",
     "ran_effort",
     "harness_version",
+    "ran_model_differs",
+    "max_attempts",
 ]
 
 
@@ -74,3 +76,19 @@ def test_the_slot_list_shows_a_held_slot_with_its_attempt_and_a_free_one(registe
     assert isinstance(found, slot_list.SlotList)
     assert [(row.name, row.state, row.attempt_id) for row in found.rows] == [("s1", SlotHold.HELD, "attempt"), ("s2", SlotHold.FREE, None)]
     assert rows_render.records(found)[1]["attempt_id"] is None
+
+
+def test_the_export_flags_a_model_that_differs_from_the_asked_one_and_names_the_workflow_cap(registered: sqlite3.Connection) -> None:
+    store = ExportStore(lambda: registered)
+    (row,) = store.attempts(None)
+    assert (row.ran_model_differs, row.max_attempts) == (None, 3)  # nothing reported: unknown, not "same"
+    registered.execute(
+        """INSERT INTO execution (attempt_id,dispatch_token,generation,rc,timed_out,work,stands,stdout_path,stdout_digest,stderr_path,
+        stderr_digest,answer_path,answer_digest,diagnostic_path,diagnostic_digest,answer_kind,session_state,model)
+        VALUES ('attempt','dispatch',1,0,0,1,1,'o','d','e','d','a','d','g','d','valid','complete','chosen')"""
+    )
+    assert store.attempts(None)[0].ran_model_differs == 0
+    registered.execute("UPDATE execution SET model='resolved-id'")
+    assert store.attempts(None)[0].ran_model_differs == 1
+    registered.execute("UPDATE workflow_file SET content=?", (b"this is [not a workflow",))
+    assert store.attempts(None)[0].max_attempts is None

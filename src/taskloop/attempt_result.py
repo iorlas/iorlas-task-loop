@@ -54,11 +54,11 @@ def usage_explanation(facts: ExecutionFacts) -> str:
     return " ".join(words)
 
 
-def ran_line(facts: ExecutionFacts) -> str | None:
-    """What the agent harness reported it ran (the model that answered, its effort and CLI version); None when it said nothing."""
+def ran_line(facts: ExecutionFacts) -> str:
+    """What the agent harness reported it ran (the model that answered, its effort and CLI version); `unknown` when it said nothing."""
     ran = (("model", facts.model), ("effort", facts.effort), ("harness", facts.harness_version))
     told = [f"{name} {value}" for name, value in ran if value]
-    return f"Ran: {', '.join(told)}" if told else None
+    return f"Ran: {', '.join(told) if told else 'unknown'}"
 
 
 def report(stored: StoredExecution) -> AttemptResult:

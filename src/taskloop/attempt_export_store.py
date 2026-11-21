@@ -2,12 +2,16 @@
 
 Read-only. NULL means unknown, never zero: an attempt that did not end captured has no `ended_at` and no wall time, and
 `usage_incomplete` 1 marks token counts that are a lower bound. `harness`, `model` and `effort` are what the attempt
-asked for; `ran_model`, `ran_effort` and `harness_version` what the harness reported (NULL: it could not tell).
+asked for; `ran_model`, `ran_effort` and `harness_version` what the harness reported (NULL: it could not tell);
+`ran_model_differs` is 1 where the reported model is not the one asked for, 0 where it is, NULL where either is unknown;
+`max_attempts` is the attempt's pinned workflow's cap of its step (NULL: the stored workflow cannot be read).
 Pool only rows with the same engine and workflow digests."""
 
 from dataclasses import dataclass
 
 from taskloop.attempt_reads import StoreConnection, StoreUnavailable, as_int, as_nullable_int, as_nullable_text, as_text
+from taskloop.step import decode_step
+from taskloop.workflow_read import WorkflowRefusal, pinned
 
 QUERY = """SELECT
   a.task_id, a.step, a.number, a.repeat_reason,
@@ -18,7 +22,8 @@ QUERY = """SELECT
   e.t_in, e.t_cached, e.t_out, e.c_in, e.c_cached, e.c_out, e.usage_incomplete,
   (SELECT c.conclusion FROM checks_attempt c WHERE c.after_attempt_id = a.attempt_id ORDER BY c.number DESC LIMIT 1),
   (SELECT c.reason FROM checks_attempt c WHERE c.after_attempt_id = a.attempt_id ORDER BY c.number DESC LIMIT 1),
-  e.model, e.effort, e.harness_version
+  e.model, e.effort, e.harness_version,
+  (SELECT w.content FROM workflow_file w WHERE w.digest = a.workflow_digest)
 FROM attempt a LEFT JOIN execution e ON e.attempt_id = a.attempt_id
 WHERE (? IS NULL OR a.backlog = ?)
 ORDER BY a.backlog, a.task_id, a.seq"""
@@ -61,6 +66,8 @@ class ExportRow:
     ran_model: str | None  # the model the agent harness reported answering (the resolved id), against `model`, the one asked for
     ran_effort: str | None
     harness_version: str | None
+    ran_model_differs: int | None
+    max_attempts: int | None
 
 
 def _real(value: object) -> float | None:
@@ -69,6 +76,16 @@ def _real(value: object) -> float | None:
     if isinstance(value, (int, float)) and not isinstance(value, bool):
         return float(value)
     raise StoreUnavailable("Malformed attempt time")
+
+
+def _cap(step: str, content: object, sha: object) -> int | None:
+    """The step's cap in the attempt's stored workflow; None when the file is absent or no longer loads."""
+    if not isinstance(content, bytes) or not isinstance(sha, str):
+        return None
+    try:
+        return pinned(content, sha).workflow.cap(decode_step(step))
+    except WorkflowRefusal:
+        return None
 
 
 def _row(r: tuple[object, ...]) -> ExportRow:
@@ -109,6 +126,8 @@ def _row(r: tuple[object, ...]) -> ExportRow:
         text(r[30]),
         text(r[31]),
         text(r[32]),
+        None if r[30] is None or r[8] is None else int(r[30] != r[8]),
+        _cap(as_text(r[1]), r[33], r[6]),
     )
 
 

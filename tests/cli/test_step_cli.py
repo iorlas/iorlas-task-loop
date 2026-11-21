@@ -67,7 +67,9 @@ START = [
     "--minutes",
     "30",
 ]
-STATUS = AttemptView("tasks", "tl-1", "plan", "attempt", "s1", "captured", "gone", AttemptResult("pending", "commit"), False, "commit")
+STATUS = AttemptView(
+    "tasks", "tl-1", "plan", "attempt", "s1", "captured", "gone", AttemptResult("pending", "commit"), False, "commit", max_attempts=3
+)
 ERROR = {"kind", "reason", "message"}  # every refusal or unknown but an admission's
 ADMISSION_ERROR = ERROR | {"claim_leaked", "admitted", "slots"}  # `tl step start`
 STATUS_KEYS = {
@@ -123,6 +125,7 @@ REPEAT = AttemptView(
     "first",
     "uncommitted",
     (("first", "uncommitted"),),
+    max_attempts=3,
 )
 D = "d" * 40
 ABANDONED = AttemptView(

@@ -136,7 +136,8 @@ def _rows_lines(command: str, result: Listed | Round | Ended | SetupTimingReport
     if isinstance(result, Listed):
         attempts = result.attempts
         rows = [
-            f"{a.task_id}\t{a.backlog}\t{a.step}\t{a.number}{'' if a.checks else f'/{ATTEMPTS}'}\t{a.slot}\t{a.phase}\t{a.entry}\t"
+            f"{a.task_id}\t{a.backlog}\t{a.step}\t{a.number}{'' if a.checks or a.max_attempts is None else f'/{a.max_attempts}'}\t"
+            f"{a.slot}\t{a.phase}\t{a.entry}\t"
             f"{a.result.status} {a.result.reason}\t{status_words(task_status(a))}\t{a.next}\t"
             f"{a.hold.reason if a.hold is not None else a.hold_due or '-'}\t{last_command(a) or '-'}"
             for a in attempts
