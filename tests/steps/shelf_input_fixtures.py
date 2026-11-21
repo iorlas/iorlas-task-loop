@@ -14,7 +14,7 @@ def shelf_files(provenance: str = "a" * 40, *, stale: bool = False) -> dict[str,
     files = {path: (ROOT / path).read_bytes() for path in (PATH, "pyproject.toml", "uv.lock")}
     delivered = json.loads(files[PATH])["source_commit"].encode()
     data = files[PATH].replace(delivered, provenance.encode())
-    files[PATH] = data.replace(b'"0.9.0"', b'"0.8.0"') if stale else data
+    files[PATH] = data.replace(b'"0.12.1"', b'"0.8.0"') if stale else data
     return files
 
 

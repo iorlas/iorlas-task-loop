@@ -98,7 +98,7 @@ def test_composition_resolves_input_and_disables_memoization(tmp_path: Path, mon
     monkeypatch.chdir(tmp_path)
     observed: list[Path] = []
 
-    def make_repo(path: Path, *, memoize: bool, read_timeout: float) -> Repo:
+    def make_repo(path: Path, *, ambient: dict[str, str], memoize: bool, read_timeout: float) -> Repo:
         assert memoize is False
         observed.append(path)
         return repo

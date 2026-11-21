@@ -143,7 +143,7 @@ def test_the_holder_record_names_the_attempt_and_the_role_only(slot: FakeWorktre
     try:
         assert not lock_path(str(slot.path)).is_relative_to(slot.path)  # outside the agent's writable slot
         record = json.loads(lock_path(str(slot.path)).read_text())
-        assert set(record) == {"pid", "created", "label", "meta"}
+        assert set(record) == {"pid", "created", "label", "meta", "start"}
         assert record["pid"] == os.getpid() and record["label"] == LABEL and record["meta"] == {"attempt": "attempt", "role": "entry"}
     finally:
         lock.release()

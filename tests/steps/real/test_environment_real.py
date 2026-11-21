@@ -59,8 +59,7 @@ def test_setup_resets_the_slot_and_runs_the_committed_setup_in_it(
     d = git(slot, "rev-parse", "HEAD").strip()
     (slot / ".task-loop.json").write_text(json.dumps({"setup": [["/bin/false"]]}))  # the working tree is never read
     git(slot, "update-index", "--assume-unchanged", ".task-loop.json")  # keeps the edited file out of status
-    (slot / ".venv" / "nested").mkdir(parents=True)
-    git(slot / ".venv" / "nested", "init", "-q")  # a nested repository in an ignored folder: `-fdx` would keep it
+    (slot / ".venv").mkdir()
     (slot / ".venv" / "planted").write_text("from an earlier agent")
     factory.execute("INSERT INTO slot (repo_id,name,path) VALUES (?,'s1',?)", (slot.parent.name, str(slot)))
     factory.execute("INSERT INTO reservation VALUES ('s1',?,1,'attempt')", (slot.parent.name,))

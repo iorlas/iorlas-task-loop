@@ -121,7 +121,7 @@ CONTRACTS = (
                 "spawn",
                 (
                     "registered(worker)",
-                    "stream_proc.popen_registered(argv, registered=register, cwd=cwd, env=env, stderr=stderr, start_new_session=session)",
+                    "stream_proc.popen_registered(argv, registered=register, cwd=cwd, env=env, stderr=stderr)",
                 ),
                 True,
             ),
@@ -149,7 +149,8 @@ CONTRACTS = (
     ),
     Contract(
         FactName.SUMMARY,
-        "Summary(text,rc,res,vendor,stderr,work,check,stands,warnings,tail,data,facts,cost) settles outcomes; "
+        "Summary(text,rc,res,vendor,stderr,work,check,stands,warnings,tail,data,facts,cost,model,harness_version,harness,effort) "
+        "settles outcomes; "
         "RunOutcome.summary; finish: harness summary,live.end; killed rc=0 -> -SIGKILL.",
         (
             Rule(
@@ -159,16 +160,16 @@ CONTRACTS = (
                 tuple(
                     f"{name}: {kind} = {default}"
                     for name, kind, default in (
-                        ("text", "str", "''"),
+                        *(
+                            (name, "str", "''")
+                            for name in ("text", "vendor", "stderr", "tail", "model", "harness_version", "harness", "effort")
+                        ),
                         ("rc", "int | None", "None"),
                         ("res", "dict[str, Json]", "field(default_factory=dict)"),
-                        ("vendor", "str", "''"),
-                        ("stderr", "str", "''"),
                         ("work", "bool", "False"),
                         ("check", "bool", "True"),
                         ("stands", "bool", "False"),
                         ("warnings", "list[str]", "field(default_factory=list)"),
-                        ("tail", "str", "''"),
                         ("data", "Json", "None"),
                         ("facts", "dict[str, Json]", "field(default_factory=dict)"),
                         ("cost", "float", "0.0"),
@@ -205,14 +206,14 @@ CONTRACTS = (
     ),
     Contract(
         FactName.PARK,
-        "park detaches/cleans; keep_ignored preserves ignored files; tracked collision refuses before change; exclude is checkout-local.",
+        "park detaches/cleans; park always preserves ignored files; tracked collision refuses before change; exclude is checkout-local.",
         (
             Rule(
                 "git-porcelain",
                 "real_write",
                 "park",
                 (
-                    "if keep_ignored:\n _keep_ignored(wt, real_checkout.resolve_commit(wt, base))",
+                    "_keep_ignored(wt, real_checkout.resolve_commit(wt, base))",
                     "wt.run('checkout', '-q', '--detach', base)",
                     "_clean(wt, clean_keep)",
                 ),

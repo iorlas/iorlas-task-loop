@@ -9,7 +9,7 @@ from typing import Literal
 
 import pytest
 from doubles import FakeSlotFiles, PinnedViews
-from git_porcelain import Dirty, GitUnavailable, Recorded, Tree
+from git_porcelain import Dirty, GitUnavailable, NothingToRecord, Recorded, Tree
 from git_porcelain.testing import FakeRepo, FakeWorktree
 
 from taskloop import implement_step, plan_step, step_text
@@ -72,6 +72,7 @@ def stages(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, ...]]:
 
 def record(slot: FakeWorktree) -> str:
     made = slot.record("Baseline", paths="all")
+    made = slot.record_empty("Baseline") if isinstance(made, NothingToRecord) else made
     assert isinstance(made, Recorded)
     return made.sha
 
@@ -153,6 +154,7 @@ def test_keep_only_measures_saved_work_review(
 ) -> None:
     message = "Saved\n\nTask-Loop-Wip: preserved" if saved else "Baseline"
     made = slot.record(message, paths="all")
+    made = slot.record_empty(message) if isinstance(made, NothingToRecord) else made
     assert isinstance(made, Recorded)
     files = EvidenceFiles(tmp_path / "artifacts")
     timing = partial(files.observe_operation, clock=lambda: 1.0, wall=lambda: 100.0, ids=NativeIds())

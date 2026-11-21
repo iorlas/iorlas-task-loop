@@ -25,10 +25,12 @@ from taskloop.tracker_discussion import read_discussion
 BD = "bd"
 
 
-def _bd(client: type[Bd], cwd: str, run: Runner | None = None, **options: float | int) -> Bd:
+def _bd(client: type[Bd], cwd: str, run: Runner | None = None, **options: float | str) -> Bd:
     """The one construction of a `Bd`: bd is found on this process's PATH, unless a test's runner is injected (nothing is run
     or searched for then, so the name alone stands for it)."""
-    return client(ACTOR, cwd=cwd, env=dict(os.environ), exe=BD if run is not None else "", run=run, **options)
+    if run is not None:
+        options["exe"] = BD
+    return client(ACTOR, cwd=cwd, env=dict(os.environ), run=run, **options)
 
 
 def _tracker_root(tracker_root: str) -> Path:

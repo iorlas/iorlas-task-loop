@@ -21,7 +21,7 @@ def test_task_show_preserves_requirements(
         (Bead("t-1", title="One task", description="Raw requirements\n  stay raw.", acceptance_criteria="Acceptance"),)
     )
 
-    def make_client(actor: str, *, cwd: str) -> TaskReadClient:
+    def make_client(actor: str, *, cwd: str, **_: object) -> TaskReadClient:
         assert actor == "taskloop"
         assert cwd == str(tmp_path)
         return client
@@ -68,7 +68,7 @@ def test_task_failures_remain_distinct(
 ) -> None:
     client = FakeTaskReadClient(faults={"t-1": failure} if failure else {})
 
-    def make_client(actor: str, *, cwd: str) -> TaskReadClient:
+    def make_client(actor: str, *, cwd: str, **_: object) -> TaskReadClient:
         return client
 
     monkeypatch.setattr(tracker_client, "Bd", make_client)
@@ -135,7 +135,7 @@ def test_task_show_prints_hostile_task_text_as_printable_lines_and_json_keeps_it
     hostile = "red\x1b[31m\u202eevil\nForged: yes"
     body = hostile + "\n" + "\n".join(["x" * 1000] * 100)
     client = FakeTaskReadClient((Bead("t-1", title=hostile, description=body, acceptance_criteria=hostile),))
-    monkeypatch.setattr(tracker_client, "Bd", lambda actor, *, cwd: client)
+    monkeypatch.setattr(tracker_client, "Bd", lambda actor, *, cwd, **_: client)
     argv = ["task", "show", "t-1", "--backlog", "configured", "--tracker-root", str(tmp_path)]
     assert main(argv) == 0
     out = capsys.readouterr().out

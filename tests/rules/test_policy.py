@@ -218,6 +218,8 @@ GIT_WRITES = frozenset(
         "push_lease",
         "delete_branch",
         "clean",
+        "clean_ignored",
+        "record_empty",
         "reset",
         "squash",
         "start_merge",
@@ -276,13 +278,14 @@ def test_the_git_write_matcher_sees_uses_and_not_words(source: str, names: set[s
 
 
 def test_only_the_commit_prepare_release_publish_environment_and_land_modules_write_git() -> None:
-    """`clean` is the environment reset's (the slot's ignored files and nested repositories, before each setup); `reset`
+    """`clean_ignored` is the environment reset's (the slot's ignored files and nested repositories, before each setup); `reset`
     too (a checks slot's tracked files back to exactly X, tl-8bh9.14.6 section 8). The checks block writes no Git. The
     land's squash (objects only) is `land_target`'s, its fetch of origin's `main` and its push of S `land_push`'s.
     Admission's bounded fetch of origin main is `prepare`'s."""
     expected = {
         ("stage", "factory_commit.py"),
         ("record", "factory_commit.py"),
+        ("record_empty", "factory_commit.py"),
         ("take_branch", "prepare.py"),
         ("park", "prepare.py"),
         ("fetch", "prepare.py"),
@@ -309,7 +312,7 @@ def test_only_the_commit_prepare_release_publish_environment_and_land_modules_wr
         ("park", "land_conflict/release.py"),
         ("abort_merge", "land_conflict/abort.py"),
         ("push", "publish.py"),
-        ("clean", "environment.py"),
+        ("clean_ignored", "environment.py"),
         ("reset", "environment.py"),
         ("record", "publish.py"),  # PublishStore.record persists the publication; the matcher sees every receiver.
         ("squash", "land_target.py"),

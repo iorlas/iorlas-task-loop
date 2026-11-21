@@ -43,6 +43,8 @@ GIT_METHODS = frozenset(
         "push_lease",
         "delete_branch",
         "clean",
+        "clean_ignored",
+        "record_empty",
         "reset",
         "squash",
         "start_merge",
