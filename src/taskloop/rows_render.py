@@ -2,6 +2,7 @@
 
 import csv
 import io
+import json
 from dataclasses import asdict, fields
 
 from taskloop.attempt_export import AttemptExport
@@ -23,5 +24,8 @@ def lines(result: Rows) -> list[str]:
     out = io.StringIO()
     writer = csv.writer(out, lineterminator=NEWLINE)
     writer.writerow(each.name for each in fields(ExportRow))
-    writer.writerows(["" if value is None else value for value in asdict(row).values()] for row in result.rows)
+    writer.writerows(
+        [json.dumps(value, sort_keys=True) if isinstance(value, dict) else "" if value is None else value for value in asdict(row).values()]
+        for row in result.rows
+    )
     return out.getvalue().rstrip(NEWLINE).split(NEWLINE)
