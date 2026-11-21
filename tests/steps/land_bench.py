@@ -21,7 +21,8 @@ from git_porcelain.api import PushResult
 from git_porcelain.testing import FakeRemote, FakeRepo, FakeWorktree
 from land_conflict_bench import ExecutionCase
 from merge_bench import MergeRepo
-from sqlite_store import Store, begin_immediate
+from sqlite_sidecar import transaction as begin_immediate
+from sqlite_store import Store
 
 from taskloop import check_store
 from taskloop.agents.launch import AgentLaunch
@@ -174,7 +175,7 @@ class LandBench:
         assert found is not None
         return found
 
-    def begin(self, con: sqlite3.Connection) -> AbstractContextManager[None]:
+    def begin(self, con: sqlite3.Connection) -> AbstractContextManager[object]:
         racing, self.racing = self.racing, lambda: None
         racing()
         return begin_immediate(con)

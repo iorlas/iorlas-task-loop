@@ -12,7 +12,7 @@ from admission_boundaries import guard_git, outside_transaction
 from doubles import ENGINE, MAIN_PROFILE, ChecksBench, Done, FakeSlotFiles, FixedIds, PinnedViews
 from git_porcelain import Sha
 from git_porcelain.testing import FakeRemote, FakeRepo
-from sqlite_store import begin_immediate
+from sqlite_sidecar import transaction as begin_immediate
 
 from taskloop.admit import AdmitRefused, Admitted
 from taskloop.admit_chain import NextAdmission, NextStepRequest

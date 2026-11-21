@@ -52,7 +52,7 @@ P = "docs/design/tl-1/plan.md"
 PLAN = {"disposition": "planned", "plan_path": P, "paths": [P], "message": "Plan tl-1", "explanation": "Plan written"}
 
 
-type Occupy = Callable[[Path], AbstractContextManager[None]]
+type Occupy = Callable[[Path], AbstractContextManager[object]]
 
 
 def agent(slot: FakeWorktree, files: dict[str, str]) -> Execution:
@@ -95,13 +95,13 @@ def writes(monkeypatch: pytest.MonkeyPatch) -> list[str]:
     found: list[str] = []
     stage, record = FakeWorktree.stage, FakeWorktree.record
 
-    def staging(self: FakeWorktree, paths: Sequence[str], *, literal: bool = True) -> None:
+    def staging(self: FakeWorktree, paths: Sequence[str]) -> None:
         found.append("stage")
-        stage(self, paths, literal=literal)
+        stage(self, paths)
 
     def recording(self: FakeWorktree, message: str, **options: object) -> object:
         found.append("record")
-        return record(self, message, paths="staged", hooks=False)
+        return record(self, message, paths="staged")
 
     monkeypatch.setattr(FakeWorktree, "stage", staging)
     monkeypatch.setattr(FakeWorktree, "record", recording)

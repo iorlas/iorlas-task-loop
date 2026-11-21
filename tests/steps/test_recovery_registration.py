@@ -10,7 +10,7 @@ from threading import Barrier
 
 import pytest
 from any_agent.procs import Worker
-from sqlite_store import begin_immediate
+from sqlite_sidecar import transaction as begin_immediate
 from test_recovery_store import CHANGES, OWNER, database, facts, observed
 
 from taskloop.attempt_reads import StoreUnavailable

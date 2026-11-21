@@ -20,7 +20,7 @@ class AnswerRepair:
         store: AnswerRepairStore,
         files: EvidenceFiles,
         processes: Processes,
-        hold: Callable[[Admission], AbstractContextManager[None]],
+        hold: Callable[[Admission], AbstractContextManager[object]],
         clock: Callable[[], float],
         *,
         ids: Ids,

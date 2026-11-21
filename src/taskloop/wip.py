@@ -218,4 +218,4 @@ def park(slot: Worktree, base: str) -> str | Refused:
             SaveReason.MERGE_PENDING,
             "The slot still has a merge in progress. Its owning release must preserve it and abort it before parking.",
         )
-    return str(slot.park(base, keep_ignored=True))
+    return str(slot.park(base))

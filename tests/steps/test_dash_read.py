@@ -14,7 +14,7 @@ from conftest import DONE
 from dash_read_support import KEY, Tracker, board_of, reads_of
 from doubles import CHECKS, D
 from hold_fixtures import event, event_for
-from sqlite_store import begin_immediate
+from sqlite_sidecar import transaction as begin_immediate
 
 from taskloop import activity_file
 from taskloop.agents.stop_models import AgentStop, Identity, StopCause, encode

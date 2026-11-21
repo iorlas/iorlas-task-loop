@@ -116,7 +116,7 @@ class ChecksAdmission:
     def __init__(
         self,
         connect: Callable[[], sqlite3.Connection | None],
-        begin: Callable[[sqlite3.Connection], AbstractContextManager[None]],
+        begin: Callable[[sqlite3.Connection], AbstractContextManager[object]],
         tasks: Tasks,
         checkouts: Checkouts,
         clock: Callable[[], float],

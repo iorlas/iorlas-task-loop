@@ -10,7 +10,8 @@ from functools import partial
 from pathlib import Path
 
 import pytest
-from sqlite_store import Store, begin_immediate
+from sqlite_sidecar import transaction as begin_immediate
+from sqlite_store import Store
 from stream_proc import (
     IdentityUnavailableError,
     OwnedProcess,

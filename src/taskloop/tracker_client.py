@@ -22,6 +22,14 @@ from taskloop.task import ReadyTitle, TaskBinding, TaskComment, TaskFacts, TaskI
 from taskloop.tracker import ACTOR, HELD, ReadyRows, gone, inspect_task, ready_titles, task_comments, task_facts, task_titles
 from taskloop.tracker_discussion import read_discussion
 
+BD = "bd"
+
+
+def _bd(client: type[Bd], cwd: str, run: Runner | None = None, **options: float | int) -> Bd:
+    """The one construction of a `Bd`: bd is found on this process's PATH, unless a test's runner is injected (nothing is run
+    or searched for then, so the name alone stands for it)."""
+    return client(ACTOR, cwd=cwd, env=dict(os.environ), exe=BD if run is not None else "", run=run, **options)
+
 
 def _tracker_root(tracker_root: str) -> Path:
     """The explicit tracker root, resolved, without discovery; unusable is `invalid_binding`."""
@@ -40,22 +48,22 @@ def inspect_tracker_task(task_id: str, backlog: str, tracker_root: str) -> TaskI
     """Bind the supplied logical backlog to the explicit tracker root, without discovery."""
     scope = TaskScope(backlog)
     root = _tracker_root(tracker_root)
-    return inspect_task(TaskBinding(scope, root), Bd(ACTOR, cwd=str(root)), task_id)
+    return inspect_task(TaskBinding(scope, root), _bd(Bd, str(root)), task_id)
 
 
 def tracker_discussion(task: TaskInspection, tracker_root: str) -> tuple[DiscussionSource, ...]:
     root = _tracker_root(tracker_root)
-    return read_discussion(task, TaskBinding(task.reference.scope, root), Bd(ACTOR, cwd=str(root)))
+    return read_discussion(task, TaskBinding(task.reference.scope, root), _bd(Bd, str(root)))
 
 
 def tracker_reads(tracker_root: str) -> ReadyRows:
     """The scheduling round's tracker reads (ready set, parents) at the same root rule as `inspect_tracker_task`; raises
     TaskInspectionError(`invalid_binding`) for an unusable root. Only reads are reachable through the returned port."""
-    return Bd(ACTOR, cwd=str(_tracker_root(tracker_root)))
+    return _bd(Bd, str(_tracker_root(tracker_root)))
 
 
 def _reader(tracker_root: Path) -> Bd:
-    return Bd(ACTOR, cwd=str(tracker_root))
+    return _bd(Bd, str(tracker_root))
 
 
 def tracker_facts(task_id: str, tracker_root: Path) -> TaskFacts | None:
@@ -199,7 +207,7 @@ def tracker_claims(run: Runner | None = None, client: type[Bd] = Bd) -> TrackerC
         return str(Path(tracker_root).expanduser().resolve())
 
     def bd(tracker_root: str) -> Bd:
-        return client(ACTOR, cwd=located(tracker_root), run=run)
+        return _bd(client, located(tracker_root), run)
 
     def claim(tracker_root: str, task_id: str) -> bool:
         return bd(tracker_root).claim(task_id)
@@ -213,7 +221,7 @@ def tracker_claims(run: Runner | None = None, client: type[Bd] = Bd) -> TrackerC
             raise
 
     def heartbeat_for(tracker_root: str, task_id: str) -> Heartbeat:
-        renewing = client(ACTOR, cwd=located(tracker_root), run=run, timeout=BD_TIMEOUT_S, lock_retries=0)
+        renewing = _bd(client, located(tracker_root), run, timeout=BD_TIMEOUT_S, lock_retries=0)
 
         def beat() -> Beat:
             try:
@@ -225,7 +233,7 @@ def tracker_claims(run: Runner | None = None, client: type[Bd] = Bd) -> TrackerC
         return beat
 
     def close(tracker_root: str, task_id: str, reason: str) -> CloseAnswer:
-        return _closed(client(ACTOR, cwd=located(tracker_root), run=run, timeout=BD_TIMEOUT_S), task_id, reason)
+        return _closed(_bd(client, located(tracker_root), run, timeout=BD_TIMEOUT_S), task_id, reason)
 
     return TrackerClaims(claim, unclaim, heartbeat_for, close)
 
@@ -298,7 +306,7 @@ def tracker_holds(run: Runner | None = None, client: type[Bd] = Bd) -> TrackerHo
     within `hold_store.COMMENT_LEASE`; `client` is the seam a test checks the construction through."""
 
     def bd(tracker_root: str) -> Bd:
-        return client(ACTOR, cwd=str(Path(tracker_root).expanduser().resolve()), run=run, timeout=BD_TIMEOUT_S, lock_retries=0)
+        return _bd(client, str(Path(tracker_root).expanduser().resolve()), run, timeout=BD_TIMEOUT_S, lock_retries=0)
 
     def labels(tracker_root: str, task_id: str, label: str | None) -> HoldAnswer[LabelStep]:
         return _labelled(bd(tracker_root), task_id, label)

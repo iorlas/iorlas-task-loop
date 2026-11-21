@@ -62,16 +62,16 @@ def stages(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, ...]]:
     calls: list[tuple[str, ...]] = []
     original = FakeWorktree.stage
 
-    def stage(self: FakeWorktree, paths: Sequence[str], *, literal: bool = True) -> None:
+    def stage(self: FakeWorktree, paths: Sequence[str]) -> None:
         calls.append(tuple(paths))
-        original(self, paths, literal=literal)
+        original(self, paths)
 
     monkeypatch.setattr(FakeWorktree, "stage", stage)
     return calls
 
 
 def record(slot: FakeWorktree) -> str:
-    made = slot.record("Baseline", paths="all", allow_empty=True)
+    made = slot.record("Baseline", paths="all")
     assert isinstance(made, Recorded)
     return made.sha
 
@@ -100,15 +100,15 @@ def test_commit_retry_measures_staging_through_record_and_suppresses_adoption(
     timing = partial(files.observe_operation, clock=lambda: now[0], wall=lambda: 100.0, ids=NativeIds())
     original, record_original = FakeWorktree.stage, FakeWorktree.record
 
-    def stage(self: FakeWorktree, paths: Sequence[str], *, literal: bool = True) -> None:
+    def stage(self: FakeWorktree, paths: Sequence[str]) -> None:
         if not broken_evidence:
             assert any(sample.state is OperationState.ACTIVE for sample in files.operations(admission.key))
         now[0] += 3
-        original(self, paths, literal=literal)
+        original(self, paths)
 
-    def recording(self: FakeWorktree, message: str, *, paths: Literal["staged"], hooks: bool) -> Recorded:
+    def recording(self: FakeWorktree, message: str, *, paths: Literal["staged"]) -> Recorded:
         now[0] += 2
-        result = record_original(self, message, paths=paths, hooks=hooks)
+        result = record_original(self, message, paths=paths)
         assert isinstance(result, Recorded)
         return result
 
@@ -152,7 +152,7 @@ def test_keep_only_measures_saved_work_review(
     saved: bool,
 ) -> None:
     message = "Saved\n\nTask-Loop-Wip: preserved" if saved else "Baseline"
-    made = slot.record(message, paths="all", allow_empty=True)
+    made = slot.record(message, paths="all")
     assert isinstance(made, Recorded)
     files = EvidenceFiles(tmp_path / "artifacts")
     timing = partial(files.observe_operation, clock=lambda: 1.0, wall=lambda: 100.0, ids=NativeIds())

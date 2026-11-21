@@ -31,7 +31,8 @@ from doubles import (
 from git_porcelain import Recorded
 from git_porcelain.testing import FakeWorktree
 from plan_fixtures import PLAN_TEXT
-from sqlite_store import Store, begin_immediate
+from sqlite_sidecar import transaction as begin_immediate
+from sqlite_store import Store
 from test_steps import TASK as INSPECTION
 
 from taskloop.admit import AdmitRefused, Admitted, AttemptAdmission
@@ -749,7 +750,7 @@ def test_a_held_slot_lock_refuses_the_takeover_and_admits_nothing(
     tmp_path: Path,
     checkouts: Checkouts,
     slot_files: FakeSlotFiles,
-    occupy: Callable[[Path], AbstractContextManager[None]],
+    occupy: Callable[[Path], AbstractContextManager[object]],
 ) -> None:
     """`admit_repeat` runs under the slot's lock, so an abandon parking the slot (or anyone else holding it) refuses it."""
     unsafe(registered, tmp_path, slot, checkouts, slot_files)

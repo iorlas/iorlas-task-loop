@@ -5,7 +5,8 @@ import hashlib
 from pathlib import Path
 
 from doubles import pin_workflow
-from sqlite_store import Store, begin_immediate
+from sqlite_sidecar import transaction as begin_immediate
+from sqlite_store import Store
 
 from taskloop.attempt_types import AttemptKey
 from taskloop.factory_schema import SCHEMA

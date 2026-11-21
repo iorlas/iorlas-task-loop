@@ -13,7 +13,8 @@ from beads_client import BdError, Bead
 from beads_client.testing import FakeTaskReadClient
 from git_porcelain import GitUnavailable, Pushed, Recorded, Repo
 from git_porcelain.testing import FakeRepo, FakeWorktree
-from sqlite_store import Store, begin_immediate
+from sqlite_sidecar import transaction as begin_immediate
+from sqlite_store import Store
 from stream_proc import OwnedProcess
 
 from taskloop.access import TMP_BYTES, Folders
@@ -491,7 +492,7 @@ class ChecksBench:
         self.reads.append(task_id)
         return inspect_task(TaskBinding(TaskScope(backlog), Path(root)), self, task_id)
 
-    def begin(self, con: sqlite3.Connection) -> AbstractContextManager[None]:
+    def begin(self, con: sqlite3.Connection) -> AbstractContextManager[object]:
         racing, self.racing = self.racing, lambda: None
         racing()
         return begin_immediate(con)

@@ -5,7 +5,8 @@ from pathlib import Path
 
 import pytest
 from git_porcelain.testing import FakeRepo
-from sqlite_store import Store, begin_immediate
+from sqlite_sidecar import transaction as begin_immediate
+from sqlite_store import Store
 from test_admit import Tracker, admission, request, slots, tasks
 from test_repeat import CONTENT_DIGEST
 

@@ -36,7 +36,7 @@ from taskloop.slot_release_store import Claimed, ReleaseRow, SlotReleaseStore
 
 __all__ = ["NotReleased", "Stopping", "entry_stopped", "setup_stopped", "stop_proof", "worker_stopped"]
 
-type ParkHold = Callable[[str, str], AbstractContextManager[None]]  # (slot path, attempt id): the slot's lock, never waiting
+type ParkHold = Callable[[str, str], AbstractContextManager[object]]  # (slot path, attempt id): the slot's lock, never waiting
 type Scratch = Callable[[Path], bool]  # the slot's `.t/<slot>` emptied when it resolves where it belongs; False otherwise
 NOTHING: Final = "Nothing changed."
 

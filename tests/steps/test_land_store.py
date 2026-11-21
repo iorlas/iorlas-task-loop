@@ -12,7 +12,7 @@ import pytest
 from doubles import CANDIDATE, CHECKS, ORIGIN, REQUIRED, SQUASH, D, X, pin_workflow
 from git_porcelain.testing import FakeRepo
 from land_conflict_bench import bench, copy_row
-from sqlite_store import begin_immediate
+from sqlite_sidecar import transaction as begin_immediate
 
 from taskloop import land_store
 from taskloop.attempt_reads import StoreRefused, StoreUnavailable

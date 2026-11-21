@@ -250,8 +250,8 @@ def test_the_port_s_bd_calls_are_capped_at_bd_timeout(tmp_path: Path) -> None:
 
     class Recorded(Bd):
         def __init__(self, actor: str, cwd: str | None = None, **options: object) -> None:
-            built.append({"actor": actor, "cwd": cwd} | {key: value for key, value in options.items() if key != "run"})
-            super().__init__(actor, cwd, run=Script().say("", "bd: no answer in 30.0s", 124))
+            built.append({"actor": actor, "cwd": cwd} | {key: value for key, value in options.items() if key not in {"run", "env", "exe"}})
+            super().__init__(actor, cwd, exe="bd", run=Script().say("", "bd: no answer in 30.0s", 124))
 
     found = tracker_claims(Script(), client=Recorded).close(str(tmp_path / "x" / ".."), "tl-1", REASON)
     assert found == CloseAnswer("unavailable", detail="timeout")

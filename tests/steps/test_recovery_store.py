@@ -10,7 +10,7 @@ from threading import Barrier
 import pytest
 from doubles import pin_workflow
 from hold_fixtures import STUCK_SQL
-from sqlite_store import begin_immediate
+from sqlite_sidecar import transaction as begin_immediate
 
 from taskloop.attempt_reads import StoreUnavailable
 from taskloop.attempt_types import AttemptKey

@@ -11,7 +11,7 @@ import pytest
 from doubles import D, X, pin_workflow
 from hold_fixtures import event
 from pydantic import ValidationError
-from sqlite_store import begin_immediate
+from sqlite_sidecar import transaction as begin_immediate
 
 from taskloop.attempt_reads import StoreRefused, StoreUnavailable
 from taskloop.hold_store import COMMENT_LEASE, HoldInsert, HoldRow, HoldStore, Labelled, Uncleared

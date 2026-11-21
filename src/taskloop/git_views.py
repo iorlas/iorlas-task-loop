@@ -39,7 +39,7 @@ class GitViews:
         except RuntimeError as error:
             raise UnsupportedCheckout(f"Cannot expand checkout path: {path}") from error
         checkout = expanded.resolve()
-        return inspect_repo(RealRepo(checkout, memoize=False, read_timeout=self.read_seconds), checkout)
+        return inspect_repo(RealRepo(checkout, ambient=dict(os.environ), memoize=False, read_timeout=self.read_seconds), checkout)
 
     def checkouts(self, path: Path, *, git_dir: Path | None = None) -> Repo:
         """A fresh (unmemoized) real Git view from one checkout path, in the hardened Git environment, its discovery ceiling
@@ -48,7 +48,7 @@ class GitViews:
         also carries the factory's own commit identity (`IDENTITY`)."""
         pins = None if git_dir is None else {path: git_dir}
         env = hardened(os.environ) | ceiling(path, os.environ) | ({} if git_dir is None else IDENTITY)
-        return RealRepo(path, memoize=False, env=env, read_timeout=self.read_seconds, pins=pins)
+        return RealRepo(path, ambient=dict(os.environ), memoize=False, env=env, read_timeout=self.read_seconds, pins=pins)
 
     def remotes(self, path: Path, *, git_dir: Path | None = None) -> Repo:
         """`checkouts` with a bounded transport (PUSH_TIMEOUT): the publication's view of the person's checkout. Hooks stay
@@ -56,7 +56,9 @@ class GitViews:
         base environment never prompts, so a locked key fails instead of hanging."""
         pins = None if git_dir is None else {path: git_dir}
         env = hardened(os.environ) | ceiling(path, os.environ)
-        return RealRepo(path, memoize=False, env=env, remote_timeout=PUSH_TIMEOUT, read_timeout=self.read_seconds, pins=pins)
+        return RealRepo(
+            path, ambient=dict(os.environ), memoize=False, env=env, remote_timeout=PUSH_TIMEOUT, read_timeout=self.read_seconds, pins=pins
+        )
 
     def slot_profiles(self, slot: Path, gitdir: Path) -> GitProfileFiles:
         """The profile port on the slot's own view, pinned to its verified Git directory."""

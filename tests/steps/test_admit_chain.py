@@ -20,7 +20,7 @@ from doubles import ENGINE, NO_CHECKS, PIN_DIGEST, PIN_SHA, WORKFLOW_BYTES, WORK
 from git_porcelain import Pushed, Sha
 from git_porcelain.testing import FakeRemote, FakeRepo, FakeWorktree
 from plan_fixtures import PLAN_TEXT
-from sqlite_store import begin_immediate
+from sqlite_sidecar import transaction as begin_immediate
 
 from taskloop.admit import AdmitRefused, AdmitRequest, Admitted, AttemptAdmission
 from taskloop.admit_chain import ChainAdmission, NextAdmission, NextStepRequest, RepeatRequest
@@ -224,7 +224,7 @@ def test_with_no_task_branch_left_the_advance_requires_origin_main_to_hold_the_p
         repo.worktree(repo.identity().root).merge_ff(planned)
     local_main = dict(repo.branches())["main"]
     repo.delete_branch("task/tl-1", expected=Sha(planned))
-    repo.plumbing().delete_ref_at(repo.path, "refs/remotes/origin/task/tl-1", planned)
+    repo.plumbing().delete_ref_at(repo.path, "refs/remotes/origin/task/tl-1", planned, ambient={})
     found = advancing(registered, tmp_path, checkouts, slot_files).admit_next(request(repo))
     assert isinstance(found, Admitted) if landed else isinstance(found, AdmitRefused) and found.reason == "branch_moved"
     assert dict(repo.branches())["main"] == local_main

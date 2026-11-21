@@ -69,14 +69,14 @@ class LandPorts:
     stop: Callable[[], Stop]
     me: Callable[[], EntryIdentity | None]
     probe: Probe
-    custody: Callable[[str, str], AbstractContextManager[None]]
+    custody: Callable[[str, str], AbstractContextManager[object]]
     environ: Mapping[str, str]
     close: Close
     conflicts: Handoff
     ids: Ids
 
 
-def _release(ports: LandPorts, hold: Callable[[str, str], AbstractContextManager[None]]) -> ChecksRelease:
+def _release(ports: LandPorts, hold: Callable[[str, str], AbstractContextManager[object]]) -> ChecksRelease:
     work = ports.work
     return ChecksRelease(
         work.store, work.checkouts, work.slot_files, work.entry_seen, hold, work.clock, work.seen, work.scratch, ids=ports.ids
@@ -176,7 +176,7 @@ def _held(ports: LandPorts, checks: ChecksRow) -> Failed | None:
     )
 
 
-def _unheld(_slot_path: str, _candidate_id: str) -> AbstractContextManager[None]:
+def _unheld(_slot_path: str, _candidate_id: str) -> AbstractContextManager[object]:
     """The land's own release runs inside the slot lock it already holds."""
     return nullcontext()
 

@@ -33,7 +33,8 @@ from doubles import (
 )
 from git_porcelain import Recorded
 from git_porcelain.testing import FakeRemote, FakeRepo, FakeWorktree
-from sqlite_store import Store, begin_immediate
+from sqlite_sidecar import transaction as begin_immediate
+from sqlite_store import Store
 
 from taskloop import check_store, land_store
 from taskloop.attempt_types import AttemptKey
@@ -312,7 +313,7 @@ def _occupied(path: Path) -> Generator[None]:
 
 
 @pytest.fixture
-def occupy() -> Callable[[Path], AbstractContextManager[None]]:
+def occupy() -> Callable[[Path], AbstractContextManager[object]]:
     """Another holder of a slot's lock file: its own open file description holding the exclusive `flock`, as another
     process would hold it."""
     return _occupied

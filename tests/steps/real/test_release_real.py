@@ -19,7 +19,7 @@ from doubles import ENGINE, WORKFLOW_BYTES, WORKFLOW_PATH
 from git_porcelain.history import Identity
 from git_porcelain.testing import apply_hermetic_env, git
 from plan_fixtures import PLAN_TEXT
-from sqlite_store import begin_immediate
+from sqlite_sidecar import transaction as begin_immediate
 
 from taskloop.admit import AdmitRequest, Admitted, AttemptAdmission
 from taskloop.agents.launch import AgentLaunch

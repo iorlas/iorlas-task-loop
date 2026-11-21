@@ -9,7 +9,8 @@ from doubles import ORIGIN, REQUIRED, SQUASH, D
 from git_porcelain import WorktreeInfo
 from git_porcelain.testing import FakeRepo
 from land_conflict_bench import Bench, bench, copy_row
-from sqlite_store import Store, begin_immediate
+from sqlite_sidecar import transaction as begin_immediate
+from sqlite_store import Store
 
 from taskloop.admit_store import reserve
 from taskloop.attempt_reads import StoreRefused, StoreUnavailable

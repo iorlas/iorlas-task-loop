@@ -16,7 +16,7 @@ from doubles import ENGINE, FakeSlotFiles, RegisteringLauncher, origin_main_at
 from git_porcelain import Dirty, Recorded
 from git_porcelain.testing import FakeRepo, FakeWorktree
 from plan_fixtures import PLAN_TEXT, PLAN_V2
-from sqlite_store import begin_immediate
+from sqlite_sidecar import transaction as begin_immediate
 from test_repeat import CONTENT_DIGEST, refresh_discussion
 
 from taskloop.admit import Admitted
@@ -410,7 +410,7 @@ def test_a_staged_index_at_e_never_dispatches(step: Step, slot: FakeWorktree) ->
     step.run(KEY, ENTRY, Agent(slot, {P: PLAN_TEXT, STRAY: "s"}, PLAN))
     step.factory_commit.commit(KEY)
     key, entry = step.next_attempt(KEY)
-    slot.stage([STRAY], literal=True)  # a person staged the scratch file: the factory's record would sweep it in
+    slot.stage([STRAY])  # a person staged the scratch file: the factory's record would sweep it in
     agent = Agent(slot, {}, UNCHANGED, removed=[STRAY])
     assert step.run(key, entry, agent) == "refused slot_staged" and agent.specs == []
 
@@ -424,8 +424,8 @@ def test_a_superseded_commit_that_staged_leaves_the_next_attempt_undispatched(
     step.run(KEY, ENTRY, Agent(slot, {P: PLAN_TEXT}, PLAN))
     stage = FakeWorktree.stage
 
-    def staging(self: FakeWorktree, paths: Sequence[str], *, literal: bool = True) -> None:
-        stage(self, paths, literal=literal)
+    def staging(self: FakeWorktree, paths: Sequence[str]) -> None:
+        stage(self, paths)
         assert isinstance(step.admission().admit_repeat(REPEAT), Admitted)
 
     monkeypatch.setattr(FakeWorktree, "stage", staging)
@@ -441,8 +441,8 @@ def test_a_path_staged_beside_the_listed_ones_is_never_committed(step: Step, slo
     step.run(KEY, ENTRY, Agent(slot, {P: PLAN_TEXT, STRAY: "s"}, PLAN))
     stage = FakeWorktree.stage
 
-    def staging(self: FakeWorktree, paths: Sequence[str], *, literal: bool = True) -> None:
-        stage(self, [*paths, STRAY], literal=literal)  # someone stages the scratch file in between
+    def staging(self: FakeWorktree, paths: Sequence[str]) -> None:
+        stage(self, [*paths, STRAY])  # someone stages the scratch file in between
 
     monkeypatch.setattr(FakeWorktree, "stage", staging)
     assert step.factory_commit.commit(KEY) == Uncommitted("staged", (STRAY,)) and made(slot, base) == []
@@ -517,7 +517,7 @@ def test_judge_refuses_a_chain_whose_commit_does_not_sit_on_the_stored_one(repo:
 def test_a_staged_slot_is_refused_before_the_takeover_and_nothing_is_spent(step: Step, slot: FakeWorktree) -> None:
     step.run(KEY, ENTRY, Agent(slot, {P: PLAN_TEXT, STRAY: "s"}, PLAN))
     step.factory_commit.commit(KEY)
-    slot.stage([STRAY], literal=True)  # the owner's staged file must never become the agent's leftover
+    slot.stage([STRAY])  # the owner's staged file must never become the agent's leftover
     dirs = sorted(path.name for path in (step.tmp / "attempts").iterdir())
     assert step.repeat(KEY) == Failed("uncommitted", "staged", STRAY) and step.launcher.calls == []
     assert step.con.execute("SELECT count(*) FROM attempt").fetchone() == (1,)
@@ -529,7 +529,7 @@ def test_a_file_staged_by_a_person_alone_is_staged_never_committed(step: Step, s
     base = head(slot)
     step.run(KEY, ENTRY, Agent(slot, {P: PLAN_TEXT}, PLAN))
     slot.write_file(STRAY, "s")
-    slot.stage([STRAY], literal=True)
+    slot.stage([STRAY])
     assert step.factory_commit.commit(KEY) == Uncommitted("staged", (STRAY,)) and made(slot, base) == []
 
 

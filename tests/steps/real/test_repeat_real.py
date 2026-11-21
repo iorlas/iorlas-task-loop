@@ -17,7 +17,7 @@ from doubles import ENGINE, WORKFLOW_BYTES, WORKFLOW_PATH, RegisteringLauncher
 from git_porcelain.history import Identity
 from git_porcelain.testing import apply_hermetic_env, git
 from plan_fixtures import PLAN_TEXT, PLAN_V2
-from sqlite_store import begin_immediate
+from sqlite_sidecar import transaction as begin_immediate
 from test_repeat import refresh_discussion
 
 from taskloop.admit_chain import ChainAdmission

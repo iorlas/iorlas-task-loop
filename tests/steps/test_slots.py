@@ -8,7 +8,7 @@ import pytest
 from doubles import FakeSlotFiles, PinnedViews, linked_into
 from git_porcelain import GitUnavailable, RepoIdentity, WorktreeInfo
 from git_porcelain.testing import FakeRemote, FakeRepo
-from sqlite_store import begin_immediate
+from sqlite_sidecar import transaction as begin_immediate
 
 from taskloop.attempt_reads import SlotUse, StoreUnavailable
 from taskloop.attempt_store import AttemptStore
@@ -132,7 +132,7 @@ def test_adoption_rereads_a_slot_adopted_elsewhere_before_the_write(factory: sql
     add(repo, root, "s1", "s2")
     other_path = root / "elsewhere" / "s1"
 
-    def begin(con: sqlite3.Connection) -> AbstractContextManager[None]:
+    def begin(con: sqlite3.Connection) -> AbstractContextManager[object]:
         con.execute("INSERT INTO slot (repo_id,name,path) VALUES (?,'s1',?)", (rid(repo), str(other_path)))
         return begin_immediate(con)
 
@@ -218,7 +218,7 @@ def test_nothing_pending_takes_no_write_lock(factory: sqlite3.Connection, repo: 
     adopted(factory, repo, root, 1)
     taken: list[int] = []
 
-    def begin(con: sqlite3.Connection) -> AbstractContextManager[None]:
+    def begin(con: sqlite3.Connection) -> AbstractContextManager[object]:
         taken.append(1)
         return begin_immediate(con)
 

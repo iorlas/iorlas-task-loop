@@ -8,29 +8,31 @@ version = "0.1.0"
 description = "Minimal task-loop successor foundation"
 requires-python = ">=3.15"
 dependencies = [
-    "any-agent==0.15.0",
-    "beads-client==0.4.0",
-    "git-porcelain==0.24.0",
-    "process-lock==0.2.1",
+    "any-agent==0.19.0",
+    "beads-client==0.6.0",
+    "git-porcelain==0.27.0",
+    "process-lock==0.4.0",
     "pydantic==2.14.3",
-    "sqlite-store==0.1.0",
-    "stream-proc==0.9.0",
+    "sqlite-sidecar==0.4.0",
+    "sqlite-store==0.2.0",
+    "stream-proc==0.12.1",
 ]
 
 [tool.uv.sources]
-blueprint = { git = "https://github.com/yoselabs/shelf.git", subdirectory = "packages/blueprint", tag = "blueprint-v0.6.0" }
-any-gate-python = { git = "https://github.com/yoselabs/shelf.git", subdirectory = "packages/any-gate-python", tag = "blueprint-v0.6.0" }
-content-digest = { git = "https://github.com/yoselabs/shelf.git", subdirectory = "packages/content-digest", tag = "blueprint-v0.6.0" }
-atomic-io = { git = "https://github.com/yoselabs/shelf.git", subdirectory = "packages/atomic-io", tag = "blueprint-v0.6.0" }
-any-lease = { git = "https://github.com/yoselabs/shelf.git", subdirectory = "packages/any-lease", tag = "blueprint-v0.6.0" }
-any-gate = { git = "https://github.com/yoselabs/shelf.git", subdirectory = "packages/any-gate", tag = "blueprint-v0.6.0" }
-any-agent = { git = "https://github.com/yoselabs/shelf.git", subdirectory = "packages/any-agent", tag = "blueprint-v0.6.0" }
-sqlite-store = { git = "https://github.com/yoselabs/shelf.git", subdirectory = "packages/sqlite-store", tag = "blueprint-v0.6.0" }
-git-porcelain = { git = "https://github.com/yoselabs/shelf.git", subdirectory = "packages/git-porcelain", tag = "blueprint-v0.6.0" }
-process-lock = { git = "https://github.com/yoselabs/shelf.git", subdirectory = "packages/process-lock", tag = "blueprint-v0.6.0" }
-beads-client = { git = "https://github.com/yoselabs/shelf.git", subdirectory = "packages/beads-client", tag = "blueprint-v0.6.0" }
+blueprint = { git = "https://github.com/yoselabs/shelf.git", subdirectory = "packages/blueprint", tag = "blueprint-v0.9.1" }
+any-gate-python = { git = "https://github.com/yoselabs/shelf.git", subdirectory = "packages/any-gate-python", tag = "blueprint-v0.9.1" }
+content-digest = { git = "https://github.com/yoselabs/shelf.git", subdirectory = "packages/content-digest", tag = "blueprint-v0.9.1" }
+atomic-io = { git = "https://github.com/yoselabs/shelf.git", subdirectory = "packages/atomic-io", tag = "blueprint-v0.9.1" }
+any-lease = { git = "https://github.com/yoselabs/shelf.git", subdirectory = "packages/any-lease", tag = "blueprint-v0.9.1" }
+any-gate = { git = "https://github.com/yoselabs/shelf.git", subdirectory = "packages/any-gate", tag = "blueprint-v0.9.1" }
+any-agent = { git = "https://github.com/yoselabs/shelf.git", subdirectory = "packages/any-agent", tag = "blueprint-v0.9.1" }
+sqlite-sidecar = { git = "https://github.com/yoselabs/shelf.git", subdirectory = "packages/sqlite-sidecar", tag = "blueprint-v0.9.1" }
+sqlite-store = { git = "https://github.com/yoselabs/shelf.git", subdirectory = "packages/sqlite-store", tag = "blueprint-v0.9.1" }
+git-porcelain = { git = "https://github.com/yoselabs/shelf.git", subdirectory = "packages/git-porcelain", tag = "blueprint-v0.9.1" }
+process-lock = { git = "https://github.com/yoselabs/shelf.git", subdirectory = "packages/process-lock", tag = "blueprint-v0.9.1" }
+beads-client = { git = "https://github.com/yoselabs/shelf.git", subdirectory = "packages/beads-client", tag = "blueprint-v0.9.1" }
 # Every shelf pin names the one snapshot tag: the packages must come from one shelf commit.
-stream-proc = { git = "https://github.com/yoselabs/shelf.git", subdirectory = "packages/stream-proc", tag = "blueprint-v0.6.0" }
+stream-proc = { git = "https://github.com/yoselabs/shelf.git", subdirectory = "packages/stream-proc", tag = "blueprint-v0.9.1" }
 
 [project.scripts]
 tl = "taskloop.cli:main"

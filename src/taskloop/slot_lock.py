@@ -45,9 +45,7 @@ def lock_path(slot_path: str) -> Path:
 def acquire(slot_path: str, attempt_id: str, role: Role) -> ProcessLock:
     """Take the slot's lock now or refuse: `SlotBusy` when held (here or elsewhere), `SlotLockUnavailable` on an OS error."""
     try:
-        return ProcessLock.acquire(
-            lock_path(slot_path), timeout=0, label=LABEL, meta={"attempt": attempt_id, "role": role}, reentrant=False
-        )
+        return ProcessLock.acquire_exclusive(lock_path(slot_path), timeout=0, label=LABEL, meta={"attempt": attempt_id, "role": role})
     except LockHeldError as error:
         raise SlotBusy(str(error.path)) from error
     except OSError as error:
@@ -63,23 +61,23 @@ def _held(slot_path: str, attempt_id: str, role: Role) -> Generator[None]:
         lock.release()
 
 
-def hold(admission: Admission) -> AbstractContextManager[None]:
+def hold(admission: Admission) -> AbstractContextManager[object]:
     """A factory commit's Git writes for `admission`, under its slot's lock; released when the block ends, raised or not."""
     return _held(admission.slot_path, admission.key.attempt_id, "commit")
 
 
-def custody(slot_path: str, attempt_id: str) -> AbstractContextManager[None]:
+def custody(slot_path: str, attempt_id: str) -> AbstractContextManager[object]:
     """A release's park and transaction for the attempt on the slot at `slot_path`, under the slot's lock."""
     return _held(slot_path, attempt_id, "release")
 
 
-def landing(slot_path: str, candidate_id: str) -> AbstractContextManager[None]:
+def landing(slot_path: str, candidate_id: str) -> AbstractContextManager[object]:
     """A land's custody of its candidate's slot (tl-8bh9.14.8 section 6): the validation and its release, or the release of
     a slot an earlier land left held, under the slot's lock."""
     return _held(slot_path, candidate_id, "land")
 
 
-def repeating(slot_path: str, attempt_id: str) -> AbstractContextManager[None]:
+def repeating(slot_path: str, attempt_id: str) -> AbstractContextManager[object]:
     """A repeat's takeover of the reservation (`admit_repeat`), under the slot's lock: no release parks the slot under it."""
     return _held(slot_path, attempt_id, "repeat")
 
@@ -96,6 +94,6 @@ def probe(slot_path: str) -> bool | None:
     return True
 
 
-def refused(_admission: Admission) -> AbstractContextManager[None]:
+def refused(_admission: Admission) -> AbstractContextManager[object]:
     """The hold of a read-only factory commit, which never writes Git: any write it were asked for fails closed (`ReadOnly`)."""
     raise ReadOnly("read_only")

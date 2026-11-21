@@ -8,7 +8,8 @@ from pathlib import Path
 import pytest
 from doubles import pin_workflow
 from hold_fixtures import event_for
-from sqlite_store import Store, begin_immediate
+from sqlite_sidecar import transaction as begin_immediate
+from sqlite_store import Store
 
 from taskloop import cli_composition
 from taskloop.answer_failures import AnswerFailureData, AnswerRule, encode

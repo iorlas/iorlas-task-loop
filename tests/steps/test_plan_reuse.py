@@ -18,7 +18,7 @@ METADATA_PATH = "docs/design/tl-1/plan-metadata.json"
 
 
 def record(slot: FakeWorktree, message: str = "ordinary result") -> str:
-    result = slot.record(message, paths="all", allow_empty=True)
+    result = slot.record(message, paths="all")
     assert isinstance(result, Recorded)
     return str(result.sha)
 

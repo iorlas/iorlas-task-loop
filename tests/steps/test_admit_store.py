@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 from doubles import ENGINE, PIN_DIGEST, PIN_SHA
-from sqlite_store import begin_immediate
+from sqlite_sidecar import transaction as begin_immediate
 
 from taskloop import admit_store
 from taskloop.admit_rows import Free

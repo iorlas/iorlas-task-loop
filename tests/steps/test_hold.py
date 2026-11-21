@@ -12,7 +12,7 @@ from pathlib import Path
 import pytest
 from doubles import CHECKS, D, X, pin_workflow
 from hold_fixtures import event, event_for
-from sqlite_store import begin_immediate
+from sqlite_sidecar import transaction as begin_immediate
 from stream_proc import OwnedProcess
 
 from taskloop.attempt_reads import ReleaseRow, StoreRefused

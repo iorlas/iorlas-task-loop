@@ -19,7 +19,8 @@ from doubles import ENGINE, WORKFLOW, WORKFLOW_BYTES, WORKFLOW_FILES, WORKFLOW_P
 from git_porcelain import GitTimeout, NotARepo, Repo
 from git_porcelain.testing import FakeRemote, FakeRepo
 from plan_fixtures import PLAN_TEXT
-from sqlite_store import Store, begin_immediate
+from sqlite_sidecar import transaction as begin_immediate
+from sqlite_store import Store
 
 from taskloop.admit import AdmitRefused, AdmitRequest, AdmitResult, Admitted, AdmitUnavailable, AttemptAdmission, checkout_repo, read_task
 from taskloop.agents.launch import AgentLaunch
@@ -186,7 +187,7 @@ def admit(con: sqlite3.Connection, tmp_path: Path, repo: FakeRepo, tracker: Trac
     return admission(con, tmp_path, tracker, repo).admit(request(tmp_path, repo))
 
 
-def breaking(error: BaseException) -> Callable[[sqlite3.Connection], AbstractContextManager[None]]:
+def breaking(error: BaseException) -> Callable[[sqlite3.Connection], AbstractContextManager[object]]:
     """A writer transaction that fails on entry, with nothing written."""
 
     @contextmanager
@@ -679,8 +680,8 @@ def test_composition_caps_each_heartbeat_at_one_bd_call_of_bd_timeout_and_claims
 
     class Recorded(Bd):
         def __init__(self, actor: str, cwd: str | None = None, **options: object) -> None:
-            built.append({"actor": actor, "cwd": cwd} | {key: value for key, value in options.items() if key != "run"})
-            super().__init__(actor, cwd, run=Script())
+            built.append({"actor": actor, "cwd": cwd} | {key: value for key, value in options.items() if key not in {"run", "env", "exe"}})
+            super().__init__(actor, cwd, exe="bd", run=Script())
 
     claims = tracker_claims(Script(), client=Recorded)
     claims.heartbeat_for(str(tmp_path / "x" / ".."), "tl-1")

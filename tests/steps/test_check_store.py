@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 from doubles import CANDIDATE, CHECKS, ORIGIN, REQUIRED, SQUASH, TARGET, D, X, pin_workflow
-from sqlite_store import begin_immediate
+from sqlite_sidecar import transaction as begin_immediate
 from stream_proc import OwnedProcess
 
 from taskloop import check_store, land_store

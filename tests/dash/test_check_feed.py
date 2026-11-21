@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 from conftest import checking, factory
 from doubles import CHECKS, REQUIRED, TARGET, D
-from sqlite_store import begin_immediate
+from sqlite_sidecar import transaction as begin_immediate
 
 from taskloop import check_feed, check_store
 from taskloop.attempt_status import StatusPorts

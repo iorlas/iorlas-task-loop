@@ -90,8 +90,8 @@ def delivery_counts(
     deliveries: list[str] = []
     park, push = FakeWorktree.park, FakeWorktree.push
 
-    def parked(slot: FakeWorktree, base: str, *, clean_keep: Sequence[str] | None = None, keep_ignored: bool = False) -> Sha:
-        result = park(slot, base, clean_keep=clean_keep, keep_ignored=keep_ignored)
+    def parked(slot: FakeWorktree, base: str, *, clean_keep: Sequence[str] | None = None) -> Sha:
+        result = park(slot, base, clean_keep=clean_keep)
         parks.append(slot.path)
         return result
 

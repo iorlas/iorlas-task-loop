@@ -11,7 +11,7 @@ import pytest
 from doubles import D, X, pin_workflow
 from hold_fixtures import event_for
 from hold_fixtures import row as hold_row
-from sqlite_store import begin_immediate
+from sqlite_sidecar import transaction as begin_immediate
 
 from taskloop.answer_failures import AnswerFailureData, AnswerRule, encode
 from taskloop.attempt_reads import ReleaseRow, StoreUnavailable

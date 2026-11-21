@@ -125,7 +125,7 @@ class CleanupSaved:
             raise AbortRefused("The checkout matches neither the cleanup input nor its recorded results.")
         if current != cleanup.after:
             p.fence()
-            slot.park(cleanup.after.head, clean_keep=(), keep_ignored=True)
+            slot.park(cleanup.after.head, clean_keep=())
         if self._current(record, work, saved) != cleanup.after:
             raise AbortRefused("The cleanup did not produce its recorded checkout and ignored bytes.")
         p.fence()

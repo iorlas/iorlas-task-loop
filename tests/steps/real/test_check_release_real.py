@@ -10,7 +10,7 @@ import pytest
 from doubles import CHECKS, REQUIRED
 from git_porcelain.history import Identity
 from git_porcelain.testing import apply_hermetic_env, git
-from sqlite_store import begin_immediate
+from sqlite_sidecar import transaction as begin_immediate
 
 from taskloop.attempt_types import DEFAULT_GIT_READ_SECONDS, Seen
 from taskloop.check_release import ChecksRelease

@@ -15,7 +15,8 @@ from doubles import MAIN_PROFILE, PinnedViews, put_workflow
 from git_porcelain import Recorded
 from git_porcelain.testing import FakeWorktree
 from round_bench import Factory, Tracker, scripts, task
-from sqlite_store import Store, begin_immediate
+from sqlite_sidecar import transaction as begin_immediate
+from sqlite_store import Store
 from stream_proc import OwnedProcess, ProcessObservation
 
 from taskloop import land_store

@@ -20,7 +20,7 @@ from doubles import ENGINE, FakeSlotFiles
 from git_porcelain import Repo, WorktreeInfo
 from git_porcelain.testing import FakeRemote, FakeWorktree
 from plan_fixtures import PLAN_TEXT
-from sqlite_store import begin_immediate
+from sqlite_sidecar import transaction as begin_immediate
 from stream_proc import OwnedProcess
 
 from taskloop.admit import AdmitRefused
@@ -172,7 +172,7 @@ def nothing() -> Generator[None]:
     yield
 
 
-def nowhere(_admission: object) -> AbstractContextManager[None]:
+def nowhere(_admission: object) -> AbstractContextManager[object]:
     return nothing()
 
 
@@ -361,7 +361,7 @@ def test_a_held_slot_lock_is_slot_busy(
     slot: FakeWorktree,
     checkouts: Checkouts,
     slot_files: SlotFiles,
-    occupy: Callable[[Path], AbstractContextManager[None]],
+    occupy: Callable[[Path], AbstractContextManager[object]],
 ) -> None:
     before, ports = stored(registered), Ports(registered, checkouts, slot_files)
     with occupy(lock_path(str(slot.path))):
@@ -509,7 +509,7 @@ def test_after_a_release_every_other_writer_meets_the_fence_and_the_slot_is_free
     checkouts: Checkouts,
     slot_files: SlotFiles,
     root: Path,
-    occupy: Callable[[Path], AbstractContextManager[None]],
+    occupy: Callable[[Path], AbstractContextManager[object]],
 ) -> None:
     committed(registered, tmp_path, slot, checkouts, slot_files)
     assert isinstance(Ports(registered, checkouts, slot_files).releaser().release(KEY, False), Released)

@@ -15,7 +15,8 @@ from any_agent.procs import Worker
 from any_agent.testing import FakeRun
 from doubles import ENGINE, pin_workflow
 from git_porcelain.testing import FakeWorktree
-from sqlite_store import Store, begin_immediate
+from sqlite_sidecar import transaction as begin_immediate
+from sqlite_store import Store
 
 from taskloop.agents.launch import AgentLaunch, CredentialReason, Credentials, CredentialsUnavailable, codex_access
 from taskloop.agents.settings import CodexPolicy

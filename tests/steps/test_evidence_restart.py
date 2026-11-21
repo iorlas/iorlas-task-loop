@@ -9,7 +9,8 @@ import pytest
 from check_repeat_bench import Repairing
 from doubles import ENGINE
 from round_bench import task
-from sqlite_store import Store, begin_immediate
+from sqlite_sidecar import transaction as begin_immediate
+from sqlite_store import Store
 from test_check_repeat import failed, rig
 from test_repeat import CONTENT_DIGEST
 
@@ -29,7 +30,7 @@ from taskloop.operations import Failed, Started
 
 __all__ = ["rig"]
 
-Begin = Callable[[sqlite3.Connection], AbstractContextManager[None]]
+Begin = Callable[[sqlite3.Connection], AbstractContextManager[object]]
 Call = Callable[[], AdmitResult | Started | Failed]
 Build = Callable[[sqlite3.Connection, EvidenceFiles, Begin], Call]
 Rows = tuple[tuple[tuple[object, ...], ...], ...]

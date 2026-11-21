@@ -18,7 +18,8 @@ from doubles import ENGINE, WORKFLOW_FILES, Environment, FakeSlotFiles, PinnedVi
 from git_porcelain import BranchHeld, GitReadFailure, Recorded, Repo, Sha
 from git_porcelain.api import TakeResult
 from git_porcelain.testing import FakeRemote, FakeRepo, FakeWorktree
-from sqlite_store import Store, begin_immediate
+from sqlite_sidecar import transaction as begin_immediate
+from sqlite_store import Store
 
 from taskloop import prepare
 from taskloop.admit import AdmitRefused, AdmitRequest, AdmitResult, Admitted, AttemptAdmission

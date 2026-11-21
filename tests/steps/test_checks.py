@@ -11,7 +11,7 @@ import pytest
 from doubles import CHECKS, REQUIRED, Command, FakeSetupProcess, PinnedViews
 from git_porcelain import GitUnavailable, Recorded, WorktreeInfo
 from git_porcelain.testing import FakeRepo, FakeWorktree
-from sqlite_store import begin_immediate
+from sqlite_sidecar import transaction as begin_immediate
 
 from taskloop.access import folders
 from taskloop.agent_credentials import PUSH_REFUSED, scrubbed

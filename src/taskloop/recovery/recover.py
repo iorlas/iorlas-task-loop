@@ -81,7 +81,7 @@ class Recovery:
         store: RecoveryStore,
         processes: Processes,
         claim: Callable[[Admission], Claim],
-        custody: Callable[[Admission], AbstractContextManager[None]],
+        custody: Callable[[Admission], AbstractContextManager[object]],
         clock: Callable[[], float],
         ids: Ids,
     ) -> None:
@@ -92,7 +92,7 @@ class Recovery:
         self,
         key: AttemptKey,
         *,
-        custody: AbstractContextManager[None] | None = None,
+        custody: AbstractContextManager[object] | None = None,
         allow_expired: bool = False,
     ) -> Observations | Result:
         """Read consistent world facts under custody, without granting or renewing authority."""
@@ -125,7 +125,7 @@ class Recovery:
         owner: Identity,
         *,
         token: str | None = None,
-        custody: AbstractContextManager[None] | None = None,
+        custody: AbstractContextManager[object] | None = None,
         deadline: float | None = None,
     ) -> Result:
         """An already-held custody scope bypasses acquisition of the nonreentrant slot lock."""
@@ -151,7 +151,7 @@ class Recovery:
         self,
         expected: Intent,
         *,
-        custody: AbstractContextManager[None] | None = None,
+        custody: AbstractContextManager[object] | None = None,
     ) -> Reconciliation | Result:
         """Observe saved execution under custody; never grant a permit or transfer ownership."""
         try:

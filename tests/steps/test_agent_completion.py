@@ -155,7 +155,7 @@ def test_unconfirmed_commentary_is_diagnostic_and_preserves_the_execution_failur
 
 
 def test_completed_turn_arms_the_answer_grace_for_a_worker_that_does_not_exit() -> None:
-    replay = Replay(CodexHarness())
+    replay = Replay(CodexHarness(env={}))
     commentary_gap(replay)
     replay.tool()
     answer = json.dumps(PLAN)
@@ -169,7 +169,7 @@ def test_completed_turn_arms_the_answer_grace_for_a_worker_that_does_not_exit() 
 
 
 def test_terminal_answer_file_is_read_by_the_released_summary(tmp_path: Path) -> None:
-    harness = CodexHarness()
+    harness = CodexHarness(env={})
     path = tmp_path / "answer.txt"
     harness.launch_spec(
         LaunchInputs(exe="/bin/codex", cwd=str(tmp_path), model="chosen", effort="high", prompt="Plan the task", env={}, out_file=str(path))
@@ -187,7 +187,7 @@ def test_terminal_answer_file_is_read_by_the_released_summary(tmp_path: Path) ->
 
 @pytest.mark.parametrize("tool_running", [False, True], ids=["model-stall", "tool-silence"])
 def test_unfinished_work_remains_bounded_by_the_existing_watchdog(tool_running: bool) -> None:
-    replay = Replay(CodexHarness())
+    replay = Replay(CodexHarness(env={}))
     replay.start()
     replay.item("agent_message", COMMENTARY)
     if tool_running:

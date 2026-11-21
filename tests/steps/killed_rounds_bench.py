@@ -13,7 +13,7 @@ from doubles import PinnedViews
 from git_porcelain.testing import FakeWorktree
 from plan_fixtures import PLAN_TEXT
 from round_bench import Factory, Tracker
-from sqlite_store import begin_immediate
+from sqlite_sidecar import transaction as begin_immediate
 from test_recovery import Processes
 
 from taskloop.agents.launch import AgentLaunch
