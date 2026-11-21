@@ -712,7 +712,7 @@ def test_after_an_abandon_the_task_is_admitted_afresh_on_its_existing_branch_wit
     assert isinstance(first, Admitted) and first.key.reservation_generation == 1 and generations(factory) == [("s1", 1), ("s2", 0)]
     path = root.resolve() / folder_name(repo.identity()) / "s1"
     d = factory.execute("SELECT slot_head FROM attempt").fetchone()[0]
-    repo.worktree(path).take_branch("task/tl-1", "HEAD", mode="resume")  # as its entry prepared it
+    repo.worktree(path).take_branch("task/tl-1", "HEAD")  # as its entry prepared it
     release = SlotRelease(
         AttemptStore(lambda: factory),
         checkouts,

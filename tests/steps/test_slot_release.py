@@ -311,7 +311,7 @@ def test_abandon_a_prepared_admitted_attempt_parks_it_at_d(
     registered: sqlite3.Connection, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles
 ) -> None:
     d = head(slot)
-    slot.take_branch("task/tl-1", "HEAD", mode="resume")
+    slot.take_branch("task/tl-1", "HEAD")
     ports = Ports(registered, checkouts, slot_files)
     assert ports.releaser().release(KEY, True) == Released("s1", d, True, "unclaimed", True)
     assert (slot.branch(), head(slot), tip(slot)) == (None, d, d) and ports.unclaimed == [("/tracker", "tl-1")]
@@ -346,7 +346,7 @@ def test_a_slot_that_is_not_clean_on_its_branch_is_refused_and_stays_held(
     change: Callable[[FakeWorktree, FakeSlotFiles, pytest.MonkeyPatch], object],
     reason: str,
 ) -> None:
-    slot.take_branch("task/tl-1", "HEAD", mode="resume")
+    slot.take_branch("task/tl-1", "HEAD")
     change(slot, slot_files, monkeypatch)
     before, ports = stored(registered), Ports(registered, checkouts, slot_files)
     found = ports.releaser().release(KEY, True)
@@ -375,7 +375,7 @@ def test_an_attempt_changed_after_the_proof_refuses_before_parking(
 ) -> None:
     """A changed entry at custody acquisition invalidates the proof before any Git write."""
     d = head(slot)
-    slot.take_branch("task/tl-1", "HEAD", mode="resume")
+    slot.take_branch("task/tl-1", "HEAD")
     before, ports = stored(registered), Ports(registered, checkouts, slot_files)
     ports.inside = lambda: registered.execute("UPDATE attempt SET entry_pid=8,rev=rev+1")
     found = ports.releaser().release(KEY, True)
@@ -684,7 +684,7 @@ def test_a_checks_admission_committed_under_the_releases_lock_fails_its_fence(
     registered: sqlite3.Connection, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles
 ) -> None:
     """`SUCCESSOR` in `FENCE`: an unreleased attempt's release records nothing once a checks attempt names it."""
-    slot.take_branch("task/tl-1", "HEAD", mode="resume")
+    slot.take_branch("task/tl-1", "HEAD")
     before, ports = stored(registered), Ports(registered, checkouts, slot_files)
     ports.inside = lambda: checks_attempt(registered, 1, False)
     found = ports.releaser().release(KEY, True)

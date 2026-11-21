@@ -210,6 +210,7 @@ GIT_WRITES = frozenset(
         "record_empty",
         "record_with_hooks",
         "clean_ignored",
+        "clean_nested",
         "record",
         "take_branch",
         "park",
@@ -314,7 +315,7 @@ def test_only_the_commit_prepare_release_publish_environment_and_land_modules_wr
         ("park", "land_conflict/release.py"),
         ("abort_merge", "land_conflict/abort.py"),
         ("push", "publish.py"),
-        ("clean_ignored", "environment.py"),
+        ("clean_nested", "environment.py"),
         ("reset", "environment.py"),
         ("record", "publish.py"),  # PublishStore.record persists the publication; the matcher sees every receiver.
         ("squash", "land_target.py"),

@@ -210,7 +210,7 @@ def _take(checkouts: Checkouts, files: SlotFiles, record: AttemptRecord, state: 
         return _refused("slot_redirected")
     slot = Path(admission.slot_path)
     worktree = checkouts(slot, git_dir=state.gitdir).worktree(slot)
-    taken = worktree.take_branch(task_branch(task_id), found.start, mode="resume")
+    taken = worktree.take_branch(task_branch(task_id), found.start)
     if isinstance(taken, BranchHeld):
         return _refused("branch_held")
     changed = taken.head != found.start
