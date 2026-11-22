@@ -53,7 +53,7 @@ def test_cli_repairs_once_and_reports_the_latest_rule(
         str(repo.path),
         "--model",
         "m",
-        "--effort",
+        "--plan-effort",
         "high",
         "--minutes",
         "30",

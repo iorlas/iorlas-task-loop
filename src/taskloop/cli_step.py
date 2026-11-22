@@ -171,8 +171,8 @@ def register(commands: Parsers) -> None:
 
 
 def _harness_flag(parser: argparse.ArgumentParser) -> None:
-    for flag in ("--model", "--effort"):
-        parser.add_argument(flag, default=None, help="Override this field of each newly admitted step (flag > machine config > default)")
+    for flag, field in (("--model", "model"), ("--plan-effort", "plan effort"), ("--implement-effort", "implement effort")):
+        parser.add_argument(flag, default=None, help=f"Override the {field} of each newly admitted step")
     parser.add_argument(
         "--harness",
         type=HarnessKind,
@@ -246,7 +246,9 @@ def _start(arguments: argparse.Namespace, loaded: Loaded) -> Result:
 
 
 def _overrides(arguments: argparse.Namespace) -> Overrides:
-    return Overrides(harness=arguments.harness, model=arguments.model, effort=arguments.effort)
+    return Overrides(
+        harness=arguments.harness, model=arguments.model, plan_effort=arguments.plan_effort, implement_effort=arguments.implement_effort
+    )
 
 
 def _new_task(arguments: argparse.Namespace) -> NewTask:
@@ -363,15 +365,17 @@ def _adopt(arguments: argparse.Namespace, loaded: Loaded) -> Result:
 
 
 def _configuration(arguments: argparse.Namespace, loaded: Loaded) -> Loaded | Failed:
-    flags = Overrides(harness=arguments.harness, model=arguments.model, effort=arguments.effort)
+    flags = Overrides(
+        harness=arguments.harness, model=arguments.model, plan_effort=arguments.plan_effort, implement_effort=arguments.implement_effort
+    )
     try:
         settings = loaded.settings.agents.overridden(flags)
     except ValueError as error:
         return Failed("refused", "choices", str(error))
     sources = dict(loaded.settings.agent_sources)
     for step in Step:
-        for key in ("harness", "model", "effort"):
-            if getattr(flags, key) is not None:
+        for key, flag in (("harness", flags.harness), ("model", flags.model), ("effort", flags.effort_for(step))):
+            if flag is not None:
                 sources[f"agents.{encode_step(step)}.{key}"] = "flag"
     return replace(loaded, settings=replace(loaded.settings, agents=settings, agent_sources=sources))
 

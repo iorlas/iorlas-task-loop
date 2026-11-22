@@ -104,10 +104,10 @@ def test_a_round_with_only_the_config_binding_runs(monkeypatch: pytest.MonkeyPat
 
     monkeypatch.setattr(cli_composition, "open_next", opener)
     monkeypatch.setattr(cli_step, "run_round", lambda _ports, request: requests.append(request) or Round("tasks", ()))
-    assert main(["--config", str(config), "rounds", "once", "--model", "m", "--effort", "high", "--minutes", "30"]) == 0
+    assert main(["--config", str(config), "rounds", "once", "--model", "m", "--plan-effort", "high", "--minutes", "30"]) == 0
     assert opened == ["/tracker"]
     assert requests == [
-        cli_step.NextRequest("tasks", "/tracker", Path("/checkout"), "auto", StepSettings(), Overrides(model="m", effort="high"), 30)
+        cli_step.NextRequest("tasks", "/tracker", Path("/checkout"), "auto", StepSettings(), Overrides(model="m", plan_effort="high"), 30)
     ]
 
 

@@ -290,7 +290,7 @@ def test_the_workflow_agent_keys_set_the_stored_choice_and_a_flag_still_wins(
     remote.advance("main", {"README": "one", ".task-loop.json": "{}", **WORKFLOW_FILES, WORKFLOW_PATH: WORKFLOW_BYTES.decode() + agent})
     repo = FakeRepo.clone(remote, tmp_path / "agent")
     slots(factory, repo, root, 1)
-    wanted = replace(request(tmp_path, repo), overrides=Overrides(effort="max"))
+    wanted = replace(request(tmp_path, repo), overrides=Overrides(plan_effort="max"))
     assert isinstance(admission(factory, tmp_path, Tracker(factory, tmp_path / "artifacts"), repo).admit(wanted), Admitted)
     assert factory.execute("SELECT model,effort,compaction_token_limit FROM attempt").fetchall() == [("wf-model", "max", 5000)]
 

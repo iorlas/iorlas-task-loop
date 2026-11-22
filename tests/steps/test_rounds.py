@@ -271,7 +271,7 @@ def test_an_unwritable_log_changes_nothing_but_warns_once_each_time_it_stops_bei
     assert flapping.warned == 2
 
 
-REQUEST = NextRequest("tasks", "/tracker", Path("/checkout"), "auto", StepSettings(), Overrides(model="m", effort="high"), 30)
+REQUEST = NextRequest("tasks", "/tracker", Path("/checkout"), "auto", StepSettings(), Overrides(model="m", plan_effort="high"), 30)
 
 
 @pytest.mark.parametrize(
@@ -293,13 +293,13 @@ def test_the_rounds_choices_are_checked_before_anything(change: dict[str, str | 
         Path("/checkout"),
         str(fields["label"]),
         StepSettings(),
-        Overrides(model=str(fields["model"]), effort=str(fields["effort"])),
+        Overrides(model=str(fields["model"]), plan_effort=str(fields["effort"])),
         int(fields["minutes"]),
     )
     refused = inputs(request)
     assert refused is not None and (refused.kind, refused.reason) == ("refused", reason)
     assert inputs(REQUEST) is None
-    assert inputs(replace(REQUEST, overrides=Overrides(effort="ultra"))) is None  # which efforts exist is the vendor's to say
+    assert inputs(replace(REQUEST, overrides=Overrides(plan_effort="ultra"))) is None  # which efforts exist is the vendor's to say
 
 
 def test_the_abrupt_line_is_best_effort() -> None:

@@ -30,6 +30,8 @@ from taskloop.step_render import human
 from taskloop.step_text import SAVED_WORK
 from taskloop.wip import SavedCommit
 
+HIGH_PLAN = Overrides(model="m", plan_effort="high")
+
 AFTER_DEADLINE = 31 * 60  # past an attempt's deadline: the rounds' --minutes is 30
 ASKED = "Which widget shape do you want?"
 
@@ -471,7 +473,7 @@ def test_the_person_s_answer_takes_the_task_again_at_plan_on_its_branch_and_held
 
 def test_a_start_by_hand_of_a_held_task_is_refused_on_hold_and_changes_nothing_until_answered(factory: Factory) -> None:
     held_plan(factory)
-    request = StartRequest("tl-1", "tasks", "/tracker", factory.slot.repo.path, StepSettings(), Overrides(model="m", effort="high"), 30)
+    request = StartRequest("tl-1", "tasks", "/tracker", factory.slot.repo.path, StepSettings(), HIGH_PLAN, 30)
     refused = start(factory.starting(), request)
     assert isinstance(refused, Failed) and refused.word == "refused:on_hold" and "failed:needs_owner" in refused.detail
     assert factory.con.execute("SELECT count(*) FROM attempt").fetchone() == (1,) and factory.tracker.beads["tl-1"].labels == ("held",)
@@ -563,14 +565,14 @@ def test_a_pending_hold_refuses_the_person_s_relaunch_of_the_attempt_it_will_aba
     ran = list(factory.ran)
     found = start(
         factory.starting(),
-        StartRequest("tl-1", "tasks", "/tracker", factory.slot.repo.path, StepSettings(), Overrides(model="m", effort="high"), 30),
+        StartRequest("tl-1", "tasks", "/tracker", factory.slot.repo.path, StepSettings(), HIGH_PLAN, 30),
     )
     assert isinstance(found, Failed) and found.word == "refused:held" and factory.ran == ran
     factory.tracker.down = set()
     assert factory.round() == [("tl-1", "plan", "hold", "held stuck:expired_admitted")]
     found = start(
         factory.starting(),
-        StartRequest("tl-1", "tasks", "/tracker", factory.slot.repo.path, StepSettings(), Overrides(model="m", effort="high"), 30),
+        StartRequest("tl-1", "tasks", "/tracker", factory.slot.repo.path, StepSettings(), HIGH_PLAN, 30),
     )
     assert isinstance(found, Failed) and found.word == "refused:on_hold" and factory.ran == ran  # finished: answered first (F3)
 
@@ -579,7 +581,7 @@ def test_a_hand_started_publication_refused_branch_moved_is_reported_never_held(
     factory.now += 1
     found = start(
         factory.starting(),
-        StartRequest("tl-1", "tasks", "/tracker", factory.slot.repo.path, StepSettings(), Overrides(model="m", effort="high"), 30),
+        StartRequest("tl-1", "tasks", "/tracker", factory.slot.repo.path, StepSettings(), HIGH_PLAN, 30),
     )
     assert isinstance(found, Started)
     factory.slot.repo.set_remote_url("origin", "/nowhere")
@@ -599,7 +601,7 @@ def test_a_graceful_stop_skips_the_clear_and_the_next_round_does_it(factory: Fac
     factory.tracker.answer("tl-1")
     scripts(factory, factory.slot, "tl-1")
     factory.now += 1
-    request = NextRequest("tasks", "/tracker", factory.slot.repo.path, "auto", StepSettings(), Overrides(model="m", effort="high"), 30)
+    request = NextRequest("tasks", "/tracker", factory.slot.repo.path, "auto", StepSettings(), HIGH_PLAN, 30)
     found = run_round(replace(factory.ports(), stopping=lambda: len(factory.tracker.claims) > 1), request)
     assert isinstance(found, Round) and [each.action for each in found.moves] == ["start"] and found.stopped == "interrupted"
     assert factory.tracker.beads["tl-1"].labels == ("held", "auto")  # `held` still there

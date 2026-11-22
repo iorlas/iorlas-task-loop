@@ -47,6 +47,8 @@ from taskloop.slot_release import AlreadyReleased, Released, ReleaseResult
 from taskloop.slots import Adopted, NotAdopted, SlotGit, SlotView
 from taskloop.tracker import leaked_claim
 
+HIGH_PLAN = Overrides(model="m", plan_effort="high")
+
 EVENTS = Path("/events.jsonl")
 
 ENTRY = (7, "entry-start", "boot")
@@ -62,7 +64,7 @@ START = [
     "/checkout",
     "--model",
     "m",
-    "--effort",
+    "--plan-effort",
     "high",
     "--minutes",
     "30",
@@ -236,7 +238,7 @@ def test_start_flags_and_config_reach_the_request_and_the_openers(
     assert opened == [(tmp_path / "file.db", tmp_path / "flag-art")]
     request = admission.requests[0]
     assert (request.task_id, request.backlog, request.tracker_root, request.checkout) == ("tl-1", "tasks", "/tracker", Path("/checkout"))
-    assert (request.overrides, request.settings, request.deadline) == (Overrides(model="m", effort="high"), StepSettings(), 1000 + 30 * 60)
+    assert (request.overrides, request.settings, request.deadline) == (HIGH_PLAN, StepSettings(), 1000 + 30 * 60)
     output = capsys.readouterr()
     assert json.loads(output.out) == {
         "status": "started",

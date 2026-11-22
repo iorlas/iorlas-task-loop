@@ -265,7 +265,7 @@ The meaning of each flag as `tl <command> --help` gives it. Every step runs thro
 | `--max-running N` | `rounds once`, `rounds start` | In-flight bound, default 3, at least 1: no new task starts while this many of the backlog's tasks are in flight (slots are global, the bound is per backlog): a step running, or a passed task waiting to be landed (counted until landed). Failed, stuck, unknown, held, landed and abandoned ones do not count. The round stops `max_running`, with no tracker read; claimed work still advances. Stated in the rounds start line. |
 | `--retake-lapsed` | `rounds once`, `rounds start` | Recovery after a factory.db discard only: also take this factory's expired tracker claims with no attempt here. Assumes one factory on the tracker; prefer running once with `rounds once`. Omission leaves this recovery disabled. |
 | `--minutes N` | `step start`, `rounds once\|start` | An attempt's deadline from now (and its renewal after a reboot). |
-| `--model`, `--effort` | `step start`, `rounds once\|start` | The agent model and effort for the attempt. |
+| `--model`, `--plan-effort`, `--implement-effort` | `step start`, `rounds once\|start` | The agent model for the attempt, and the effort of plan and of implement steps, each chosen apart. |
 | `--db`, `--artifacts` | most `step`, `config show` | factory.db and the artifacts root, overriding the machine config. |
 | `--minutes N` | `land run` | The deadline of the validation of S, from now; needed when S must be validated (main moved or its required names changed) or a pending candidate resumes; not for `--no-change` or a same-tree land. |
 | `--no-change` | `land run` | Accept that origin's `main` already holds X's changes: recorded and closed with no push. |

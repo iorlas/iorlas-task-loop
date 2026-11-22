@@ -38,7 +38,7 @@ from taskloop.step_guide import CHECKS_GUIDE, GUIDE
 from taskloop.step_render import human
 
 ENTRY = (7, "entry-start", "boot")
-REQUEST = StartRequest("tl-1", "tasks", "/tracker", Path("/unused"), StepSettings(), Overrides(model="m", effort="high"), 30)
+REQUEST = StartRequest("tl-1", "tasks", "/tracker", Path("/unused"), StepSettings(), Overrides(model="m", plan_effort="high"), 30)
 
 
 class Never:

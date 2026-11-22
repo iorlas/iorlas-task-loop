@@ -211,7 +211,9 @@ class AttemptAdmission:
                 return AdmitUnavailable("git", detail=selection.explanation)
             if selection.declared and selection.decision is not ReuseDecision.REUSE:
                 return AdmitRefused("plan", detail=selection.explanation)
-            setting = choose(request.settings.for_step(selection.step), pin.workflow.table(selection.step).agent, request.overrides)
+            setting = choose(
+                request.settings.for_step(selection.step), pin.workflow.table(selection.step).agent, request.overrides, selection.step
+            )
             chosen = _Chosen(earlier, discussion.digest, selection, setting, pin)
             text = EarlierInput(reader, self.files, HoldStore(self.connect, self.begin)).attach(
                 task_text(prepared.task, selection.step, context, pin.workflow, discussion.text),

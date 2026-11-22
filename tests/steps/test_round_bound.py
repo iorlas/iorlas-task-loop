@@ -17,7 +17,7 @@ from taskloop.operations import Failed
 from taskloop.round import NextRequest, run_round
 
 DEFAULT = NextRequest(
-    "tasks", "/tracker", Path("/checkout"), "auto", StepSettings(), Overrides(model="model-m", effort="high"), 30
+    "tasks", "/tracker", Path("/checkout"), "auto", StepSettings(), Overrides(model="model-m", plan_effort="high"), 30
 )  # the bound as the CLI leaves it (3)
 
 

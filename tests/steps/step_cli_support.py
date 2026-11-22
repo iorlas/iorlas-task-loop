@@ -26,7 +26,7 @@ NEXT = [
     "auto",
     "--model",
     "m",
-    "--effort",
+    "--plan-effort",
     "high",
     "--minutes",
     "30",

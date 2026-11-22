@@ -25,6 +25,8 @@ from taskloop.operations import (
 from taskloop.round import NextRequest, run_round
 from taskloop.round_guide import automatic_guide
 
+HIGH_PLAN = Overrides(model="m", plan_effort="high")
+
 
 class Rounds:
     """`advance`'s ports are opaque to the surface: the opener's value is passed through to the stubbed operation."""
@@ -51,9 +53,7 @@ def test_next_flags_reach_the_request_and_the_opener_and_its_json_is_exact(
     monkeypatch.setattr(cli_step, "run_round", advanced)
     assert main([*NEXT, "--db", str(tmp_path / "f.db"), "--artifacts", str(tmp_path / "art"), "--json"]) == 0
     assert opened == [(tmp_path / "f.db", tmp_path / "art", "/tracker")]
-    assert requests == [
-        cli_step.NextRequest("tasks", "/tracker", Path("/checkout"), "auto", StepSettings(), Overrides(model="m", effort="high"), 30)
-    ]
+    assert requests == [cli_step.NextRequest("tasks", "/tracker", Path("/checkout"), "auto", StepSettings(), HIGH_PLAN, 30)]
     assert json.loads(capsys.readouterr().out) == {
         "status": "round",
         "backlog": "tasks",
@@ -106,9 +106,7 @@ def test_one_round_runs_over_the_real_next_wiring_and_an_empty_factory_db(tmp_pa
     con.close()
     with cli_composition.open_next(db, tmp_path / "artifacts", GitViews(DEFAULT_GIT_READ_SECONDS), str(tmp_path)) as ports:
         assert not isinstance(ports, Failed) and ports.holding.status("tasks", "tl-1") is None
-        found = run_round(
-            ports, NextRequest("tasks", str(tmp_path), tmp_path, "auto", StepSettings(), Overrides(model="m", effort="high"), 30)
-        )
+        found = run_round(ports, NextRequest("tasks", str(tmp_path), tmp_path, "auto", StepSettings(), HIGH_PLAN, 30))
     assert isinstance(found, Round) and (found.moves, found.stopped) == ((), "no_free_slot")
 
 
@@ -144,7 +142,7 @@ def test_rounds_flags_reach_the_opener_and_print_a_start_and_an_end(
 ) -> None:
     run, art = stubbed(monkeypatch, Ended("tasks", "interrupted")), tmp_path / "art"
     assert main([*ROUNDS, "--db", str(tmp_path / "f.db"), "--artifacts", str(art)]) == 0
-    request = cli_step.NextRequest("tasks", "/tracker", Path("/checkout"), "auto", StepSettings(), Overrides(model="m", effort="high"), 30)
+    request = cli_step.NextRequest("tasks", "/tracker", Path("/checkout"), "auto", StepSettings(), HIGH_PLAN, 30)
     assert run.opened == [(tmp_path / "f.db", art, request)] and run.requests == [cli_step.RoundsRequest("tasks", 60)]
     output = capsys.readouterr()
     assert (
@@ -196,9 +194,7 @@ def test_a_second_ctrl_c_exits_130(structured: bool, monkeypatch: pytest.MonkeyP
 
 def test_a_factory_db_that_exists_but_cannot_be_opened_backs_off_while_an_absent_one_ends(tmp_path: Path) -> None:
     db = tmp_path / "factory.db"
-    request = cli_step.NextRequest(
-        "tasks", str(tmp_path), Path("/checkout"), "auto", StepSettings(), Overrides(model="m", effort="high"), 30
-    )
+    request = cli_step.NextRequest("tasks", str(tmp_path), Path("/checkout"), "auto", StepSettings(), HIGH_PLAN, 30)
     once = cli_composition.one_round(db, tmp_path / "art", GitViews(DEFAULT_GIT_READ_SECONDS), request, lambda: False)
     absent = once(frozenset())
     assert isinstance(absent, Failed) and (absent.kind, absent.reason) == ("refused", "database")

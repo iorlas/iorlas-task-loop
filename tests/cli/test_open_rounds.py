@@ -24,7 +24,7 @@ from taskloop.interrupts import Interrupts
 from taskloop.operations import Ended, Failed
 from taskloop.round import NextRequest
 
-REQUEST = NextRequest("tasks", "/tracker", Path("/checkout"), "auto", StepSettings(), Overrides(model="m", effort="high"), 30)
+REQUEST = NextRequest("tasks", "/tracker", Path("/checkout"), "auto", StepSettings(), Overrides(model="m", plan_effort="high"), 30)
 
 
 class Handler:

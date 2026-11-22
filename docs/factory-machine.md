@@ -61,7 +61,7 @@ Start (one process, started by hand; nothing restarts it):
    label = "real-run-1"
    ```
 
-   Then run `rounds start --model gpt-6.1-sol --effort high --max-running N --minutes 240`, in the
+   Then run `rounds start --model gpt-6.1-sol --plan-effort high --implement-effort medium --max-running N --minutes 240`, in the
    background (`--backlog`, `--tracker-root`, `--checkout` and `--label` override the config's values), with output to
    `~/.local/state/task-loop/rounds.out`. After a `factory.db` discard, first run the same line once as `rounds once` with `--retake-lapsed`; never leave that flag on the permanent line.
 
