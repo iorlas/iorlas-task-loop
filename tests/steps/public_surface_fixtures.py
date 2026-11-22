@@ -224,6 +224,7 @@ def export_full() -> AttemptExport:
                 changed_files=None,
                 changed_lines=None,
                 launched_input_digest=None,
+                t_reasoning=None,
             ),
         )
     )

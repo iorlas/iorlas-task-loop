@@ -67,6 +67,7 @@ COLUMNS = [
     "changed_files",
     "changed_lines",
     "launched_input_digest",
+    "t_reasoning",
 ]
 
 
@@ -226,3 +227,17 @@ def test_the_export_carries_the_launched_input_digest_and_the_committed_diff_siz
     row = store.attempts(None)[0]
     assert (row.launched_input_digest, row.changed_files, row.changed_lines) == ("e" * 64, 3, 42)
     assert row.base_commit is not None and row.input_digest != row.launched_input_digest
+
+
+def test_the_export_carries_the_reasoning_tokens_and_leaves_an_unreported_count_unknown(registered: sqlite3.Connection) -> None:
+    store = ExportStore(lambda: registered)
+    registered.execute("UPDATE attempt SET phase='captured',base_commit=slot_head,ended_at=4")
+    registered.execute(
+        """INSERT INTO execution (attempt_id,dispatch_token,generation,rc,timed_out,work,stands,t_out,stdout_path,stdout_digest,
+        stderr_path,stderr_digest,answer_path,answer_digest,diagnostic_path,diagnostic_digest,answer_kind,session_state)
+        VALUES ('attempt','dispatch',1,0,0,1,1,900,'o','d','e','d','a','d','g','d','valid','complete')"""
+    )
+    assert store.attempts(None)[0].t_reasoning is None  # not reported: unknown, never 0
+    registered.execute("UPDATE execution SET t_reasoning=400")
+    row = store.attempts(None)[0]
+    assert (row.t_out, row.t_reasoning) == (900, 400)

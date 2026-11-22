@@ -199,6 +199,7 @@ class ExecutionFacts:
     model: str | None = None  # the model that answered (resolved, not the requested alias); None = the harness could not tell
     harness_version: str | None = None  # that CLI's own version
     effort: str | None = None  # the reasoning effort the run used
+    reasoning_tokens: int | None = None  # the reasoning share of this attempt's output tokens; None = the harness did not report it
 
 
 @dataclass(frozen=True)
@@ -418,6 +419,10 @@ def optional_int(value: object) -> int | None:
     return value if isinstance(value, int) and not isinstance(value, bool) and value >= 0 else None
 
 
+def reasoning_tokens(value: object) -> int | None:
+    return optional_int(value.get("reasoning")) if isinstance(value, dict) else None
+
+
 def _usage(value: object) -> tuple[int | None, int | None, int | None] | None:
     if isinstance(value, dict):
         counts = (optional_int(value.get("in")), optional_int(value.get("cached")), optional_int(value.get("out")))
@@ -455,4 +460,5 @@ def execution_facts(raw: RunOutcome) -> ExecutionFacts:
         s.model or None,
         s.harness_version or None,
         s.effort or None,
+        reasoning_tokens(s.res.get("tokens")),
     )

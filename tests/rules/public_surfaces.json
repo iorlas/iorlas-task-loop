@@ -804,6 +804,7 @@
             "t_cached": null,
             "t_in": null,
             "t_out": null,
+            "t_reasoning": null,
             "task_id": "tl-1",
             "task_total_seconds": null,
             "terminal_result": null,
@@ -2600,5 +2601,5 @@
       ]
     }
   },
-  "schema_version": 38
+  "schema_version": 39
 }

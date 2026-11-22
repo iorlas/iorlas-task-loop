@@ -47,7 +47,7 @@ def test_usage_survives_endings_and_capture_replay(
             rc=rc,
             text=answer,
             res={
-                "tokens": {"in": 740000, "cached": 600000, "out": 1500},
+                "tokens": {"in": 740000, "cached": 600000, "out": 1500, "reasoning": 400},
                 "cumulative": {"in": 1790000, "cached": 1000000, "out": 3000},
                 "requests": 16,
                 "usage_incomplete": incomplete,
@@ -60,7 +60,8 @@ def test_usage_survives_endings_and_capture_replay(
     assert result.reason == reason and result.execution is not None
     stored = result.execution
     facts = stored.facts
-    assert facts.tokens == (740000, 600000, 1500)
+    assert facts.tokens == (740000, 600000, 1500) and facts.reasoning_tokens == 400
+    assert con.execute("SELECT t_reasoning FROM execution").fetchone() == (400,)
     assert facts.cumulative == (1790000, 1000000, 3000) and facts.turns == 16
     assert facts.usage_incomplete is (incomplete if isinstance(incomplete, bool) else None)
     assert con.execute("SELECT t_in,t_cached,t_out,c_in,c_cached,c_out,turns,usage_incomplete FROM execution").fetchone() == (

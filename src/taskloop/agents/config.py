@@ -5,7 +5,6 @@ from pathlib import Path
 from any_agent.access import ClaudePermissionMode, CodexSandbox
 from pydantic import Field, JsonValue, ValidationError
 
-from taskloop.agents.effort import require
 from taskloop.agents.settings import (
     AgentSetting,
     ClaudePolicy,
@@ -14,6 +13,7 @@ from taskloop.agents.settings import (
     OpenCodePolicy,
     OpenCodeSandbox,
     StepSettings,
+    require_effort,
 )
 from taskloop.harness_choice import HarnessKind
 from taskloop.step import Step, encode_step
@@ -61,7 +61,7 @@ def _setting(raw: StepInput, home: Path, built: AgentSetting) -> AgentSetting:
         access = CodexInput.model_validate(raw.access)
         policy = CodexPolicy(sandbox=access.sandbox)
         chosen = model if model is not None else built.model
-        require(effort, raw.harness, chosen, home)
+        require_effort(effort, raw.harness, chosen, home)
         return AgentSetting(model=chosen, effort=effort, access=policy, compaction_token_limit=raw.compaction_token_limit)
     if model is None:
         raise ValueError("model is required when harness is not codex")
@@ -74,7 +74,7 @@ def _setting(raw: StepInput, home: Path, built: AgentSetting) -> AgentSetting:
         path = None if opencode.sandbox_file is None else path_at(opencode.sandbox_file, home)
         sandbox = OpenCodeSandbox() if path is None else OpenCodeSandbox.model_validate_json(path.read_text())
         policy = OpenCodePolicy(sandbox_file=path, sandbox=sandbox)
-    require(effort, raw.harness, model, home)
+    require_effort(effort, raw.harness, model, home)
     return AgentSetting(harness=raw.harness, model=model, effort=effort, access=policy)
 
 

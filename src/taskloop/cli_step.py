@@ -12,8 +12,7 @@ from typing import Final
 from pydantic import ValidationError
 
 from taskloop import cli_attempt, cli_composition, cli_land, dash_composition, operations, result_data, slot_list
-from taskloop.agents.effort import EffortRefused, require
-from taskloop.agents.settings import Overrides
+from taskloop.agents.settings import EffortRefused, Overrides
 from taskloop.cli_common import (
     ARTIFACTS,
     DB,
@@ -255,15 +254,10 @@ def _start(arguments: argparse.Namespace, loaded: Loaded) -> Result:
 
 
 def _overrides(arguments: argparse.Namespace, loaded: Loaded) -> Overrides:
-    """The flags, each effort level checked against the step's machine harness and the model the flags leave it."""
     flags = Overrides(
         harness=arguments.harness, model=arguments.model, plan_effort=arguments.plan_effort, implement_effort=arguments.implement_effort
     )
-    for step in Step:
-        effort, setting = flags.effort_for(step), loaded.settings.agents.for_step(step)
-        if effort is not None:
-            require(effort, setting.harness, flags.model or setting.model, Path.home())
-    return flags
+    return loaded.settings.agents.require_flags(flags, Path.home())
 
 
 def _new_task(arguments: argparse.Namespace) -> NewTask:

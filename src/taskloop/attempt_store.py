@@ -9,7 +9,7 @@ from taskloop.attempt_reads import as_text, stored_setting
 from taskloop.attempt_status_store import AttemptReads
 from taskloop.attempt_types import AttemptKey, FileRef
 from taskloop.attempt_write_store import AttemptWrites
-from taskloop.factory_schema import ANSWER, ATTEMPT_LOADED, EVIDENCE, FACTS, RAN, VERDICT, prefixed
+from taskloop.factory_schema import ANSWER, ATTEMPT_LOADED, EVIDENCE, FACTS, RAN, REASONING, VERDICT, prefixed
 from taskloop.step import Step
 
 __all__ = ["REGISTRATION_BUSY_MS", "AttemptLoads", "AttemptReads", "AttemptStore", "configure_registration", "retained_on"]
@@ -106,7 +106,7 @@ class AttemptLoads(LoadDecoding):
 
     def _execution_row(self, con: sqlite3.Connection, key: AttemptKey) -> tuple[object, ...] | None:
         return con.execute(
-            f"""SELECT {prefixed("e", f"{FACTS},{EVIDENCE},{ANSWER}")},{prefixed("v", VERDICT)},{prefixed("e", RAN)}
+            f"""SELECT {prefixed("e", f"{FACTS},{EVIDENCE},{ANSWER}")},{prefixed("v", VERDICT)},{prefixed("e", f"{RAN},{REASONING}")}
             FROM execution e LEFT JOIN factory_commit v
             ON v.attempt_id=e.attempt_id AND v.dispatch_token=e.dispatch_token AND v.generation=e.generation
             WHERE e.attempt_id=? AND e.dispatch_token=? AND e.generation=?""",
