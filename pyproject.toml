@@ -8,9 +8,9 @@ version = "0.1.0"
 description = "Minimal task-loop successor foundation"
 requires-python = ">=3.15"
 dependencies = [
-    "any-agent==0.22.0",
+    "any-agent==0.23.0",
     "beads-client==0.6.0",
-    "git-porcelain==0.30.0",
+    "git-porcelain==0.31.0",
     "process-lock==0.4.0",
     "pydantic==2.14.3",
     "sqlite-sidecar==0.4.0",

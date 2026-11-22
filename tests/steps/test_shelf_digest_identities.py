@@ -120,7 +120,7 @@ def test_current_project_and_lock_pins_including_stream_procs_own_version(tmp_pa
             )
     result = Inputs(tmp_path, project, lock, files).extract()
     assert isinstance(result, Identities)
-    assert tuple(item.version for item in result.packages) == ("0.22.0", "0.6.0", "0.30.0", "0.4.0", "0.2.0", "0.17.0")
+    assert tuple(item.version for item in result.packages) == ("0.23.0", "0.6.0", "0.31.0", "0.4.0", "0.2.0", "0.17.0")
     assert result.packages[0].commit == result.packages[-1].commit
     assert result.packages[-1].requested_tag == "blueprint-v0.13.0"
 
