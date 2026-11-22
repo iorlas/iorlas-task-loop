@@ -9,7 +9,7 @@ from any_agent import LaunchInputs, LaunchSpec, OpenCodeHarness, RunOutcome, Sum
 from any_agent.access import CodexSandbox
 from any_agent.testing import FakeRun
 from doubles import FEEDBACK_OPENING, WORKFLOW, FixedIds
-from test_attempt import ENTRY, KEY, PLAN, WORKER, AttemptSurroundings, app, database
+from test_attempt import ENTRY, KEY, PLAN, WORKER, AttemptSurroundings, database
 from test_attempt import surroundings as attempt_surroundings
 
 from taskloop.agent_credentials import machine_credentials
