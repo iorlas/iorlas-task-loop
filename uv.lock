@@ -14,7 +14,7 @@ wheels = [
 [[package]]
 name = "any-agent"
 version = "0.23.0"
-source = { git = "https://github.com/yoselabs/shelf?subdirectory=packages%2Fany-agent&tag=blueprint-v0.13.2#1ccc53ce8a4fa948af0d3833be5597a22d042b3a" }
+source = { git = "https://github.com/yoselabs/shelf?subdirectory=packages%2Fany-agent&tag=blueprint-v0.14.0#71e6cceb593285a484db33c46981b074e02f9695" }
 dependencies = [
     { name = "app-dirs" },
     { name = "child-env" },
@@ -24,7 +24,7 @@ dependencies = [
 [[package]]
 name = "any-gate"
 version = "0.3.0"
-source = { git = "https://github.com/yoselabs/shelf?subdirectory=packages%2Fany-gate&tag=blueprint-v0.13.2#1ccc53ce8a4fa948af0d3833be5597a22d042b3a" }
+source = { git = "https://github.com/yoselabs/shelf?subdirectory=packages%2Fany-gate&tag=blueprint-v0.14.0#71e6cceb593285a484db33c46981b074e02f9695" }
 dependencies = [
     { name = "any-lease" },
     { name = "atomic-io" },
@@ -35,7 +35,7 @@ dependencies = [
 [[package]]
 name = "any-gate-python"
 version = "0.3.0"
-source = { git = "https://github.com/yoselabs/shelf?subdirectory=packages%2Fany-gate-python&tag=blueprint-v0.13.2#1ccc53ce8a4fa948af0d3833be5597a22d042b3a" }
+source = { git = "https://github.com/yoselabs/shelf?subdirectory=packages%2Fany-gate-python&tag=blueprint-v0.14.0#71e6cceb593285a484db33c46981b074e02f9695" }
 dependencies = [
     { name = "any-gate" },
     { name = "child-env" },
@@ -46,7 +46,7 @@ dependencies = [
 [[package]]
 name = "any-lease"
 version = "0.4.0"
-source = { git = "https://github.com/yoselabs/shelf?subdirectory=packages%2Fany-lease&tag=blueprint-v0.13.2#1ccc53ce8a4fa948af0d3833be5597a22d042b3a" }
+source = { git = "https://github.com/yoselabs/shelf?subdirectory=packages%2Fany-lease&tag=blueprint-v0.14.0#71e6cceb593285a484db33c46981b074e02f9695" }
 dependencies = [
     { name = "content-digest" },
     { name = "process-lock" },
@@ -55,22 +55,22 @@ dependencies = [
 [[package]]
 name = "app-dirs"
 version = "0.3.0"
-source = { git = "https://github.com/yoselabs/shelf?subdirectory=packages%2Fapp-dirs&tag=blueprint-v0.13.2#1ccc53ce8a4fa948af0d3833be5597a22d042b3a" }
+source = { git = "https://github.com/yoselabs/shelf?subdirectory=packages%2Fapp-dirs&tag=blueprint-v0.14.0#71e6cceb593285a484db33c46981b074e02f9695" }
 
 [[package]]
 name = "async-scope"
 version = "0.4.1"
-source = { git = "https://github.com/yoselabs/shelf?subdirectory=packages%2Fasync-scope&tag=blueprint-v0.13.2#1ccc53ce8a4fa948af0d3833be5597a22d042b3a" }
+source = { git = "https://github.com/yoselabs/shelf?subdirectory=packages%2Fasync-scope&tag=blueprint-v0.14.0#71e6cceb593285a484db33c46981b074e02f9695" }
 
 [[package]]
 name = "atomic-io"
 version = "0.3.0"
-source = { git = "https://github.com/yoselabs/shelf?subdirectory=packages%2Fatomic-io&tag=blueprint-v0.13.2#1ccc53ce8a4fa948af0d3833be5597a22d042b3a" }
+source = { git = "https://github.com/yoselabs/shelf?subdirectory=packages%2Fatomic-io&tag=blueprint-v0.14.0#71e6cceb593285a484db33c46981b074e02f9695" }
 
 [[package]]
 name = "beads-client"
 version = "0.6.0"
-source = { git = "https://github.com/yoselabs/shelf?subdirectory=packages%2Fbeads-client&tag=blueprint-v0.13.2#1ccc53ce8a4fa948af0d3833be5597a22d042b3a" }
+source = { git = "https://github.com/yoselabs/shelf?subdirectory=packages%2Fbeads-client&tag=blueprint-v0.14.0#71e6cceb593285a484db33c46981b074e02f9695" }
 dependencies = [
     { name = "child-env" },
 ]
@@ -78,12 +78,12 @@ dependencies = [
 [[package]]
 name = "blueprint"
 version = "0.13.2"
-source = { git = "https://github.com/yoselabs/shelf?subdirectory=packages%2Fblueprint&tag=blueprint-v0.13.2#1ccc53ce8a4fa948af0d3833be5597a22d042b3a" }
+source = { git = "https://github.com/yoselabs/shelf?subdirectory=packages%2Fblueprint&tag=blueprint-v0.14.0#71e6cceb593285a484db33c46981b074e02f9695" }
 
 [[package]]
 name = "child-env"
 version = "0.4.0"
-source = { git = "https://github.com/yoselabs/shelf?subdirectory=packages%2Fchild-env&tag=blueprint-v0.13.2#1ccc53ce8a4fa948af0d3833be5597a22d042b3a" }
+source = { git = "https://github.com/yoselabs/shelf?subdirectory=packages%2Fchild-env&tag=blueprint-v0.14.0#71e6cceb593285a484db33c46981b074e02f9695" }
 
 [[package]]
 name = "click"
@@ -115,7 +115,7 @@ wheels = [
 [[package]]
 name = "content-digest"
 version = "0.2.0"
-source = { git = "https://github.com/yoselabs/shelf?subdirectory=packages%2Fcontent-digest&tag=blueprint-v0.13.2#1ccc53ce8a4fa948af0d3833be5597a22d042b3a" }
+source = { git = "https://github.com/yoselabs/shelf?subdirectory=packages%2Fcontent-digest&tag=blueprint-v0.14.0#71e6cceb593285a484db33c46981b074e02f9695" }
 
 [[package]]
 name = "coverage"
@@ -194,7 +194,7 @@ wheels = [
 [[package]]
 name = "git-porcelain"
 version = "0.31.0"
-source = { git = "https://github.com/yoselabs/shelf?subdirectory=packages%2Fgit-porcelain&tag=blueprint-v0.13.2#1ccc53ce8a4fa948af0d3833be5597a22d042b3a" }
+source = { git = "https://github.com/yoselabs/shelf?subdirectory=packages%2Fgit-porcelain&tag=blueprint-v0.14.0#71e6cceb593285a484db33c46981b074e02f9695" }
 dependencies = [
     { name = "child-env" },
     { name = "stream-proc" },
@@ -274,33 +274,35 @@ dev = [
     { name = "pyrefly" },
     { name = "pytest" },
     { name = "pytest-cov" },
+    { name = "pytest-timeout" },
     { name = "pytest-xdist" },
     { name = "ruff" },
 ]
 
 [package.metadata]
 requires-dist = [
-    { name = "any-agent", git = "https://github.com/yoselabs/shelf?subdirectory=packages%2Fany-agent&tag=blueprint-v0.13.2" },
-    { name = "beads-client", git = "https://github.com/yoselabs/shelf?subdirectory=packages%2Fbeads-client&tag=blueprint-v0.13.2" },
-    { name = "git-porcelain", git = "https://github.com/yoselabs/shelf?subdirectory=packages%2Fgit-porcelain&tag=blueprint-v0.13.2" },
-    { name = "process-lock", git = "https://github.com/yoselabs/shelf?subdirectory=packages%2Fprocess-lock&tag=blueprint-v0.13.2" },
+    { name = "any-agent", git = "https://github.com/yoselabs/shelf?subdirectory=packages%2Fany-agent&tag=blueprint-v0.14.0" },
+    { name = "beads-client", git = "https://github.com/yoselabs/shelf?subdirectory=packages%2Fbeads-client&tag=blueprint-v0.14.0" },
+    { name = "git-porcelain", git = "https://github.com/yoselabs/shelf?subdirectory=packages%2Fgit-porcelain&tag=blueprint-v0.14.0" },
+    { name = "process-lock", git = "https://github.com/yoselabs/shelf?subdirectory=packages%2Fprocess-lock&tag=blueprint-v0.14.0" },
     { name = "pydantic", specifier = "==2.14.3" },
-    { name = "sqlite-sidecar", git = "https://github.com/yoselabs/shelf?subdirectory=packages%2Fsqlite-sidecar&tag=blueprint-v0.13.2" },
-    { name = "sqlite-store", git = "https://github.com/yoselabs/shelf?subdirectory=packages%2Fsqlite-store&tag=blueprint-v0.13.2" },
-    { name = "stream-proc", git = "https://github.com/yoselabs/shelf?subdirectory=packages%2Fstream-proc&tag=blueprint-v0.13.2" },
+    { name = "sqlite-sidecar", git = "https://github.com/yoselabs/shelf?subdirectory=packages%2Fsqlite-sidecar&tag=blueprint-v0.14.0" },
+    { name = "sqlite-store", git = "https://github.com/yoselabs/shelf?subdirectory=packages%2Fsqlite-store&tag=blueprint-v0.14.0" },
+    { name = "stream-proc", git = "https://github.com/yoselabs/shelf?subdirectory=packages%2Fstream-proc&tag=blueprint-v0.14.0" },
 ]
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "any-gate", git = "https://github.com/yoselabs/shelf?subdirectory=packages%2Fany-gate&tag=blueprint-v0.13.2" },
-    { name = "any-gate-python", git = "https://github.com/yoselabs/shelf?subdirectory=packages%2Fany-gate-python&tag=blueprint-v0.13.2" },
-    { name = "blueprint", git = "https://github.com/yoselabs/shelf?subdirectory=packages%2Fblueprint&tag=blueprint-v0.13.2" },
+    { name = "any-gate", git = "https://github.com/yoselabs/shelf?subdirectory=packages%2Fany-gate&tag=blueprint-v0.14.0" },
+    { name = "any-gate-python", git = "https://github.com/yoselabs/shelf?subdirectory=packages%2Fany-gate-python&tag=blueprint-v0.14.0" },
+    { name = "blueprint", git = "https://github.com/yoselabs/shelf?subdirectory=packages%2Fblueprint&tag=blueprint-v0.14.0" },
     { name = "codespell", specifier = ">=2.3,<3" },
     { name = "deptry", specifier = ">=0.20,<1" },
     { name = "import-linter", specifier = "==2.15" },
     { name = "pyrefly", specifier = "==1.4.0" },
     { name = "pytest", specifier = "==9.2.0" },
     { name = "pytest-cov", specifier = ">=7.1.0" },
+    { name = "pytest-timeout", specifier = "==2.4.0" },
     { name = "pytest-xdist", specifier = "==3.8.0" },
     { name = "ruff", specifier = "==0.17.2" },
 ]
@@ -347,7 +349,7 @@ wheels = [
 [[package]]
 name = "process-lock"
 version = "0.4.0"
-source = { git = "https://github.com/yoselabs/shelf?subdirectory=packages%2Fprocess-lock&tag=blueprint-v0.13.2#1ccc53ce8a4fa948af0d3833be5597a22d042b3a" }
+source = { git = "https://github.com/yoselabs/shelf?subdirectory=packages%2Fprocess-lock&tag=blueprint-v0.14.0#71e6cceb593285a484db33c46981b074e02f9695" }
 dependencies = [
     { name = "stream-proc" },
 ]
@@ -467,6 +469,18 @@ wheels = [
 ]
 
 [[package]]
+name = "pytest-timeout"
+version = "2.4.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pytest" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/ac/82/4c9ecabab13363e72d880f2fb504c5f750433b2b6f16e99f4ec21ada284c/pytest_timeout-2.4.0.tar.gz", hash = "sha256:7e68e90b01f9eff71332b25001f85c75495fc4e3a836701876183c4bcfd0540a", size = 17973, upload-time = "2025-05-05T19:44:34.99Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/fa/b6/3127540ecdf1464a00e5a01ee60a1b09175f6913f0644ac748494d9c4b21/pytest_timeout-2.4.0-py3-none-any.whl", hash = "sha256:c42667e5cdadb151aeb5b26d114aff6bdf5a907f176a007a30b940d3d865b5c2", size = 14382, upload-time = "2025-05-05T19:44:33.502Z" },
+]
+
+[[package]]
 name = "pytest-xdist"
 version = "3.8.0"
 source = { registry = "https://pypi.org/simple" }
@@ -532,12 +546,12 @@ wheels = [
 [[package]]
 name = "sqlite-sidecar"
 version = "0.4.0"
-source = { git = "https://github.com/yoselabs/shelf?subdirectory=packages%2Fsqlite-sidecar&tag=blueprint-v0.13.2#1ccc53ce8a4fa948af0d3833be5597a22d042b3a" }
+source = { git = "https://github.com/yoselabs/shelf?subdirectory=packages%2Fsqlite-sidecar&tag=blueprint-v0.14.0#71e6cceb593285a484db33c46981b074e02f9695" }
 
 [[package]]
 name = "sqlite-store"
 version = "0.2.0"
-source = { git = "https://github.com/yoselabs/shelf?subdirectory=packages%2Fsqlite-store&tag=blueprint-v0.13.2#1ccc53ce8a4fa948af0d3833be5597a22d042b3a" }
+source = { git = "https://github.com/yoselabs/shelf?subdirectory=packages%2Fsqlite-store&tag=blueprint-v0.14.0#71e6cceb593285a484db33c46981b074e02f9695" }
 dependencies = [
     { name = "sqlite-sidecar" },
 ]
@@ -545,7 +559,7 @@ dependencies = [
 [[package]]
 name = "stream-proc"
 version = "0.17.0"
-source = { git = "https://github.com/yoselabs/shelf?subdirectory=packages%2Fstream-proc&tag=blueprint-v0.13.2#1ccc53ce8a4fa948af0d3833be5597a22d042b3a" }
+source = { git = "https://github.com/yoselabs/shelf?subdirectory=packages%2Fstream-proc&tag=blueprint-v0.14.0#71e6cceb593285a484db33c46981b074e02f9695" }
 dependencies = [
     { name = "async-scope" },
 ]
