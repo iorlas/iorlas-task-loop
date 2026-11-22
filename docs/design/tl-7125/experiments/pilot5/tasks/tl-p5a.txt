@@ -1,0 +1,10 @@
+`tl attempt show` can print the wrong artifacts directory. When the factory's rounds were started with `tl rounds start --artifacts DIR` (a directory other than the default), `tl attempt show TASK` run without `--artifacts` reports artifact paths under the default directory instead of the directory the running rounds write to.
+
+`tl attempt show` must report the artifacts directory that the same machine configuration and rounds settings resolve to, so a person does not have to repeat `--artifacts` on every attempt command.
+
+Note on checks: the factory runs `just check` and `just test` itself after your answer. They cannot run in your sandbox (no beads database, read-only gate cache), so do not run them; focused pytest runs of the files you touch are fine.
+
+## Acceptance Criteria
+- `tl attempt show TASK` resolves the artifacts directory from the same source as `tl rounds start` does, so the paths it prints match the files the rounds wrote.
+- An explicit `--artifacts DIR` on `tl attempt show` still wins.
+- A focused test covers both cases.

@@ -1,0 +1,33 @@
+{
+ "run": "tl-p6a_b",
+ "task": "tl-p6a",
+ "arm": "b",
+ "workflow": "attempt-budget",
+ "started": 1795360493.6330545,
+ "outcome": "infra:[Errno 2] No such file or directory: '/tmp/aa/pilot6/tasks/tl-p6a.title'",
+ "states": [],
+ "group": 2,
+ "inflight_planned": 2,
+ "sample_start": {
+  "t": 1795360493.6333287,
+  "load": [
+   "2.58",
+   "3.37",
+   "2.99"
+  ],
+  "mem_avail_mb": 8049
+ },
+ "ended": 1795360495.7102063,
+ "sample_end": {
+  "t": 1795360495.7102463,
+  "load": [
+   "3.10",
+   "3.46",
+   "3.02"
+  ],
+  "mem_avail_mb": 7890
+ },
+ "export": null,
+ "diffstat": "",
+ "dirty": ""
+}

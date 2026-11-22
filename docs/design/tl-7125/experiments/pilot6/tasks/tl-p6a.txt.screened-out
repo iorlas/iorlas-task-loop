@@ -1,0 +1,9 @@
+Before a drain-and-upgrade the factory's `factory.db` is discarded when the schema changes, so the attempt evidence it holds is lost unless someone exported it first. Today that depends on a person remembering to run `tl attempt export`.
+
+When `tl drain` finishes a drain (no attempt is running any more), it must also save the same comparison rows that `tl attempt export --json` prints, into a dated file in the artifacts directory, and report that file's path in its result. A drain that is not finished writes nothing.
+
+## Acceptance Criteria
+- A finished drain writes the export JSON to `<artifacts>/exports/attempts-<UTC date and time>.json` and its result names the path.
+- The file's content equals what `tl attempt export --json` prints at that moment for the same database and backlog.
+- A drain that is still waiting for running attempts writes no file.
+- A focused test covers a finished drain and an unfinished one.

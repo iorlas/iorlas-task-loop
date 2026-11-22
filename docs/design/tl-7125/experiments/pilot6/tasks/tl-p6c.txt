@@ -1,0 +1,8 @@
+An experiment that compares two workflows reads the rows of `tl attempt export`, but the CLI documentation does not say what a held task looks like in them, so a reader may drop held runs or replace them as failures.
+
+Document in `docs/cli.md`, next to the `tl attempt export` entry, how a held task appears in the rows (which columns carry the hold and its explanation, whether the held attempt has a row of its own) and that comparisons count a hold as a result, not as a missing run.
+
+## Acceptance Criteria
+- The `tl attempt export` entry says where a hold shows up and that it counts as a result.
+- The statement matches what the export actually returns for a held attempt (verify it against the code or a test).
+- No behaviour changes; the repository's own checks still pass.

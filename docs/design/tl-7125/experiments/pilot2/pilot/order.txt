@@ -1,0 +1,7 @@
+group1 solo: a04
+group2 solo: a02
+group3 solo: a01
+group4 pair: a05 b01
+group5 solo: a03
+group6 pair: b03 b04
+group7 pair: b05 b02
