@@ -202,7 +202,7 @@ NOTE = "docs/design/tl-1/note.md"
 @pytest.mark.parametrize(
     ("files", "line", "code", "opens"),
     [
-        ({P: PLAN_TEXT}, "collected committed commit=committed claim=held release=released branch=published", 0, 17),
+        ({P: PLAN_TEXT}, "collected committed commit=committed claim=held release=released branch=published", 0, 18),
         ({P: " \n"}, "collected rejected:plan_empty commit=rejected:plan_empty claim=held release=released", 1, 17),
         ({P: PLAN_TEXT, NOTE: "n"}, "pending commit commit=uncommitted:uncommitted claim=held", 1, 13),
         ({}, "pending commit commit=uncommitted:unsafe claim=held", 1, 9),
@@ -220,7 +220,8 @@ def test_the_registered_entry_executes_commits_once_and_exits_0_only_when_commit
     # branch rule: root;
     # take_branch: slot; slot read again: root, slot); the one factory commit: four to commit (the staged set read before the
     # record), two for the clean check, one
-    # to judge or list; a collected step's release: the slot read (root, slot) and the park (slot). The worker is observed
+    # to judge or list (a committed verdict: one more to count its changes), a collected step's release: the slot read (root, slot) and
+    # the park (slot). The worker is observed
     # right before each Git write (stage, record), never when the paths are unsafe, and once more by the release's stop proof
     collected = line.startswith("collected")
     assert entry.waits == [] and entry.git_opens == opens + 5 and entry.observed == [WORKER] * (0 if files == {} else 3 if collected else 2)

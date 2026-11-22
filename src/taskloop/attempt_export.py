@@ -9,7 +9,8 @@ otherwise NULL. wall_seconds remains this agent attempt's admission to capture. 
 block that did not pass (an empty list: none, or none recorded). hold_text is the stored hold's explanation (NULL: no hold or none given).
 setup_seconds is the latest setup run's duration. check_seconds maps check names to durations in the latest
 block of the latest checks attempt (unfinished durations are NULL, no recorded checks is an empty object).
-The launched-input digest is not stored in factory.db; input_digest is the admitted input only.
+input_digest is the admitted input, launched_input_digest the input actually launched (NULL: never dispatched). base_commit is the slot
+HEAD the attempt started from; changed_files and changed_lines are its diff to its commit (NULL: no committed verdict).
 """
 
 from dataclasses import dataclass

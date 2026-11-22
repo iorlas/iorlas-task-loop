@@ -64,6 +64,9 @@ COLUMNS = [
     "hold_cause",
     "hold_text",
     "terminal_result",
+    "changed_files",
+    "changed_lines",
+    "launched_input_digest",
 ]
 
 
@@ -204,3 +207,22 @@ def test_the_export_names_the_failed_checks_and_the_hold_text_of_a_row(registere
     assert row.hold_cause == "failed:needs_owner"
     assert rows_render.records(found)[0]["failed_checks"] == ["tests", "docs", "slow"]
     assert '"[""tests"", ""docs"", ""slow""]"' in rows_render.lines(found)[1]
+
+
+def test_the_export_carries_the_launched_input_digest_and_the_committed_diff_size(registered: sqlite3.Connection) -> None:
+    store = ExportStore(lambda: registered)
+    row = store.attempts(None)[0]
+    assert (row.launched_input_digest, row.changed_files, row.changed_lines) == (None, None, None)  # unknown, not zero
+    registered.execute("UPDATE attempt SET phase='captured',base_commit=slot_head,ended_at=4,launched_digest=?", ("e" * 64,))
+    registered.execute(
+        """INSERT INTO execution (attempt_id,dispatch_token,generation,rc,timed_out,work,stands,stdout_path,stdout_digest,stderr_path,
+        stderr_digest,answer_path,answer_digest,diagnostic_path,diagnostic_digest,answer_kind,session_state)
+        VALUES ('attempt','dispatch',1,0,0,1,1,'o','d','e','d','a','d','g','d','valid','complete')"""
+    )
+    registered.execute(
+        "INSERT INTO factory_commit (attempt_id,dispatch_token,generation,verdict,observed_at,files_changed,lines_changed) "
+        "VALUES ('attempt','dispatch',1,'committed',5,3,42)"
+    )
+    row = store.attempts(None)[0]
+    assert (row.launched_input_digest, row.changed_files, row.changed_lines) == ("e" * 64, 3, 42)
+    assert row.base_commit is not None and row.input_digest != row.launched_input_digest

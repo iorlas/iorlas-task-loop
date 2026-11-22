@@ -688,6 +688,7 @@ source_modules =
     taskloop.drain.reconcile
     taskloop.drain.render
     taskloop.drain.restart
+    taskloop.drain_evidence
     taskloop.duration_evidence
     taskloop.duration_file
     taskloop.earlier_attempt

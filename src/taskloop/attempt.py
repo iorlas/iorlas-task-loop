@@ -1,5 +1,6 @@
 """Execute, capture, collect and commit one already admitted agent attempt; it grants no admission and releases nothing."""
 
+import hashlib
 from collections.abc import Callable
 from contextlib import suppress
 from dataclasses import replace
@@ -203,7 +204,7 @@ class Attempts:
         running = False
         try:
             self.registration_store.warm()
-            if self.store.dispatch(record, base.head) == "conflict":
+            if self.store.dispatch(record, base.head, hashlib.sha256(spec.stdin.encode()).hexdigest()) == "conflict":
                 return AttemptResult("pending", "dispatching")
             running = True
             return self._run(record.admission, harness, spec, runtime_clock)

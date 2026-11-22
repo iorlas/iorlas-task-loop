@@ -20,9 +20,11 @@ from taskloop.attempt_types import (
     Admission,
     AttemptKey,
     AttemptRecord,
+    Changes,
     Checkouts,
     CommitRefused,
     CommitResult,
+    Committed,
     CommitWaiting,
     CommitWaitingReason,
     NotApplicable,
@@ -42,7 +44,7 @@ from taskloop.operation_evidence import OperationTiming
 from taskloop.slot_lock import ReadOnly, SlotBusy, SlotLockUnavailable
 from taskloop.slot_state import SlotState, bounded, observe_slot, staged
 from taskloop.steps import kind
-from taskloop.verdict import judge
+from taskloop.verdict import changes, judge
 
 type CommitHold = Callable[[Admission], AbstractContextManager[None]]
 LOCK_WORDS: dict[type[Exception], CommitWaitingReason] = {
@@ -207,8 +209,11 @@ class FactoryCommit:
             return CommitRefused("inconsistent")
         step = kind(admission.step)
         found = judge(self.checkouts(root), root, commit, step, step.rules(admission.task.task_id), self.store.chain(admission.key))
-        return self._kept(record, base, commit, found)
+        made = changes(self.checkouts(root), root, base, commit) if isinstance(found, Committed) else None
+        return self._kept(record, base, commit, found, made)
 
-    def _kept(self, record: AttemptRecord, base: str, commit: str | None, found: Verdict) -> Verdict | CommitRefused:
-        kept = self.store.verdict(record.admission, base, commit, found, self.clock())
+    def _kept(
+        self, record: AttemptRecord, base: str, commit: str | None, found: Verdict, made: Changes | None = None
+    ) -> Verdict | CommitRefused:
+        kept = self.store.verdict(record.admission, base, commit, found, self.clock(), made)
         return found if kept == found else CommitRefused("inconsistent")  # same inputs, same rules: a defect

@@ -16,6 +16,7 @@ from taskloop.attempt_types import (
     AnswerState,
     AttemptKey,
     AttemptRecord,
+    Changes,
     EntryIdentity,
     Evidence,
     ExecutionFacts,
@@ -171,15 +172,16 @@ class AttemptWrites(AttemptLoads):
             )
             return "accepted"
 
-    def dispatch(self, expected: AttemptRecord, base: str) -> Literal["accepted", "conflict"]:
-        """`base` is the slot HEAD read just before this write; it is recorded once, with the phase change."""
+    def dispatch(self, expected: AttemptRecord, base: str, launched_digest: str) -> Literal["accepted", "conflict"]:
+        """`base` is the slot HEAD read just before this write and `launched_digest` the sha256 of the input about to be launched;
+        both are recorded once, with the phase change."""
         with self._connection(write=True) as con:
             current = self._fence(con, expected.admission)
             if current.phase != "admitted" or current.revision != expected.revision:
                 return "conflict"
             con.execute(
-                "UPDATE attempt SET phase='dispatching',base_commit=?,rev=rev+1 WHERE attempt_id=? AND rev=?",
-                (base, expected.admission.key.attempt_id, expected.revision),
+                "UPDATE attempt SET phase='dispatching',base_commit=?,launched_digest=?,rev=rev+1 WHERE attempt_id=? AND rev=?",
+                (base, launched_digest, expected.admission.key.attempt_id, expected.revision),
             )
             return "accepted"
 
@@ -305,23 +307,26 @@ class AttemptWrites(AttemptLoads):
             raise StoreRefused("changed_answer")
         return stored
 
-    def verdict(self, admission: Admission, base: str, commit: str | None, result: Verdict, now: float) -> Verdict:
+    def verdict(
+        self, admission: Admission, base: str, commit: str | None, result: Verdict, now: float, changes: Changes | None = None
+    ) -> Verdict:
         """Insert-only: written while the reservation is held, the run was clean, its session state complete, the
         stored valid answer's effect `commit` or `keep`, its base B and its stored `end_commit` exactly those judged by factory commit;
         `nothing_written` alone has no commit (effect `commit`, `end_commit` NULL) and `reused` needs `keep`. An
         existing row is kept, never rewritten. Returns the row now stored."""
         values = attempt_reads._verdict_values(result)
+        made = (None, None) if changes is None else (changes.files, changes.lines)
         with self._connection(write=True) as con:
             self._fence(con, admission)
             con.execute(
-                f"""INSERT INTO factory_commit (attempt_id,dispatch_token,generation,{VERDICT},observed_at)
-                SELECT ?,?,?,?,?,?,?,? FROM execution e JOIN attempt p ON p.attempt_id=e.attempt_id
+                f"""INSERT INTO factory_commit (attempt_id,dispatch_token,generation,{VERDICT},observed_at,files_changed,lines_changed)
+                SELECT ?,?,?,?,?,?,?,?,?,? FROM execution e JOIN attempt p ON p.attempt_id=e.attempt_id
                 WHERE e.attempt_id=? AND e.dispatch_token=? AND e.generation=? AND e.answer_kind='valid'
                 AND e.effect IN ('commit','keep') AND e.rc=0 AND e.timed_out=0 AND e.session_state='complete'
                 AND p.base_commit=? AND CASE WHEN ?='nothing_written' THEN p.end_commit IS NULL AND e.effect='commit'
                 ELSE p.end_commit=? END AND (?=0 OR e.effect='keep')
                 ON CONFLICT DO NOTHING""",
-                (*astuple(admission.key), *values, now, *astuple(admission.key), base, values[1], commit, values[3]),
+                (*astuple(admission.key), *values, now, *made, *astuple(admission.key), base, values[1], commit, values[3]),
             )
             row: tuple[object, ...] | None = con.execute(
                 f"SELECT {VERDICT} FROM factory_commit WHERE attempt_id=? AND dispatch_token=? AND generation=?", astuple(admission.key)

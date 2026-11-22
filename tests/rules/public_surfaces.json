@@ -447,6 +447,7 @@
           "active_count": 0,
           "conclusion": "complete",
           "detail": "Drain result",
+          "export": "not saved: factory.db could not be read",
           "generation": 1,
           "pending_actions": 0,
           "uncertain": [],
@@ -767,6 +768,8 @@
             "c_in": null,
             "c_out": null,
             "chain_id": "attempt",
+            "changed_files": null,
+            "changed_lines": null,
             "check_seconds": {},
             "compaction_token_limit": null,
             "disposition": null,
@@ -783,6 +786,7 @@
             "input_digest": "input",
             "latest_checks_conclusion": null,
             "latest_checks_reason": null,
+            "launched_input_digest": null,
             "max_attempts": null,
             "model": "m",
             "number": 1,
@@ -2570,5 +2574,5 @@
       ]
     }
   },
-  "schema_version": 37
+  "schema_version": 38
 }

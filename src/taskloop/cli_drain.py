@@ -3,7 +3,9 @@
 import argparse
 import json
 import sys
+import time
 
+from taskloop import drain_evidence
 from taskloop.cli_composition import load_config
 from taskloop.drain.composition import open_drain
 from taskloop.drain.drain import drain
@@ -39,7 +41,12 @@ def run(arguments: argparse.Namespace) -> int:
             result = opened if isinstance(opened, Result) else drain(opened)
     failed = result.conclusion not in {Conclusion.WAITING, Conclusion.COMPLETE}
     text = human(result) + (f"\n{CONFIG[loaded.reason]}" if isinstance(loaded, ConfigRefused) else "")
-    print(json.dumps(data(result)) if arguments.json_output else text, file=sys.stderr if failed else sys.stdout)
+    shown = data(result)
+    if result.conclusion is Conclusion.COMPLETE and not isinstance(loaded, ConfigRefused):
+        saved = drain_evidence.save(loaded, time.time())
+        text += f"\nAttempt export {saved}"
+        shown |= {"export": saved}
+    print(json.dumps(shown) if arguments.json_output else text, file=sys.stderr if failed else sys.stdout)
     return {Conclusion.COMPLETE: ExitCode.SUCCESS, Conclusion.REFUSED: ExitCode.REFUSED, Conclusion.INTERRUPTED: ExitCode.INTERRUPTED}.get(
         result.conclusion, ExitCode.UNKNOWN
     )

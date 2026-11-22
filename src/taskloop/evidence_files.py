@@ -374,6 +374,10 @@ class EvidenceFiles:
         """The admitted input, written once under the attempt's key-derived directory before any external effect."""
         return self._write(self.directory(key) + "/input.txt", text)
 
+    def put_export(self, relative: str, text: str) -> FileRef:
+        """A drain's attempt export, written once under `relative` (a dated name) before the database can be discarded."""
+        return self._write(relative, text)
+
     def put_launched_input(self, key: AttemptKey, text: str, execution: Intent | Callback | None = None) -> FileRef:
         """The complete dispatched prompt and source commit, retaining admission's original input snapshot."""
         return self._write(self.directory(key, execution) + "/launched-input.txt", text)

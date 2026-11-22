@@ -57,6 +57,7 @@ WORKER = Worker(pid=42, pgid=42, start="native-start", boot="boot")
 P = "docs/design/tl-1/plan.md"
 PLAN = {"disposition": "planned", "plan_path": P, "paths": [P], "message": "Plan tl-1", "explanation": "Plan committed"}
 BASE = "b" * 40  # a recorded B for store-level dispatches; the body reads the slot's own HEAD
+DIGEST = "d" * 64  # a launched-input digest for store-level dispatches
 
 
 def codex(_harness: HarnessKind) -> tuple[str, dict[str, str]]:
@@ -246,8 +247,8 @@ def test_dispatch_is_consumed_and_wrong_key_cannot_capture(tmp_path: Path, surro
     store = AttemptStore(lambda: con)
     admitted = store.load(KEY)
     assert admitted is not None
-    assert store.dispatch(admitted, BASE) == "accepted"
-    assert store.dispatch(admitted, BASE) == "conflict"
+    assert store.dispatch(admitted, BASE, DIGEST) == "accepted"
+    assert store.dispatch(admitted, BASE, DIGEST) == "conflict"
     execution = fake()
     assert app(con, surroundings, execution).execute(KEY, ENTRY).status == "pending"
     assert execution.calls == []
@@ -584,9 +585,9 @@ def test_the_registration_connection_is_opened_before_dispatch_and_its_fault_lea
     con, events = database(surroundings), []
 
     class Main(AttemptStore):
-        def dispatch(self, expected: AttemptRecord, base: str) -> Literal["accepted", "conflict"]:
+        def dispatch(self, expected: AttemptRecord, base: str, launched_digest: str) -> Literal["accepted", "conflict"]:
             events.append("dispatch")
-            return super().dispatch(expected, base)
+            return super().dispatch(expected, base, launched_digest)
 
     def opened() -> sqlite3.Connection | None:
         events.append("registration_store")
@@ -701,7 +702,7 @@ def test_two_connections_contend_for_one_dispatch(tmp_path: Path, surroundings: 
     def contender() -> None:
         mine = Store(SCHEMA).open_rw(path)
         barrier.wait()
-        outcomes.append(AttemptStore(lambda: mine, store.begin_immediate).dispatch(record, BASE))
+        outcomes.append(AttemptStore(lambda: mine, store.begin_immediate).dispatch(record, BASE, DIGEST))
 
     threads = [threading.Thread(target=contender) for _ in range(2)]
     for thread in threads:

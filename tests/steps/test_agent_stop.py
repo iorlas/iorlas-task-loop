@@ -31,7 +31,7 @@ def running(con: sqlite3.Connection) -> Admission:
     attempts = AttemptStore(lambda: con)
     record = attempts.load(KEY)
     assert record is not None
-    assert attempts.dispatch(record, "b" * 40) == "accepted"
+    assert attempts.dispatch(record, "b" * 40, "c" * 64) == "accepted"
     assert attempts.register(record.admission, WORKER) == "accepted"
     return record.admission
 

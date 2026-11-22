@@ -26,6 +26,8 @@ v22: durable agent stop intents and signal-call reports. Drain old entries befor
 v27: captured per-attempt compaction threshold. Drain old entries before discarding an older database.
 v31: durable answer repairs retain their predecessor's repeat number, settings, session and deadline.
 v37: `execution.harness` dropped: it only repeated `attempt.harness`. Drain old entries before discarding an older database.
+v38: `attempt.launched_digest` (sha256 of the input actually launched, written at dispatch) and `factory_commit.files_changed` /
+`lines_changed` (the committed attempt's diff from its base to its commit). Drain old entries before discarding an older database.
 """
 
 from enum import StrEnum
@@ -55,7 +57,7 @@ _UNDEFINED = encode(CommandConclusion.UNDEFINED)
 # This is also the runtime's persisted-state compatibility version: increment it for incompatible changes to the
 # interpretation of execution state, even without a DDL change. Compatible code changes keep it and resume normally.
 SCHEMA = Schema(
-    version=37,
+    version=38,
     name="factory",
     steps={},
     ddl=f"""
@@ -130,6 +132,7 @@ CREATE TABLE attempt (
  rev INTEGER NOT NULL DEFAULT 0, worker_pid INTEGER, worker_pgid INTEGER, worker_start TEXT, worker_boot TEXT,
  session_ref TEXT, session_conflict INTEGER NOT NULL DEFAULT 0 CHECK(session_conflict IN (0,1)),
  base_commit TEXT CHECK(base_commit IS NULL OR length(base_commit) IN (40,64)),
+ launched_digest TEXT CHECK(launched_digest IS NULL OR (length(launched_digest)=64 AND launched_digest NOT GLOB '*[^0-9a-f]*')),
  end_commit TEXT CHECK(end_commit IS NULL OR length(end_commit) IN (40,64)),
  number INTEGER NOT NULL CHECK(number >= 1), seq INTEGER NOT NULL CHECK(seq >= 1),
  slot_head TEXT NOT NULL CHECK(length(slot_head) IN (40,64)),
@@ -179,7 +182,11 @@ CREATE TABLE execution (
 CREATE TABLE factory_commit (
  attempt_id TEXT PRIMARY KEY REFERENCES execution(attempt_id), dispatch_token TEXT NOT NULL, generation INTEGER NOT NULL,
  verdict TEXT NOT NULL CHECK(verdict IN ('committed','rejected')), reason TEXT, blob TEXT, observed_at REAL NOT NULL,
- reused INTEGER NOT NULL DEFAULT 0 CHECK(reused IN (0,1)), CHECK(reused=0 OR verdict='committed'),
+ reused INTEGER NOT NULL DEFAULT 0 CHECK(reused IN (0,1)),
+ files_changed INTEGER CHECK(files_changed IS NULL OR files_changed>=0),
+ lines_changed INTEGER CHECK(lines_changed IS NULL OR lines_changed>=0),
+ CHECK(reused=0 OR verdict='committed'),
+ CHECK((files_changed IS NULL) = (lines_changed IS NULL)),
  CHECK((verdict='committed') = (reason IS NULL))
 );
 CREATE TABLE slot_release (

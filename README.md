@@ -53,13 +53,15 @@ Start with [First landed task](#first-landed-task-linux) for an ordered setup an
   distinct backlog retained in `factory.db` (including ended attempts). With none or several, supply the flag or config
   default. `tl attempt list` lists all backlogs; its `hold cause` column shows the recorded or due reason after `rounds once`.
 - `tl attempt export [--backlog KEY] [--db PATH] [--json]` is the read-only A/A and A/B comparison: one row per agent attempt (identity,
-  digests, harness, model, effort, times, outcome, token usage, latest checks conclusion), CSV with a header by default or a JSON array.
+  digests, launched-input digest, base commit, changed files and lines, harness, model, effort, times, outcome, token usage, latest checks conclusion), CSV with a header by default or a JSON array.
   The backlog is the flag, else the config's `backlog`, else every backlog; an unknown value is empty (CSV) or null (JSON), never zero.
   `tl slot list [--db PATH] [--json]` lists the adopted slots: name, path, repository id, and free or held (with the holding attempt).
 - `tl drain [--db PATH] [--json]` durably blocks new work across the resolved factory database and
   waits for existing entries, agents, setup, checks and synchronous operations to finish. Success verifies idle; it
   preserves claims, reservations, sessions and unlaunched attempts. Uncertainty exits 3 and Ctrl-C exits 130, leaving
   the fence in place. JSON writes progress and the final result as JSON Lines.
+  A completed drain also saves the attempt export as `exports/attempts-<UTC time>.json` under the artifacts root, so an upgrade that
+  discards `factory.db` keeps its evidence; the final output names the file (JSON: `export`).
 - `tl rounds start` repeats rounds in the foreground until Ctrl-C. `--retake-lapsed` on `rounds once` or `rounds start` is for recovery
   after discarding `factory.db`: it also takes the factory's expired claims absent from that database, assuming one
   factory on the tracker. Prefer one `rounds once` invocation for that recovery.

@@ -256,6 +256,14 @@ class Committed:
 
 
 @dataclass(frozen=True)
+class Changes:
+    """What a committed attempt changed, base to its commit: the files and the added plus deleted lines (a binary file counts 0 lines)."""
+
+    files: int
+    lines: int
+
+
+@dataclass(frozen=True)
 class Rejected:
     """The first rule the step's commit broke (or `nothing_written`: no commit at all); terminal for the attempt."""
 

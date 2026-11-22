@@ -10,7 +10,7 @@ from pathlib import Path
 
 from git_porcelain import Repo, Tree
 
-from taskloop.attempt_types import MODE, ChainLink, Committed, Rejected, Rule, StepRules, Unreadable, Verdict, path_allowed
+from taskloop.attempt_types import MODE, ChainLink, Changes, Committed, Rejected, Rule, StepRules, Unreadable, Verdict, path_allowed
 from taskloop.step import Step
 from taskloop.steps import StepKind
 
@@ -42,6 +42,12 @@ def judge(repo: Repo, root: Path, commit: str, step: StepKind, rules: StepRules,
             return Rejected(broken)
         parent = sha
     return _artifact(step, tip, rules, reused=False)
+
+
+def changes(repo: Repo, root: Path, base: str, commit: str) -> Changes:
+    """The files and the added plus deleted lines from `base` to `commit`, read from content-addressed objects."""
+    found = repo.worktree(root).diff(base, commit, cap=0).changes
+    return Changes(len(found), sum(each.added + each.deleted for each in found))
 
 
 def _artifact(step: StepKind, tip: Tree, rules: StepRules, *, reused: bool) -> Verdict:

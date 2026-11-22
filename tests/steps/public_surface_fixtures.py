@@ -221,6 +221,9 @@ def export_full() -> AttemptExport:
                 hold_cause=None,
                 hold_text=None,
                 terminal_result=None,
+                changed_files=None,
+                changed_lines=None,
+                launched_input_digest=None,
             ),
         )
     )

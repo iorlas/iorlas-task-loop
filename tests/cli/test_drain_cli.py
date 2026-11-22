@@ -100,7 +100,8 @@ def test_config_db_is_used_and_explicit_db_wins(tmp_path: Path, capsys: pytest.C
     assert main(["--config", str(config), "drain"]) == 0
     with sqlite3.connect(configured) as con:
         assert DrainStore(lambda: con, ids=NativeIds()).boundary().state is State.COMPLETE
-    assert not (tmp_path / "artifacts").exists() and not (tmp_path / "other").exists()
+    (saved,) = (tmp_path / "artifacts" / "exports").glob("attempts-*.json")  # the completed drain kept its attempt export
+    assert json.loads(saved.read_text()) == [] and not (tmp_path / "other").exists()
 
 
 @pytest.mark.parametrize("structured", [False, True])

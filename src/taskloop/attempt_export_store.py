@@ -57,7 +57,8 @@ SELECT
   m.repairs,
   CASE WHEN c.conclusion='{encode(CommandConclusion.PASSED)}' THEN c.concluded_at-
    (SELECT q.admitted_at FROM attempt q WHERE q.adapter=a.adapter AND q.backlog=a.backlog AND q.task_id=a.task_id
-    ORDER BY q.seq LIMIT 1) END
+    ORDER BY q.seq LIMIT 1) END,
+  f.files_changed,f.lines_changed,a.launched_digest
 FROM attempt a JOIN summary m ON m.attempt_id=a.attempt_id LEFT JOIN execution e ON e.attempt_id = a.attempt_id
 LEFT JOIN factory_commit f ON f.attempt_id=a.attempt_id
 LEFT JOIN checks_attempt c ON c.attempt_id=(SELECT latest.attempt_id FROM checks_attempt latest
@@ -122,6 +123,9 @@ class ExportRow:
     hold_cause: str | None
     hold_text: str | None
     terminal_result: str | None
+    changed_files: int | None  # base_commit to the attempt's commit; NULL: no committed verdict
+    changed_lines: int | None  # added plus deleted lines of the same diff
+    launched_input_digest: str | None  # sha256 of the input actually launched (input_digest is the admitted one); NULL: never dispatched
 
 
 def _real(value: object) -> float | None:
@@ -205,6 +209,9 @@ def _row(r: tuple[object, ...], pins: Pins) -> ExportRow:
         None,
         None,
         None,
+        whole(r[51]),
+        whole(r[52]),
+        text(r[53]),
     )
 
 
