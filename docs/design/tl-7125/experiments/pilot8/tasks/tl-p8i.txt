@@ -1,0 +1,6 @@
+A workflow name (`--workflow`, the new-task workflow, the workflow command's name) is accepted at any length and only fails later in the file system with an operating-system error. Refuse a name over a fixed length with the existing plain-name message.
+
+## Acceptance Criteria
+- A name over the cap is refused with the same message as other bad names at all three places that take one.
+- A one-character name and ordinary names are accepted.
+- A focused test covers both sides of the cap.

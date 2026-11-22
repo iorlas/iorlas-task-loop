@@ -1,0 +1,8 @@
+A person comparing two workflows with `tl attempt export` has to work out from the code which columns hold input, cached input and output tokens, and how to get uncached input; `docs/cli.md` only says that `c_*` columns are cumulative and that NULL means unknown.
+
+Document, in `docs/cli.md` next to the `tl attempt export` entry, which export columns carry a row's input tokens, cached input tokens, output tokens and request count, whether cached input is included in input, and how to compute uncached input from the columns.
+
+## Acceptance Criteria
+- The `tl attempt export` entry (or a short note directly under it) names the token columns and says how to compute uncached input.
+- The statement matches what the export actually returns (verify it against the code or a test).
+- No behaviour changes; the repository's own checks still pass.

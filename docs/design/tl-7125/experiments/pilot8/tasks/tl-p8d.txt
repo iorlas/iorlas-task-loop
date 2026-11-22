@@ -1,0 +1,6 @@
+When `pyproject.toml` is listed in the tree but its content cannot be read as a file at the commit (it is a symlink or submodule, the commit is missing, or Git is unavailable), the input-building error must name the path, the commit and a plain reason, as the shelf digest read already does, and not print a Python object.
+
+## Acceptance Criteria
+- Each of the three unreadable cases gives an input error naming the path, the commit and a plain reason.
+- The success path is unchanged.
+- A focused test covers the three cases.

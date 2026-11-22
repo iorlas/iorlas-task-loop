@@ -1,0 +1,8 @@
+`tl step start` and `tl rounds start` accept `--workflow`, but `docs/cli.md` does not say what a workflow name refers to, where its file is read from, or what happens when the name is unknown.
+
+Document, in `docs/cli.md`, what `--workflow` names, where the file is looked up (and in which Git ref or checkout), that it applies to a task's first attempt only, and the failure when the name does not exist.
+
+## Acceptance Criteria
+- `docs/cli.md` has a short, accurate statement on `--workflow` covering lookup location, first-attempt scope and the unknown-name failure.
+- The statement matches the code (verify it against the code or a test).
+- No behaviour changes; the repository's own checks still pass.

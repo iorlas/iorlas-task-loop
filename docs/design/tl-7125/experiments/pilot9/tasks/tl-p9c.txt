@@ -1,0 +1,8 @@
+`docs/factory-machine.md` has a "Start and stop" section, but a person restarting the factory after a crash or reboot cannot tell from it what happens to a task whose attempt was running.
+
+Add to the "Start and stop" section of `docs/factory-machine.md` a short paragraph on what a restart does with an attempt that was running when the process died (when `factory.db` is intact, and when it was discarded), verified against the code.
+
+## Acceptance Criteria
+- `docs/factory-machine.md` states what happens to a running attempt on restart with an intact `factory.db`, and with a discarded one.
+- The statement matches the code (verify it against the code or a test).
+- No behaviour changes; the repository's own checks still pass.

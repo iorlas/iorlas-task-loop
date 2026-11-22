@@ -3,7 +3,7 @@
 Status: archive of experiments run 2026-11-21 and 2026-11-22 (epic tl-7125, declarative workflows). One folder per
 experiment with its report, the per-run result files and the task or check material. Raw run trees, transcripts and
 agent patches stay outside Git (`/tmp/aa`, `~/.codex/sessions`); the reports quote what they showed. The running list of
-improvements these experiments produced is [../improvement-ledger.md](../improvement-ledger.md) (rows L1 to L67).
+improvements these experiments produced is [../improvement-ledger.md](../improvement-ledger.md) (rows L1 to L72).
 
 All runs used Codex `gpt-6.1-sol` (CLI 0.169.0), plan effort `high`, implement effort `medium` unless a report says
 otherwise, the default workflow, `land: manual`, and never landed. Arms are fresh clones with their own tracker,
@@ -21,6 +21,8 @@ otherwise, the default workflow, `land: manual`, and never landed. Arms are fres
 | [pilot5](pilot5/report.md) | Feedback A/B (default vs attempt-budget) on real repo tasks | 2 valid-but-capped, plus invalid setup pairs | No verdict (run cap too short for 5-6 minute checks). First real failed checks: lint/format/type slips the agent could not run in its sandbox (4 of 4). |
 | [pilot6](pilot6/report.md) | Same A/B after the cheap-checks prompt (#863) | 6 valid (3 pairs) | 0 of 6 failed a check at attempt 1; the attempt-budget text was never rendered, so the A/B says nothing about it. |
 | [pilot7](pilot7/report.md) | Cost A/B: implement effort `low` vs `medium` on real tasks | 6 (3 pairs: two docs tasks, one code task) | 6/6 passed first try at both efforts, 0 repeats. `low` was 4-20% cheaper on the code task and indistinguishable on the docs tasks: inside the A/A noise at n = 3 pairs. Effort did not change the number of model requests. |
+| [pilot8](pilot8/report.md) | Cost A/B: implement effort `low` vs `medium`, 10 pairs of screened code tasks | 20 (10 pairs) | 20/20 passed first try, 0 repeats. No difference in implement wall time (paired geometric mean 1.00, 95% CI 0.92-1.09) or total input tokens (0.98, 0.85-1.11); `low` wrote ~13% fewer output tokens in the implement step (0.87, 0.79-0.97) and diffs of about the same size; every diff satisfies its task (one unblinded reader). |
+| [pilot9](pilot9/report.md) | Feedback A/B (default vs attempt-budget) with an engineered failed check | 6 calibration + 12 (6 pairs) | The engineered `convention` check (sandbox-unrunnable gate, then a changelog rule stated only in its failure message) failed attempt 1 in 17 of 17 implementing runs; 16 of 17 fixed it in one repeat from the check output alone. 11 of 12 A/B runs reached a repeat; the attempt-budget sentence reached the agent in all 6 arm-b repeats and no arm-a repeat; repeat outcomes (default 4/5 first-repeat passes, budget 6/6) do not separate. |
 
 Earlier arms (old engine, schema v34) are kept outside Git as history; the current build cannot read them.
 
@@ -76,7 +78,14 @@ skeleton. `pilot5/run6.py`, `pilot6/run7.py` and `pilot7/run8.py` are the ad-hoc
 paths and rounds stopped by confirmed pid); kept as history. Task texts are under `tasks/`; hidden check sources (pilot1,
 pilot2, pilot4) under `hidden/`.
 
+## Settled so far
+
+- Implement effort `low` vs `medium` makes no measurable difference in wall time or input tokens on small code tasks and
+  costs nothing in first-attempt passes (pilot 7 and 8, 13 pairs). Default effort is not worth changing on this evidence.
+- Feedback works as a mechanism: with an honest failure the agent fixes the problem from the failed-check text alone.
+  The attempt-budget sentence neither helped nor hurt at n = 5 vs 6; keeping or dropping it is a taste decision.
+
 ## Next
 
-No experiment is queued. The effort cost A/B (pilot7) is inconclusive at n = 3 pairs; seeing a 10% difference needs well
-over 10 pairs of screened code tasks, which only pays off if the goal is a cheaper default effort.
+No experiment is queued. Candidates only if there is a goal: a larger feedback A/B (the budget sentence needs many more
+repeats to show an effect of a few percent), or a cost comparison of models rather than efforts.

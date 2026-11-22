@@ -1,0 +1,6 @@
+tl-p6d: b(attempt-budget) a(default)
+tl-p9b: b(attempt-budget) a(default)
+tl-p6c: b(attempt-budget) a(default)
+tl-p6b: a(default) b(attempt-budget)
+tl-p9c: a(default) b(attempt-budget)
+tl-p9a: b(attempt-budget) a(default)

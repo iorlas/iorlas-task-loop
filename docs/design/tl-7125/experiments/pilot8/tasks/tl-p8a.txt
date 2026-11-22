@@ -1,0 +1,6 @@
+`tl rounds start --dash-port 70000` (or a negative port) must end as a clear typed refusal naming the port, like an occupied port does, and the rounds must keep running without the dashboard. Today an out-of-range port escapes as an unhandled error.
+
+## Acceptance Criteria
+- A port outside 0-65535 gives a refusal whose text names the port and the dashboard port setting; no OverflowError escapes.
+- Ports 0 and 65535 still work.
+- A focused test covers an out-of-range and an in-range port.

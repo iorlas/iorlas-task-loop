@@ -1,0 +1,7 @@
+A commit whose message body merely contains a prose line starting with the saved-work marker is treated as saved work and refused by checks, publish and land. The marker must count only as a trailer, in the final paragraph of the message, even when other trailers sit beside it.
+
+## Acceptance Criteria
+- A prose line starting with the marker in the body does not mark a commit saved.
+- The real trailer still does, also beside other trailers; the review-needed decision follows the same rule.
+- The text the factory writes into its own commits is unchanged.
+- A focused test covers prose and trailer.
