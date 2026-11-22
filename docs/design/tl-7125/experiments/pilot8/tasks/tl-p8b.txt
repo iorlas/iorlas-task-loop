@@ -1,0 +1,6 @@
+Evidence artifacts the factory writes (input, answer, stdout and stderr copies) are created readable by the owner only: files mode 0600 and their folders 0700, the way the factory's logs already are.
+
+## Acceptance Criteria
+- A file captured by the artifact writer has mode 0600 and its new folders 0700 under a 022 umask.
+- Re-capturing identical bytes still succeeds; a conflicting rewrite is still refused.
+- A focused test covers the modes.

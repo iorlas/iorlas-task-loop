@@ -1,0 +1,6 @@
+When a read inside the dashboard raises, the dashboard answers status 500 with a fixed error word, not the exception class and message (which can carry paths and tracker text to an unauthenticated page).
+
+## Acceptance Criteria
+- A raising read gives status 500 and a body with a fixed error word and no exception class or message.
+- Other replies are unchanged.
+- A focused test covers a raising read.

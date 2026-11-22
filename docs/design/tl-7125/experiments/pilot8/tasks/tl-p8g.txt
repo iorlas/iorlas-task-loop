@@ -1,0 +1,6 @@
+The Claude settings file and the OpenCode sandbox file are read at configuration time without any size limit, while the other documents the factory captures are capped. A file over a small cap must be a configuration refusal that names the `agents.<step>` key.
+
+## Acceptance Criteria
+- A file over the cap is refused naming the key; a file exactly at the cap is accepted.
+- An unreadable or non-UTF-8 file is still refused as today.
+- A focused test covers both sides of the cap.

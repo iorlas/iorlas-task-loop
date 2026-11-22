@@ -1,0 +1,7 @@
+The plan content check finds the `## Change map` heading only as an exact string, while the forbidden headings are compared ignoring case and surrounding spaces. A plan with `## Change map ` (trailing space), `## change map` or a closing-hash form must count as having the change map, so a plan is not held for formatting only.
+
+## Acceptance Criteria
+- Those heading forms pass the change-map rule.
+- A plan with no change map, or an empty list under it, still fails the same way.
+- A heading inside a code fence still does not count.
+- A focused test covers the forms.

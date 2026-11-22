@@ -1,0 +1,114 @@
+{
+ "run": "tl-p9a_a",
+ "task": "tl-p9a",
+ "arm": "a",
+ "workflow": "default",
+ "started": 1795384495.8527348,
+ "outcome": "held",
+ "states": [
+  [
+   13,
+   "plan",
+   1,
+   "running",
+   "wait",
+   false
+  ],
+  [
+   119,
+   "plan",
+   1,
+   "held",
+   "on_hold",
+   true
+  ]
+ ],
+ "group": 6,
+ "inflight_planned": 2,
+ "sample_start": {
+  "codex_procs": 4,
+  "t": 1795384495.8646772,
+  "load": [
+   "3.62",
+   "4.06",
+   "4.73"
+  ],
+  "mem_avail_mb": 12807
+ },
+ "rounds_pid": 2866058,
+ "ended": 1795384614.4562674,
+ "sample_end": {
+  "codex_procs": 3,
+  "t": 1795384614.4641652,
+  "load": [
+   "1.78",
+   "3.45",
+   "4.44"
+  ],
+  "mem_avail_mb": 12887
+ },
+ "export": [
+  {
+   "task_id": "tl-p9a",
+   "step": "plan",
+   "number": 1,
+   "repeat_reason": null,
+   "engine_digest": "5d4e75d2cf7b545bb76000b719f1c640533b20295b21e5ef5f56047b111826f9",
+   "workflow_digest": "2c1046c825f383900e14a706da37e56c88e892a15f7854310a7e2b65cf26134b",
+   "workflow_sha": "4c46ef569fa8a3e8a80e27a703dc2241fccb287b",
+   "harness": "codex",
+   "model": "gpt-6.1-sol",
+   "effort": "high",
+   "compaction_token_limit": null,
+   "input_digest": "18f128e288c88e493c438ffb01a1581a01cd9fe442ac16125c8311fc18b44bbd",
+   "admitted_at": 1795384499.801012,
+   "ended_at": 1795384605.3820472,
+   "wall_seconds": 105.58103513717651,
+   "disposition": "planned",
+   "effect": "commit",
+   "answer_kind": "valid",
+   "rc": 0,
+   "timed_out": 0,
+   "turns": 8,
+   "t_in": 386351,
+   "t_cached": 343296,
+   "t_out": 3937,
+   "c_in": 386351,
+   "c_cached": 343296,
+   "c_out": 3937,
+   "usage_incomplete": 0,
+   "latest_checks_conclusion": null,
+   "latest_checks_reason": null,
+   "ran_model": "gpt-6.1-sol",
+   "ran_effort": "high",
+   "harness_version": "0.169.0",
+   "ran_model_differs": 0,
+   "max_attempts": 3,
+   "attempt_id": "6bbd30e443e94717abc3d4d0f13cae7a",
+   "backlog": "aa",
+   "previous_attempt_id": null,
+   "seq": 1,
+   "base_commit": "4c46ef569fa8a3e8a80e27a703dc2241fccb287b",
+   "factory_commit_verdict": "rejected",
+   "chain_id": "6bbd30e443e94717abc3d4d0f13cae7a",
+   "setup_seconds": null,
+   "check_seconds": {},
+   "rework_count": 0,
+   "repair_count": 0,
+   "time_to_green_seconds": null,
+   "task_total_seconds": null,
+   "failed_checks": [],
+   "hold_cause": "failed:rejected:plan_size",
+   "hold_text": "Small documentation-only plan prepared. Verified column names, request-count mapping and uncached-input subtraction against existing code. No missing owner decisions or explicitly unlanded dependencies. Implementation checks were not run during planning.",
+   "terminal_result": "rejected:plan_size"
+  }
+ ],
+ "branches": [
+  "task/tl-p9a"
+ ],
+ "diffstat": "12\t0\tdocs/design/tl-p9a/plan-metadata.json\n54\t0\tdocs/design/tl-p9a/plan.md\n",
+ "changelog_diff": "",
+ "feedback_files": {},
+ "cap_sentence_anywhere": [],
+ "dirty": ""
+}

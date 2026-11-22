@@ -1,0 +1,6 @@
+A `slot_count` (machine config file or `--slot-count`) far above anything a machine can serve is refused with a count-style refusal that names the key and the bound, so a typo cannot ask for a million worktrees. The bound is one named constant.
+
+## Acceptance Criteria
+- A slot count above the bound is refused, naming the key and the bound.
+- The bound itself and 1 are accepted; the flag and the file value follow the same rule.
+- A focused test covers both sides of the bound.

@@ -1,0 +1,6 @@
+A workflow file's agent `model` and `effort` are one printable word with no space and no leading dash, but have no length limit, so a pasted blob loads. Refuse a word above a sane maximum length at load, as the other bad words are.
+
+## Acceptance Criteria
+- A word over the cap is refused at load as a bad value naming the step, the agent and the field.
+- Ordinary model and effort names still load; the existing space and leading-dash rules are unchanged.
+- A focused test covers both sides of the cap.
