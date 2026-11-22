@@ -7,6 +7,7 @@ from collections.abc import Callable
 from dataclasses import replace
 from ipaddress import ip_address
 from pathlib import Path
+from typing import Final
 
 from pydantic import ValidationError
 
@@ -49,6 +50,7 @@ from taskloop.workflow_read import DEFAULT
 
 DASH_PORT = 8765
 SCHEDULER, STEP, START = "rounds", "step", "start"
+STORE_TRUE: Final = "store_true"
 SLOTS = "slot"
 COMMANDS = ("config", SLOTS, STEP, cli_attempt.GROUP, SCHEDULER, cli_land.GROUP)
 
@@ -95,7 +97,13 @@ def _register_rounds(commands: Parsers) -> None:
         default=DASH_PORT,
         help=f"Serve the read-only dashboard on --dash-host:PORT while the rounds run (default {DASH_PORT}; 0 picks a free port)",
     )
-    rounds.add_argument("--no-dashboard", action="store_true", help="Serve no dashboard (for a second rounds on one machine)")
+    rounds.add_argument(
+        "--exit-when-idle",
+        action=STORE_TRUE,
+        help="End the rounds (exit 0, reason idle) once no execution or pending action is alive and a round then does no work; "
+        "a task waiting to be landed or held counts as idle. Like `tl drain` it signals nothing and reads no log",
+    )
+    rounds.add_argument("--no-dashboard", action=STORE_TRUE, help="Serve no dashboard (for a second rounds on one machine)")
     _round_flags(rounds)
     rounds.epilog = (
         "--json prints JSON Lines: one start record and one end record on a graceful stop; "
@@ -222,7 +230,7 @@ def _round_flags(parser: argparse.ArgumentParser) -> None:
     _new_task_flags(parser)
     parser.add_argument(
         "--retake-lapsed",
-        action="store_true",
+        action=STORE_TRUE,
         help="After a factory.db discard only: also take the tasks "
         "`taskloop` still holds in progress with an expired lease and no attempt here (assumes this is the one "
         "factory on the tracker); run it once, with `tl rounds once`",
@@ -305,7 +313,7 @@ def _rounds(arguments: argparse.Namespace, loaded: Loaded) -> Result:
     """The start line once the rounds are set up, then the rounds; a `KeyboardInterrupt` anywhere (the second Ctrl-C) is
     the abrupt stop, exit 130 (the operation writes its `rounds stopped abrupt` line once its rounds started)."""
     settings, round_request = loaded.settings, _next_request(arguments, loaded)
-    request = RoundsRequest(round_request.backlog, loaded.settings.round_seconds.value)
+    request = RoundsRequest(round_request.backlog, loaded.settings.round_seconds.value, arguments.exit_when_idle)
     log = settings.artifacts.value / "rounds.log"
     try:
         with cli_composition.open_rounds(settings.db.value, settings.artifacts.value, views_for(loaded), round_request) as ports:
@@ -433,7 +441,7 @@ def run(arguments: argparse.Namespace) -> int:
         except ValidationError as error:
             result = Failed("refused", "choices", str(error))
     failed = isinstance(result, Failed) or (
-        isinstance(result, Ended) and result.reason not in {"interrupted", Reason.DRAINED, Reason.DRAINING}
+        isinstance(result, Ended) and result.reason not in {"interrupted", Reason.DRAINED, Reason.DRAINING, Reason.IDLE}
     )
     stream = sys.stderr if failed else sys.stdout
     if arguments.json_output:

@@ -31,7 +31,7 @@ Each command's own `--help` is the reference for its flags.
 | `tl workflow show` | B | Show a workflow file as the factory would read it: digest, agent choice and prompt sections per step, feedback section count and ordered kinds (`text` or renderer, including `attempt_budget`), or why it is refused; JSON includes the ordered `feedback` list | reads Git | no | you |
 | `tl task show` | B | Show a task as the tracker holds it | reads the tracker | no | you |
 | `tl rounds once` | C | Run one scheduling round over the whole backlog | settles, advances and starts tasks; publishes; holds; under `land: auto` lands one | yes | you |
-| `tl rounds start` | C | The factory's long-running process: rounds on a timer and the read-only dashboard; reopens a completed drain | as `rounds once`, repeated | yes | you, in the background |
+| `tl rounds start` | C | The factory's long-running process: rounds on a timer and the read-only dashboard; reopens a completed drain; `--exit-when-idle` ends it when nothing is left to do | as `rounds once`, repeated | yes | you, in the background |
 | `tl step start` | D | Move one named task forward by one launch: admit, relaunch, repeat, advance or re-run checks. `--from` and `--workflow` apply to a task's first attempt only | one application operation, also called by a round | yes | you (A/B arms, manual runs) |
 | `tl step commit` | D | Finish the factory commit when the entry did not, then release the slot and publish | writes the verdict, releases, pushes | yes | you; rounds do it too |
 | `tl step release` | D | Park the slot of an ended step; the claim stays | writes the release | yes | you |
@@ -58,6 +58,11 @@ Each command's own `--help` is the reference for its flags.
 - Old spellings are deleted, not aliased.
 
 ## Stopping rounds
+
+`tl rounds start --exit-when-idle` ends by itself (exit 0, reason `idle`) when no execution or pending action is alive (the
+drain's idle inspection, read before a round) and the round that follows does no work (no start, advance, commit, release,
+publish, hold or land; reports and skips are not work). A task waiting to be landed by a person or held counts as idle. It adds
+no state, signal or log reading, and does not block new work the way `tl drain` does.
 
 There is no `tl rounds stop`. Stopping rounds from another shell is `tl drain`: rounds poll the drain request and end when it is
 set, and running attempts finish in their own processes. Drain also refuses hand `tl step start` and `tl rounds once` until

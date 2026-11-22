@@ -70,7 +70,7 @@ def exit_code(result: Result) -> ExitCode:
         case Ended(reason=reason):
             return (
                 ExitCode.SUCCESS
-                if reason in {"interrupted", Reason.DRAINING, Reason.DRAINED}
+                if reason in {"interrupted", Reason.DRAINING, Reason.DRAINED, Reason.IDLE}
                 else ExitCode.INTERRUPTED
                 if reason == "abrupt"
                 else ExitCode.REFUSED

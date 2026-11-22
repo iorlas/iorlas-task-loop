@@ -80,6 +80,14 @@ def _inspect(ports: Ports, generation: int, *, claims_only: bool) -> Result:
     )
 
 
+def is_idle(ports: Ports, generation: int) -> bool:
+    """True only when `inspect` finds no live execution or pending action; any failure to read is not idle."""
+    try:
+        return inspect(ports, generation).conclusion is Conclusion.COMPLETE
+    except sqlite3.Error, ValidationError, OSError, StoreUnavailable:
+        return False
+
+
 def drain(ports: Ports) -> Result:
     generation: int | None = None
     previous: Result | None = None

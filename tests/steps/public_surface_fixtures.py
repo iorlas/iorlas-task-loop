@@ -357,7 +357,7 @@ def step_cases() -> dict[str, tuple[list[str], Result]]:
                 ],
                 Failed(kind, "choices", "Operation refused", True, (SlotView("s1", PATH, "held", attempt_id="attempt"),), True),
             )
-    for reason in ("interrupted", "drained", "unavailable"):
+    for reason in ("interrupted", "drained", "idle", "unavailable"):
         cases[f"rounds.{reason}"] = (["rounds", "start", "--backlog", "tasks", *ROUND_FLAGS], Ended("tasks", reason, "Rounds ended"))
     released = ReleasedTask("tasks", "tl-1", "attempt", Released("s1", "parked", True, "unclaimed", False))
     for name, result in {

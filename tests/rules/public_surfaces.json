@@ -1669,6 +1669,32 @@
         }
       ]
     },
+    "rounds.idle": {
+      "argv": [
+        "rounds",
+        "start",
+        "--backlog",
+        "tasks",
+        "--tracker-root",
+        "/tracker",
+        "--checkout",
+        "/snapshot",
+        "--minutes",
+        "30",
+        "--label",
+        "approved"
+      ],
+      "exit": 0,
+      "stderr": [],
+      "stdout": [
+        {
+          "backlog": "tasks",
+          "detail": "Rounds ended",
+          "reason": "idle",
+          "status": "ended"
+        }
+      ]
+    },
     "rounds.interrupted": {
       "argv": [
         "rounds",

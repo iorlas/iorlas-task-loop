@@ -39,7 +39,7 @@ from taskloop.composition import (
     open_releaser,
 )
 from taskloop.drain.composition import open_drain
-from taskloop.drain.drain import reconcile_claims
+from taskloop.drain.drain import is_idle, reconcile_claims
 from taskloop.drain.models import Boundary, Conclusion, Reason, Result, State
 from taskloop.drain.restart import restart
 from taskloop.drain.store import DrainStore
@@ -371,6 +371,7 @@ def open_rounds(
                     pid,
                     not interrupts.ignored,
                     fenced,
+                    partial(is_idle, draining, started.generation),
                 )
     finally:
         registration.close_shared()

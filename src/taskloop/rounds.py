@@ -15,17 +15,18 @@ lines (fixed words, never read back); one rounds process per backlog is the call
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Final
+from typing import Final, get_args
 
 from taskloop.attempt_reads import SlotUse
 from taskloop.clock_jumps import ClockContext, ClockJumps, encode
 from taskloop.drain.models import Reason
 from taskloop.evidence_files import EvidenceError
-from taskloop.operations import Ended, Failed, Quiet, Round, minutes_refused
+from taskloop.operations import Action, Ended, Failed, Quiet, Round, minutes_refused
 from taskloop.round import STOPPING_UNKNOWN, NextRequest, max_running_refused
 from taskloop.round_log import IDENT, INTERRUPTED, fixed, stamped
 
 CHECK: Final = 2.0  # seconds between two reads of the reservation rows
+WORK: Final = frozenset(get_args(Action.__value__)) - {"report", "skip"}  # a move that changed something or must be retried
 CAP: Final = 300  # the longest backoff delay, unless the interval is longer
 
 
@@ -33,6 +34,7 @@ CAP: Final = 300  # the longest backoff delay, unless the interval is longer
 class RoundsRequest:
     backlog: str
     every: int  # seconds, at least `machine_config.MIN_SECONDS`
+    exit_when_idle: bool = False  # end with `Reason.IDLE` once a round after a verified-idle read did no work
 
 
 @dataclass(frozen=True)
@@ -52,6 +54,7 @@ class RoundsPorts:
     pid: int
     ctrl_c: bool = True  # False when this process started with Ctrl-C ignored: only SIGTERM stops it
     draining: Callable[[], bool] = lambda: False  # durable drain, separate from the interrupt flag
+    idle: Callable[[], bool] = lambda: False  # drain's inspection finds no live execution or pending action (False when unknown)
 
 
 def inputs(request: NextRequest) -> Failed | None:
@@ -107,7 +110,8 @@ def _unknown(found: Round | Failed) -> str:
 
 
 def run_rounds(ports: RoundsPorts, request: RoundsRequest) -> Ended:
-    """Rounds until a stop: `Ended("interrupted")` after a graceful stop (no further move or round), `Ended` with the
+    """Rounds until a stop: `Ended("interrupted")` after a graceful stop (no further move or round), `Ended(Reason.IDLE)` under
+    `exit_when_idle` once no execution or pending action was alive before a round and that round did no work, `Ended` with the
     word of a whole-round refusal (`refused:database`, `refused:schema`, ...). Per-task words never end or back off. A
     `KeyboardInterrupt` once `rounds started` is written adds the best-effort `rounds stopped abrupt` and passes on."""
     log = _Log(ports, request.backlog)
@@ -126,6 +130,7 @@ def _rounds(ports: RoundsPorts, request: RoundsRequest, log: _Log, jumps: ClockJ
     while not ports.stopping() and not ports.draining():
         jumps.sample()
         before = _held(ports)
+        quiescent = request.exit_when_idle and ports.idle()  # read before the round: the round then sees every ending
         try:
             found = ports.round(quiet)
         finally:
@@ -137,6 +142,8 @@ def _rounds(ports: RoundsPorts, request: RoundsRequest, log: _Log, jumps: ClockJ
             quiet = found.written
         if ports.stopping():
             break
+        if quiescent and isinstance(found, Round) and not found.stopped and not any(move.action in WORK for move in found.moves):
+            return _end(log, request.backlog, Reason.IDLE)
         _pause(ports, backoff.after(found, log), _union(before, _held(ports)), jumps)
     return _end(log, request.backlog, Reason.DRAINING if ports.draining() else INTERRUPTED)
 

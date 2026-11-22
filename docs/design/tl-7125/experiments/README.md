@@ -70,9 +70,11 @@ Earlier arms (old engine, schema v34) are kept outside Git as history; the curre
 
 ## Reproduce
 
-`pilot5/run6.py` and `pilot6/run7.py` are the runners used (fresh clone, local bare origin, tracker, `factory.db`,
-rounds stopped by confirmed pid). They assume `/tmp/aa` paths and an engine worktree; read the report's Setup section
-first. Task texts are under `tasks/`; hidden check sources (pilot1, pilot2, pilot4) under `hidden/`.
+Use [`tools/experiment`](../../../../tools/experiment/README.md): one documented script that builds the arms, block-randomizes,
+runs with N in flight through `tl rounds start --exit-when-idle`, collects the exports and diffs, and writes the report
+skeleton. `pilot5/run6.py`, `pilot6/run7.py` and `pilot7/run8.py` are the ad-hoc runners it replaces (they assume `/tmp/aa`
+paths and rounds stopped by confirmed pid); kept as history. Task texts are under `tasks/`; hidden check sources (pilot1,
+pilot2, pilot4) under `hidden/`.
 
 ## Next
 

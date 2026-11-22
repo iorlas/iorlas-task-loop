@@ -10,6 +10,7 @@ ROOT = Path(__file__).resolve().parents[2]
 SCRIPTS = (
     "tools/check_tool_versions.py",
     "tools/generate_import_contracts.py",
+    "tools/experiment/experiment.py",
     "docs/design/tl-8bh9.14.109/measure.py",
     "docs/design/tl-8bh9.14.109/query_study.py",
 )
