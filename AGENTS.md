@@ -42,6 +42,19 @@ Work in a worktree. Preserve unrelated edits and task claims. Git operations fol
 local Git authorization does not authorize remote publication or merge.
 Never kill processes by name; act only on a confirmed owned process identity.
 
+## Protected files
+
+These files judge the work (value 10). The snapshots record a surface; the rest hold a limit.
+
+| file | agent MAY update | agent MUST stop with `needs_owner` |
+|---|---|---|
+| `tests/rules/public_surfaces.json` | its own change to a public surface (new or changed CLI flag, export column, API name): refresh it so it shows exactly that change (as #855, #865) | any diff the task did not cause, or a removed or renamed surface the task did not ask for |
+| `DDL_DIGESTS` in `tests/steps/test_factory_schema.py` | a schema change that bumps the schema version, adds its digest and follows the drain rule | a digest changed without a version bump, or a schema change with no drain note |
+| `tests/rules/repeated_string_exceptions.json` | removing an entry the change made obsolete | adding an entry or raising a count |
+| import-linter contracts and `APPROVED_EXCEPTIONS` (`pyproject.toml`, `tests/rules/test_ratchet.py`) | removing an exception | adding an exception or ignore, or loosening a contract |
+| shelf pins (`pyproject.toml`, `uv.lock`) | nothing | any change (a shelf need is a proposal) |
+| any check, ratchet, cap or test weakened to pass | nothing | always |
+
 ## Build and verification
 
 Python 3.15+. The full gates are `just check` and `just test`; a session runs them, a factory attempt does not (below). `just check`
@@ -55,6 +68,7 @@ No live tests. A factory attempt cannot run `just check` or `just test` (no bd d
 `just lint`, `just typecheck`, `just rules` and its focused test files, and the factory runs the full gates after it. A
 session runs `just check` and `just test` once before a pull request. Use focused behavior/contract tests; new tests are pytest functions
 or classes, never unittest. No test for every private helper or a test that merely repeats its implementation.
+After `git rebase` or any source edit run `just install` before any gate: a stale installed package fails the pre-push gate on imports.
 Retain caps: 400 source lines per file, 80 per function and 800 per test file. No new Any, cast or ignore escape.
 
 ## Architecture and design
