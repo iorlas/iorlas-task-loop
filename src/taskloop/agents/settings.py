@@ -136,12 +136,16 @@ class AgentSetting(Input):
 class Overrides(Input):
     harness: HarnessKind | None = None
     model: str | None = None
-    effort: str | None = None
+    plan_effort: str | None = None
+    implement_effort: str | None = None
 
-    @field_validator("model", "effort")
+    @field_validator("model", "plan_effort", "implement_effort")
     @classmethod
     def word(cls, value: str | None) -> str | None:
         return None if value is None else identifier(value)
+
+    def effort_for(self, step: str) -> str | None:
+        return self.plan_effort if decode_step(step) is Step.PLAN else self.implement_effort
 
 
 class StepSettings(Input):
@@ -152,22 +156,22 @@ class StepSettings(Input):
         return self.plan if decode_step(step) is Step.PLAN else self.implement
 
     def overridden(self, flags: Overrides) -> Self:
-        return type(self)(plan=apply(self.plan, flags), implement=apply(self.implement, flags))
+        return type(self)(plan=apply(self.plan, flags, Step.PLAN), implement=apply(self.implement, flags, Step.IMPLEMENT))
 
 
-def apply(setting: AgentSetting, flags: Overrides) -> AgentSetting:
+def apply(setting: AgentSetting, flags: Overrides, step: str) -> AgentSetting:
     if flags.harness is not None and flags.harness is not setting.harness:
         raise ValueError(f"{flags.harness} needs matching per-step model and access configuration")
     return AgentSetting(
         harness=setting.harness,
         model=flags.model or setting.model,
-        effort=flags.effort or setting.effort,
+        effort=flags.effort_for(step) or setting.effort,
         access=setting.access,
         compaction_token_limit=setting.compaction_token_limit,
     )
 
 
-def choose(machine: AgentSetting, workflow: Agent, flags: Overrides) -> AgentSetting:
+def choose(machine: AgentSetting, workflow: Agent, flags: Overrides, step: str) -> AgentSetting:
     """The step's agent choice: `machine`, then each key the workflow names, then the flags (decision 18). Sandbox, access and
     credentials stay the machine's. A harness the workflow names that differs from the machine's is refused like the flag case
     (`ValueError`), since the model and access policy of another harness are machine configuration."""
@@ -182,7 +186,7 @@ def choose(machine: AgentSetting, workflow: Agent, flags: Overrides) -> AgentSet
             machine.compaction_token_limit if workflow.compaction_token_limit is None else workflow.compaction_token_limit
         ),
     )
-    return apply(named, flags)
+    return apply(named, flags, step)
 
 
 def encode_policy(policy: Policy) -> str:

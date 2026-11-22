@@ -22,7 +22,7 @@ from taskloop.recovery.store import RecoveryStore
 from taskloop.slots import SlotGit
 
 BACKLOG = ["--backlog", "tasks"]
-CHOICES = ["--tracker-root", "/tracker", "--checkout", "/checkout", "--model", "m", "--effort", "high", "--minutes", "30"]
+CHOICES = ["--tracker-root", "/tracker", "--checkout", "/checkout", "--model", "m", "--plan-effort", "high", "--minutes", "30"]
 COMMANDS = {
     "list": ["attempt", "list"],
     "show": ["attempt", "show", "tl-1", *BACKLOG],

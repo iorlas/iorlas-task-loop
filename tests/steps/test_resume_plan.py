@@ -125,7 +125,9 @@ def test_resume_captures_implementation_prompt_settings_overrides_and_latest_ans
             access=ClaudePolicy(settings_file=Path("/settings.json"), settings="{}"),
         ),
     )
-    admitted = factory.starting().admission.admit(request(factory, settings, Overrides(harness=HarnessKind.CLAUDE, effort="high")))
+    admitted = factory.starting().admission.admit(
+        request(factory, settings, Overrides(harness=HarnessKind.CLAUDE, implement_effort="high"))
+    )
     assert isinstance(admitted, Admitted)
     factory.con.close()
     reopened = Store(SCHEMA).open_rw(factory.tmp / "resume.db")

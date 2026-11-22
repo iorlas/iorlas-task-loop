@@ -52,6 +52,8 @@ from taskloop.task import TaskBinding, TaskInspection, TaskScope
 from taskloop.tracker import inspect_task
 from taskloop.tracker_client import HoldAnswer, HoldWrite, LabelStep, TrackerHolds
 
+HIGH_PLAN = Overrides(model="m", plan_effort="high")
+
 ENTRY = (7, "entry-start", "boot")
 WORKER = Worker(pid=42, pgid=42, start="native-start", boot="boot")
 type Agent = Callable[[Harness, LaunchSpec, float, RunHooks | None], RunOutcome]
@@ -339,7 +341,7 @@ class Factory:
             self.slot.repo.path,
             label,
             StepSettings(),
-            Overrides(model="m", effort="high"),
+            HIGH_PLAN,
             30,
             quiet,
             max_running=running,
@@ -355,7 +357,7 @@ class Factory:
         assert isinstance(
             start(
                 self.starting(),
-                StartRequest(task_id, "tasks", "/tracker", self.slot.repo.path, StepSettings(), Overrides(model="m", effort="high"), 30),
+                StartRequest(task_id, "tasks", "/tracker", self.slot.repo.path, StepSettings(), HIGH_PLAN, 30),
             ),
             Started,
         )

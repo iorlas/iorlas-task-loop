@@ -76,7 +76,7 @@ from taskloop.slots import Adopted, SlotGit, SlotView
 
 KEY = AttemptKey("attempt", "dispatch", 1)
 ENTRY = (7, "entry-start", "boot")
-REQUEST = StartRequest("tl-1", "tasks", "/tracker", Path("/checkout"), StepSettings(), Overrides(model="model-m", effort="high"), 30)
+REQUEST = StartRequest("tl-1", "tasks", "/tracker", Path("/checkout"), StepSettings(), Overrides(model="model-m", plan_effort="high"), 30)
 
 
 class Admission:
@@ -250,7 +250,7 @@ def test_an_impossible_model_or_effort_is_refused_before_any_read_or_launch(mode
     unread = AttemptStore(lambda: None)
     ports = StartPorts(unread, admission, launcher, lambda: 1000, Repeats(), NoAdvance(), NO_CHECKS)
     with pytest.raises(ValueError):
-        start(ports, replace(REQUEST, overrides=Overrides(model=model, effort=effort)))
+        start(ports, replace(REQUEST, overrides=Overrides(model=model, plan_effort=effort)))
     assert admission.requests == [] and launcher.calls == []
 
 

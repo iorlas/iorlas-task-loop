@@ -61,7 +61,7 @@ ENTRY = (7, "entry-start", "boot")
 BEFORE_REBOOT = (7, "entry-start", "old-boot")  # registered in another boot than the bench's "boot"
 HEAD, X = "d" * 40, "x" * 40
 REQUEST = NextRequest(
-    "tasks", "/tracker", Path("/checkout"), "auto", StepSettings(), Overrides(model="model-m", effort="high"), 30, max_running=10
+    "tasks", "/tracker", Path("/checkout"), "auto", StepSettings(), Overrides(model="model-m", plan_effort="high"), 30, max_running=10
 )
 STAMP = r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ tasks "
 STEPPED = r"\S+ plan (start|relaunch|repeat|commit|publish|report|skip)( \S+)+"  # every attempt-bearing move names its step
@@ -454,7 +454,7 @@ def test_an_advance_refusal_is_a_skip_of_the_done_step_and_a_stop_word_ends_admi
         KEY,
         Path("/checkout"),
         StepSettings().implement,
-        Overrides(model="model-m", effort="high"),
+        Overrides(model="model-m", plan_effort="high"),
         1810,
     )
     assert ready.ready_reads == ([] if stopped else ["auto"]) and bench.launcher.calls == ([] if stopped else ["t-9"])
@@ -574,7 +574,7 @@ def test_an_empty_label_a_bad_choice_or_minutes_out_of_range_are_refused_before_
     bench = Bench(factory, ready)
     found = run_round(
         bench.ports(),
-        NextRequest("tasks", "/tracker", Path("/checkout"), label, StepSettings(), Overrides(model=model, effort=effort), minutes),
+        NextRequest("tasks", "/tracker", Path("/checkout"), label, StepSettings(), Overrides(model=model, plan_effort=effort), minutes),
     )
     assert isinstance(found, Failed) and (found.kind, found.reason) == ("refused", reason) and exit_code(found) == 1
     assert ready.ready_reads == [] and bench.lines == [] and bench.launcher.calls == []

@@ -258,7 +258,7 @@ class NextAdmission:
             reader = AttemptStore(self.connect, self.begin)
             earlier = reader.earlier_for(request.previous)
             ready = replace(ready, earlier=earlier)
-            setting = choose(request.setting, pin.workflow.table(ready.step).agent, request.overrides)
+            setting = choose(request.setting, pin.workflow.table(ready.step).agent, request.overrides, ready.step)
             text = EarlierInput(reader, self.files, HoldStore(self.connect, self.begin)).attach(
                 task_text(ready.task, ready.step, context, pin.workflow, discussion.text),
                 earlier,

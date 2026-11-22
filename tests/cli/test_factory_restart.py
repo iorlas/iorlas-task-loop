@@ -29,7 +29,7 @@ from taskloop.round import NextRequest
 from taskloop.task import TaskInspection
 from taskloop.tracker import ACTOR
 
-REQUEST = NextRequest("tasks", "/tracker", Path("/checkout"), "auto", StepSettings(), Overrides(model="m", effort="high"), 30)
+REQUEST = NextRequest("tasks", "/tracker", Path("/checkout"), "auto", StepSettings(), Overrides(model="m", plan_effort="high"), 30)
 VERSIONS = [SCHEMA.version - 1, SCHEMA.version + 1, 0]
 
 
@@ -94,7 +94,7 @@ def test_rounds_restart_reports_the_same_recovery_in_human_and_json_and_preserve
         "auto",
         "--model",
         "m",
-        "--effort",
+        "--plan-effort",
         "high",
         "--minutes",
         "30",

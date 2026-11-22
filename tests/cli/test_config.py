@@ -239,7 +239,7 @@ def test_config_show_preserves_each_steps_choices_and_flag_provenance(
     config.write_text(
         '[agents.plan]\nmodel = "plan-model"\neffort = "low"\n[agents.implement]\nmodel = "implement-model"\neffort = "high"\n'
     )
-    flags = ["--harness", "codex", "--model", "flag-model", "--effort", "ultra"] if overridden else []
+    flags = ["--harness", "codex", "--model", "flag-model", "--plan-effort", "ultra", "--implement-effort", "ultra"] if overridden else []
     assert main(["--config", str(config), "config", "show", *flags, *(["--json"] if structured else [])]) == 0
     output = capsys.readouterr()
     assert output.err == ""
@@ -273,12 +273,13 @@ model = "opus"
 [agents.plan.access]
 settings_file = "{policy}"
 ''')
-    assert main(["--config", str(config), "config", "show", "--effort", "low", "--json"]) == 0
+    assert main(["--config", str(config), "config", "show", "--plan-effort", "low", "--json"]) == 0
     output = capsys.readouterr()
     values = json.loads(output.out)["settings"]
     assert "do-not-display" not in output.out and "hooks" not in output.out
     assert values["agents.plan.harness"] == {"value": "claude", "source": "file"}
-    assert values["agents.plan.effort"] == values["agents.implement.effort"] == {"value": "low", "source": "flag"}
+    assert values["agents.plan.effort"] == {"value": "low", "source": "flag"}
+    assert values["agents.implement.effort"] == {"value": "medium", "source": "default"}
     assert values["agents.plan.access.settings_file"] == {"value": str(policy), "source": "file"}
     assert values["agents.plan.access.permission_mode"] == {"value": "dontAsk", "source": "default"}
     assert values["agents.plan.provider"] == {"value": "anthropic", "source": "derived"}
@@ -292,7 +293,7 @@ def test_invalid_file_choice_is_checked_even_when_a_flag_would_override_it(tmp_p
 def test_config_show_compaction_provenance_survives_existing_flags(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     config = tmp_path / "config.toml"
     config.write_text("[agents.implement]\ncompaction_token_limit = 100000\n")
-    assert main(["--config", str(config), "config", "show", "--effort", "low", "--json"]) == 0
+    assert main(["--config", str(config), "config", "show", "--plan-effort", "low", "--json"]) == 0
     values = json.loads(capsys.readouterr().out)["settings"]
     assert values["agents.implement.compaction_token_limit"] == {"value": "100000", "source": "file"}
     assert values["agents.plan.compaction_token_limit"] == {"value": "null", "source": "default"}

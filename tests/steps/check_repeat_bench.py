@@ -70,7 +70,7 @@ class Repairing(Checking):
 
     def request(self) -> StartRequest:
         return StartRequest(
-            "tl-1", "tasks", "/tracker", self.slot.repo.path, StepSettings(), Overrides(model="changed-model", effort="low"), 30
+            "tl-1", "tasks", "/tracker", self.slot.repo.path, StepSettings(), Overrides(model="changed-model", plan_effort="low"), 30
         )
 
     def conclude(self, key: AttemptKey, body: str, me: EntryIdentity) -> None:

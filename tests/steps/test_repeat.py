@@ -645,7 +645,9 @@ class Repeats:
 def test_start_repeats_a_captured_current_attempt_and_launches_any_other(
     registered: sqlite3.Connection, slot: FakeWorktree, tmp_path: Path, checkouts: Checkouts, slot_files: FakeSlotFiles
 ) -> None:
-    request = StartRequest("tl-1", "tasks", "/tracker", Path("/checkout"), StepSettings(), Overrides(model="other-model", effort="low"), 45)
+    request = StartRequest(
+        "tl-1", "tasks", "/tracker", Path("/checkout"), StepSettings(), Overrides(model="other-model", plan_effort="low"), 45
+    )
     store, launcher, repeats = AttemptStore(lambda: registered), Launching(), Repeats()
     fresh = AttemptAdmission(
         lambda: registered,

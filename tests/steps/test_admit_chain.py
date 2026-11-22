@@ -408,7 +408,7 @@ def test_advancement_captures_the_next_step_compaction_choice(
 ) -> None:
     registered.execute("UPDATE attempt SET compaction_token_limit=100000")
     settings = StepSettings(plan=AgentSetting(compaction_token_limit=100000), implement=AgentSetting(compaction_token_limit=120000))
-    selected = settings.overridden(Overrides(effort="low")).implement
+    selected = settings.overridden(Overrides(implement_effort="low")).implement
     next_request = replace(request(slot.repo), setting=selected)
     admitted = advancing(registered, tmp_path, checkouts, slot_files).admit_next(next_request)
     assert isinstance(admitted, Admitted)
@@ -565,12 +565,12 @@ def test_step_start_on_a_done_plan_admits_and_launches_implement(
         NO_CHECKS,
     )
     started = start(
-        ports, StartRequest("tl-1", "tasks", "/tracker", slot.repo.path, StepSettings(), Overrides(model="chosen", effort="high"), 1)
+        ports, StartRequest("tl-1", "tasks", "/tracker", slot.repo.path, StepSettings(), Overrides(model="chosen", plan_effort="high"), 1)
     )
     assert isinstance(started, Started) and (started.status, started.step, started.existing) == ("started", "implement", False)
     assert launcher.calls == ["tl-1"]
     again = start(
-        ports, StartRequest("tl-1", "tasks", "/tracker", slot.repo.path, StepSettings(), Overrides(model="chosen", effort="high"), 1)
+        ports, StartRequest("tl-1", "tasks", "/tracker", slot.repo.path, StepSettings(), Overrides(model="chosen", plan_effort="high"), 1)
     )
     assert isinstance(again, Started) and again.attempt_id == started.attempt_id and again.status == "relaunched"
 

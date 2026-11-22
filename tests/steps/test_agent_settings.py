@@ -27,10 +27,10 @@ def test_defaults_and_individual_overrides_are_selected_for_the_actual_step() ->
     settings = StepSettings()
     assert settings.plan.model == settings.implement.model == "gpt-6.1-sol"
     assert settings.plan.effort == "high" and settings.implement.effort == "medium"
-    assert apply(settings.plan, Overrides(model="custom")).effort == "high"
-    assert apply(settings.implement, Overrides(effort="ultra")).model == "gpt-6.1-sol"
+    assert apply(settings.plan, Overrides(model="custom"), "plan").effort == "high"
+    assert apply(settings.implement, Overrides(implement_effort="ultra"), "implement").model == "gpt-6.1-sol"
     with pytest.raises(ValueError, match="matching per-step"):
-        apply(settings.plan, Overrides(harness=HarnessKind.CLAUDE, model="opus"))
+        apply(settings.plan, Overrides(harness=HarnessKind.CLAUDE, model="opus"), "plan")
 
 
 def test_each_step_resolves_and_displays_its_own_file_choices(tmp_path: Path) -> None:
@@ -75,7 +75,7 @@ def test_compaction_resolves_and_survives_flags_and_storage(limit: int | None, t
     assert setting.compaction_token_limit == limit
     assert settings.plan.compaction_token_limit is None
     assert sources["agents.implement.compaction_token_limit"] == "file"
-    overridden = apply(setting, Overrides(model="custom", effort="low"))
+    overridden = apply(setting, Overrides(model="custom", implement_effort="low"), "implement")
     assert overridden.compaction_token_limit == limit
     assert (
         decode_setting(

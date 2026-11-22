@@ -155,7 +155,7 @@ settings_file = "~/.config/task-loop/claude-settings.json"
 permission_mode = "dontAsk"
 ```
 
-`--harness`, `--model` and `--effort` optionally override their fields on each newly admitted step (flag, then file,
+`--harness`, `--model`, `--plan-effort` and `--implement-effort` optionally override their fields on each newly admitted step (flag, then file,
 then default). A different harness needs its own model and policy in configuration; a harness flag cannot borrow
 another harness's policy. Provider is derived from the harness and model. `config show` accepts these overrides too
 and reports sources and safe access summaries. Claude settings must be a JSON object; the mode defaults to `dontAsk`,

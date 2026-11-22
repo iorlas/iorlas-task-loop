@@ -31,6 +31,8 @@ from taskloop.slot_lock import custody
 from taskloop.step_render import human
 from taskloop.task_status import Status, task_status, words
 
+HIGH_PLAN = Overrides(model="m", plan_effort="high")
+
 
 @pytest.fixture
 def b(tmp_path: Path) -> Iterator[LandBench]:
@@ -196,7 +198,7 @@ def test_completed_delivery_frees_capacity_for_a_new_task_in_the_same_round(b: L
     factory = Factory(b.con, b.root / "art", b.slot, b.views, b.files, Tracker(task("tl-2")), adopted=True)
     scripts(factory, b.slot, "tl-2")
     built = replace(factory.ports(), landing=ports(b).landing)
-    request = NextRequest("tasks", "/tracker", b.repo.path, "auto", StepSettings(), Overrides(model="m", effort="high"), 30, max_running=1)
+    request = NextRequest("tasks", "/tracker", b.repo.path, "auto", StepSettings(), HIGH_PLAN, 30, max_running=1)
     result = run_round(built, request)
     assert isinstance(result, Round)
     assert [(move.task_id, move.action, move.word) for move in result.moves if move.action in ("land", "start")] == [
