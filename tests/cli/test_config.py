@@ -304,3 +304,34 @@ def test_invalid_compaction_is_refused_before_admission(value: str, tmp_path: Pa
     result = resolve(f"[agents.implement]\ncompaction_token_limit = {value}\n", Flags(), tmp_path)
     assert isinstance(result, ConfigRefused)
     assert result.key == "agents.implement.compaction_token_limit"
+
+
+CLAUDE_PLAN = '[agents.plan]\nharness = "claude"\nmodel = "opus"\neffort = "{effort}"\n[agents.plan.access]\nsettings_file = "{policy}"\n'
+
+
+def test_an_effort_the_harness_does_not_accept_is_refused_in_the_file_and_in_the_flag(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    policy = tmp_path / "settings.json"
+    policy.write_text("{}")
+    refused = resolve(CLAUDE_PLAN.format(effort="turbo", policy=policy), Flags(), tmp_path)
+    assert isinstance(refused, ConfigRefused) and refused.key == "agents.plan"
+    assert "effort 'turbo' is not accepted by claude model 'opus'; it accepts low, medium, high, xhigh, max" in refused.detail
+    config = tmp_path / "config.toml"
+    config.write_text(CLAUDE_PLAN.format(effort="low", policy=policy))
+    assert main(["--config", str(config), "config", "show", "--plan-effort", "turbo", "--json"]) == 1
+    assert "effort 'turbo' is not accepted by claude model 'opus'" in capsys.readouterr().err
+    assert main(["--config", str(config), "config", "show", "--plan-effort", "max", "--json"]) == 0
+
+
+def test_an_effort_level_the_harness_cannot_judge_is_accepted(tmp_path: Path) -> None:
+    """No model list for the default Codex model under this home, and OpenCode never says: both are unknown, so accepted."""
+    assert isinstance(resolve('[agents.plan]\neffort = "turbo"', Flags(), tmp_path), Effective)
+    cache = tmp_path / ".codex"
+    cache.mkdir()
+    (cache / "models_cache.json").write_text(
+        '{"models":[{"slug":"gpt-x","supported_reasoning_levels":[{"effort":"low"},{"effort":"high"}]}]}'
+    )
+    assert isinstance(resolve('[agents.plan]\nmodel = "other"\neffort = "turbo"', Flags(), tmp_path), Effective)
+    refused = resolve('[agents.plan]\nmodel = "gpt-x"\neffort = "turbo"', Flags(), tmp_path)
+    assert isinstance(refused, ConfigRefused) and "it accepts low, high" in refused.detail

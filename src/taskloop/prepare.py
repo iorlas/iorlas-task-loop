@@ -27,6 +27,7 @@ from taskloop.slots import SlotView, unusable_text
 type BranchRefusal = Literal["branch_name", "branch_held", "branch_diverged", "branch_unpublished", "target"]
 MAIN: Final = "refs/heads/main"  # the person's local branch, retained for checks and foreign-work protection
 ORIGIN_MAIN: Final = "refs/remotes/origin/main"
+ORIGIN_TRACK: Final = "origin/main"  # ORIGIN_MAIN as the short remote-tracking name `take_branch(track=)` takes
 HEADS: Final = "refs/heads/task"
 REMOTES: Final = "refs/remotes/origin/task"
 NAME: Final = re.compile(r"[A-Za-z0-9._-]+")
@@ -210,7 +211,9 @@ def _take(checkouts: Checkouts, files: SlotFiles, record: AttemptRecord, state: 
         return _refused("slot_redirected")
     slot = Path(admission.slot_path)
     worktree = checkouts(slot, git_dir=state.gitdir).worktree(slot)
-    taken = worktree.take_branch(task_branch(task_id), found.start)
+    # A new branch tracks origin main, so `@{upstream}` readers (the secret scan, change selection) see a bounded range.
+    tracked = any(entry.name == ORIGIN_MAIN for entry in repo.refs([ORIGIN_MAIN]))
+    taken = worktree.take_branch(task_branch(task_id), found.start, track=ORIGIN_TRACK if tracked else None)
     if isinstance(taken, BranchHeld):
         return _refused("branch_held")
     changed = taken.head != found.start

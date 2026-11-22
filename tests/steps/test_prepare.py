@@ -15,7 +15,7 @@ from any_agent.testing import FakeRun
 from beads_client import Bead
 from beads_client.testing import FakeTaskReadClient
 from doubles import ENGINE, WORKFLOW_FILES, Environment, FakeSlotFiles, PinnedViews
-from git_porcelain import BranchHeld, GitReadFailure, Recorded, Repo, Sha
+from git_porcelain import BranchHeld, BranchTaken, GitReadFailure, Recorded, Repo, Sha
 from git_porcelain.api import TakeResult
 from git_porcelain.testing import FakeRemote, FakeRepo, FakeWorktree
 from sqlite_sidecar import transaction
@@ -692,3 +692,26 @@ def test_a_local_task_branch_with_the_persons_unpublished_commit_is_refused_but_
     repo.delete_branch(BRANCH, expected=tip)
     leave(repo, tmp_path, BRANCH, extra=True)  # an abandoned attempt's own commit (trailer): resumed as before
     assert isinstance(branch_refusal(repo, "tl-1", ()), Branch)
+
+
+def test_a_new_task_branch_tracks_origin_main(
+    con: sqlite3.Connection,
+    slot: FakeWorktree,
+    tmp_path: Path,
+    checkouts: Checkouts,
+    slot_files: SlotFiles,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The branch the entry creates has origin main as its upstream, so range readers (the secret scan) are bounded."""
+    take = FakeWorktree.take_branch
+    upstreams: list[str | None] = []
+
+    def spy(self: FakeWorktree, branch: str, base: str, *, track: str | None = None) -> TakeResult:
+        taken = take(self, branch, base, track=track)
+        assert isinstance(taken, BranchTaken)
+        upstreams.append(taken.upstream)
+        return taken
+
+    monkeypatch.setattr(FakeWorktree, "take_branch", spy)
+    assert execute(con, tmp_path, checkouts, slot_files)[:2] == ("pending", "commit")
+    assert upstreams == ["origin/main"]

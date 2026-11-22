@@ -12,6 +12,7 @@ from typing import Final
 from pydantic import ValidationError
 
 from taskloop import cli_attempt, cli_composition, cli_land, dash_composition, operations, result_data, slot_list
+from taskloop.agents.effort import EffortRefused, require
 from taskloop.agents.settings import Overrides
 from taskloop.cli_common import (
     ARTIFACTS,
@@ -245,7 +246,7 @@ def _start(arguments: argparse.Namespace, loaded: Loaded) -> Result:
         tracker_root_of(arguments, loaded),
         checkout_of(arguments, loaded),
         loaded.settings.agents,
-        _overrides(arguments),
+        _overrides(arguments, loaded),
         arguments.minutes,
         new=_new_task(arguments),
     )
@@ -253,10 +254,16 @@ def _start(arguments: argparse.Namespace, loaded: Loaded) -> Result:
         return ports if isinstance(ports, Failed) else operations.start(ports, request)
 
 
-def _overrides(arguments: argparse.Namespace) -> Overrides:
-    return Overrides(
+def _overrides(arguments: argparse.Namespace, loaded: Loaded) -> Overrides:
+    """The flags, each effort level checked against the step's machine harness and the model the flags leave it."""
+    flags = Overrides(
         harness=arguments.harness, model=arguments.model, plan_effort=arguments.plan_effort, implement_effort=arguments.implement_effort
     )
+    for step in Step:
+        effort, setting = flags.effort_for(step), loaded.settings.agents.for_step(step)
+        if effort is not None:
+            require(effort, setting.harness, flags.model or setting.model, Path.home())
+    return flags
 
 
 def _new_task(arguments: argparse.Namespace) -> NewTask:
@@ -270,7 +277,7 @@ def _next_request(arguments: argparse.Namespace, loaded: Loaded) -> NextRequest:
         checkout_of(arguments, loaded),
         label_of(arguments, loaded),
         loaded.settings.agents,
-        _overrides(arguments),
+        _overrides(arguments, loaded),
         arguments.minutes,
         max_running=arguments.max_running,
         retake=arguments.retake_lapsed,
@@ -373,9 +380,7 @@ def _adopt(arguments: argparse.Namespace, loaded: Loaded) -> Result:
 
 
 def _configuration(arguments: argparse.Namespace, loaded: Loaded) -> Loaded | Failed:
-    flags = Overrides(
-        harness=arguments.harness, model=arguments.model, plan_effort=arguments.plan_effort, implement_effort=arguments.implement_effort
-    )
+    flags = _overrides(arguments, loaded)
     try:
         settings = loaded.settings.agents.overridden(flags)
     except ValueError as error:
@@ -438,7 +443,7 @@ def run(arguments: argparse.Namespace) -> int:
             result = OPERATIONS[arguments.command, arguments.operation](arguments, loaded)
         except ConfigMissing as missing:
             result = operations.refused_config(missing.refused)
-        except ValidationError as error:
+        except (ValidationError, EffortRefused) as error:
             result = Failed("refused", "choices", str(error))
     failed = isinstance(result, Failed) or (
         isinstance(result, Ended) and result.reason not in {"interrupted", Reason.DRAINED, Reason.DRAINING, Reason.IDLE}
