@@ -8,6 +8,7 @@ from any_agent.access import ClaudePermissionMode, CodexSandbox
 from any_agent.harnesses.opencode_sandbox import Sandbox
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, TypeAdapter, field_validator, model_validator
 
+from taskloop.agents.effort import accepted
 from taskloop.harness_choice import HarnessKind, Provider, provider_of
 from taskloop.step import Step, decode_step
 from taskloop.workflow import Agent
@@ -15,6 +16,17 @@ from taskloop.workflow import Agent
 
 class Input(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid", hide_input_in_errors=True)
+
+
+class EffortRefused(ValueError):
+    """An effort level the chosen harness and model are known not to accept."""
+
+
+def require_effort(effort: str, harness: HarnessKind, model: str, home: Path) -> None:
+    """Refuse an effort level that is known not to be accepted; a level the harness cannot judge passes."""
+    levels = accepted(harness, model, home)
+    if levels is not None and effort not in levels:
+        raise EffortRefused(f"effort {effort!r} is not accepted by {harness} model {model!r}; it accepts {', '.join(levels)}")
 
 
 def identifier(value: str) -> str:
@@ -154,6 +166,14 @@ class StepSettings(Input):
 
     def for_step(self, step: str) -> AgentSetting:
         return self.plan if decode_step(step) is Step.PLAN else self.implement
+
+    def require_flags(self, flags: Overrides, home: Path) -> Overrides:
+        """`flags`, each effort level checked against the step's machine harness and the model the flags leave it."""
+        for step in Step:
+            effort, setting = flags.effort_for(step), self.for_step(step)
+            if effort is not None:
+                require_effort(effort, setting.harness, flags.model or setting.model, home)
+        return flags
 
     def overridden(self, flags: Overrides) -> Self:
         return type(self)(plan=apply(self.plan, flags, Step.PLAN), implement=apply(self.implement, flags, Step.IMPLEMENT))

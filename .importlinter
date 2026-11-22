@@ -193,6 +193,7 @@ type = protected
 protected_modules =
 
     taskloop.agents.config
+    taskloop.agents.effort
     taskloop.agents.launch
     taskloop.agents.settings
     taskloop.agents.stop
@@ -204,6 +205,7 @@ allowed_importers =
     taskloop.agents
     taskloop.agents.api
     taskloop.agents.config
+    taskloop.agents.effort
     taskloop.agents.launch
     taskloop.agents.settings
     taskloop.agents.stop
@@ -611,6 +613,7 @@ source_modules =
     taskloop.agents
     taskloop.agents.api
     taskloop.agents.config
+    taskloop.agents.effort
     taskloop.agents.launch
     taskloop.agents.settings
     taskloop.agents.stop

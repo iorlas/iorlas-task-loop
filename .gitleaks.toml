@@ -1,5 +1,6 @@
-# Allowlist for gitleaks (the `secrets` gate step, pinned in mise.toml). A slot's task branch has no upstream, so
-# `blueprint.secret_scan range` scans all history; these are the historic false positives of that scan.
+# Allowlist for gitleaks (the `secrets` gate step, pinned in mise.toml). `blueprint.secret_scan range` scans all history
+# on a branch with no upstream (a person's or session's branch; a factory slot's task branch tracks origin/main and scans only its
+# own range, verified without this file); these are the historic false positives of that full scan.
 # None of the paths exists in the checkout now. Each entry names why it is not a secret. Add nothing without a path and a reason.
 [extend]
 useDefault = true

@@ -262,8 +262,8 @@ def _facts_values(facts: ExecutionFacts) -> tuple[object, ...]:
     )
 
 
-def ran_values(facts: ExecutionFacts) -> tuple[str | None, ...]:
-    return (facts.model, facts.harness_version, facts.effort)
+def ran_values(facts: ExecutionFacts) -> tuple[str | int | None, ...]:
+    return (facts.model, facts.harness_version, facts.effort, facts.reasoning_tokens)
 
 
 def _verdict_values(result: Verdict) -> tuple[str, str | None, str | None, int]:

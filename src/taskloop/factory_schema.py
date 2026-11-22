@@ -28,6 +28,8 @@ v31: durable answer repairs retain their predecessor's repeat number, settings, 
 v37: `execution.harness` dropped: it only repeated `attempt.harness`. Drain old entries before discarding an older database.
 v38: `attempt.launched_digest` (sha256 of the input actually launched, written at dispatch) and `factory_commit.files_changed` /
 `lines_changed` (the committed attempt's diff from its base to its commit). Drain old entries before discarding an older database.
+v39: `execution.t_reasoning` (the reasoning share of the output tokens, NULL when the harness does not report it). Drain old entries
+before discarding an older database.
 """
 
 from enum import StrEnum
@@ -57,7 +59,7 @@ _UNDEFINED = encode(CommandConclusion.UNDEFINED)
 # This is also the runtime's persisted-state compatibility version: increment it for incompatible changes to the
 # interpretation of execution state, even without a DDL change. Compatible code changes keep it and resume normally.
 SCHEMA = Schema(
-    version=38,
+    version=39,
     name="factory",
     steps={},
     ddl=f"""
@@ -164,7 +166,7 @@ CREATE UNIQUE INDEX attempt_checks_source ON attempt(source_checks_id) WHERE rep
 CREATE TABLE execution (
  attempt_id TEXT PRIMARY KEY REFERENCES attempt(attempt_id), dispatch_token TEXT NOT NULL, generation INTEGER NOT NULL,
  rc INTEGER, timed_out INTEGER NOT NULL, stop TEXT, watch TEXT, work INTEGER NOT NULL, stands INTEGER NOT NULL,
- answered INTEGER, reason TEXT, http_status INTEGER, t_in INTEGER, t_cached INTEGER, t_out INTEGER,
+ answered INTEGER, reason TEXT, http_status INTEGER, t_in INTEGER, t_cached INTEGER, t_out INTEGER, t_reasoning INTEGER,
  c_in INTEGER, c_cached INTEGER, c_out INTEGER, turns INTEGER, session TEXT,
  usage_incomplete INTEGER CHECK(usage_incomplete IS NULL OR usage_incomplete IN (0,1)),
  model TEXT, harness_version TEXT, effort TEXT,
@@ -324,6 +326,7 @@ FACTS = (
 )
 RAN = "model,harness_version,effort"  # what the agent harness reported it ran: NULL when it could not tell
 RAN_COLUMNS = len(RAN.split(","))
+REASONING = "t_reasoning"  # the reasoning share of the output tokens, an integer unlike the RAN texts; NULL when not reported
 EVIDENCE = "stdout_path,stdout_digest,stderr_path,stderr_digest,answer_path,answer_digest,diagnostic_path,diagnostic_digest"
 ANSWER = "answer_kind,disposition,effect,commit_paths,commit_message,answer_failure,session_state"
 VERDICT = "verdict,reason,blob,reused"

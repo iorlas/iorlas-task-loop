@@ -3,6 +3,7 @@
 Read-only. NULL means unknown, never zero: an attempt that did not end captured has no `ended_at` and no wall time, and
 `usage_incomplete` 1 marks token counts that are a lower bound. `harness`, `model` and `effort` are what the attempt
 asked for; `ran_model`, `ran_effort` and `harness_version` what the harness reported (NULL: it could not tell);
+`t_reasoning` is the reasoning share of `t_out` (NULL: the harness did not report it);
 `ran_model_differs` is 1 where the reported model is not the one asked for (a resolved alias counts as different), 0 where it is,
 NULL where either is unknown;
 `max_attempts` is the attempt's pinned workflow's cap of its step (NULL: the stored workflow cannot be read).
@@ -58,7 +59,7 @@ SELECT
   CASE WHEN c.conclusion='{encode(CommandConclusion.PASSED)}' THEN c.concluded_at-
    (SELECT q.admitted_at FROM attempt q WHERE q.adapter=a.adapter AND q.backlog=a.backlog AND q.task_id=a.task_id
     ORDER BY q.seq LIMIT 1) END,
-  f.files_changed,f.lines_changed,a.launched_digest
+  f.files_changed,f.lines_changed,a.launched_digest,e.t_reasoning
 FROM attempt a JOIN summary m ON m.attempt_id=a.attempt_id LEFT JOIN execution e ON e.attempt_id = a.attempt_id
 LEFT JOIN factory_commit f ON f.attempt_id=a.attempt_id
 LEFT JOIN checks_attempt c ON c.attempt_id=(SELECT latest.attempt_id FROM checks_attempt latest
@@ -126,6 +127,7 @@ class ExportRow:
     changed_files: int | None  # base_commit to the attempt's commit; NULL: no committed verdict
     changed_lines: int | None  # added plus deleted lines of the same diff
     launched_input_digest: str | None  # sha256 of the input actually launched (input_digest is the admitted one); NULL: never dispatched
+    t_reasoning: int | None  # the reasoning share of t_out; NULL: the harness did not report it
 
 
 def _real(value: object) -> float | None:
@@ -212,6 +214,7 @@ def _row(r: tuple[object, ...], pins: Pins) -> ExportRow:
         whole(r[51]),
         whole(r[52]),
         text(r[53]),
+        whole(r[54]),
     )
 
 
