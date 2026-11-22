@@ -51,8 +51,9 @@ pyrefly, import contracts; `just test` = tests/cli, tests/steps, tests/rules. Ru
 The successor has its own declared environment and installed package; baseline editable installs or PYTHONPATH
 must not supply missing code. Do not copy the old conftest/runners: they load the old application and kernel.
 Run the code under test with `uv run --frozen --no-sync python -I -m taskloop ...` after `just install`, or through the tests.
-No live tests. A factory attempt runs `just check` and `just test` once each, last, as its step text says; a session
-runs them once before a pull request. Use focused behavior/contract tests; new tests are pytest functions
+No live tests. A factory attempt cannot run `just check` or `just test` (no bd database, read-only gate cache); it runs
+`just lint`, `just typecheck`, `just rules` and its focused test files, and the factory runs the full gates after it. A
+session runs `just check` and `just test` once before a pull request. Use focused behavior/contract tests; new tests are pytest functions
 or classes, never unittest. No test for every private helper or a test that merely repeats its implementation.
 Retain caps: 400 source lines per file, 80 per function and 800 per test file. No new Any, cast or ignore escape.
 

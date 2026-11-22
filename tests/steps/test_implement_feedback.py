@@ -35,8 +35,7 @@ def test_failed_check_repeat_retains_the_original_implement_policy(tmp_path: Pat
     assert "Remove unwanted untracked files and restore unwanted tracked edits before answering" in instructions
     assert "An unchanged answer still goes through fresh factory checks." in text
     assert text.endswith(f"The task and plan instructions, for reference:\n\n{task_text(TASK, 'implement', CONTEXT, WORKFLOW)}")
-    assert "at most twice while working" in text and "Do not rerun either successful final command." in text
-    assert "run `just check 2>&1 | tail -60` once and then `just test 2>&1 | tail -40` once" in text
+    assert "never run them, and never answer `incomplete`" in text and "`just lint`" in text
 
 
 def test_tail_handles_large_invalid_control_marker_and_unterminated_output(tmp_path: Path) -> None:
