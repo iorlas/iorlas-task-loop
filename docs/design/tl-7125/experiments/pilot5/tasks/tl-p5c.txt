@@ -1,0 +1,11 @@
+`--effort` on the step and rounds commands overrides the agent effort of both the plan and the implement step at once. A person who wants a low implement effort with the plan effort left as configured has to write a per-run machine configuration file.
+
+Let a person set the effort of one step from the command line.
+
+Note on checks: the factory runs `just check` and `just test` itself after your answer. They cannot run in your sandbox (no beads database, read-only gate cache), so do not run them; focused pytest runs of the files you touch are fine.
+
+## Acceptance Criteria
+- The commands that take `--effort` also take a per-step choice for the plan step and for the implement step.
+- A per-step choice overrides `--effort` for its step only; `--effort` alone behaves exactly as before; configured values remain the fallback for a step with no flag.
+- The effective choices still appear in the same places as today (admitted run choices, `tl config show` sources).
+- A focused test covers each precedence case.

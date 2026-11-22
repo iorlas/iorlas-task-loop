@@ -1,0 +1,11 @@
+In `tl attempt export`, `rework_count` is documented and computed as the number of repeat attempts of a task except answer repairs. A reader comparing workflows wants the number of repeats that followed a failed check, not every repeat for any other reason.
+
+Make `rework_count` count only the repeats whose reason is a failed check.
+
+Note on checks: the factory runs `just check` and `just test` itself after your answer. They cannot run in your sandbox (no beads database, read-only gate cache), so do not run them; focused pytest runs of the files you touch are fine.
+
+## Acceptance Criteria
+- `rework_count` equals the number of failed-check repeats among the task's attempts up to and including this row.
+- Repeats for any other reason (answer repair, retry after an infrastructure failure, and so on) do not count.
+- The column's documentation says so.
+- A focused test covers a chain with a failed-check repeat and a chain with another kind of repeat.

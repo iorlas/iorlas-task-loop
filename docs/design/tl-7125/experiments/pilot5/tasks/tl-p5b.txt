@@ -1,0 +1,10 @@
+`tl attempt export` has a `hold_cause` column holding the hold's cause as a code, but nothing that says in words why the attempt was held. An experiment reader has to open the database to see the text.
+
+Add the hold's explanation text to the export as a new column named `hold_text`: the same text the dashboard and `tl attempt show` display for that hold, empty (NULL) for an attempt with no hold. It appears in both the CSV and the `--json` output.
+
+Note on checks: the factory runs `just check` and `just test` itself after your answer. They cannot run in your sandbox (no beads database, read-only gate cache), so do not run them; focused pytest runs of the files you touch are fine.
+
+## Acceptance Criteria
+- `tl attempt export` and `tl attempt export --json` include `hold_text`, in the column order after `hold_cause`.
+- It is NULL (empty in CSV) when the attempt has no hold.
+- A focused test covers a held attempt and an attempt that was not held.
