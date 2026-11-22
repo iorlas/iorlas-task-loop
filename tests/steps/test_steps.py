@@ -161,7 +161,7 @@ def test_an_implement_repeat_frames_the_listing_and_preserves_the_complete_input
     assert "read the original content with `git show HEAD:<path>` and restore it with `apply_patch`" in text
     assert "git show HEAD:<path> >" not in text
     assert "never run them, and never answer `incomplete`" in text
-    assert "`just lint`" in text and "`just typecheck`" in text and "`just rules`" in text
+    assert "`just lint`" in text and "`just typecheck`" in text and "`just rules`" in text and "`tests/rules`" in text
 
 
 @pytest.mark.parametrize("route", ["initial", "repeat", "failed_check"])

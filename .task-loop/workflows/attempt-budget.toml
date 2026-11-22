@@ -149,8 +149,7 @@ The factory ran this repository's `setup` before you started; uv normally uses t
 For an authorized shelf package addition or upgrade, acquisition of its latest release is allowed when absent from the prepared cache. \
 `just check` and `just test` cannot run in your sandbox (no bd database, read-only gate cache): never run them, and never answer `incomplete` or "unverified" because they could not run. \
 The factory runs both after your answer and only those results count. \
-Run the checks that do work here: `just lint` (ruff check and format; `just format` fixes formatting), `just typecheck` and `just rules`, and for each test file you changed or added \
-`uv run --frozen --no-sync python -I -m pytest -q <file> --tb=short | tail -40`. \
+Run the checks that do work here: `just lint` (ruff check and format; `just format` fixes formatting), `just typecheck` and `just rules`, and with `uv run --frozen --no-sync python -I -m pytest -q <file> --tb=short | tail -40` each test file you changed or added and `tests/rules` (file, function and test-file size caps). \
 Run them after your edits and again after each fix, and finish only when they pass. \
 Enable pipeline failure propagation in the command shell (`set -o pipefail`) so `tail` cannot conceal a failure. \
 If uv reports a read-only cache or lock, prefix the command with `UV_NO_CACHE=1`. \
