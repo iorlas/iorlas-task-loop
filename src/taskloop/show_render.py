@@ -9,7 +9,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from taskloop.attempt_result import ran_line, succeeded, usage_explanation
-from taskloop.attempt_status import AttemptView, SetupShown, Shown
+from taskloop.attempt_status import AttemptView, SetupShown, Shown, cap_words
 from taskloop.check_status import ChecksView
 from taskloop.check_store import Required, ResultRow
 from taskloop.checks import differs
@@ -63,7 +63,7 @@ def _agent_lines(each: AttemptView) -> list[str]:
     earlier, entry, released = _common(each)
     # the stored registration only: the agent may have exited long ago, so it is never shown as running
     worker = "none" if each.worker is None else f"last known pid {each.worker[0]}, process group {each.worker[1]} (not checked)"
-    cap = "" if each.max_attempts is None else f" of at most {each.max_attempts}"
+    cap = "" if each.max_attempts is None else f", {cap_words(each.max_attempts)}"
     repeats = "" if each.previous_attempt_id is None else f"; repeats {each.previous_attempt_id}, {each.repeat_reason}"
     found = each.published
     published = [] if found is None else [f"Published: task/{each.task_id} at {found.commit} on origin, {_when(found.published_at)}"]

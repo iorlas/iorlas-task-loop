@@ -316,6 +316,7 @@ FACTS = (
     "rc,timed_out,stop,watch,work,stands,answered,reason,http_status,t_in,t_cached,t_out,c_in,c_cached,c_out,turns,session,usage_incomplete"
 )
 RAN = "model,harness_version,effort"  # what the agent harness reported it ran: NULL when it could not tell
+RAN_COLUMNS = len(RAN.split(","))
 EVIDENCE = "stdout_path,stdout_digest,stderr_path,stderr_digest,answer_path,answer_digest,diagnostic_path,diagnostic_digest"
 ANSWER = "answer_kind,disposition,effect,commit_paths,commit_message,answer_failure,session_state"
 VERDICT = "verdict,reason,blob,reused"

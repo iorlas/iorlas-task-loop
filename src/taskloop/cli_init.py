@@ -39,12 +39,8 @@ def register(commands: argparse._SubParsersAction[argparse.ArgumentParser]) -> N
 
 def run(arguments: argparse.Namespace, write: Writer = create_new) -> int:
     checkout = Path(arguments.checkout).expanduser().absolute()
-    try:
-        if not checkout.is_dir():
-            raise NotADirectoryError(str(checkout))
-        outcome = scaffold(checkout, arguments.workflow, write)
-    except OSError as error:
-        message = f"{checkout} cannot be written: {error.strerror or error}"
+    if not checkout.is_dir():
+        message = f"{checkout} cannot be written: it is not a folder"
         print(
             json.dumps({"error": {"kind": UNWRITABLE, "message": message}})
             if arguments.json_output
@@ -52,10 +48,14 @@ def run(arguments: argparse.Namespace, write: Writer = create_new) -> int:
             file=sys.stderr,
         )
         return ExitCode.REFUSED
+    outcome = scaffold(checkout, arguments.workflow, write)
+    code = ExitCode.REFUSED if outcome.failed else ExitCode.SUCCESS
     if arguments.json_output:
         created, kept = [str(each) for each in outcome.created], [str(each) for each in outcome.kept]
-        print(json.dumps({"created": created, "kept": kept, "committed": False}))
-        return ExitCode.SUCCESS
+        failed = [{"path": str(path), "reason": reason} for path, reason in outcome.failed]
+        print(json.dumps({"created": created, "kept": kept, "failed": failed, "committed": False}))
+        return code
     lines = [f"Wrote {each}" for each in outcome.created] + [f"Kept {each}: it already exists" for each in outcome.kept]
+    lines += [f"Failed {path}: {reason}" for path, reason in outcome.failed]
     print("\n".join(lines + ([UNCOMMITTED] if outcome.created else [])))
-    return ExitCode.SUCCESS
+    return code

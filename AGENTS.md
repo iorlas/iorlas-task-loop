@@ -44,10 +44,10 @@ Never kill processes by name; act only on a confirmed owned process identity.
 
 ## Build and verification
 
-Python 3.15+. `just check` and `just test` are the required focused gates. `just check` = install (rebuilds the package), ruff,
-pyrefly, import contracts; `just test` = tests/cli, tests/steps, tests/rules. Run gates as `just check 2>&1 | tail -60` and
-`just test 2>&1 | tail -40`. Never run ruff or pytest directly except
-`uv run --frozen --no-sync python -I -m pytest -q <file> --tb=short | tail -40`.
+Python 3.15+. The full gates are `just check` and `just test`; a session runs them, a factory attempt does not (below). `just check`
+= install (rebuilds the package), ruff, pyrefly, import contracts; `just test` = tests/cli, tests/steps, tests/rules. Run gates as
+`just check 2>&1 | tail -60` and `just test 2>&1 | tail -40`. The cheap checks are `just lint`, `just typecheck` and `just rules`.
+Never run ruff or pytest directly except `uv run --frozen --no-sync python -I -m pytest -q <file or tests/rules> --tb=short | tail -40`.
 The successor has its own declared environment and installed package; baseline editable installs or PYTHONPATH
 must not supply missing code. Do not copy the old conftest/runners: they load the old application and kernel.
 Run the code under test with `uv run --frozen --no-sync python -I -m taskloop ...` after `just install`, or through the tests.

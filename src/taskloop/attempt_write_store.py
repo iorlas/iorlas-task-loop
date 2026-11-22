@@ -249,7 +249,7 @@ class AttemptWrites(AttemptLoads):
                 *refs,
                 session_state,
                 None if callback is None else callback.model_dump_json(),
-                *attempt_reads._ran_values(facts),
+                *attempt_reads.ran_values(facts),
             )
             marks = ",".join("?" * len(values))
             con.execute(

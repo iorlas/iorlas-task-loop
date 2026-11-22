@@ -11,7 +11,7 @@ from taskloop.attempt_types import AttemptKey
 from taskloop.check_store import ChecksRow, CheckStore, ResultRow
 from taskloop.command_conclusion import CommandConclusion, encode
 from taskloop.land_store import LandStore
-from taskloop.step import ATTEMPTS, Step
+from taskloop.step import Step
 from taskloop.workflow_read import WorkflowRefusal
 
 
@@ -54,7 +54,7 @@ def decision(
 ) -> CheckRepeatDecision:
     if blocked or failed_result(row, results) is None:
         return CheckRepeatDecision.INELIGIBLE
-    if number >= ATTEMPTS or number >= cap():
+    if number >= cap():
         return CheckRepeatDecision.EXHAUSTED
     return CheckRepeatDecision.RELEASE if row.released_at is None else CheckRepeatDecision.REPEAT
 

@@ -15,7 +15,7 @@ Writer = Callable[[Path, str], None]  # creates the file and its folders; raises
 # setup is filled; checks and required stay empty, so a task is refused (no_required) until the owner names the checks
 PROFILE_STARTER: Final = (
     json.dumps(
-        {"setup": [list(argv) for argv in DEFAULT_SETUP], "checks": [], "required": [], "target": DEFAULT_TARGET, "land": "manual"},
+        {"setup": [list(argv) for argv in DEFAULT_SETUP], "checks": [], "required": [], "target": DEFAULT_TARGET},
         indent=2,
     )
     + "\n"
@@ -28,6 +28,7 @@ class Scaffold:
 
     created: tuple[Path, ...]
     kept: tuple[Path, ...]
+    failed: tuple[tuple[Path, str], ...]  # each path with why it could not be written
 
 
 def workflow_path(checkout: Path, name: str) -> Path:
@@ -38,14 +39,20 @@ def scaffold(checkout: Path, name: str, write: Writer) -> Scaffold:
     """Write each absent file into the checkout's working tree, never over one: nothing is staged, committed or read from Git."""
     created: list[Path] = []
     kept: list[Path] = []
+    failed: list[tuple[Path, str]] = []
     for path, text in ((checkout / PROFILE_PATH, PROFILE_STARTER), (workflow_path(checkout, name), STARTER)):
         try:
             write(path, text)
         except FileExistsError:
-            kept.append(path)
+            if path.is_file():
+                kept.append(path)
+            else:  # a file stands where a folder is needed
+                failed.append((path, "a file is in the way of its folder"))
+        except OSError as error:
+            failed.append((path, error.strerror or str(error)))
         else:
             created.append(path)
-    return Scaffold(tuple(created), tuple(kept))
+    return Scaffold(tuple(created), tuple(kept), tuple(failed))
 
 
 def create_new(path: Path, text: str) -> None:

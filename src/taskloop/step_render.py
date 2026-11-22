@@ -6,7 +6,7 @@ from pathlib import Path
 from taskloop import rows_render
 from taskloop.agents.config import display
 from taskloop.attempt_export import AttemptExport
-from taskloop.attempt_status import Listed, Shown
+from taskloop.attempt_status import AttemptView, Listed, Shown, cap_words
 from taskloop.command_conclusion import encode
 from taskloop.drain.models import Reason
 from taskloop.hold_guide import hold_guide, pending_guide
@@ -42,6 +42,10 @@ from taskloop.step import ATTEMPTS
 from taskloop.step_guide import GUIDE, HELD, NEEDS_OWNER, STEP_ONLY, discard, guide, refusal_guide
 from taskloop.task_status import task_status
 from taskloop.task_status import words as status_words
+
+
+def _cap(a: AttemptView) -> str:
+    return "" if a.checks or a.max_attempts is None else f" ({cap_words(a.max_attempts)})"
 
 
 def human(command: str, result: Result, db: Path | None) -> list[str]:
@@ -136,7 +140,7 @@ def _rows_lines(command: str, result: Listed | Round | Ended | SetupTimingReport
     if isinstance(result, Listed):
         attempts = result.attempts
         rows = [
-            f"{a.task_id}\t{a.backlog}\t{a.step}\t{a.number}{'' if a.checks or a.max_attempts is None else f'/{a.max_attempts}'}\t"
+            f"{a.task_id}\t{a.backlog}\t{a.step}\t{a.number}{_cap(a)}\t"
             f"{a.slot}\t{a.phase}\t{a.entry}\t"
             f"{a.result.status} {a.result.reason}\t{status_words(task_status(a))}\t{a.next}\t"
             f"{a.hold.reason if a.hold is not None else a.hold_due or '-'}\t{last_command(a) or '-'}"
