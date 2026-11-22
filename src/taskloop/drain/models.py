@@ -9,6 +9,7 @@ from stream_proc import OwnedProcess
 class Reason(StrEnum):
     DRAINING = "draining"
     DRAINED = "drained"
+    IDLE = "idle"
 
 
 class State(StrEnum):

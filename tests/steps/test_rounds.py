@@ -12,6 +12,7 @@ import pytest
 from taskloop.agents.settings import Overrides, StepSettings
 from taskloop.attempt_reads import SlotUse
 from taskloop.clock_jumps import ClockContext, ClockDirection, ClockJump
+from taskloop.drain.models import Reason
 from taskloop.exit_codes import exit_code
 from taskloop.operations import Ended, Failed, Move, Quiet, Round
 from taskloop.round import NextRequest
@@ -357,3 +358,42 @@ def test_idle_round_boundaries_record_jumps_without_a_wait_callback() -> None:
         ClockJump.model_validate_json(line.split(" rounds clock-jump ", 1)[1]) for line in bench.lines if " rounds clock-jump " in line
     ]
     assert [record.difference for record in records] == [7200, -14400]
+
+
+WORKING = Round("tasks", (Move("tl-1", "advance", "done", "a1"),))
+SKIPPED = Round("tasks", (Move("tl-2", "skip", "unlabelled"),))
+
+
+def run_idle(results: Sequence[Round | Failed], idle: Callable[[], bool]) -> tuple[Bench, Ended]:
+    bench = Bench(results, lambda _t: SlotUse(0, frozenset()))
+    ports = RoundsPorts(
+        bench.round,
+        bench.slot_use,
+        lambda: 1000 + bench.now,
+        lambda: bench.now,
+        bench.wait,
+        bench.log,
+        bench.warn,
+        lambda: bench.stopped,
+        7,
+        idle=idle,
+    )
+    return bench, run_rounds(ports, RoundsRequest("tasks", 60, exit_when_idle=True))
+
+
+def test_exit_when_idle_ends_after_an_idle_read_and_a_round_without_work() -> None:
+    bench, ended = run_idle([CLEAN, WORKING, SKIPPED, CLEAN], iter([False, True, True, True]).__next__)
+    assert ended == Ended("tasks", Reason.IDLE) and exit_code(ended) == 0
+    assert len(bench.rounds) == 3  # a round after a false read and a round that works never end it
+    assert bench.words()[-1] == "rounds stopped idle"
+
+
+@pytest.mark.parametrize("found", [WORKING, TRACKER, Round("tasks", (), "capacity")])
+def test_exit_when_idle_waits_while_a_round_works_or_stops_on_a_word(found: Round) -> None:
+    bench, ended = run_idle([found, found], lambda: True)
+    assert ended == Ended("tasks", "interrupted") and len(bench.rounds) == 2
+
+
+def test_without_the_flag_an_idle_factory_keeps_running() -> None:
+    bench = Bench([CLEAN, CLEAN])
+    assert bench.run() == Ended("tasks", "interrupted") and len(bench.rounds) == 2

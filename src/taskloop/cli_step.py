@@ -95,6 +95,12 @@ def _register_rounds(commands: Parsers) -> None:
         default=DASH_PORT,
         help=f"Serve the read-only dashboard on --dash-host:PORT while the rounds run (default {DASH_PORT}; 0 picks a free port)",
     )
+    rounds.add_argument(
+        "--exit-when-idle",
+        action="store_true",
+        help="End the rounds (exit 0, reason idle) once no execution or pending action is alive and a round then does no work; "
+        "a task waiting to be landed or held counts as idle. Like `tl drain` it signals nothing and reads no log",
+    )
     rounds.add_argument("--no-dashboard", action="store_true", help="Serve no dashboard (for a second rounds on one machine)")
     _round_flags(rounds)
     rounds.epilog = (
@@ -305,7 +311,7 @@ def _rounds(arguments: argparse.Namespace, loaded: Loaded) -> Result:
     """The start line once the rounds are set up, then the rounds; a `KeyboardInterrupt` anywhere (the second Ctrl-C) is
     the abrupt stop, exit 130 (the operation writes its `rounds stopped abrupt` line once its rounds started)."""
     settings, round_request = loaded.settings, _next_request(arguments, loaded)
-    request = RoundsRequest(round_request.backlog, loaded.settings.round_seconds.value)
+    request = RoundsRequest(round_request.backlog, loaded.settings.round_seconds.value, arguments.exit_when_idle)
     log = settings.artifacts.value / "rounds.log"
     try:
         with cli_composition.open_rounds(settings.db.value, settings.artifacts.value, views_for(loaded), round_request) as ports:
@@ -433,7 +439,7 @@ def run(arguments: argparse.Namespace) -> int:
         except ValidationError as error:
             result = Failed("refused", "choices", str(error))
     failed = isinstance(result, Failed) or (
-        isinstance(result, Ended) and result.reason not in {"interrupted", Reason.DRAINED, Reason.DRAINING}
+        isinstance(result, Ended) and result.reason not in {"interrupted", Reason.DRAINED, Reason.DRAINING, Reason.IDLE}
     )
     stream = sys.stderr if failed else sys.stdout
     if arguments.json_output:

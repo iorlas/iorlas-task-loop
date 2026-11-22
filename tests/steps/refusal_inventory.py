@@ -205,6 +205,7 @@ DYNAMIC_REASONS = {
     "answer_repair",
     "draining",
     "drained",
+    "idle",
     "check_feedback",
     "check_profile",
     "interrupted",

@@ -132,6 +132,7 @@ REFUSALS = {
     "draining": "New work is blocked by the durable drain request. Existing work remains intact; wait for "
     "verified idle and the owner's restart or upgrade decision.",
     "drained": "Idle was verified and new work remains blocked. The owner must decide whether to restart or upgrade.",
+    "idle": "No execution or pending action was alive and a round then did nothing. The owner decides what is next.",
     "interrupted": "The operation was interrupted. Existing executions and evidence remain intact; inspect "
     "current state before continuing.",
     "dashboard_port": "The dashboard address or port cannot be bound. Select an address available on this machine and a free "
