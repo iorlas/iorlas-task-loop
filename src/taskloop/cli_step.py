@@ -7,6 +7,7 @@ from collections.abc import Callable
 from dataclasses import replace
 from ipaddress import ip_address
 from pathlib import Path
+from typing import Final
 
 from pydantic import ValidationError
 
@@ -49,6 +50,7 @@ from taskloop.workflow_read import DEFAULT
 
 DASH_PORT = 8765
 SCHEDULER, STEP, START = "rounds", "step", "start"
+STORE_TRUE: Final = "store_true"
 SLOTS = "slot"
 COMMANDS = ("config", SLOTS, STEP, cli_attempt.GROUP, SCHEDULER, cli_land.GROUP)
 
@@ -97,11 +99,11 @@ def _register_rounds(commands: Parsers) -> None:
     )
     rounds.add_argument(
         "--exit-when-idle",
-        action="store_true",
+        action=STORE_TRUE,
         help="End the rounds (exit 0, reason idle) once no execution or pending action is alive and a round then does no work; "
         "a task waiting to be landed or held counts as idle. Like `tl drain` it signals nothing and reads no log",
     )
-    rounds.add_argument("--no-dashboard", action="store_true", help="Serve no dashboard (for a second rounds on one machine)")
+    rounds.add_argument("--no-dashboard", action=STORE_TRUE, help="Serve no dashboard (for a second rounds on one machine)")
     _round_flags(rounds)
     rounds.epilog = (
         "--json prints JSON Lines: one start record and one end record on a graceful stop; "
@@ -228,7 +230,7 @@ def _round_flags(parser: argparse.ArgumentParser) -> None:
     _new_task_flags(parser)
     parser.add_argument(
         "--retake-lapsed",
-        action="store_true",
+        action=STORE_TRUE,
         help="After a factory.db discard only: also take the tasks "
         "`taskloop` still holds in progress with an expired lease and no attempt here (assumes this is the one "
         "factory on the tracker); run it once, with `tl rounds once`",

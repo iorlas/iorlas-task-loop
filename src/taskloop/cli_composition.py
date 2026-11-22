@@ -39,7 +39,7 @@ from taskloop.composition import (
     open_releaser,
 )
 from taskloop.drain.composition import open_drain
-from taskloop.drain.drain import inspect, reconcile_claims
+from taskloop.drain.drain import is_idle, reconcile_claims
 from taskloop.drain.models import Boundary, Conclusion, Reason, Result, State
 from taskloop.drain.restart import restart
 from taskloop.drain.store import DrainStore
@@ -357,12 +357,6 @@ def open_rounds(
                 current = draining.store.boundary()
                 return current.state is not State.OPEN or current.generation != started.generation
 
-            def idle() -> bool:
-                try:
-                    return inspect(draining, started.generation).conclusion is Conclusion.COMPLETE
-                except sqlite3.Error, OSError, StoreUnavailable:
-                    return False  # unknown is not idle
-
             with install(say) as interrupts:
                 rounding = one_round(database, artifacts, views, request, interrupts.stopping, started.generation, store, registration)
                 yield RoundsPorts(
@@ -377,7 +371,7 @@ def open_rounds(
                     pid,
                     not interrupts.ignored,
                     fenced,
-                    idle,
+                    partial(is_idle, draining, started.generation),
                 )
     finally:
         registration.close_shared()

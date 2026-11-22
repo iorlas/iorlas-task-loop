@@ -70,12 +70,12 @@ test-file = 800
 testpaths = ["tests/cli", "tests/steps", "tests/rules"]
 addopts = "--import-mode=importlib -p no:cacheprovider"
 # importlib mode puts no test directory on sys.path: tests import the shared doubles module (tests/steps/doubles.py)
-pythonpath = ["tests/steps"]
+pythonpath = ["tests/steps", "tools/experiment"]
 
 # The successor's lint policy: narrower than the shelf's, scoped to its own source roots (it replaces ruff.toml).
 [tool.ruff]
 target-version = "py315"
-src = ["src"]
+src = ["src", "tools/experiment"]
 line-length = 140
 output-format = "concise"
 extend-exclude = [".worktrees", ".slots", ".task", "docs"]
@@ -138,7 +138,7 @@ preset = "strict"
 python-version = "3.15"
 project-includes = ["src", "tests", "tools"]
 # tests/steps: the shared test doubles module (doubles.py), as pytest's pythonpath
-search-path = ["src", "tests/steps"]
+search-path = ["src", "tests/steps", "tools/experiment"]
 check-unannotated-defs = true
 use-ignore-files = false
 
