@@ -78,4 +78,13 @@ Areas: **A/A** (same workflow in both arms, measures noise), **A/B** (two workfl
 | L66 | 2026-11-22 | A/B | Effort changed reasoning per request, not behaviour (same request counts); the export has tokens but no reasoning-token split | pilot 7 | if cost comparisons matter, export reasoning tokens when the harness reports them (a shelf question) | open |
 | L67 | 2026-11-22 | A/A | Medium runs of the same task repeat within 0-16% on agent wall across pilots 6 and 7 (p6d: 464 vs 538 s): a cross-pilot noise figure from identical settings | pilots 6, 7 | use it as the noise floor when sizing a cost A/B | decided |
 
+## export-v2 (closes L6, L8, L9, L42, L61; commit 4838fa192)
+
+- **Changed files and lines (L6, L61):** counted at the factory commit through the Git port (`diff` from the attempt's `base_commit` to its commit) and stored in `factory_commit.files_changed` / `lines_changed`; NULL when there is no committed verdict. Export columns `changed_files`, `changed_lines`.
+- **Launched input (L9):** `attempt.launched_digest`, the sha256 of the input actually launched, written at dispatch (not on the execution row, which only exists after capture). Export column `launched_input_digest`.
+- **Base commit (L42):** already exported as `base_commit`; no change.
+- **Drain evidence (L8):** a completed `tl drain` writes the attempt export as JSON to `<artifacts root>/exports/attempts-<UTC time>.json` through `EvidenceFiles` and prints the path (`export` in `--json`). A save failure prints "not saved: ..." and the drain stays complete. Module `drain_evidence.py`.
+- **Schema v38 drain note:** drain running attempts first (`tl drain`); the v37 database is then discarded. Old entry processes cannot write to v38.
+- Unverified: the diff count against a real repository (the test stores the counts directly).
+
 Update rule: after each experiment run, add the rows it taught us, mark rows it answered, and link the report.
