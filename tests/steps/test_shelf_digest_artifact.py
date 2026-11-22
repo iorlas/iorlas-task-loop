@@ -78,9 +78,9 @@ def test_consumer_validates_all_pins_and_keeps_generation_provenance() -> None:
     ("old", "new", "reason"),
     [
         (b'"0.17.0"', b'"0.12.1"', "package identities"),
-        (b'"blueprint-v0.14.0"', b'"blueprint-v0.10.0"', "package identities"),
+        (b'"blueprint-v0.14.1"', b'"blueprint-v0.10.0"', "package identities"),
         (b'"packages/stream-proc"', b'"packages/other"', "package identities"),
-        (b'"71e6cceb593285a484db33c46981b074e02f9695"', b'"71e6cceb593285a484db33c46981b074e02f96950"', "commit identities"),
+        (b'"92791da38ff1cd542f89a5e044e003bb00168694"', b'"92791da38ff1cd542f89a5e044e003bb001686940"', "commit identities"),
         (b'"0.23.0",0', b'"0.23.0",-1', "identity index"),
         (b'"0.23.0",0', b'"0.23.0",true', "valid integer"),
         (b'"stream-proc","0.17.0"', b'"any-agent","0.17.0"', "package identities"),
