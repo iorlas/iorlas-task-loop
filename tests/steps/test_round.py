@@ -320,7 +320,7 @@ def captured(con: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checko
     Attempts(
         store,
         EvidenceFiles(tmp_path),
-        AgentLaunch(lambda _harness: ("/bin/codex", {}), ids=NativeIds()),
+        AgentLaunch(lambda _harness: ("/bin/codex", {"HOME": "/home/agent"}), ids=NativeIds()),
         agent,
         lambda: 10,
         checkouts,

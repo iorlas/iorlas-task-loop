@@ -128,7 +128,7 @@ class RestartFactory(Factory):
         return Attempts(
             self.store,
             EvidenceFiles(self.tmp),
-            AgentLaunch(lambda _h: ("/bin/codex", {}), ids=NativeIds()),
+            AgentLaunch(lambda _h: ("/bin/codex", {"HOME": "/home/agent"}), ids=NativeIds()),
             self.execute_agent,
             lambda: self.now,
             self.checkouts,

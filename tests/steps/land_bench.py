@@ -309,13 +309,13 @@ def executing(
                 b.views,
                 b.files,
                 work.files,
-                AgentLaunch(lambda _h: ("/bin/codex", {}), ids=NativeIds()),
+                AgentLaunch(lambda _h: ("/bin/codex", {"HOME": "/home/agent"}), ids=NativeIds()),
                 lambda *_args: pytest.fail("unwired agent"),
                 lambda _worker: True,
                 lambda: b.now,
                 work.preparation,
                 lambda: ClaimWord.HELD,
-                ("/bin/codex", {}),
+                ("/bin/codex", {"HOME": "/home/agent"}),
                 ("probe",),
             )
             case = ExecutionCase(b.root / "factory.db", b.con, record, dependencies, b.slot, b.environment, interrupt=interrupt, edit=edit)
