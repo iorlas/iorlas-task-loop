@@ -4,10 +4,12 @@ import sqlite3
 from dataclasses import fields
 
 from doubles import ENGINE, PIN_DIGEST
+from hold_fixtures import event
 
 from taskloop import attempt_export, rows_render, slot_list
 from taskloop.attempt_export_store import ExportRow, ExportStore
 from taskloop.slot_list_store import SlotHold, SlotListStore
+from taskloop.task_event_codec import encode
 
 COLUMNS = [
     "task_id",
@@ -55,8 +57,12 @@ COLUMNS = [
     "setup_seconds",
     "check_seconds",
     "rework_count",
+    "repair_count",
     "time_to_green_seconds",
+    "task_total_seconds",
+    "failed_checks",
     "hold_cause",
+    "hold_text",
     "terminal_result",
 ]
 
@@ -71,7 +77,8 @@ def test_the_export_gives_one_row_per_attempt_with_its_identity_and_no_invented_
     assert row.ended_at is None and row.wall_seconds is None and row.t_in is None  # not captured: unknown, not zero
     assert (row.attempt_id, row.backlog, row.chain_id, row.previous_attempt_id, row.seq) == ("attempt", "tasks", "attempt", None, 1)
     assert (row.setup_seconds, row.time_to_green_seconds, row.hold_cause, row.terminal_result) == (None, None, None, None)
-    assert row.check_seconds == {} and row.rework_count == 0
+    assert row.check_seconds == {} and (row.rework_count, row.repair_count, row.task_total_seconds) == (0, 0, None)
+    assert (row.failed_checks, row.hold_text) == ([], None)
     header, line = rows_render.lines(found)
     assert header.split(",") == COLUMNS and line.startswith("tl-1,plan,1,,")
 
@@ -144,3 +151,56 @@ def test_export_uses_latest_checks_and_setup_without_writing(registered: sqlite3
     assert registered.total_changes == before
     registered.execute("UPDATE checks_attempt SET conclusion='failed',reason='check:failed' WHERE number=2")
     assert ExportStore(lambda: registered).attempts(None)[0].time_to_green_seconds is None
+
+
+def _successor(con: sqlite3.Connection, new: str, previous: str, **columns: str) -> None:
+    """A copy of the plan attempt as a later attempt of the same task: `columns` are SQL expressions that replace its columns."""
+    values = {
+        "attempt_id": f"'{new}'",
+        "dispatch_token": f"'{new}-token'",
+        "previous_attempt_id": f"'{previous}'",
+        "seq": "seq+1",
+        "admitted_at": "5",
+    } | columns
+    names = [row[1] for row in con.execute("PRAGMA table_info(attempt)")]
+    selected = ",".join(values.get(name, name) for name in names)
+    con.execute(f"INSERT INTO attempt ({','.join(names)}) SELECT {selected} FROM attempt WHERE attempt_id='attempt'")
+
+
+def _checks(con: sqlite3.Connection, after: str, number: int, conclusion: str, names: tuple[tuple[str, str], ...]) -> None:
+    con.execute(
+        """INSERT INTO checks_attempt (attempt_id,dispatch_token,generation,after_attempt_id,number,slot,slot_head,target_commit,
+        required,deadline,phase,conclusion,reason,concluded_at) SELECT ?,?,1,attempt_id,?,slot,slot_head,slot_head,'[]',100,'concluded',?,?,
+        30 FROM attempt WHERE attempt_id=?""",
+        (f"checks-{after}", f"token-{after}", number, conclusion, None if conclusion == "passed" else "check:failed", after),
+    )
+    for position, (name, result) in enumerate(names):
+        defined = result != "undefined"
+        con.execute(
+            """INSERT INTO check_result (attempt_id,block,position,name,dispatch_token,generation,argv_digest,timeout,started_at,
+            ended_at,conclusion) VALUES (?,1,?,?,?,1,?,?,3,4,?)""",
+            (f"checks-{after}", position, name, f"token-{after}", "a" * 64 if defined else None, 10 if defined else None, result),
+        )
+
+
+def test_the_task_total_spans_plan_to_this_rows_passed_checks_and_repairs_are_not_rework(registered: sqlite3.Connection) -> None:
+    _successor(registered, "impl", "attempt", step="'implement'", number="1", previous_attempt_id="NULL", after_commit="slot_head")
+    repair = {"step": "'implement'", "number": "1", "after_commit": "slot_head", "repair_context": "'{}'", "seq": "3", "admitted_at": "7"}
+    _successor(registered, "fix", "impl", **repair)
+    _checks(registered, "fix", 1, "passed", (("lint", "passed"), ("tests", "passed")))
+    rows = {row.attempt_id: row for row in ExportStore(lambda: registered).attempts(None)}
+    assert (rows["fix"].repair_count, rows["fix"].rework_count) == (1, 0)  # one repair, no failed-check repeat
+    assert (rows["fix"].task_total_seconds, rows["fix"].time_to_green_seconds) == (29, 25)  # plan admitted at 1, impl chain at 5
+    assert rows["impl"].task_total_seconds is None and rows["attempt"].task_total_seconds is None  # no passed checks of its own
+
+
+def test_the_export_names_the_failed_checks_and_the_hold_text_of_a_row(registered: sqlite3.Connection) -> None:
+    _checks(registered, "attempt", 1, "failed", (("lint", "passed"), ("tests", "failed"), ("docs", "undefined"), ("slow", "timed_out")))
+    registered.execute("INSERT INTO task_hold (attempt_id,event,held_at) VALUES ('attempt',?,10)", (encode(event(attempt_id="attempt")),))
+    found = attempt_export.export(ExportStore(lambda: registered), None)
+    assert isinstance(found, attempt_export.AttemptExport)
+    (row,) = found.rows
+    assert row.failed_checks == ["tests", "docs", "slow"] and row.hold_text == "Owner decision required."
+    assert row.hold_cause == "failed:needs_owner"
+    assert rows_render.records(found)[0]["failed_checks"] == ["tests", "docs", "slow"]
+    assert '"[""tests"", ""docs"", ""slow""]"' in rows_render.lines(found)[1]

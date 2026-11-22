@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from taskloop.attempt_types import AttemptKey
 from taskloop.command_conclusion import CommandConclusion
 from taskloop.profile import MAX_ARG, MAX_ARGV, MAX_NAME, NAME_CHARS
+from taskloop.repeat_reason import CheckRepeatReason
 
 TAIL_BYTES = 16 * 1024
 TAIL_LINES = 100
@@ -18,10 +19,6 @@ class Availability(StrEnum):
     AVAILABLE = "available"
     EMPTY = "empty"
     UNAVAILABLE = "unavailable"
-
-
-class CheckRepeatReason(StrEnum):
-    FAILED_CHECK = "failed_check"
 
 
 class FeedbackReason(StrEnum):

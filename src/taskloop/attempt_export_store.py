@@ -3,7 +3,8 @@
 Read-only. NULL means unknown, never zero: an attempt that did not end captured has no `ended_at` and no wall time, and
 `usage_incomplete` 1 marks token counts that are a lower bound. `harness`, `model` and `effort` are what the attempt
 asked for; `ran_model`, `ran_effort` and `harness_version` what the harness reported (NULL: it could not tell);
-`ran_model_differs` is 1 where the reported model is not the one asked for, 0 where it is, NULL where either is unknown;
+`ran_model_differs` is 1 where the reported model is not the one asked for (a resolved alias counts as different), 0 where it is,
+NULL where either is unknown;
 `max_attempts` is the attempt's pinned workflow's cap of its step (NULL: the stored workflow cannot be read).
 Pool only rows with the same engine and workflow digests."""
 
@@ -13,16 +14,28 @@ from taskloop.attempt_reads import StoreConnection, StoreUnavailable, as_int, as
 from taskloop.attempt_result import report
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import AttemptKey
-from taskloop.check_store import CheckStore
+from taskloop.check_store import CheckStore, ResultRow
 from taskloop.command_conclusion import CommandConclusion, encode
 from taskloop.hold_store import HoldStore
+from taskloop.repeat_reason import CheckRepeatReason
 from taskloop.step import decode_step
-from taskloop.workflow_read import WorkflowRefusal, pinned
+from taskloop.workflow_read import Pin, WorkflowRefusal, pinned
 
 QUERY = f"""WITH RECURSIVE chain(attempt_id,ancestor_id) AS (
- SELECT attempt_id,attempt_id FROM attempt
+ SELECT attempt_id,attempt_id FROM attempt WHERE (? IS NULL OR backlog = ?)
  UNION ALL SELECT chain.attempt_id,p.previous_attempt_id FROM chain
  JOIN attempt p ON p.attempt_id=chain.ancestor_id WHERE p.previous_attempt_id IS NOT NULL
+),
+walk AS (
+ SELECT k.attempt_id, p.attempt_id AS ancestor, p.admitted_at, p.previous_attempt_id IS NULL AS is_root,
+  p.repeat_reason='{CheckRepeatReason.FAILED_CHECK}' AND p.repair_context IS NULL AS is_rework,
+  p.repair_context IS NOT NULL AS is_repair
+ FROM chain k JOIN attempt p ON p.attempt_id=k.ancestor_id
+),
+summary AS (
+ SELECT attempt_id, coalesce(sum(is_rework),0) AS reworks, sum(is_repair) AS repairs,
+  max(CASE WHEN is_root THEN ancestor END) AS root_id, max(CASE WHEN is_root THEN admitted_at END) AS root_admitted
+ FROM walk GROUP BY attempt_id
 )
 SELECT
   a.task_id, a.step, a.number, a.repeat_reason,
@@ -31,22 +44,21 @@ SELECT
   a.admitted_at, a.ended_at, a.ended_at - a.admitted_at AS wall_seconds,
   e.disposition, e.effect, e.answer_kind, e.rc, e.timed_out, e.turns,
   e.t_in, e.t_cached, e.t_out, e.c_in, e.c_cached, e.c_out, e.usage_incomplete,
-  (SELECT c.conclusion FROM checks_attempt c WHERE c.after_attempt_id = a.attempt_id ORDER BY c.number DESC LIMIT 1),
-  (SELECT c.reason FROM checks_attempt c WHERE c.after_attempt_id = a.attempt_id ORDER BY c.number DESC LIMIT 1),
+  c.conclusion, c.reason,
   e.model, e.effort, e.harness_version,
   (SELECT w.content FROM workflow_file w WHERE w.digest = a.workflow_digest),
   a.attempt_id,a.backlog,a.previous_attempt_id,a.seq,a.base_commit,f.verdict,
-  (SELECT p.attempt_id FROM chain k JOIN attempt p ON p.attempt_id=k.ancestor_id
-   WHERE k.attempt_id=a.attempt_id AND p.previous_attempt_id IS NULL),
+  m.root_id,
   (SELECT s.ended_at-s.started_at FROM setup_run s WHERE s.attempt_id=a.attempt_id ORDER BY s.run DESC LIMIT 1),
   c.attempt_id,
-  (SELECT count(*) FROM chain k JOIN attempt p ON p.attempt_id=k.ancestor_id
-   WHERE k.attempt_id=a.attempt_id AND p.repeat_reason IS NOT NULL AND p.repair_context IS NULL),
+  m.reworks,
+  CASE WHEN c.conclusion='{encode(CommandConclusion.PASSED)}' THEN c.concluded_at-m.root_admitted END,
+  a.dispatch_token,a.generation,c.dispatch_token,c.generation,
+  m.repairs,
   CASE WHEN c.conclusion='{encode(CommandConclusion.PASSED)}' THEN c.concluded_at-
-   (SELECT p.admitted_at FROM chain k JOIN attempt p ON p.attempt_id=k.ancestor_id
-    WHERE k.attempt_id=a.attempt_id AND p.previous_attempt_id IS NULL) END,
-  a.dispatch_token,a.generation,c.dispatch_token,c.generation
-FROM attempt a LEFT JOIN execution e ON e.attempt_id = a.attempt_id
+   (SELECT q.admitted_at FROM attempt q WHERE q.adapter=a.adapter AND q.backlog=a.backlog AND q.task_id=a.task_id
+    ORDER BY q.seq LIMIT 1) END
+FROM attempt a JOIN summary m ON m.attempt_id=a.attempt_id LEFT JOIN execution e ON e.attempt_id = a.attempt_id
 LEFT JOIN factory_commit f ON f.attempt_id=a.attempt_id
 LEFT JOIN checks_attempt c ON c.attempt_id=(SELECT latest.attempt_id FROM checks_attempt latest
  WHERE latest.after_attempt_id=a.attempt_id ORDER BY latest.number DESC LIMIT 1)
@@ -103,8 +115,12 @@ class ExportRow:
     setup_seconds: float | None
     check_seconds: dict[str, float | None]
     rework_count: int
+    repair_count: int
     time_to_green_seconds: float | None
+    task_total_seconds: float | None
+    failed_checks: list[str]
     hold_cause: str | None
+    hold_text: str | None
     terminal_result: str | None
 
 
@@ -116,17 +132,23 @@ def _real(value: object) -> float | None:
     raise StoreUnavailable("Malformed attempt time")
 
 
-def _cap(step: str, content: object, sha: object) -> int | None:
-    """The step's cap in the attempt's stored workflow; None when the file is absent or no longer loads."""
+type Pins = dict[tuple[bytes, str], Pin | None]
+
+
+def _cap(step: str, content: object, sha: object, pins: Pins) -> int | None:
+    """The step's cap in the attempt's stored workflow (None: the file is absent or no longer loads); each workflow is parsed once."""
     if not isinstance(content, bytes) or not isinstance(sha, str):
         return None
-    try:
-        return pinned(content, sha).workflow.cap(decode_step(step))
-    except WorkflowRefusal:
-        return None
+    if (content, sha) not in pins:
+        try:
+            pins[content, sha] = pinned(content, sha)
+        except WorkflowRefusal:
+            pins[content, sha] = None
+    pin = pins[content, sha]
+    return None if pin is None else pin.workflow.cap(decode_step(step))
 
 
-def _row(r: tuple[object, ...]) -> ExportRow:
+def _row(r: tuple[object, ...], pins: Pins) -> ExportRow:
     text, whole, admitted = as_nullable_text, as_nullable_int, _real(r[12])
     if admitted is None:
         raise StoreUnavailable("Malformed attempt time")
@@ -165,7 +187,7 @@ def _row(r: tuple[object, ...]) -> ExportRow:
         text(r[31]),
         text(r[32]),
         None if r[30] is None or r[8] is None else int(r[30] != r[8]),
-        _cap(as_text(r[1]), r[33], r[6]),
+        _cap(as_text(r[1]), r[33], r[6], pins),
         as_text(r[34]),
         as_text(r[35]),
         text(r[36]),
@@ -176,42 +198,52 @@ def _row(r: tuple[object, ...]) -> ExportRow:
         _real(r[41]),
         {},
         as_int(r[43]),
+        as_int(r[49]),
         _real(r[44]),
+        _real(r[50]),
+        [],
+        None,
         None,
         None,
     )
 
 
+def _seconds(each: ResultRow) -> float | None:
+    if each.ended_at is None or each.conclusion is CommandConclusion.UNDEFINED:
+        return None
+    return each.ended_at - each.started_at
+
+
 class ExportStore(StoreConnection):
-    def check_seconds(self, raw: tuple[object, ...]) -> dict[str, float | None]:
-        """Durations of the latest block, through the owning check-result reader and codec."""
+    def latest_block(self, raw: tuple[object, ...]) -> list[ResultRow]:
+        """The results of the latest block of the latest checks attempt, through the owning check-result reader and codec."""
         if raw[42] is None:
-            return {}
+            return []
         results = CheckStore(self.connect, self.begin).results(AttemptKey(as_text(raw[42]), as_text(raw[47]), as_int(raw[48])))
         latest = max((each.block for each in results), default=0)
-        return {
-            each.name: None if each.ended_at is None or each.conclusion is CommandConclusion.UNDEFINED else each.ended_at - each.started_at
-            for each in results
-            if each.block == latest
-        }
+        return [each for each in results if each.block == latest]
 
     def attempts(self, backlog: str | None) -> tuple[ExportRow, ...]:
         """Every agent attempt (of one backlog, or of all) in task and attempt order."""
         with self._connection() as con:
-            found = con.execute(QUERY, (backlog, backlog)).fetchall()
+            found = con.execute(QUERY, (backlog, backlog, backlog, backlog)).fetchall()
             holds = HoldStore(self.connect, self.begin).of_attempts(tuple(as_text(row[34]) for row in found))
             reader = AttemptStore(self.connect, self.begin)
             rows = []
+            pins: Pins = {}
             for raw in found:
-                row = _row(raw)
+                row = _row(raw, pins)
                 stored = reader.collect(AttemptKey(row.attempt_id, as_text(raw[45]), as_int(raw[46])))
                 result = None if stored is None else report(stored)
                 hold = holds.get(row.attempt_id)
+                block = self.latest_block(raw)
                 rows.append(
                     replace(
                         row,
-                        check_seconds=self.check_seconds(raw),
+                        check_seconds={each.name: _seconds(each) for each in block},
+                        failed_checks=[each.name for each in block if each.conclusion not in (None, CommandConclusion.PASSED)],
                         hold_cause=None if hold is None else hold.reason,
+                        hold_text=None if hold is None else hold.event.cause.explanation,
                         terminal_result=result.reason if result is not None and result.status == "collected" else None,
                     )
                 )

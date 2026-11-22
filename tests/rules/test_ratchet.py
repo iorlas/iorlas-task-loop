@@ -69,7 +69,6 @@ APPROVED_EXCEPTIONS.update(
             ("taskloop.cli_composition", "taskloop.check_repeat.repair"),
             ("taskloop.cli_composition", "taskloop.check_repeat.store"),
             ("taskloop.evidence_files", "taskloop.check_repeat.feedback"),
-            ("taskloop.factory_schema", "taskloop.check_repeat.feedback"),
             ("taskloop.implement_step", "taskloop.check_repeat.feedback"),
             ("taskloop.operations", "taskloop.check_repeat.feedback"),
             ("taskloop.operations", "taskloop.check_repeat.status"),

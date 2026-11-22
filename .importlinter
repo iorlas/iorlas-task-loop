@@ -276,7 +276,6 @@ ignore_imports =
     taskloop.cli_composition -> taskloop.check_repeat.repair
     taskloop.cli_composition -> taskloop.check_repeat.store
     taskloop.evidence_files -> taskloop.check_repeat.feedback
-    taskloop.factory_schema -> taskloop.check_repeat.feedback
     taskloop.implement_step -> taskloop.check_repeat.feedback
     taskloop.operations -> taskloop.check_repeat.feedback
     taskloop.operations -> taskloop.check_repeat.status
@@ -786,6 +785,7 @@ source_modules =
     taskloop.recovery.status
     taskloop.release_proof
     taskloop.repeat
+    taskloop.repeat_reason
     taskloop.repo
     taskloop.result_data
     taskloop.resume_plan
