@@ -147,22 +147,16 @@ Within this scope, implement the plan, with tests for the behavior it adds or ch
 text = """\
 The factory ran this repository's `setup` before you started; uv normally uses the prepared cache offline. \
 For an authorized shelf package addition or upgrade, acquisition of its latest release is allowed when absent from the prepared cache. \
-While working, run only focused test files for the code you changed. \
-For lint and type validation, run `just check 2>&1 | tail -60` at most twice while working, in addition to the required final run. \
-Do not run a full `just test` while working. \
-The only direct pytest invocation permitted is `uv run --frozen --no-sync python -I -m pytest -q <file> --tb=short | tail -40`, replacing `<file>` with a focused test file for your change. \
-Do not invoke ruff or pyrefly directly, or use another direct pytest command. \
-After finishing edits and focused verification, run `just check 2>&1 | tail -60` once and then `just test 2>&1 | tail -40` once, as the last validation before the answer, including an `unchanged` answer. \
-Run the final `just test` once in the foreground with sufficient command wait time; never start it in the background or poll a running `just test`. \
-Do not rerun either successful final command. \
-If a command fails, fix the reported failure, use focused verification as needed, and rerun only the failed command; failure does not justify repeating the successful one. \
-This failure exception overrides the normal run limits. \
-Enable pipeline failure propagation in the command shell (`set -o pipefail`) so `tail` cannot conceal a failed check or test. \
-Report the underlying command's result, not just `tail`'s status. \
-These factory instructions take precedence over AGENTS.md's "Do not run whole-suite/live tests as an agent" for the two required final checks, once each, with the stated failure exception. \
-This narrow exception does not authorize other whole-suite or live tests. \
+`just check` and `just test` cannot run in your sandbox (no bd database, read-only gate cache): never run them, and never answer `incomplete` or "unverified" because they could not run. \
+The factory runs both after your answer and only those results count. \
+Run the checks that do work here: `just lint` (ruff check and format; `just format` fixes formatting), `just typecheck` and `just rules`, and for each test file you changed or added \
+`uv run --frozen --no-sync python -I -m pytest -q <file> --tb=short | tail -40`. \
+Run them after your edits and again after each fix, and finish only when they pass. \
+Enable pipeline failure propagation in the command shell (`set -o pipefail`) so `tail` cannot conceal a failure. \
+If uv reports a read-only cache or lock, prefix the command with `UV_NO_CACHE=1`. \
+Do not use another direct pytest, ruff or pyrefly command. \
 Keep line length at most 140 (`E501`), at most six returns per function (`PLR0911`), and no function-local imports (`PLC0415`). \
-In `explanation`, name the result of each final command. \
+In `explanation`, name the result of each command you ran. \
 Temporary files go to `$TMPDIR`; cleanup is attempted after release and required before the next agent. \
 Do not write elsewhere outside the repository. \
 Your runs are evidence for you: after this step the checks run again outside your control, and only those results count. \

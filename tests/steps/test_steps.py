@@ -160,8 +160,8 @@ def test_an_implement_repeat_frames_the_listing_and_preserves_the_complete_input
     assert "answer `implemented`" in text and text.endswith(f"The task, for reference:\n\n{original}")
     assert "read the original content with `git show HEAD:<path>` and restore it with `apply_patch`" in text
     assert "git show HEAD:<path> >" not in text
-    assert "at most twice while working" in text and "Do not rerun either successful final command." in text
-    assert "run `just check 2>&1 | tail -60` once and then `just test 2>&1 | tail -40` once" in text
+    assert "never run them, and never answer `incomplete`" in text
+    assert "`just lint`" in text and "`just typecheck`" in text and "`just rules`" in text
 
 
 @pytest.mark.parametrize("route", ["initial", "repeat", "failed_check"])
