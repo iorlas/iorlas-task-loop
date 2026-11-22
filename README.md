@@ -215,7 +215,6 @@ tl repo show "$checkout"
 tl profile show --checkout "$checkout" --at HEAD --target origin/main
 prek install
 just check
-just test
 ```
 
 Mise supplies the declared Tailwind, Beads (`bd`), uv, just, prek and check tools; no separate Node
@@ -224,8 +223,8 @@ The explicit mise environment keeps those tools on the factory's inherited PATH 
 set `checkout`, enter it, reload that environment and define the function again, or configure
 [mise shell activation](https://mise.jdx.dev/getting-started#_4-activate-mise-optional).
 The inspection must identify your writable origin and the profile must show your intended setup and required checks.
-Keep `land` absent or `manual` in the profile on origin's `main` for this walkthrough. Both local gates must pass.
-There is no CI workflow: enforcement stays with `just check`, `just test`, the prek hook and the factory's checks step.
+Keep `land` absent or `manual` in the profile on origin's `main` for this walkthrough. The local gate must pass.
+There is no CI workflow: enforcement stays with `just check`, the prek hooks and the factory's checks step.
 
 ### 2. Authenticate Codex with a file login
 
@@ -302,7 +301,7 @@ single documentation file without changing checks or runtime behavior:
 cd "$checkout"
 task_id=$(bd create "Document the team's first task" --type task \
   --description "Add docs/first-task.md explaining how this team approves one task and reviews its land summary." \
-  --acceptance "The file names our approval label first-run-approved and manual land policy. just check and just test pass." \
+  --acceptance "The file names our approval label first-run-approved and manual land policy. just check passes." \
   --silent)
 tl task show "$task_id" --backlog first-run --tracker-root "$checkout"
 bd label add "$task_id" first-run-approved
@@ -366,7 +365,7 @@ Tailwind executable; Node is not required. `.python-version` selects that same
 Python for uv; the package's `>=3.15` compatibility range is separate from this development pin.
 The committed `mise.lock` records managed downloads.
 
-`just check`, `just test`, the prek lint hook and `just css` verify these versions locally.
+`just check` and `just css` verify these versions locally.
 A missing tool, unexpected executable version or contradictory committed declaration fails
 with the tool's expected version and observed detail. Install the declared version and check
 your shell's PATH before retrying; verification never installs or upgrades external tools.
@@ -376,13 +375,12 @@ just install
 uv run --frozen --no-sync python -I -m taskloop --help
 uv run --frozen --no-sync python -I -m taskloop repo show . --json
 just check
-just test
 ```
 
-Both required checks rebuild and install the current project as a wheel in this
+`just check` rebuilds and installs the current project as a wheel in this
 worktree's `.venv`. Tests use that installed package and verify its source provenance;
 no old editable install, vendored runtime or baseline source path supplies imports.
-`just test` runs the CLI, step and architecture checks. `tests/steps/` holds all the factory tests, including the lock, lease and
+`just test` (inside `just check`) runs the tests the change reaches: units cli, dash, steps and rules (`[tool.blueprint.test]`). `tests/steps/` holds all the factory tests, including the lock, lease and
 rounds tests (the folder name is historical). No historical test bootstrap or kernel is included.
 The Git, task tracker, agent, SQLite, process-lock and stream boundaries come from released
 [shelf](https://github.com/yoselabs/shelf) libraries, pinned in [pyproject.toml](pyproject.toml) and [uv.lock](uv.lock)

@@ -60,6 +60,8 @@ dev = [
 
 [tool.uv]
 required-version = ">=0.13.0"
+# The tests run the installed wheel (never an editable install): `uv run` rebuilds it when the source or the lock changes.
+cache-keys = [{ file = "pyproject.toml" }, { file = "uv.lock" }, { file = "src/**/*.py" }, { file = "src/**/*.js" }, { file = "src/**/*.css" }, { file = "src/**/*.html" }]
 
 [tool.shelf-size]
 code-file = 400
@@ -67,7 +69,7 @@ function = 80
 test-file = 800
 
 [tool.pytest.ini_options]
-testpaths = ["tests/cli", "tests/steps", "tests/rules"]
+testpaths = ["tests/cli", "tests/dash", "tests/steps", "tests/rules"]
 addopts = "--import-mode=importlib -p no:cacheprovider"
 # importlib mode puts no test directory on sys.path: tests import the shared doubles module (tests/steps/doubles.py)
 pythonpath = ["tests/steps"]
@@ -190,14 +192,41 @@ extend_exclude = ["docs", "\\.worktrees", "\\.slots", "\\.task"]
 # owning tasks (tests/rules/test_isolation.py pins it); no module imports it yet.
 per_rule_ignores = { DEP002 = ["pydantic"] }
 
+# The tests run the installed wheel (never an editable install): measure that package and map its files back to src/.
 [tool.coverage.run]
 branch = true
-source = ["src"]
+source_pkgs = ["taskloop"]
 
+[tool.coverage.paths]
+source = ["src/taskloop", "*/site-packages/taskloop"]
+
+# No fail_under here: pytest-cov would apply it to every unit alone; the floor of the whole repo is [tool.blueprint.test] floor.
 [tool.coverage.report]
 show_missing = true
-fail_under = 65
 
 [tool.blueprint.gate]
 # codespell's `skip` does not apply to files passed one by one (the changed-files run), so the paths exclude docs/design's generated HTML.
 spell-paths = ["src", "tests", "tools", "README.md", "AGENTS.md"]
+
+[tool.blueprint.test]
+coverage = "pytest-cov"
+floor = 65
+pytest-args = ["-n", "auto", "-q"]
+
+[tool.blueprint.test.units.cli]
+paths = ["tests/cli"]
+
+# The dashboard contract tests read the static files (css, html, js) by path.
+[tool.blueprint.test.units.dash]
+paths = ["tests/dash"]
+reads = ["src/taskloop/dash/static/*"]
+
+# The steps tests read files no import names: the committed shelf digest and the tools folder.
+[tool.blueprint.test.units.steps]
+paths = ["tests/steps"]
+reads = ["docs/shelf-digest.json", "tools/*.py", ".task-loop.json"]
+
+# The architecture rules read the source tree and the contract files by path, not by import: any source change reruns them.
+[tool.blueprint.test.units.rules]
+paths = ["tests/rules"]
+reads = ["src/**/*", ".importlinter", "tools/*.py", "mise.toml", "mise.lock", "docs/shelf-digest.json"]

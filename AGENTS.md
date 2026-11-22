@@ -44,16 +44,19 @@ Never kill processes by name; act only on a confirmed owned process identity.
 
 ## Build and verification
 
-Python 3.15+. The full gates are `just check` and `just test`; a session runs them, a factory attempt does not (below). `just check`
-= install (rebuilds the package), ruff, pyrefly, import contracts; `just test` = tests/cli, tests/steps, tests/rules. Run gates as
-`just check 2>&1 | tail -60` and `just test 2>&1 | tail -40`. The cheap checks are `just lint`, `just typecheck` and `just rules`.
+Python 3.15+. The full gate is `just check`; a session runs it, a factory attempt does not (below). `just check` is the shelf
+blueprint's rendered gate (`.blueprint/*.just`, written by `uv run blueprint gate render`, never hand-edited), narrowed to what the
+change reaches: guard, preset, render, blueprint, secrets, ruff over changed files, pyrefly, codespell over changed files, deptry, the
+affected tests (`just test`, units declared in pyproject `[tool.blueprint.test]`), import contracts (`just rules`) and the tool-version probes.
+Paths and extra steps are data in pyproject `[tool.blueprint.gate]`; this justfile defines only what is the repo's own. Run it as
+`just check 2>&1 | tail -60`. The cheap checks are `just lint-changed`, `just typecheck` and `just rules`.
 Never run ruff or pytest directly except `uv run --frozen --no-sync python -I -m pytest -q <file or tests/rules> --tb=short | tail -40`.
 The successor has its own declared environment and installed package; baseline editable installs or PYTHONPATH
 must not supply missing code. Do not copy the old conftest/runners: they load the old application and kernel.
 Run the code under test with `uv run --frozen --no-sync python -I -m taskloop ...` after `just install`, or through the tests.
-No live tests. A factory attempt cannot run `just check` or `just test` (no bd database, read-only gate cache); it runs
-`just lint`, `just typecheck`, `just rules` and its focused test files, and the factory runs the full gates after it. A
-session runs `just check` and `just test` once before a pull request. Use focused behavior/contract tests; new tests are pytest functions
+No live tests. A factory attempt cannot run `just check` (no bd database, read-only gate cache); it runs
+`just lint-changed`, `just typecheck`, `just rules` and its focused test files, and the factory runs the full gate after it. A
+session runs `just check` once before a pull request. Use focused behavior/contract tests; new tests are pytest functions
 or classes, never unittest. No test for every private helper or a test that merely repeats its implementation.
 Retain caps: 400 source lines per file, 80 per function and 800 per test file. No new Any, cast or ignore escape.
 
