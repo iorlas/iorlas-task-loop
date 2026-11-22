@@ -3,7 +3,7 @@
 Status: archive of experiments run 2026-11-21 and 2026-11-22 (epic tl-7125, declarative workflows). One folder per
 experiment with its report, the per-run result files and the task or check material. Raw run trees, transcripts and
 agent patches stay outside Git (`/tmp/aa`, `~/.codex/sessions`); the reports quote what they showed. The running list of
-improvements these experiments produced is [../improvement-ledger.md](../improvement-ledger.md) (rows L1 to L63).
+improvements these experiments produced is [../improvement-ledger.md](../improvement-ledger.md) (rows L1 to L67).
 
 All runs used Codex `gpt-6.1-sol` (CLI 0.169.0), plan effort `high`, implement effort `medium` unless a report says
 otherwise, the default workflow, `land: manual`, and never landed. Arms are fresh clones with their own tracker,
@@ -20,6 +20,7 @@ otherwise, the default workflow, `land: manual`, and never landed. Arms are fres
 | [pilot4](pilot4/report.md) | Does a repo-convention trap make first attempts fail? | 8 (two trap variants) | 8/8 passed first try: the agent reads every document the repo points at. |
 | [pilot5](pilot5/report.md) | Feedback A/B (default vs attempt-budget) on real repo tasks | 2 valid-but-capped, plus invalid setup pairs | No verdict (run cap too short for 5-6 minute checks). First real failed checks: lint/format/type slips the agent could not run in its sandbox (4 of 4). |
 | [pilot6](pilot6/report.md) | Same A/B after the cheap-checks prompt (#863) | 6 valid (3 pairs) | 0 of 6 failed a check at attempt 1; the attempt-budget text was never rendered, so the A/B says nothing about it. |
+| [pilot7](pilot7/report.md) | Cost A/B: implement effort `low` vs `medium` on real tasks | 6 (3 pairs: two docs tasks, one code task) | 6/6 passed first try at both efforts, 0 repeats. `low` was 4-20% cheaper on the code task and indistinguishable on the docs tasks: inside the A/A noise at n = 3 pairs. Effort did not change the number of model requests. |
 
 Earlier arms (old engine, schema v34) are kept outside Git as history; the current build cannot read them.
 
@@ -75,5 +76,5 @@ first. Task texts are under `tasks/`; hidden check sources (pilot1, pilot2, pilo
 
 ## Next
 
-A cost A/B of implement effort (`low` against `medium`) on real, screened tasks: it needs no repeats and measures
-tokens, time, first-attempt pass and diff size.
+No experiment is queued. The effort cost A/B (pilot7) is inconclusive at n = 3 pairs; seeing a 10% difference needs well
+over 10 pairs of screened code tasks, which only pays off if the goal is a cheaper default effort.
