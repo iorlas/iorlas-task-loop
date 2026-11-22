@@ -110,6 +110,7 @@ class Checking(Factory):
             module=CHECK_ENTRY_MODULE,
             read_seconds=DEFAULT_GIT_READ_SECONDS,
             ids=NativeIds(),
+            environment={},
         )
         return replace(super().starting(), checks=ChecksPorts(admission, launcher, self.releasing()))
 

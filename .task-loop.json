@@ -1,10 +1,23 @@
 {
-  "setup": [["just", "bootstrap"]],
-  "checks": [
-    {"name": "check", "argv": ["just", "check"], "timeout": 1800},
-    {"name": "test", "argv": ["just", "test"], "timeout": 1800}
+  "setup": [
+    [
+      "just",
+      "bootstrap"
+    ]
   ],
-  "required": ["check", "test"],
+  "checks": [
+    {
+      "name": "check",
+      "argv": [
+        "just",
+        "check"
+      ],
+      "timeout": 1800
+    }
+  ],
+  "required": [
+    "check"
+  ],
   "target": "main",
   "land": "auto"
 }

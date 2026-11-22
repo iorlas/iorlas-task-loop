@@ -35,6 +35,7 @@ def launcher(path: Path, start: FakeStart, recovery: Recovery) -> Launcher:
         read_seconds=DEFAULT_GIT_READ_SECONDS,
         ids=NativeIds(),
         recovery=RecoveryLaunch(recovery),
+        environment={},
     )
 
 

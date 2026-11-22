@@ -60,7 +60,7 @@ class Start(Protocol):
         *,
         registered: Callable[[OwnedProcess], None],
         cwd: str | os.PathLike[str] | None = ...,
-        env: Mapping[str, str] | None = ...,
+        env: Mapping[str, str],
         stderr: int = ...,
         start_new_session: bool = ...,
         registration_timeout: float = ...,
@@ -153,12 +153,14 @@ class Launcher:
         *,
         read_seconds: int,
         ids: Ids,
+        environment: Mapping[str, str],
         recovery: Callable[[AttemptKey, Identity, float], Result] | None = None,
         timing: OperationTiming | None = None,
     ) -> None:
         """`targets` and `module`: the agent attempts' store and entry by default, `CheckStore` and `CHECK_ENTRY_MODULE`
-        for checks attempts. `read_seconds`: the Git read bound the entry's views carry (argv)."""
-        self.ids = ids
+        for checks attempts. `read_seconds`: the Git read bound the entry's views carry (argv). `environment`: the
+        entry's whole environment, read at the edge (the composition root); the start never reads `os.environ`."""
+        self.ids, self.environment = ids, environment
         self.database, self.files, self.clock = database, files, clock
         self.start, self.observe, self.executable = start, observe, executable
         self.targets, self.module, self.read_seconds = targets, module, read_seconds
@@ -278,7 +280,7 @@ class Launcher:
                     argv,
                     registered=registered,
                     cwd=str(self.files.root),
-                    env=None,
+                    env=self.environment,
                     stderr=log,
                     start_new_session=True,
                     registration_timeout=REGISTRATION_TIMEOUT,

@@ -197,7 +197,7 @@ class Factory:
         key = found[0]
         self.store.register_entry(key, ENTRY, self.now)  # a relaunch keeps the identity registered first
         step = self.store.step_of(key.attempt_id)
-        evidence, agent = EvidenceFiles(self.tmp), AgentLaunch(lambda _harness: ("/bin/codex", {}), ids=NativeIds())
+        evidence, agent = EvidenceFiles(self.tmp), AgentLaunch(lambda _harness: ("/bin/codex", {"HOME": "/home/agent"}), ids=NativeIds())
         environment = self.environment.preparation()
         preparation = (
             SourcePreparation(

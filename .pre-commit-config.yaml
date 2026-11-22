@@ -27,16 +27,26 @@ repos:
     always_run: true
     pass_filenames: false
     stages: [pre-push]
-  - id: bd-dolt-push
-    name: bd dolt push
-    # `bd hooks run pre-push` does not push the Dolt data ref (refs/dolt/data); git push and bd dolt
-    # push are two remote syncs. Fatal: a hook that cannot fail says nothing (a2kay's push "Passed" while the
-    # Dolt push failed over HTTPS). Offline, BD_DOLT_PUSH_OPTIONAL=1 pushes the code and still prints FAILED.
-    entry: sh -c 'bd dolt push && exit 0; echo "FAILED - bd dolt push did not reach the remote (refs/dolt/data); fix the remote or its credentials and push again, or set BD_DOLT_PUSH_OPTIONAL=1 to push the code without it" >&2; test -n "${BD_DOLT_PUSH_OPTIONAL:-}"'
+  - id: bd-sync-push
+    name: bd sync
+    # `bd hooks run pre-push` does not move the Dolt data ref (refs/dolt/data); git push and the bead sync are two
+    # remote syncs. `bd sync` is the one routine step: pull, conflict check, push with retry (a non-fast-forward heals
+    # itself). Bare `bd dolt push` / `bd dolt pull` are a fallback for something strange, never the routine path.
+    # Fatal: a hook that cannot fail says nothing. Offline, BD_DOLT_PUSH_OPTIONAL=1 pushes the code and still prints FAILED.
+    entry: sh -c 'bd sync && exit 0; rc=$?; case $rc in 2) m="merge conflict, nothing pushed - resolve the beads conflict by hand";; 3) m="push race or busy writer, transient - push again";; 4) m="pending bead edits are stuck - clear the beads working set";; *) m="transport or credentials - fix the remote (refs/dolt/data)";; esac; echo "FAILED - bd sync exit $rc - $m; set BD_DOLT_PUSH_OPTIONAL=1 to push the code without it" >&2; test -n "${BD_DOLT_PUSH_OPTIONAL:-}"'
     language: system
     always_run: true
     pass_filenames: false
     stages: [pre-push]
+  - id: bd-sync-pull
+    name: bd sync (pull)
+    # Post hooks cannot block git; a failure shows as a failed hook with this line. Worktrees share one database, so
+    # pulling on every merge and checkout is the closest freshness without a separate bd server.
+    entry: sh -c 'bd sync || { echo "FAILED - bd sync - beads here may be stale; run bd sync and read its message" >&2; exit 1; }'
+    language: system
+    always_run: true
+    pass_filenames: false
+    stages: [post-merge, post-checkout]
   - id: bd-post-checkout
     name: bd post-checkout
     entry: sh -c 'bd hooks run post-checkout "$PRE_COMMIT_FROM_REF" "$PRE_COMMIT_TO_REF" "$PRE_COMMIT_CHECKOUT_TYPE"' --

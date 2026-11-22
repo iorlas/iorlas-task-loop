@@ -203,7 +203,7 @@ def attempts(con: sqlite3.Connection, tmp_path: Path, run: FakeRun, checkouts: C
     return Attempts(
         AttemptStore(lambda: con),
         artifacts,
-        AgentLaunch(lambda _harness: ("/bin/codex", {}), ids=NativeIds()),
+        AgentLaunch(lambda _harness: ("/bin/codex", {"HOME": "/home/agent"}), ids=NativeIds()),
         run,
         lambda: 10,
         checkouts,

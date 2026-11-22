@@ -8,31 +8,31 @@ version = "0.1.0"
 description = "Minimal task-loop successor foundation"
 requires-python = ">=3.15"
 dependencies = [
-    "any-agent==0.20.0",
+    "any-agent==0.22.0",
     "beads-client==0.6.0",
     "git-porcelain==0.30.0",
     "process-lock==0.4.0",
     "pydantic==2.14.3",
     "sqlite-sidecar==0.4.0",
     "sqlite-store==0.2.0",
-    "stream-proc==0.13.0",
+    "stream-proc==0.17.0",
 ]
 
 [tool.uv.sources]
-blueprint = { git = "https://github.com/yoselabs/shelf", subdirectory = "packages/blueprint", tag = "blueprint-v0.10.1" }
-any-gate-python = { git = "https://github.com/yoselabs/shelf", subdirectory = "packages/any-gate-python", tag = "blueprint-v0.10.1" }
-content-digest = { git = "https://github.com/yoselabs/shelf", subdirectory = "packages/content-digest", tag = "blueprint-v0.10.1" }
-atomic-io = { git = "https://github.com/yoselabs/shelf", subdirectory = "packages/atomic-io", tag = "blueprint-v0.10.1" }
-any-lease = { git = "https://github.com/yoselabs/shelf", subdirectory = "packages/any-lease", tag = "blueprint-v0.10.1" }
-any-gate = { git = "https://github.com/yoselabs/shelf", subdirectory = "packages/any-gate", tag = "blueprint-v0.10.1" }
-any-agent = { git = "https://github.com/yoselabs/shelf", subdirectory = "packages/any-agent", tag = "blueprint-v0.10.1" }
-sqlite-store = { git = "https://github.com/yoselabs/shelf", subdirectory = "packages/sqlite-store", tag = "blueprint-v0.10.1" }
-sqlite-sidecar = { git = "https://github.com/yoselabs/shelf", subdirectory = "packages/sqlite-sidecar", tag = "blueprint-v0.10.1" }
-git-porcelain = { git = "https://github.com/yoselabs/shelf", subdirectory = "packages/git-porcelain", tag = "blueprint-v0.10.1" }
-process-lock = { git = "https://github.com/yoselabs/shelf", subdirectory = "packages/process-lock", tag = "blueprint-v0.10.1" }
-beads-client = { git = "https://github.com/yoselabs/shelf", subdirectory = "packages/beads-client", tag = "blueprint-v0.10.1" }
+blueprint = { git = "https://github.com/yoselabs/shelf", subdirectory = "packages/blueprint", tag = "blueprint-v0.13.0" }
+any-gate-python = { git = "https://github.com/yoselabs/shelf", subdirectory = "packages/any-gate-python", tag = "blueprint-v0.13.0" }
+content-digest = { git = "https://github.com/yoselabs/shelf", subdirectory = "packages/content-digest", tag = "blueprint-v0.13.0" }
+atomic-io = { git = "https://github.com/yoselabs/shelf", subdirectory = "packages/atomic-io", tag = "blueprint-v0.13.0" }
+any-lease = { git = "https://github.com/yoselabs/shelf", subdirectory = "packages/any-lease", tag = "blueprint-v0.13.0" }
+any-gate = { git = "https://github.com/yoselabs/shelf", subdirectory = "packages/any-gate", tag = "blueprint-v0.13.0" }
+any-agent = { git = "https://github.com/yoselabs/shelf", subdirectory = "packages/any-agent", tag = "blueprint-v0.13.0" }
+sqlite-store = { git = "https://github.com/yoselabs/shelf", subdirectory = "packages/sqlite-store", tag = "blueprint-v0.13.0" }
+sqlite-sidecar = { git = "https://github.com/yoselabs/shelf", subdirectory = "packages/sqlite-sidecar", tag = "blueprint-v0.13.0" }
+git-porcelain = { git = "https://github.com/yoselabs/shelf", subdirectory = "packages/git-porcelain", tag = "blueprint-v0.13.0" }
+process-lock = { git = "https://github.com/yoselabs/shelf", subdirectory = "packages/process-lock", tag = "blueprint-v0.13.0" }
+beads-client = { git = "https://github.com/yoselabs/shelf", subdirectory = "packages/beads-client", tag = "blueprint-v0.13.0" }
 # Every shelf pin names the one snapshot tag: the packages must come from one shelf commit.
-stream-proc = { git = "https://github.com/yoselabs/shelf", subdirectory = "packages/stream-proc", tag = "blueprint-v0.10.1" }
+stream-proc = { git = "https://github.com/yoselabs/shelf", subdirectory = "packages/stream-proc", tag = "blueprint-v0.13.0" }
 
 [project.scripts]
 tl = "taskloop.cli:main"
@@ -60,6 +60,8 @@ dev = [
 
 [tool.uv]
 required-version = ">=0.13.0"
+# The tests run the installed wheel (never an editable install): `uv run` rebuilds it when the source or the lock changes.
+cache-keys = [{ file = "pyproject.toml" }, { file = "uv.lock" }, { file = "src/**/*.py" }, { file = "src/**/*.js" }, { file = "src/**/*.css" }, { file = "src/**/*.html" }]
 
 [tool.shelf-size]
 code-file = 400
@@ -67,7 +69,7 @@ function = 80
 test-file = 800
 
 [tool.pytest.ini_options]
-testpaths = ["tests/cli", "tests/steps", "tests/rules"]
+testpaths = ["tests/cli", "tests/dash", "tests/steps", "tests/rules"]
 addopts = "--import-mode=importlib -p no:cacheprovider"
 # importlib mode puts no test directory on sys.path: tests import the shared doubles module (tests/steps/doubles.py)
 pythonpath = ["tests/steps", "tools/experiment"]
@@ -190,10 +192,41 @@ extend_exclude = ["docs", "\\.worktrees", "\\.slots", "\\.task"]
 # owning tasks (tests/rules/test_isolation.py pins it); no module imports it yet.
 per_rule_ignores = { DEP002 = ["pydantic"] }
 
+# The tests run the installed wheel (never an editable install): measure that package and map its files back to src/.
 [tool.coverage.run]
 branch = true
-source = ["src"]
+source_pkgs = ["taskloop"]
 
+[tool.coverage.paths]
+source = ["src/taskloop", "*/site-packages/taskloop"]
+
+# No fail_under here: pytest-cov would apply it to every unit alone; the floor of the whole repo is [tool.blueprint.test] floor.
 [tool.coverage.report]
 show_missing = true
-fail_under = 65
+
+[tool.blueprint.gate]
+# codespell's `skip` does not apply to files passed one by one (the changed-files run), so the paths exclude docs/design's generated HTML.
+spell-paths = ["src", "tests", "tools", "README.md", "AGENTS.md"]
+
+[tool.blueprint.test]
+coverage = "pytest-cov"
+floor = 65
+pytest-args = ["-n", "auto", "-q"]
+
+[tool.blueprint.test.units.cli]
+paths = ["tests/cli"]
+
+# The dashboard contract tests read the static files (css, html, js) by path.
+[tool.blueprint.test.units.dash]
+paths = ["tests/dash"]
+reads = ["src/taskloop/dash/static/*"]
+
+# The steps tests read files no import names: the committed shelf digest and the tools folder.
+[tool.blueprint.test.units.steps]
+paths = ["tests/steps"]
+reads = ["docs/shelf-digest.json", "tools/*.py", ".task-loop.json"]
+
+# The architecture rules read the source tree and the contract files by path, not by import: any source change reruns them.
+[tool.blueprint.test.units.rules]
+paths = ["tests/rules"]
+reads = ["src/**/*", ".importlinter", "tools/*.py", "mise.toml", "mise.lock", "docs/shelf-digest.json"]

@@ -9,12 +9,13 @@ from any_agent import LaunchInputs, LaunchSpec, OpenCodeHarness, RunOutcome, Sum
 from any_agent.access import CodexSandbox
 from any_agent.testing import FakeRun
 from doubles import FEEDBACK_OPENING, WORKFLOW, FixedIds
-from test_attempt import ENTRY, KEY, PLAN, WORKER, AttemptSurroundings, app, database
+from test_attempt import ENTRY, KEY, PLAN, WORKER, AttemptSurroundings, database
 from test_attempt import surroundings as attempt_surroundings
 
 from taskloop.agent_credentials import machine_credentials
 from taskloop.agents.launch import AgentLaunch, CredentialReason, CredentialsUnavailable, LaunchedAgent, LaunchFailure
 from taskloop.agents.settings import AgentSetting, ClaudePolicy, CodexPolicy, OpenCodePolicy, encode_policy
+from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import AttemptKey, Uncommitted
 from taskloop.check_repeat.feedback import Availability, FailedCheck, OutputTail
 from taskloop.evidence_files import EvidenceFiles
@@ -416,7 +417,9 @@ def test_all_harnesses_use_the_same_strict_step_decoder(
         (chosen.harness, chosen.provider, chosen.model, chosen.effort, encode_policy(chosen.access)),
     )
     run = FakeRun(RunOutcome(rc=0, worker=WORKER, summary=Summary(text=answer, rc=0, stands=True)))
-    result = app(con, surroundings, run).execute(KEY, ENTRY)
+    # The opencode sandbox names the secrets it denies from HOME, so the launch env must carry one.
+    attempts = surroundings.attempts(AttemptStore(lambda: con), run, credentials=lambda _harness: ("/bin/codex", {"HOME": str(tmp_path)}))
+    result = attempts.execute(KEY, ENTRY)
     assert result.execution is not None and result.execution.answer.kind == kind and len(run.calls) == 1
     assert run.calls[0][0].kind == harness
 

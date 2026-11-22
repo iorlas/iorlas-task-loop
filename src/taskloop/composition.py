@@ -292,6 +292,7 @@ def open_launcher(database: Path, artifacts: Path, views: GitViews) -> Launcher:
         sys.executable,
         read_seconds=views.read_seconds,
         ids=NativeIds(),
+        environment=dict(os.environ),
         recovery=RecoveryLaunch(recovery),
     )
 
@@ -311,6 +312,7 @@ def open_checks_launcher(database: Path, artifacts: Path, views: GitViews) -> La
         CHECK_ENTRY_MODULE,
         read_seconds=views.read_seconds,
         ids=NativeIds(),
+        environment=dict(os.environ),
         timing=timing,
     )
 
