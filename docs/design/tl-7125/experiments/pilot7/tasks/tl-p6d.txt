@@ -1,0 +1,9 @@
+`tl attempt export` has no column that tells how large the task's plan is, so an experiment cannot separate "the plan was long" from "the agent did more". The plan the task's plan attempt committed lives in Git.
+
+Add a column `plan_bytes` to `tl attempt export`: the size in bytes of the plan file the task's plan attempt committed (the plan at the commit that attempt produced), the same value on every row of the task, and NULL when the task has no committed plan. It appears in the CSV and the `--json` output. Do not change the database schema.
+
+## Acceptance Criteria
+- `tl attempt export` and `--json` include `plan_bytes`.
+- It is NULL for a task with no committed plan and for a plan attempt that produced none.
+- The value matches the size of the plan file in Git at the plan attempt's commit.
+- A focused test covers a task with a plan and one without.

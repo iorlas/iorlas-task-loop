@@ -1,0 +1,7 @@
+Experiment trees are throwaway: each run of an experiment leaves a clone, a bare origin, a tracker, a `factory.db`, artifacts and a slot (megabytes to hundreds of megabytes each), and nothing in the documentation says how to remove them safely or what to keep.
+
+Document, in `docs/factory-machine.md`, how a person cleans up the trees of a finished experiment: what is safe to delete, what is the durable evidence to keep first (the `tl attempt export` output and the stored artifacts of attempts that are under review), and the order of the steps.
+
+## Acceptance Criteria
+- `docs/factory-machine.md` has a section on cleaning up experiment trees with the keep-first step and the safe deletion steps.
+- No factory behaviour changes; the repository's own checks still pass.
