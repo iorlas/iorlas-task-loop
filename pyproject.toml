@@ -184,7 +184,7 @@ pyrefly-errors-omitted = ["deprecated", "missing-super-call", "no-any-return-exp
 linter-versions-differ = ["ruff", "pyrefly"]  # pinned exactly in the dev group; the shelf runs older ones
 
 [tool.deptry]
-known_first_party = ["taskloop"]
+known_first_party = ["taskloop", "exp_arms", "exp_order", "exp_report", "exp_run", "exp_spec"]
 extend_exclude = ["docs", "\\.worktrees", "\\.slots", "\\.task"]
 # pydantic is pinned for the models at the edges (database rows, agent answers, configuration) the foundation grows with their
 # owning tasks (tests/rules/test_isolation.py pins it); no module imports it yet.
