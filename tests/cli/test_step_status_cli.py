@@ -128,7 +128,7 @@ def test_show_reports_persisted_answer_failure_without_artifacts(
     else:
         assert "Result: collected answer:schema_invalid" in output.out
         assert "Answer: " + failure.describe() in output.out
-        assert "Ran: unknown\n" in output.out and "(1 of at most 3)" in output.out
+        assert "Ran: unknown\n" in output.out and "(1, failed-check cap 3)" in output.out
     assert db.read_bytes() == before and not artifacts.exists()
 
 

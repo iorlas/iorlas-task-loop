@@ -341,7 +341,7 @@ CASES: list[tuple[list[str], Result, int, list[str], set[str]]] = [
             "  ?? docs/design/tl-1/note.md",
             "  +3 more",
             f"Next: repeat\n{step_guide.GUIDE['repeat']}",
-            "Attempt: attempt (2 of at most 3; repeats first, uncommitted)\nEarlier: first repeated (uncommitted)\nSlot: s1",
+            "Attempt: attempt (2, failed-check cap 3; repeats first, uncommitted)\nEarlier: first repeated (uncommitted)\nSlot: s1",
         ],
         STATUS_KEYS | {"directory", "entry_log", "events_path", "setup", "failed_checks"},
     ),
@@ -373,7 +373,7 @@ CASES: list[tuple[list[str], Result, int, list[str], set[str]]] = [
         ["attempt", "show", "tl-1", "--backlog", "tasks"],
         Shown(STATUS, Path("/a/d"), Path("/a/d/entry.log"), EVENTS),
         0,
-        ["Attempt: attempt (1 of at most 3)\nSlot: s1"],
+        ["Attempt: attempt (1, failed-check cap 3)\nSlot: s1"],
         STATUS_KEYS | {"directory", "entry_log", "events_path", "setup", "failed_checks"},
     ),
     (
@@ -784,11 +784,11 @@ def test_the_real_read_paths_write_nothing_and_never_print_the_token(tmp_path: P
     assert main(["attempt", "list", "--stuck", "--db", str(db)]) == 0
     listed = capsys.readouterr().out
     head = "task\tbacklog\tstep\tattempt\tslot\tphase\tentry\tresult\tstatus\tnext\thold cause\tlast command"
-    assert listed.startswith(f"{head}\ntl-1\ttasks\tplan\t1/3\ts1\t")
+    assert listed.startswith(f"{head}\ntl-1\ttasks\tplan\t1 (failed-check cap 3)\ts1\t")
     assert main(["attempt", "list", "--db", str(db), "--json"]) == 0
     assert [each["step"] for each in json.loads(capsys.readouterr().out)["attempts"]] == ["plan"]
     assert main(["attempt", "show", "tl-1", "--backlog", "tasks", "--db", str(db), "--artifacts", str(art)]) == 0
-    assert "Task: tl-1 (backlog tasks)\nStep: plan\nAttempt: attempt (1 of at most 3)\n" in capsys.readouterr().out
+    assert "Task: tl-1 (backlog tasks)\nStep: plan\nAttempt: attempt (1, failed-check cap 3)\n" in capsys.readouterr().out
     assert "stuck:expired_admitted: Nothing ran; rounds only report it." in listed
     assert f"discard {db} and its" in listed
     assert main(["step", "commit", "tl-1", "--backlog", "tasks", "--db", str(db), "--json"]) == 1

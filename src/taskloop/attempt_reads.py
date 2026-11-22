@@ -262,7 +262,7 @@ def _facts_values(facts: ExecutionFacts) -> tuple[object, ...]:
     )
 
 
-def _ran_values(facts: ExecutionFacts) -> tuple[str | None, ...]:
+def ran_values(facts: ExecutionFacts) -> tuple[str | None, ...]:
     return (facts.model, facts.harness_version, facts.effort)
 
 

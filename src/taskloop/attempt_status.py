@@ -187,6 +187,11 @@ def _observed(reads: StatusPorts, entry: EntryIdentity | None) -> EntryState:
     return "running" if seen == "matching" else seen
 
 
+def cap_words(cap: int) -> str:
+    """The one wording of a step's failed-check cap: Git-leftover repeats may still run up to the engine's attempt ceiling."""
+    return f"failed-check cap {cap}"
+
+
 def _show(reads: StatusPorts, row: AttemptRow, *, probe: bool = True) -> AttemptView:
     """Read the current agent or checks view; probe leftovers only when the caller needs them."""
     view = _agent(reads, row, probe=probe)

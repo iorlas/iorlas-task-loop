@@ -12,8 +12,9 @@ Review remains future work; the retained designs describe more than the implemen
 
 Start with [First landed task](#first-landed-task-linux) for an ordered setup and delivery walkthrough.
 
-- `just shelf-digest` regenerates `docs/shelf-digest.json` from the pins committed at `HEAD` and sets `SOURCE_COMMIT` in
-  `tests/steps/test_shelf_digest_artifact.py` in one step; commit `pyproject.toml` and `uv.lock` first.
+- `just shelf-digest` regenerates `docs/shelf-digest.json` from the pins committed at `HEAD`; commit `pyproject.toml` and `uv.lock` first.
+  The digest's `source_commit` records only where it was generated (a squash merge drops that commit); the digest test checks
+  every package, tag and commit against `pyproject.toml` and `uv.lock`.
 - `uv run --frozen --no-sync python -I -m taskloop.shelf_digest --checkout PATH --at REV --shelf PATH` generates
   a digest of the six shelf dependencies pinned by committed `pyproject.toml` and `uv.lock`. After `just install`,
   use the installed module with Python 3.15+. `--checkout` defaults to `.` and `--at` to `HEAD`; `--shelf` is required.

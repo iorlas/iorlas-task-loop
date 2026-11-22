@@ -41,3 +41,27 @@ def test_an_unusable_checkout_or_name_is_refused(tmp_path: Path, capsys: pytest.
     with pytest.raises(SystemExit) as result:
         main(["init", "--workflow", "../x"])
     assert result.value.code == 2
+
+
+def test_init_reports_created_kept_and_failed_separately(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    (tmp_path / ".task-loop").write_text("a file, not a folder")
+    assert main(["init", "--checkout", str(tmp_path)]) == 1
+    out = capsys.readouterr().out
+    profile, workflow = tmp_path / ".task-loop.json", tmp_path / ".task-loop" / "workflows" / "default.toml"
+    assert f"Wrote {profile}" in out and f"Failed {workflow}: Not a directory" in out and "Kept" not in out
+
+
+def test_init_json_lists_failures_with_their_reason(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    (tmp_path / ".task-loop").write_text("x")
+    assert main(["init", "--checkout", str(tmp_path), "--json"]) == 1
+    data = json.loads(capsys.readouterr().out)
+    assert data["created"] == [str(tmp_path / ".task-loop.json")] and data["kept"] == []
+    assert [item["path"] for item in data["failed"]] == [str(tmp_path / ".task-loop/workflows/default.toml")]
+
+
+def test_init_fails_when_a_file_stands_where_the_workflow_folder_must_be(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    (tmp_path / ".task-loop").mkdir()
+    (tmp_path / ".task-loop" / "workflows").write_text("x")
+    assert main(["init", "--checkout", str(tmp_path)]) == 1
+    out = capsys.readouterr().out
+    assert "a file is in the way of its folder" in out and "Kept" not in out
