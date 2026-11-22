@@ -11,13 +11,14 @@ from taskloop.attempt_reads import AttemptRow, StoreConnection, StoreRefused, St
 from taskloop.attempt_result import collect, succeeded
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import AttemptKey, FileRef
-from taskloop.check_repeat.feedback import CheckRepeatReason, FailedCheck
+from taskloop.check_repeat.feedback import FailedCheck
 from taskloop.check_repeat.status import CapStore, CheckRepeatDecision, decision, failed_result
 from taskloop.check_store import ChecksRow, CheckStore, ResultRow
 from taskloop.drain.models import BLOCKED, Reason
 from taskloop.drain.store import blocked
 from taskloop.hold_store import HoldStore
 from taskloop.land_store import LandStore
+from taskloop.repeat_reason import CheckRepeatReason
 from taskloop.repo import RepoId
 from taskloop.slots import Probe, SlotGit
 from taskloop.step import Step, decode_step

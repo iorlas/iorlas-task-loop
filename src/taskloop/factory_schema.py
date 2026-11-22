@@ -32,10 +32,10 @@ from enum import StrEnum
 
 from sqlite_store import Schema
 
-from taskloop.check_repeat.feedback import CheckRepeatReason
 from taskloop.command_conclusion import SETUP_CONCLUSIONS, CommandConclusion, encode
 from taskloop.drain.models import ActionKind, ActionState, State
 from taskloop.harness_choice import HarnessKind, Provider
+from taskloop.repeat_reason import CheckRepeatReason
 from taskloop.step import Step
 
 

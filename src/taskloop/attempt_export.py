@@ -1,9 +1,12 @@
 """Read-only comparison evidence, one row per agent attempt.
 
 NULL means unknown. t_* and c_* are token counts, never dollars; usage is a lower bound when incomplete.
-chain_id is the first attempt reached through previous_attempt_id. rework_count counts repeats (check-driven or leftover)
-through this row, excluding answer repairs. time_to_green_seconds measures that chain's first admission to
-this row's latest passed checks; otherwise NULL. wall_seconds remains this agent attempt's admission to capture.
+chain_id is the first attempt reached through previous_attempt_id. rework_count counts the failed-check repeats through this
+row; repair_count the answer repairs (a repair is not rework). time_to_green_seconds measures that chain's first admission to
+this row's latest passed checks; otherwise NULL. task_total_seconds measures the task's first attempt admission (its plan) to
+this row's latest passed checks across steps, the task's attempts in `seq` order being the only link of plan to implement;
+otherwise NULL. wall_seconds remains this agent attempt's admission to capture. failed_checks names the checks of the latest
+block that did not pass (an empty list: none, or none recorded). hold_text is the stored hold's explanation (NULL: no hold or none given).
 setup_seconds is the latest setup run's duration. check_seconds maps check names to durations in the latest
 block of the latest checks attempt (unfinished durations are NULL, no recorded checks is an empty object).
 The launched-input digest is not stored in factory.db; input_digest is the admitted input only.

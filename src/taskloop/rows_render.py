@@ -18,14 +18,17 @@ def records(result: Rows) -> list[dict[str, object]]:
     return [asdict(row) for row in result.rows]
 
 
+def _cell(value: object) -> object:
+    if isinstance(value, (dict, list)):
+        return json.dumps(value, sort_keys=True)
+    return "" if value is None else value
+
+
 def lines(result: Rows) -> list[str]:
     if isinstance(result, SlotList):
         return [f"{row.name}\t{row.state}\t{row.attempt_id or '-'}\t{row.repo_id}\t{row.path}" for row in result.rows]
     out = io.StringIO()
     writer = csv.writer(out, lineterminator=NEWLINE)
     writer.writerow(each.name for each in fields(ExportRow))
-    writer.writerows(
-        [json.dumps(value, sort_keys=True) if isinstance(value, dict) else "" if value is None else value for value in asdict(row).values()]
-        for row in result.rows
-    )
+    writer.writerows([_cell(value) for value in asdict(row).values()] for row in result.rows)
     return out.getvalue().rstrip(NEWLINE).split(NEWLINE)

@@ -13,9 +13,10 @@ from taskloop.attempt_reads import StoreConnection, StoreUnavailable, as_int, as
 from taskloop.attempt_result import report
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import AttemptKey
-from taskloop.check_store import CheckStore
+from taskloop.check_store import CheckStore, ResultRow
 from taskloop.command_conclusion import CommandConclusion, encode
 from taskloop.hold_store import HoldStore
+from taskloop.repeat_reason import CheckRepeatReason
 from taskloop.step import decode_step
 from taskloop.workflow_read import WorkflowRefusal, pinned
 
@@ -41,11 +42,16 @@ SELECT
   (SELECT s.ended_at-s.started_at FROM setup_run s WHERE s.attempt_id=a.attempt_id ORDER BY s.run DESC LIMIT 1),
   c.attempt_id,
   (SELECT count(*) FROM chain k JOIN attempt p ON p.attempt_id=k.ancestor_id
-   WHERE k.attempt_id=a.attempt_id AND p.repeat_reason IS NOT NULL AND p.repair_context IS NULL),
+   WHERE k.attempt_id=a.attempt_id AND p.repeat_reason='{CheckRepeatReason.FAILED_CHECK}' AND p.repair_context IS NULL),
   CASE WHEN c.conclusion='{encode(CommandConclusion.PASSED)}' THEN c.concluded_at-
    (SELECT p.admitted_at FROM chain k JOIN attempt p ON p.attempt_id=k.ancestor_id
     WHERE k.attempt_id=a.attempt_id AND p.previous_attempt_id IS NULL) END,
-  a.dispatch_token,a.generation,c.dispatch_token,c.generation
+  a.dispatch_token,a.generation,c.dispatch_token,c.generation,
+  (SELECT count(*) FROM chain k JOIN attempt p ON p.attempt_id=k.ancestor_id
+   WHERE k.attempt_id=a.attempt_id AND p.repair_context IS NOT NULL),
+  CASE WHEN c.conclusion='{encode(CommandConclusion.PASSED)}' THEN c.concluded_at-
+   (SELECT q.admitted_at FROM attempt q WHERE q.adapter=a.adapter AND q.backlog=a.backlog AND q.task_id=a.task_id
+    ORDER BY q.seq LIMIT 1) END
 FROM attempt a LEFT JOIN execution e ON e.attempt_id = a.attempt_id
 LEFT JOIN factory_commit f ON f.attempt_id=a.attempt_id
 LEFT JOIN checks_attempt c ON c.attempt_id=(SELECT latest.attempt_id FROM checks_attempt latest
@@ -103,8 +109,12 @@ class ExportRow:
     setup_seconds: float | None
     check_seconds: dict[str, float | None]
     rework_count: int
+    repair_count: int
     time_to_green_seconds: float | None
+    task_total_seconds: float | None
+    failed_checks: list[str]
     hold_cause: str | None
+    hold_text: str | None
     terminal_result: str | None
 
 
@@ -176,24 +186,30 @@ def _row(r: tuple[object, ...]) -> ExportRow:
         _real(r[41]),
         {},
         as_int(r[43]),
+        as_int(r[49]),
         _real(r[44]),
+        _real(r[50]),
+        [],
+        None,
         None,
         None,
     )
 
 
+def _seconds(each: ResultRow) -> float | None:
+    if each.ended_at is None or each.conclusion is CommandConclusion.UNDEFINED:
+        return None
+    return each.ended_at - each.started_at
+
+
 class ExportStore(StoreConnection):
-    def check_seconds(self, raw: tuple[object, ...]) -> dict[str, float | None]:
-        """Durations of the latest block, through the owning check-result reader and codec."""
+    def latest_block(self, raw: tuple[object, ...]) -> list[ResultRow]:
+        """The results of the latest block of the latest checks attempt, through the owning check-result reader and codec."""
         if raw[42] is None:
-            return {}
+            return []
         results = CheckStore(self.connect, self.begin).results(AttemptKey(as_text(raw[42]), as_text(raw[47]), as_int(raw[48])))
         latest = max((each.block for each in results), default=0)
-        return {
-            each.name: None if each.ended_at is None or each.conclusion is CommandConclusion.UNDEFINED else each.ended_at - each.started_at
-            for each in results
-            if each.block == latest
-        }
+        return [each for each in results if each.block == latest]
 
     def attempts(self, backlog: str | None) -> tuple[ExportRow, ...]:
         """Every agent attempt (of one backlog, or of all) in task and attempt order."""
@@ -207,11 +223,14 @@ class ExportStore(StoreConnection):
                 stored = reader.collect(AttemptKey(row.attempt_id, as_text(raw[45]), as_int(raw[46])))
                 result = None if stored is None else report(stored)
                 hold = holds.get(row.attempt_id)
+                block = self.latest_block(raw)
                 rows.append(
                     replace(
                         row,
-                        check_seconds=self.check_seconds(raw),
+                        check_seconds={each.name: _seconds(each) for each in block},
+                        failed_checks=[each.name for each in block if each.conclusion not in (None, CommandConclusion.PASSED)],
                         hold_cause=None if hold is None else hold.reason,
+                        hold_text=None if hold is None else hold.event.cause.explanation,
                         terminal_result=result.reason if result is not None and result.status == "collected" else None,
                     )
                 )

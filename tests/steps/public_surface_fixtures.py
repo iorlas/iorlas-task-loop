@@ -214,8 +214,12 @@ def export_full() -> AttemptExport:
                 setup_seconds=None,
                 check_seconds={},
                 rework_count=0,
+                repair_count=0,
                 time_to_green_seconds=None,
+                task_total_seconds=None,
+                failed_checks=[],
                 hold_cause=None,
+                hold_text=None,
                 terminal_result=None,
             ),
         )
