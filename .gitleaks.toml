@@ -1,0 +1,18 @@
+# Allowlist for gitleaks (the `secrets` gate step, pinned in mise.toml). A slot's task branch has no upstream, so
+# `blueprint.secret_scan range` scans all history; these are the historic false positives of that scan.
+# None of the paths exists in the checkout now. Each entry names why it is not a secret. Add nothing without a path and a reason.
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Historic false positives: test fixtures and metric names that look like keys, in files since deleted"
+paths = [
+  # tests/domain/test_secret_scan.py lines 16 and 29: fake `API_KEY = "sk-live-..."` fixtures of the old secret-scan test
+  '''^tests/domain/test_secret_scan\.py$''',
+  # skills/task-loop/lifecycle.py line 689: a dashboard metric id/key pair ("reverts_per_100_landings")
+  '''^skills/task-loop/lifecycle\.py$''',
+  # tests/test_lifecycle_docs.py line 19: the same metric names in a docs test
+  '''^tests/test_lifecycle_docs\.py$''',
+  # docs/design/tl-8bh9.14.129/plan.md line 134: prose about "key changes"
+  '''^docs/design/tl-8bh9\.14\.129/plan\.md$''',
+]
