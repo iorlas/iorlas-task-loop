@@ -1,23 +1,23 @@
-# Rendered by `blueprint gate render` -- never edit; a recipe of the same name in the repo's justfile replaces it.
+# Rendered by `blueprint gate render` -- never edit; a recipe of the same name in the repo's justfile replaces it only through a declared override (gate.recipe-shadowing).
 # The python+uv stack: its linter, type, spelling, dependency and test steps.
 
+# `lint` over the files changed against the base (any-gate changed), for `check`; check-all runs `lint` over everything.
 [group('gate')]
-lint:
-    uv run ruff check .
-    uv run ruff format --check .
+lint-changed:
+    uv run blueprint gate lint --changed
 
 format:
-    uv run ruff format .
+    uv run blueprint gate format
 
 # A type warning fails the build (pyrefly's config). No slow rot.
 [group('gate')]
 typecheck:
     uv run pyrefly check
 
-# Typos in code, docstrings and docs.
+# `spell` over the files changed against the base, for `check`.
 [group('gate')]
-spell:
-    uv run codespell
+spell-changed:
+    uv run blueprint gate spell --changed
 
 # Dependency hygiene: the lockfile matches pyproject, then unused, missing and transitive (deptry), once per package in a workspace.
 [group('gate')]
@@ -33,16 +33,10 @@ deps:
     fi
 
 # The tests the change reaches, through any-gate (`blueprint gate test`): suites that already passed on this input are skipped, the rest
-# queue for one test slot. No coverage floor: it is a whole-repo measure.
+# queue for one test slot. Declared test units combine cached coverage before enforcing their whole-repo floor.
 [group('gate')]
 test:
     uv run blueprint gate test
-
-# Every test, with the coverage floor (the release gate's test step). Coverage is a whole-repo measure, so a floor cannot ride
-# on `test`, which runs only what the change reaches. The floor is low on purpose, a rot-guard; raise it as coverage climbs.
-[group('gate')]
-test-all:
-    uv run pytest -n auto --cov --cov-report=term-missing --cov-fail-under=65
 
 # Coverage report only (human view).
 cov:

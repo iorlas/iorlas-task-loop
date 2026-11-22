@@ -85,6 +85,3 @@ export:
 
 import:
     auto: false
-
-sync:
-    remote: "git+https://github.com/iorlas/iorlas-task-loop.git"

@@ -1,18 +1,15 @@
 # Rendered by `blueprint gate render` -- never edit this file; `blueprint gate render` rewrites it and `just render` fails on any difference.
-# The base of this repo's gate. The repo's own `justfile` imports it and owns everything else: a recipe defined there replaces the
-# one of the same name here (`set allow-duplicate-recipes`), and `check-extra` is the extension point for one more step.
+# The base of this repo's gate. The repo's own `justfile` imports it and owns everything else: `check-extra` is the extension point
+# for one more step, and `[tool.blueprint.gate]` in pyproject.toml holds its paths and extra steps. A recipe of the same name replaces one here only
+# through a declared override (gate.recipe-shadowing).
 #
 # No backticks anywhere: `just --dry-run` evaluates them, and blueprint's gate.one-command dry-runs `check`.
 
 # The gate: every step at once (`steps`), one timing line, a warning for a step over its budget. A green run records the tree it
 # checked (any-gate), so the pre-push hook does not run it again on that tree.
 [group('gate')]
-check: gate-start beads-lint (steps "guard" "preset" "render" "blueprint" "secrets" "lint" "typecheck" "spell" "deps" "test") check-extra
+check: gate-start beads-lint (steps "guard" "preset" "render" "blueprint" "secrets" "lint-changed" "typecheck" "spell-changed" "deps" "test") check-extra
     uv run python -m any_gate passed --gate check
-
-# The release gate, rare (before a tag): every step over everything (all files, all history, every test, the coverage floor).
-[group('gate')]
-check-all: beads-lint (steps-all "guard" "preset" "render" "blueprint" "secrets-all" "lint" "typecheck" "spell" "deps" "test-all")
 
 # Extension point: a repo defines `check-extra` in its own justfile to run one more thing in the gate (after the steps, before the record).
 [private]
@@ -47,11 +44,6 @@ beads-lint:
 steps +names:
     uv run python -m any_gate steps --runner {{ just_executable() }} {{ names }}
 
-# `steps` for the release gate: every step runs, whatever changed (a step otherwise skips when `gate-inputs.toml` says its inputs did not change).
-[private]
-steps-all +names:
-    uv run python -m any_gate steps --all --runner {{ just_executable() }} {{ names }}
-
 # The blueprint's per-commit checkpoints: one line per one that is not passing.
 [group('gate')]
 blueprint:
@@ -62,11 +54,6 @@ blueprint:
 [group('gate')]
 secrets:
     uv run python -m blueprint.secret_scan range
-
-# The same over all history: for a release gate, never per commit.
-[group('gate')]
-secrets-all:
-    uv run python -m blueprint.secret_scan full
 
 # The commit guard as a gate, not only a hook: a hook is per-clone and silently disabled by anything that claims core.hooksPath.
 # Reads HEAD (an uncommitted local override is the supported co-development workflow). Exit 2 means it could not run: never a pass.

@@ -35,6 +35,7 @@ from taskloop.operation_evidence import OperationKind, OperationState
 
 KEY = AttemptKey("attempt", "dispatch", 1)
 NEW = OwnedProcess(9, 9, "new-start", "boot")
+ENVIRONMENT = {"HOME": "/home/agent"}
 OLD = (7, "old-start", "boot")
 
 
@@ -68,7 +69,7 @@ class FakeStart:
         *,
         registered: Callable[[OwnedProcess], None],
         cwd: str | os.PathLike[str] | None = None,
-        env: Mapping[str, str] | None = None,
+        env: Mapping[str, str],
         stderr: int = -1,
         start_new_session: bool = True,
         registration_timeout: float = 5.0,
@@ -122,6 +123,7 @@ def launcher(db: Path, start: FakeStart, observe: Observe | None = None, now: fl
         "/venv/bin/python",
         read_seconds=DEFAULT_GIT_READ_SECONDS,
         ids=NativeIds(),
+        environment=ENVIRONMENT,
     )
 
 
@@ -144,7 +146,15 @@ def register(db: Path, entry: EntryIdentity) -> None:
 def test_the_launchers_git_bound_is_in_the_entry_argv(admitted: Path) -> None:
     start = FakeStart()
     built = Launcher(
-        admitted, EvidenceFiles(admitted.parent), lambda: 10, start, Observe(), "/venv/bin/python", read_seconds=45, ids=NativeIds()
+        admitted,
+        EvidenceFiles(admitted.parent),
+        lambda: 10,
+        start,
+        Observe(),
+        "/venv/bin/python",
+        read_seconds=45,
+        ids=NativeIds(),
+        environment=ENVIRONMENT,
     )
     assert isinstance(built.launch("tasks", "tl-1", 30), Launched)
     argv = start.calls[0]["argv"]
@@ -179,7 +189,7 @@ def test_launch_registers_before_the_permit_and_leaves_the_child_alone(admitted:
     root = str(admitted.parent)
     assert call["argv"] == ["/venv/bin/python", "-I", "-m", "taskloop.attempt_entry", str(admitted), root, "600", "tasks", "tl-1"]
     assert KEY.dispatch_token not in str(call["argv"])  # the dispatch token is never in argv
-    assert (call["cwd"], call["env"], call["session"], call["timeout"]) == (root, None, True, 5.0)
+    assert (call["cwd"], call["env"], call["session"], call["timeout"]) == (root, ENVIRONMENT, True, 5.0)
     assert start.child.stdin.closed and start.child.stdout.closed
     log = admitted.parent / EvidenceFiles(admitted.parent).directory(KEY) / "entry.log"
     assert stat.S_IMODE(log.stat().st_mode) == 0o600
@@ -195,7 +205,7 @@ def test_start_guard_rejects_a_held_writer_before_registration_or_permission(adm
     con = sqlite3.connect(admitted, timeout=0, isolation_level=None)
     try:
         with admitted.open("rb") as log, transaction(con), pytest.raises(sqlite3.OperationalError, match="locked"):
-            start(["entry"], registered=registered.append, stderr=log.fileno())
+            start(["entry"], registered=registered.append, env=ENVIRONMENT, stderr=log.fileno())
     finally:
         con.close()
     assert registered == [] and not start.permitted
@@ -328,6 +338,7 @@ def test_a_relative_database_is_refused_before_any_read_registration_or_start(ad
         "/venv/bin/python",
         read_seconds=DEFAULT_GIT_READ_SECONDS,
         ids=NativeIds(),
+        environment=ENVIRONMENT,
     )
     assert built.launch("tasks", "tl-1", 30) == LaunchRefused("database")
     assert start.calls == [] and stored(admitted) == (None, None, None, "admitted")
@@ -448,6 +459,7 @@ def checks_launcher(db: Path, start: FakeStart, observe: Observe | None = None, 
         CHECK_ENTRY_MODULE,
         read_seconds=DEFAULT_GIT_READ_SECONDS,
         ids=NativeIds(),
+        environment=ENVIRONMENT,
     )
 
 
