@@ -24,6 +24,7 @@ from taskloop.evidence_files import EvidenceError
 from taskloop.operations import Action, Ended, Failed, Quiet, Round, minutes_refused
 from taskloop.round import STOPPING_UNKNOWN, NextRequest, max_running_refused
 from taskloop.round_log import IDENT, INTERRUPTED, fixed, stamped
+from taskloop.task_status import Wait
 
 CHECK: Final = 2.0  # seconds between two reads of the reservation rows
 WORK: Final = frozenset(get_args(Action.__value__)) - {"report", "skip"}  # a move that changed something or must be retried
@@ -142,10 +143,16 @@ def _rounds(ports: RoundsPorts, request: RoundsRequest, log: _Log, jumps: ClockJ
             quiet = found.written
         if ports.stopping():
             break
-        if quiescent and isinstance(found, Round) and not found.stopped and not any(move.action in WORK for move in found.moves):
+        if quiescent and isinstance(found, Round) and _idle_round(found):
             return _end(log, request.backlog, Reason.IDLE)
         _pause(ports, backoff.after(found, log), _union(before, _held(ports)), jumps)
     return _end(log, request.backlog, Reason.DRAINING if ports.draining() else INTERRUPTED)
+
+
+def _idle_round(found: Round) -> bool:
+    """No work: no move that changed or must retry, and no stop word but the wait for a person's land (`slot_for_land`)."""
+    waiting = not found.stopped or found.stopped == Wait.SLOT_FOR_LAND
+    return waiting and not any(move.action in WORK for move in found.moves)
 
 
 def _held(ports: RoundsPorts) -> frozenset[tuple[str, str]] | None:

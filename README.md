@@ -60,7 +60,7 @@ Start with [First landed task](#first-landed-task-linux) for an ordered setup an
   waits for existing entries, agents, setup, checks and synchronous operations to finish. Success verifies idle; it
   preserves claims, reservations, sessions and unlaunched attempts. Uncertainty exits 3 and Ctrl-C exits 130, leaving
   the fence in place. JSON writes progress and the final result as JSON Lines.
-  A completed drain also saves the attempt export as `exports/attempts-<UTC time>.json` under the artifacts root, so an upgrade that
+  A completed drain also saves the attempt export (once per drain request) as `exports/attempts-drain<generation>.json` under the artifacts root, so an upgrade that
   discards `factory.db` keeps its evidence; the final output names the file (JSON: `export`).
 - `tl rounds start` repeats rounds in the foreground until Ctrl-C. `--retake-lapsed` on `rounds once` or `rounds start` is for recovery
   after discarding `factory.db`: it also takes the factory's expired claims absent from that database, assuming one
