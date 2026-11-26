@@ -44,7 +44,7 @@ Each command's own `--help` is the reference for its flags.
 | `tl attempt list` | F | One line per task: where everything stands | reads `factory.db` | no | you; the dashboard |
 | `tl attempt setup-times` | F | Recent implement setup durations | reads `factory.db` | no | you |
 | `tl attempt export` | F | One comparison row per agent attempt as CSV or JSON: task/backlog and repeat-chain identifiers, base commit, factory-commit verdict, hold cause, terminal result, setup and latest check durations, `rework_count` (attempts of the chain up to this one that were failed-check repeats), `repair_count` (its answer repairs), `failed_checks` (names of the latest block's checks that did not pass), `hold_text` (the stored hold's explanation), time to green, `task_total_seconds`, wall time, digests, requested/reported agent settings and token counts (`t_reasoning` is the reasoning share of `t_out`; `c_*` are cumulative tokens; NULL means unknown; incomplete usage is a lower bound; no dollars). Time to green spans chain admission to this row's latest passed checks; task total spans the task's first attempt (its plan) to the same checks, across steps; check durations use their latest block (a JSON object in CSV). `changed_files` and `changed_lines` are the attempt's diff from `base_commit` to its commit (NULL: no committed verdict); `launched_input_digest` is the input actually launched (NULL: never dispatched), `input_digest` the admitted one. | reads `factory.db` | no | you |
-| `tl drain` | G | Block new work, let executions finish and verify the factory idle before an upgrade or restart; a completed drain stays until `tl rounds start` runs again, and saves the attempt export as `exports/attempts-<UTC time>.json` under the artifacts root, naming the path in its output | writes a durable drain request and that file | yes | you |
+| `tl drain` | G | Block new work, let executions finish and verify the factory idle before an upgrade or restart; a completed drain stays until `tl rounds start` runs again, and saves the attempt export (once per drain request) as `exports/attempts-drain<generation>.json` under the artifacts root, naming the path in its output | writes a durable drain request and that file | yes | you |
 
 `tl task show` is the tracker's view of a task; `tl attempt show` is the factory's view of its attempt.
 
@@ -61,7 +61,7 @@ Each command's own `--help` is the reference for its flags.
 
 `tl rounds start --exit-when-idle` ends by itself (exit 0, reason `idle`) when no execution or pending action is alive (the
 drain's idle inspection, read before a round) and the round that follows does no work (no start, advance, commit, release,
-publish, hold or land; reports and skips are not work). A task waiting to be landed by a person or held counts as idle. It adds
+publish, hold or land; reports, skips and a stop on `slot_for_land` are not work). A task waiting to be landed by a person or held counts as idle. It adds
 no state, signal or log reading, and does not block new work the way `tl drain` does.
 
 There is no `tl rounds stop`. Stopping rounds from another shell is `tl drain`: rounds poll the drain request and end when it is

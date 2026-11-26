@@ -104,6 +104,17 @@ def test_config_db_is_used_and_explicit_db_wins(tmp_path: Path, capsys: pytest.C
     assert json.loads(saved.read_text()) == [] and not (tmp_path / "other").exists()
 
 
+def test_a_second_drain_of_a_completed_request_keeps_one_export(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    path = tmp_path / "factory.db"
+    initialized(path)
+    config = tmp_path / "config.toml"
+    config.write_text(f'db = "{path}"\nartifacts = "{tmp_path / "artifacts"}"\n')
+    assert main(["--config", str(config), "drain"]) == 0
+    assert main(["--config", str(config), "drain"]) == 0
+    assert "not saved" not in capsys.readouterr().out
+    assert len(list((tmp_path / "artifacts" / "exports").glob("attempts-*.json"))) == 1
+
+
 @pytest.mark.parametrize("structured", [False, True])
 def test_unknown_process_observation_exits_three_with_identity_and_keeps_fence(
     tmp_path: Path,

@@ -1,9 +1,8 @@
-"""Keep the attempt export before an upgrade can discard factory.db: one immutable JSON file per completed `tl drain`, under the
+"""Keep the attempt export before an upgrade can discard factory.db: one immutable JSON file per drain request, under the
 artifacts root's `exports/`, which a database discard leaves alone.
 Read-only on factory.db; the one writer of artifacts is `EvidenceFiles`."""
 
 import json
-from datetime import UTC, datetime
 
 from sqlite_store import SchemaError
 
@@ -15,8 +14,9 @@ from taskloop.machine_config import Loaded
 from taskloop.rows_render import records
 
 
-def save(loaded: Loaded, now: float) -> str:
-    """The saved file's path, or the reason none was saved (never raises: a completed drain stays completed)."""
+def save(loaded: Loaded, generation: int) -> str:
+    """The saved file's path (one per drain request, named by its generation, so a retry writes the same file), or the reason
+    none was saved (never raises: a completed drain stays completed)."""
     database, artifacts = loaded.settings.db.value, loaded.settings.artifacts.value
     try:
         reader = open_ro(database)
@@ -30,7 +30,7 @@ def save(loaded: Loaded, now: float) -> str:
         reader.close()
     if not isinstance(found, attempt_export.AttemptExport):
         return f"not saved: {found.detail or found.reason}"
-    name = f"exports/attempts-{datetime.fromtimestamp(now, UTC):%Y%m%dT%H%M%SZ}.json"
+    name = f"exports/attempts-drain{generation}.json"
     try:
         ref = EvidenceFiles(artifacts).put_export(name, json.dumps(records(found), sort_keys=True, indent=1))
     except EvidenceError as error:
