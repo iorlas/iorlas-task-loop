@@ -17,6 +17,7 @@ from taskloop.exit_codes import exit_code
 from taskloop.operations import Ended, Failed, Move, Quiet, Round
 from taskloop.round import NextRequest
 from taskloop.rounds import CHECK, RoundsPorts, RoundsRequest, abrupt, inputs, run_rounds
+from taskloop.task_status import Wait
 
 HELD = frozenset({("repo", "s1")})
 CLEAN = Round("tasks", (Move("tl-1", "report", "running", "a1"),), written=frozenset({("tl-1", "report", "running", "a1")}))
@@ -395,7 +396,7 @@ def test_exit_when_idle_waits_while_a_round_works_or_stops_on_a_word(found: Roun
 
 
 def test_exit_when_idle_ends_while_the_last_slot_waits_for_a_land() -> None:
-    bench, ended = run_idle([Round("tasks", (), "slot_for_land"), CLEAN], lambda: True)
+    bench, ended = run_idle([Round("tasks", (), Wait.SLOT_FOR_LAND), CLEAN], lambda: True)
     assert ended == Ended("tasks", Reason.IDLE) and len(bench.rounds) == 1
 
 
